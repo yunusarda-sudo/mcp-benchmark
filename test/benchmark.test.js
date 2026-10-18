@@ -5,6 +5,7 @@ import {
   benchmarkServerTools,
   generateHtmlReport,
   fetchToolsFromStdioServer,
+  detectToolCollisions,
 } from '../dist/index.js';
 
 test('analyzeToolDefinition scores clean schema with Grade A', () => {
@@ -94,6 +95,51 @@ test('generateHtmlReport renders a self-contained HTML document', () => {
   assert.match(html, /<\/html>\s*$/);
   assert.match(html, /Alpha Server/);
   assert.match(html, /read_file/);
+});
+
+test('detectToolCollisions flags tools with conflicting names and descriptions', () => {
+  const collisions = detectToolCollisions([
+    { name: 'getTask', description: 'Retrieve a task by its unique identifier.' },
+    { name: 'fetchTask', description: 'Retrieve a task by its unique identifier.' },
+  ]);
+
+  assert.equal(collisions.length, 1);
+  assert.equal(collisions[0].toolA, 'getTask');
+  assert.equal(collisions[0].toolB, 'fetchTask');
+  assert.ok(collisions[0].similarityScore > 0.6, `Expected similarity > 0.6, got ${collisions[0].similarityScore}`);
+  assert.ok(collisions[0].reason.length > 0);
+});
+
+test('detectToolCollisions flags verb/noun synonym clashes', () => {
+  const collisions = detectToolCollisions([
+    { name: 'get_user', description: 'Fetch a single user record.' },
+    { name: 'fetch_user', description: 'Load one customer profile.' },
+  ]);
+
+  assert.equal(collisions.length, 1);
+  assert.equal(collisions[0].toolA, 'get_user');
+  assert.equal(collisions[0].toolB, 'fetch_user');
+  assert.match(collisions[0].reason, /synonym verbs/i);
+});
+
+test('detectToolCollisions returns no collisions for distinct tools', () => {
+  const collisions = detectToolCollisions([
+    { name: 'read_file', description: 'Read the complete contents of a file.' },
+    { name: 'send_email', description: 'Dispatch a transactional email message.' },
+  ]);
+
+  assert.deepEqual(collisions, []);
+});
+
+test('benchmarkServerTools surfaces collisions on its result', () => {
+  const result = benchmarkServerTools('Collision Server', [
+    { name: 'getTask', description: 'Retrieve a task by its unique identifier.' },
+    { name: 'fetchTask', description: 'Retrieve a task by its unique identifier.' },
+  ]);
+
+  assert.ok(Array.isArray(result.collisions));
+  assert.equal(result.collisions.length, 1);
+  assert.equal(result.collisions[0].toolA, 'getTask');
 });
 
 test('fetchToolsFromStdioServer connects to a live stdio server and returns its tools', async () => {

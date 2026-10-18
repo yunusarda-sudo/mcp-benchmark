@@ -1,4 +1,5 @@
 import { McpToolDefinition, MetricBreakdown, ServerBenchmarkResult, ToolAnalysisReport } from './types.js';
+import { detectToolCollisions } from './collisionDetector.js';
 
 const IMPERATIVE_ACTION_VERBS = new Set([
   'get', 'list', 'create', 'update', 'delete', 'read', 'write',
@@ -180,6 +181,7 @@ export function benchmarkServerTools(serverName: string, tools: McpToolDefinitio
       overallTQI: 0,
       grade: 'F',
       tools: [],
+      collisions: [],
     };
   }
 
@@ -208,5 +210,6 @@ export function benchmarkServerTools(serverName: string, tools: McpToolDefinitio
     overallTQI,
     grade,
     tools: toolReports,
+    collisions: detectToolCollisions(tools),
   };
 }

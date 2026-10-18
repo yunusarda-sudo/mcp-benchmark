@@ -166,6 +166,12 @@ export function formatMarkdownLeaderboard(results: ServerBenchmarkResult[]): str
         md += `  * ✅ _Optimal schema strictness, imperative density, and boundary guards._\n`;
       }
     }
+    if (r.collisions && r.collisions.length > 0) {
+      md += `\n  **⚔️ Tool Collisions (${r.collisions.length})**\n`;
+      for (const c of r.collisions) {
+        md += `  * \`${c.toolA}\` ↔ \`${c.toolB}\` — similarity ${c.similarityScore} — _${c.reason}_\n`;
+      }
+    }
     md += '\n';
   }
 

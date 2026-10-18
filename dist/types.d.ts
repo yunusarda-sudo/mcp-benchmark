@@ -24,6 +24,12 @@ export interface ToolAnalysisReport {
     metrics: MetricBreakdown;
     findings: string[];
 }
+export interface ToolCollision {
+    toolA: string;
+    toolB: string;
+    similarityScore: number;
+    reason: string;
+}
 export interface ServerBenchmarkResult {
     serverName: string;
     toolsAnalyzed: number;
@@ -35,4 +41,5 @@ export interface ServerBenchmarkResult {
     overallTQI: number;
     grade: 'A+' | 'A' | 'B' | 'C' | 'D' | 'F';
     tools: ToolAnalysisReport[];
+    collisions?: ToolCollision[];
 }

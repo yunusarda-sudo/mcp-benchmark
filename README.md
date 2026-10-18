@@ -111,6 +111,18 @@ jobs:
 
 ---
 
+## 🚦 Collision Detection
+
+During benchmarking, the tool detects **name or description overlaps** that can cause ambiguous tool selection. If a collision is found, the HTML report shows a **red banner** and the markdown output lists the colliding pairs.
+
+### Why it matters
+- **Prevents LLM hallucination**: When multiple tools share similar verbs or nouns, the model may pick the wrong one.
+- **Keeps your toolset clean**: Highlights duplicated or overly similar tools before they ship to production.
+- **Easy to act on**: The `collisions` field is included in the JSON output, so you can programmatically fail CI if needed.
+
+Run the benchmark with `--html` to see the banner, or inspect the `collisions` array in the JSON/markdown output.
+
+
 ## 💻 Programmatic Usage (TypeScript / Node.js)
 
 ```typescript

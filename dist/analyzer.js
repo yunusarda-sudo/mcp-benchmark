@@ -1,3 +1,4 @@
+import { detectToolCollisions } from './collisionDetector.js';
 const IMPERATIVE_ACTION_VERBS = new Set([
     'get', 'list', 'create', 'update', 'delete', 'read', 'write',
     'fetch', 'search', 'find', 'execute', 'run', 'send', 'query',
@@ -168,6 +169,7 @@ export function benchmarkServerTools(serverName, tools) {
             overallTQI: 0,
             grade: 'F',
             tools: [],
+            collisions: [],
         };
     }
     const toolReports = tools.map(analyzeToolDefinition);
@@ -198,5 +200,6 @@ export function benchmarkServerTools(serverName, tools) {
         overallTQI,
         grade,
         tools: toolReports,
+        collisions: detectToolCollisions(tools),
     };
 }
