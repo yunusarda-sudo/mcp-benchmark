@@ -32,19 +32,13 @@ Autonomous AI agents (Claude, GPT, Ollama) fail most frequently at **tool select
 No installation required. Run the reference benchmark suite immediately:
 
 ```bash
-npx mcp-benchmark
-```
+# Run instantly from GitHub without cloning or installing:
+npx github:yunusarda-sudo/mcp-benchmark
 
-### Lint Your Own MCP Server or Tool Definitions
-
-Pass any JSON file containing an array of tool definitions or `{ "tools": [...] }`:
-
-```bash
-# Try with the included calibrated example:
-npx mcp-benchmark --file ./examples/sample-mcp-tools.json
-
+# Or run with the included calibrated example fixture:
+npx github:yunusarda-sudo/mcp-benchmark --file ./examples/sample-mcp-tools.json
 # Or lint your custom server:
-npx mcp-benchmark --file path/to/my-mcp-tools.json
+npx github:yunusarda-sudo/mcp-benchmark --file path/to/my-mcp-tools.json
 ```
 
 Output results as machine-readable JSON:
