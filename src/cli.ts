@@ -3,7 +3,35 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { benchmarkServerTools } from './analyzer.js';
 import { generateHtmlReport } from './htmlReport.js';
+import { fetchToolsFromStdioServer } from './liveClient.js';
 import { McpToolDefinition, ServerBenchmarkResult } from './types.js';
+
+// Split a command line string into executable + args, respecting quotes.
+function splitCommand(input: string): string[] {
+  const tokens: string[] = [];
+  let current = '';
+  let quote: '"' | "'" | null = null;
+
+  for (let i = 0; i < input.length; i++) {
+    const ch = input[i];
+    if (quote) {
+      if (ch === quote) quote = null;
+      else current += ch;
+    } else if (ch === '"' || ch === "'") {
+      quote = ch;
+    } else if (/\s/.test(ch)) {
+      if (current) {
+        tokens.push(current);
+        current = '';
+      }
+    } else {
+      current += ch;
+    }
+  }
+  if (current) tokens.push(current);
+
+  return tokens;
+}
 
 // Realistic tool definitions for top MCP servers:
 const DATASETS: Record<string, McpToolDefinition[]> = {
@@ -155,6 +183,7 @@ Deterministic quantitative quality benchmark and linter for Model Context Protoc
 
 Options:
   --file, -f <path>      Path to a JSON file containing tool definitions to lint
+  --cmd <command>        Launch a local MCP server over stdio and benchmark its live tools
   --fail-under <score>   Exit with non-zero code if TQI score is below this threshold (CI/CD gate)
   --json                 Output results as JSON
   --markdown, -m         Output results as a Markdown table (default)
@@ -164,6 +193,7 @@ Options:
 Examples:
   npx mcp-benchmark                       Run reference benchmark suite across standard servers
   npx mcp-benchmark -f tools.json         Lint and score your own MCP tool definitions
+  npx mcp-benchmark --cmd "npx -y @modelcontextprotocol/server-everything"
   npx mcp-benchmark -f tools.json --fail-under 80
   npx mcp-benchmark --html report.html    Write a shareable HTML report
 `);
@@ -171,6 +201,7 @@ Examples:
 }
 
 const fileIdx = args.indexOf('--file') !== -1 ? args.indexOf('--file') : args.indexOf('-f');
+const cmdIdx = args.indexOf('--cmd');
 const failUnderIdx = args.indexOf('--fail-under');
 const failUnder = failUnderIdx !== -1 ? parseInt(args[failUnderIdx + 1], 10) : null;
 const isJson = args.includes('--json');
@@ -184,7 +215,24 @@ if (htmlIdx !== -1) {
 
 const results: ServerBenchmarkResult[] = [];
 
-if (fileIdx !== -1 && args[fileIdx + 1]) {
+if (cmdIdx !== -1) {
+  const rawCommand = args[cmdIdx + 1];
+  if (!rawCommand) {
+    console.error('Error: --cmd requires a server command string, e.g. --cmd "npx -y @scope/server".');
+    process.exit(1);
+  }
+
+  const [command, ...cmdArgs] = splitCommand(rawCommand);
+  let tools: McpToolDefinition[];
+  try {
+    tools = await fetchToolsFromStdioServer(command, cmdArgs);
+  } catch (e: any) {
+    console.error(`Error: Failed to inspect live MCP server "${rawCommand}": ${e.message}`);
+    process.exit(1);
+  }
+
+  results.push(benchmarkServerTools(rawCommand, tools));
+} else if (fileIdx !== -1 && args[fileIdx + 1]) {
   const filePath = path.resolve(process.cwd(), args[fileIdx + 1]);
   if (!fs.existsSync(filePath)) {
     console.error(`Error: File not found at ${filePath}`);

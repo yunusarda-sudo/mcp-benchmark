@@ -1,6 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { analyzeToolDefinition, benchmarkServerTools, generateHtmlReport } from '../dist/index.js';
+import {
+  analyzeToolDefinition,
+  benchmarkServerTools,
+  generateHtmlReport,
+  fetchToolsFromStdioServer,
+} from '../dist/index.js';
 
 test('analyzeToolDefinition scores clean schema with Grade A', () => {
   const tool = {
@@ -89,4 +94,34 @@ test('generateHtmlReport renders a self-contained HTML document', () => {
   assert.match(html, /<\/html>\s*$/);
   assert.match(html, /Alpha Server/);
   assert.match(html, /read_file/);
+});
+
+test('fetchToolsFromStdioServer connects to a live stdio server and returns its tools', async () => {
+  const path = await import('node:path');
+  const fixture = path.resolve('fixtures/echo-mcp-server.mjs');
+
+  const tools = await fetchToolsFromStdioServer('node', [fixture]);
+
+  assert.ok(Array.isArray(tools), 'Expected an array of tool definitions');
+  assert.equal(tools.length, 2);
+  assert.deepEqual(
+    tools.map((t) => t.name).sort(),
+    ['ping', 'read_file']
+  );
+
+  const readFile = tools.find((t) => t.name === 'read_file');
+  assert.ok(readFile, 'Expected read_file tool');
+  assert.equal(readFile.inputSchema.type, 'object');
+  assert.ok(readFile.inputSchema.properties.path, 'Expected path property to be preserved');
+  assert.equal(typeof readFile.description, 'string');
+});
+
+test('fetchToolsFromStdioServer rejects when the server command cannot be spawned', async () => {
+  await assert.rejects(
+    () => fetchToolsFromStdioServer('definitely-not-a-real-binary-xyz', []),
+    (err) => {
+      assert.ok(err instanceof Error);
+      return true;
+    }
+  );
 });

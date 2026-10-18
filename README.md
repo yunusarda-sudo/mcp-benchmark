@@ -32,25 +32,22 @@ Autonomous AI agents (Claude, GPT, Ollama) fail most frequently at **tool select
 No installation required. Run the reference benchmark suite immediately:
 
 ```bash
-# Run instantly from GitHub without cloning or installing:
+# 1. Run reference benchmark across standard MCP servers:
 npx github:yunusarda-sudo/mcp-benchmark
 
-# Or run with the included calibrated example fixture:
+# 2. Audit a live MCP server directly over stdio (zero JSON export needed!):
+npx github:yunusarda-sudo/mcp-benchmark --cmd "npx -y @modelcontextprotocol/server-filesystem /tmp"
+npx github:yunusarda-sudo/mcp-benchmark --cmd "node dist/index.js"
+npx github:yunusarda-sudo/mcp-benchmark --cmd "python -m my_mcp_server"
+
+# 3. Lint static tool definitions from a JSON file:
 npx github:yunusarda-sudo/mcp-benchmark --file ./examples/sample-mcp-tools.json
-# Or lint your custom server:
-npx github:yunusarda-sudo/mcp-benchmark --file path/to/my-mcp-tools.json
-```
 
-Output results as machine-readable JSON:
+# 4. Generate a self-contained interactive HTML dashboard:
+npx github:yunusarda-sudo/mcp-benchmark --html report.html
 
-```bash
-npx mcp-benchmark -f tools.json --json
-```
-
-Use as a strict CI/CD gate (exits with code `1` if any tool scores below threshold):
-
-```bash
-npx mcp-benchmark -f tools.json --fail-under 85
+# 5. Use as a strict CI/CD gate (exits with code 1 if below threshold):
+npx github:yunusarda-sudo/mcp-benchmark -f tools.json --fail-under 85
 ```
 
 ---
