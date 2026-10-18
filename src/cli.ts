@@ -2,6 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { benchmarkServerTools } from './analyzer.js';
+import { generateHtmlReport } from './htmlReport.js';
 import { McpToolDefinition, ServerBenchmarkResult } from './types.js';
 
 // Realistic tool definitions for top MCP servers:
@@ -157,12 +158,14 @@ Options:
   --fail-under <score>   Exit with non-zero code if TQI score is below this threshold (CI/CD gate)
   --json                 Output results as JSON
   --markdown, -m         Output results as a Markdown table (default)
+  --html [path]          Write a self-contained HTML report to disk (default: mcp-benchmark-report.html)
   --help, -h             Show this help message
 
 Examples:
   npx mcp-benchmark                       Run reference benchmark suite across standard servers
   npx mcp-benchmark -f tools.json         Lint and score your own MCP tool definitions
   npx mcp-benchmark -f tools.json --fail-under 80
+  npx mcp-benchmark --html report.html    Write a shareable HTML report
 `);
   process.exit(0);
 }
@@ -171,6 +174,13 @@ const fileIdx = args.indexOf('--file') !== -1 ? args.indexOf('--file') : args.in
 const failUnderIdx = args.indexOf('--fail-under');
 const failUnder = failUnderIdx !== -1 ? parseInt(args[failUnderIdx + 1], 10) : null;
 const isJson = args.includes('--json');
+
+const htmlIdx = args.indexOf('--html');
+let htmlPath: string | null = null;
+if (htmlIdx !== -1) {
+  const candidate = args[htmlIdx + 1];
+  htmlPath = candidate && !candidate.startsWith('-') ? candidate : 'mcp-benchmark-report.html';
+}
 
 const results: ServerBenchmarkResult[] = [];
 
@@ -203,6 +213,16 @@ if (isJson) {
   console.log(JSON.stringify(results, null, 2));
 } else {
   console.log(formatMarkdownLeaderboard(results));
+}
+
+if (htmlPath !== null) {
+  const resolvedHtmlPath = path.resolve(process.cwd(), htmlPath);
+  fs.writeFileSync(resolvedHtmlPath, generateHtmlReport(results), 'utf-8');
+  console.error(`📄 HTML report written to ${resolvedHtmlPath}`);
+}
+
+if (process.env.GITHUB_STEP_SUMMARY) {
+  fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, formatMarkdownLeaderboard(results), 'utf-8');
 }
 
 if (failUnder !== null) {

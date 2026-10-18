@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { analyzeToolDefinition, benchmarkServerTools } from '../dist/index.js';
+import { analyzeToolDefinition, benchmarkServerTools, generateHtmlReport } from '../dist/index.js';
 
 test('analyzeToolDefinition scores clean schema with Grade A', () => {
   const tool = {
@@ -63,4 +63,30 @@ test('examples/sample-mcp-tools.json parses and produces expected scores', async
   assert.equal(result.toolsAnalyzed, 3);
   assert.equal(result.grade, 'B');
   assert.ok(result.overallTQI >= 65 && result.overallTQI <= 75);
+});
+
+test('generateHtmlReport renders a self-contained HTML document', () => {
+  const results = [
+    benchmarkServerTools('Alpha Server', [
+      {
+        name: 'read_file',
+        description: 'Read the complete contents of a file from the local file system using UTF-8 encoding.',
+        inputSchema: {
+          type: 'object',
+          required: ['path'],
+          properties: {
+            path: { type: 'string', description: 'The absolute path to the file to read.' },
+          },
+        },
+      },
+    ]),
+  ];
+
+  const html = generateHtmlReport(results);
+
+  assert.equal(typeof html, 'string');
+  assert.match(html, /^<!DOCTYPE html>/);
+  assert.match(html, /<\/html>\s*$/);
+  assert.match(html, /Alpha Server/);
+  assert.match(html, /read_file/);
 });
