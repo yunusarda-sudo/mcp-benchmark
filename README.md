@@ -40,6 +40,10 @@ npx mcp-benchmark
 Pass any JSON file containing an array of tool definitions or `{ "tools": [...] }`:
 
 ```bash
+# Try with the included calibrated example:
+npx mcp-benchmark --file ./examples/sample-mcp-tools.json
+
+# Or lint your custom server:
 npx mcp-benchmark --file path/to/my-mcp-tools.json
 ```
 

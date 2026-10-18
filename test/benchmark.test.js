@@ -50,3 +50,17 @@ test('benchmarkServerTools aggregates scores and computes grade', () => {
   assert.equal(result.toolsAnalyzed, 1);
   assert.ok(['A+', 'A', 'B'].includes(result.grade));
 });
+
+test('examples/sample-mcp-tools.json parses and produces expected scores', async () => {
+  const fs = await import('node:fs/promises');
+  const path = await import('node:path');
+  const content = await fs.readFile(path.resolve('examples/sample-mcp-tools.json'), 'utf8');
+  const data = JSON.parse(content);
+  assert.ok(Array.isArray(data.tools), 'Expected tools array');
+  assert.equal(data.tools.length, 3);
+
+  const result = benchmarkServerTools('Sample Server', data.tools);
+  assert.equal(result.toolsAnalyzed, 3);
+  assert.equal(result.grade, 'B');
+  assert.ok(result.overallTQI >= 65 && result.overallTQI <= 75);
+});
