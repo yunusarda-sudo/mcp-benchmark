@@ -40,14 +40,19 @@ npx github:yunusarda-sudo/mcp-benchmark --cmd "npx -y @modelcontextprotocol/serv
 npx github:yunusarda-sudo/mcp-benchmark --cmd "node dist/index.js"
 npx github:yunusarda-sudo/mcp-benchmark --cmd "python -m my_mcp_server"
 
-# 3. Lint static tool definitions from a JSON file:
+# 3. Audit a live remote MCP server over SSE / HTTP (FastMCP, Cloudflare, Docker):
+npx github:yunusarda-sudo/mcp-benchmark --url "http://localhost:8000/sse"
+npx github:yunusarda-sudo/mcp-benchmark -u "https://api.my-mcp.com/sse" -H "Authorization: Bearer <TOKEN>"
+
+# 4. Lint static tool definitions from a JSON file:
 npx github:yunusarda-sudo/mcp-benchmark --file ./examples/sample-mcp-tools.json
 
-# 4. Generate a self-contained interactive HTML dashboard:
+# 5. Generate a self-contained interactive HTML dashboard:
 npx github:yunusarda-sudo/mcp-benchmark --html report.html
 
-# 5. Use as a strict CI/CD gate (exits with code 1 if below threshold):
+# 6. Use as a strict CI/CD gate (exits with code 1 if below threshold):
 npx github:yunusarda-sudo/mcp-benchmark -f tools.json --fail-under 85
+
 ```
 
 ---
@@ -87,7 +92,14 @@ TQI = (0.40 × Schema Strictness) + (0.35 × Semantic Density) + (0.25 × Token 
 - Efficient schemas (under 160 tokens) preserve agent context memory.
 - Heavy schemas (>300 tokens) receive progressive efficiency penalties.
 
+### 4. Security & Prompt-Injection Defense (Integrity Guardrails)
+- **Prompt Injection Directives:** Detects and flags system prompt override patterns (`ignore previous instructions`, `bypass rules`, etc.) with `CRITICAL` findings.
+- **Data Exfiltration Defense:** Flags covert instructions attempting to exfiltrate keys, tokens, or environment variables to remote destinations.
+- **Covert Stealth Directives:** Catches directives instructing the model not to notify or warn the user.
+- **Deterministic Penalty:** Malicious or compromised tool definitions receive heavy deductions preventing them from passing quality gates.
+
 ---
+
 
 ## 🤖 GitHub Actions CI/CD Integration
 

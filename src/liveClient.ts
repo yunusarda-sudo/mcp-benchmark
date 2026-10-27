@@ -1,5 +1,6 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import { McpToolDefinition } from './types.js';
 
 /**
@@ -12,7 +13,7 @@ export async function fetchToolsFromStdioServer(
   args: string[] = []
 ): Promise<McpToolDefinition[]> {
   const transport = new StdioClientTransport({ command, args });
-  const client = new Client({ name: 'mcp-benchmark', version: '1.0.0' });
+  const client = new Client({ name: 'mcp-benchmark', version: '1.1.0' });
 
   try {
     await client.connect(transport);
@@ -27,3 +28,32 @@ export async function fetchToolsFromStdioServer(
     await transport.close();
   }
 }
+
+/**
+ * Connect to a remote MCP server over Server-Sent Events (SSE) / HTTP,
+ * retrieve its live tool definitions, and cleanly close the connection.
+ */
+export async function fetchToolsFromSseServer(
+  url: string | URL,
+  headers?: Record<string, string>
+): Promise<McpToolDefinition[]> {
+  const endpoint = typeof url === 'string' ? new URL(url) : url;
+  const transport = new SSEClientTransport(endpoint, {
+    requestInit: headers ? { headers } : undefined,
+  });
+  const client = new Client({ name: 'mcp-benchmark', version: '1.1.0' });
+
+  try {
+    await client.connect(transport);
+    const response = await client.listTools();
+
+    return response.tools.map((tool) => ({
+      name: tool.name,
+      description: tool.description,
+      inputSchema: tool.inputSchema as McpToolDefinition['inputSchema'],
+    }));
+  } finally {
+    await transport.close();
+  }
+}
+

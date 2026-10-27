@@ -16,6 +16,31 @@ const FLUFF_PATTERNS = [
   /you can use this tool to/i,
 ];
 
+export const PROMPT_INJECTION_PATTERNS = [
+  {
+    regex: /(ignore|override|bypass)\s+(all\s+)?((previous|prior|system|chat|base)\s+)*(instructions|prompts|rules|context)/i,
+    severity: 'CRITICAL',
+    title: 'Prompt injection / system prompt override directive detected in tool description',
+  },
+  {
+    regex: /(exfiltrate|send|upload|post)\s+.*?(keys?|secrets?|tokens?|credentials?|passwords?|env)\s+.*?to/i,
+    severity: 'CRITICAL',
+    title: 'Potential data exfiltration directive detected in tool description',
+  },
+  {
+    regex: /do\s+not\s+(notify|tell|inform|warn)\s+(the\s+)?user/i,
+    severity: 'HIGH',
+    title: 'Covert stealth directive (hiding actions from user) detected in tool description',
+  },
+  {
+    regex: /\bsilently\b|\bwithout\s+(notifying|asking|prompting)\b/i,
+    severity: 'HIGH',
+    title: 'Silent execution directive detected in tool description',
+  },
+];
+
+
+
 export function estimateTokenCount(text: string): number {
   if (!text) return 0;
   // Standard heuristic: ~4 characters per token for English text/JSON
@@ -143,12 +168,23 @@ export function analyzeToolDefinition(tool: McpToolDefinition): ToolAnalysisRepo
     findings.push(`Heavy context token footprint (${tokenCount} tokens)`);
   }
 
+  // 4. Security & Prompt-Injection Hygiene
+  let securityPenalty = 0;
+  for (const pattern of PROMPT_INJECTION_PATTERNS) {
+    if (pattern.regex.test(desc)) {
+      findings.push(`${pattern.severity}: ${pattern.title}`);
+      securityPenalty += pattern.severity === 'CRITICAL' ? 45 : 25;
+    }
+  }
+
   // Weighted Tool Quality Index (TQI)
-  const overallScore = Math.round(
+  const rawScore = Math.round(
     schemaScore * 0.40 +
     semanticScore * 0.35 +
     tokenScore * 0.25
   );
+  const overallScore = Math.max(0, rawScore - securityPenalty);
+
 
   return {
     toolName: tool.name,
