@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 import fs from 'node:fs';
 import path from 'node:path';
+import { parseArgs } from 'node:util';
 import { benchmarkServerTools } from './analyzer.js';
+import { CatalogComparison, compareToolCatalogs } from './compare.js';
 import { generateHtmlReport } from './htmlReport.js';
 import { fetchToolsFromStdioServer, fetchToolsFromSseServer } from './liveClient.js';
 import { McpToolDefinition, ServerBenchmarkResult } from './types.js';
@@ -29,6 +31,7 @@ function splitCommand(input: string): string[] {
       current += ch;
     }
   }
+  if (quote) throw new Error('--cmd contains an unclosed quote.');
   if (current) tokens.push(current);
 
   return tokens;
@@ -145,26 +148,58 @@ const DATASETS: Record<string, McpToolDefinition[]> = {
   ],
 };
 
+function markdownText(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/\r?\n|\r/g, ' ')
+    .replace(/[\\|`*_\[\]]/g, '\\$&');
+}
+
+function formatComparison(comparison: CatalogComparison): string {
+  const lines = [
+    '## Catalog comparison',
+    '',
+    `Added: ${comparison.addedTools.length} · Removed: ${comparison.removedTools.length} · Changed: ${comparison.changedTools.length} · Breaking: ${comparison.breakingChanges.length} · New findings: ${comparison.newDiagnostics.length} · Resolved: ${comparison.resolvedDiagnostics.length}`,
+    '',
+  ];
+  for (const tool of comparison.addedTools) lines.push(`- Added **${markdownText(tool)}**.`);
+  for (const tool of comparison.removedTools) lines.push(`- Removed **${markdownText(tool)}**.`);
+  for (const change of comparison.changedTools) lines.push(`- Changed **${markdownText(change.toolName)}** (${change.fields.join(', ')}).`);
+  for (const change of comparison.breakingChanges) {
+    if (change.kind === 'required-input-added') {
+      lines.push(`- **${markdownText(change.toolName)}** now requires ${markdownText(change.property)}.`);
+    }
+  }
+  for (const finding of comparison.newDiagnostics) {
+    lines.push(`- New **${finding.severity}** ${finding.code} on **${markdownText(finding.toolName)}** (${markdownText(finding.path || '/')}): ${markdownText(finding.message)}. ${markdownText(finding.suggestion)}`);
+  }
+  return lines.join('\n') + '\n\n';
+}
+
 export function formatMarkdownLeaderboard(results: ServerBenchmarkResult[]): string {
   let md = '# 📊 Model Context Protocol (MCP) Tool Quality Benchmark — Leaderboard\n\n';
   md += '| Rank | MCP Server | Grade | TQI Score | Schema Strictness | Semantic Density | Token Efficiency | Avg Tokens/Tool |\n';
   md += '|:---:|:---|:---:|:---:|:---:|:---:|:---:|:---:|\n';
 
   results.forEach((r, idx) => {
-    md += `| ${idx + 1} | **${r.serverName}** | \`${r.grade}\` | **${r.overallTQI}/100** | ${r.averageSchemaStrictness}% | ${r.averageSemanticDensity}% | ${r.averageTokenEfficiency}% | ${r.averageTokensPerTool} tok |\n`;
+    md += `| ${idx + 1} | **${markdownText(r.serverName)}** | \`${r.grade}\` | **${r.overallTQI}/100** | ${r.averageSchemaStrictness}% | ${r.averageSemanticDensity}% | ${r.averageTokenEfficiency}% | ${r.averageTokensPerTool} tok |\n`;
   });
 
   md += '\n\n### 🔍 Detailed Diagnostic Insights\n\n';
   for (const r of results) {
-    md += `#### ${r.serverName} (Grade: ${r.grade} · TQI: ${r.overallTQI}/100)\n`;
+    md += `#### ${markdownText(r.serverName)} (Grade: ${r.grade} · TQI: ${r.overallTQI}/100)\n`;
     for (const t of r.tools) {
-      md += `* **\`${t.toolName}\`** (${t.metrics.overallScore}/100) — Tokens: ${t.tokenCount}\n`;
-      if (t.findings.length > 0) {
-        for (const f of t.findings) {
-          md += `  * ⚠️ _${f}_\n`;
+      md += `* **${markdownText(t.toolName)}** (${t.metrics.overallScore}/100) — Estimated tokens: ${t.tokenCount}\n`;
+      if (t.diagnostics?.length) {
+        for (const finding of t.diagnostics) {
+          md += `  * ${finding.severity.toUpperCase()} ${finding.code} (${markdownText(finding.path || '/')}): ${markdownText(finding.message)}. ${markdownText(finding.suggestion)}\n`;
         }
+      } else if (t.findings.length) {
+        for (const finding of t.findings) md += `  * ${markdownText(finding)}\n`;
       } else {
-        md += `  * ✅ _Optimal schema strictness, imperative density, and boundary guards._\n`;
+        md += '  * No findings.\n';
       }
     }
     md += '\n';
@@ -185,134 +220,207 @@ Deterministic quantitative quality benchmark and linter for Model Context Protoc
 Options:
   --file, -f <path>      Path to a JSON file containing tool definitions to lint
   --cmd <command>        Launch a local MCP server over stdio and benchmark its live tools
-  --url, -u <endpoint>   Connect to a remote MCP server over SSE / HTTP and benchmark live tools
+  --url, -u <endpoint>   Connect to a remote MCP server using legacy HTTP+SSE
   --header, -H <k:v>     Custom HTTP header for remote MCP connection (can be specified multiple times)
-  --fail-under <score>   Exit with non-zero code if TQI score is below this threshold (CI/CD gate)
+  --fail-under <score>   Require a minimum TQI from 0 to 100
+  --baseline <path>      Compare a tool catalog against the input source
+  --fail-on <level>      Fail on critical, high (or higher), or breaking changes; repeatable
+  --english-style        Add advisory checks for English wording
   --json                 Output results as JSON
   --markdown, -m         Output results as a Markdown table (default)
   --html [path]          Write a self-contained HTML report to disk (default: mcp-benchmark-report.html)
   --help, -h             Show this help message
 
 Examples:
-  npx mcp-benchmark                       Run reference benchmark suite across standard servers
-  npx mcp-benchmark -f tools.json         Lint and score your own MCP tool definitions
-  npx mcp-benchmark --cmd "npx -y @modelcontextprotocol/server-everything"
-  npx mcp-benchmark --url "http://localhost:8000/sse"
-  npx mcp-benchmark -u "https://api.example.com/mcp/sse" -H "Authorization: Bearer token"
-  npx mcp-benchmark -f tools.json --fail-under 80
-  npx mcp-benchmark --html report.html    Write a shareable HTML report
+  mcp-benchmark                         Run the bundled examples
+  mcp-benchmark -f tools.json         Lint and score your own MCP tool definitions
+  mcp-benchmark --cmd "node fixtures/echo-mcp-server.mjs"
+  mcp-benchmark --url "http://localhost:8000/sse"
+  mcp-benchmark -u "https://api.example.com/mcp/sse" -H "Authorization: Bearer token"
+  mcp-benchmark -f tools.json --fail-under 80
+  mcp-benchmark --baseline before.json --file after.json --fail-on breaking --fail-on critical
+  mcp-benchmark --html report.html    Write a shareable HTML report
 `);
   process.exit(0);
 }
 
-const fileIdx = args.indexOf('--file') !== -1 ? args.indexOf('--file') : args.indexOf('-f');
-const cmdIdx = args.indexOf('--cmd');
-const urlIdx = args.indexOf('--url') !== -1 ? args.indexOf('--url') : args.indexOf('-u');
-const failUnderIdx = args.indexOf('--fail-under');
-const failUnder = failUnderIdx !== -1 ? parseInt(args[failUnderIdx + 1], 10) : null;
-const isJson = args.includes('--json');
+function readOptions(args: string[]) {
+  const normalized = args.map((arg, i) =>
+    arg === '--html' && (!args[i + 1] || args[i + 1].startsWith('-'))
+      ? '--html=mcp-benchmark-report.html'
+      : arg
+  );
+  const { values } = parseArgs({
+    args: normalized,
+    options: {
+      file: { type: 'string', short: 'f' },
+      cmd: { type: 'string' },
+      url: { type: 'string', short: 'u' },
+      header: { type: 'string', short: 'H', multiple: true },
+      'fail-under': { type: 'string' },
+      baseline: { type: 'string' },
+      'fail-on': { type: 'string', multiple: true },
+      'english-style': { type: 'boolean' },
+      json: { type: 'boolean' },
+      markdown: { type: 'boolean', short: 'm' },
+      html: { type: 'string' },
+    },
+  });
 
-const headers: Record<string, string> = {};
-for (let i = 0; i < args.length; i++) {
-  if ((args[i] === '--header' || args[i] === '-H') && args[i + 1]) {
-    const headerStr = args[i + 1];
-    const colonIdx = headerStr.indexOf(':');
-    if (colonIdx > 0) {
-      const k = headerStr.slice(0, colonIdx).trim();
-      const v = headerStr.slice(colonIdx + 1).trim();
-      headers[k] = v;
+  const sources = [values.file, values.cmd, values.url].filter(value => value !== undefined);
+  if (sources.length > 1) throw new Error('Choose only one of --file, --cmd, or --url.');
+  if (sources.some(value => !value.trim())) throw new Error('The selected input option requires a non-empty value.');
+  if (values.json && values.markdown) throw new Error('Choose either --json or --markdown.');
+
+  const threshold = values['fail-under'];
+  if (threshold !== undefined && (!/^\d+$/.test(threshold) || Number(threshold) > 100)) {
+    throw new Error('--fail-under must be an integer from 0 to 100.');
+  }
+
+  const failOn = values['fail-on'] ?? [];
+  if (failOn.some(level => level !== 'critical' && level !== 'high' && level !== 'breaking')) {
+    throw new Error('--fail-on must be critical, high, or breaking.');
+  }
+  if (values.baseline !== undefined && (!values.baseline.trim() || sources.length !== 1)) {
+    throw new Error('--baseline requires a file path and one of --file, --cmd, or --url.');
+  }
+  if (failOn.includes('breaking') && !values.baseline) throw new Error('--fail-on breaking requires --baseline.');
+
+  if (values.header && !values.url) throw new Error('--header requires --url.');
+  const headers = Object.fromEntries((values.header ?? []).map(header => {
+    const colon = header.indexOf(':');
+    const name = header.slice(0, colon).trim();
+    if (colon < 1 || !name) throw new Error('--header must use the format Name: value.');
+    return [name, header.slice(colon + 1).trim()];
+  }));
+
+  return {
+    ...values,
+    headers: values.header ? headers : undefined,
+    failOn,
+    failUnder: threshold === undefined ? null : Number(threshold),
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function readToolFile(file: string): McpToolDefinition[] {
+  const filePath = path.resolve(file);
+  let input: unknown;
+  try {
+    input = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Cannot read tool definitions from ${filePath}: ${message}`);
+  }
+
+  let list = input;
+  if (isRecord(input) && input.jsonrpc === '2.0') {
+    if (!isRecord(input.result) || Object.hasOwn(input, 'error')) {
+      throw new Error('Expected a successful tools/list JSON-RPC response.');
+    }
+    list = input.result;
+  }
+  if (isRecord(list) && list.nextCursor !== undefined && list.nextCursor !== null) {
+    throw new Error('The export lists only one page. Combine all tools into a single array and try again.');
+  }
+  const tools = isRecord(list) ? list.tools : list;
+  if (!Array.isArray(tools)) {
+    throw new Error('Expected a tool array, a { "tools": [...] } object, or a tools/list JSON-RPC response.');
+  }
+
+  for (const [index, tool] of tools.entries()) {
+    const location = `Tool ${index + 1}`;
+    if (!isRecord(tool) || typeof tool.name !== 'string' || !tool.name.trim()) {
+      throw new Error(`${location} must have a non-empty name.`);
+    }
+    if (tool.description !== undefined && typeof tool.description !== 'string') {
+      throw new Error(`${location} description must be a string.`);
+    }
+    const schema = tool.inputSchema;
+    if (schema === undefined) continue;
+    if (!isRecord(schema)) throw new Error(`${location} inputSchema must be an object.`);
+    if (schema.properties !== undefined && !isRecord(schema.properties)) {
+      throw new Error(`${location} inputSchema.properties must be an object.`);
+    }
+    if (schema.required !== undefined && (!Array.isArray(schema.required) || !schema.required.every(key => typeof key === 'string'))) {
+      throw new Error(`${location} inputSchema.required must be an array of strings.`);
+    }
+  }
+  return tools as McpToolDefinition[];
+}
+
+async function run() {
+  const options = readOptions(args);
+  const analysis = { englishStyle: options['english-style'] };
+  const baseline = options.baseline === undefined ? undefined : readToolFile(options.baseline);
+  const results: ServerBenchmarkResult[] = [];
+  let comparison: CatalogComparison | undefined;
+  const benchmark = (name: string, tools: McpToolDefinition[]) => {
+    if (baseline) comparison = compareToolCatalogs(baseline, tools, analysis);
+    results.push(benchmarkServerTools(name, tools, analysis));
+  };
+
+  if (options.cmd !== undefined) {
+    const [command, ...cmdArgs] = splitCommand(options.cmd);
+    if (!command) throw new Error('--cmd requires a non-empty executable name.');
+    benchmark(options.cmd, await fetchToolsFromStdioServer(command, cmdArgs));
+  } else if (options.url !== undefined) {
+    benchmark(options.url, await fetchToolsFromSseServer(options.url, options.headers));
+  } else if (options.file !== undefined) {
+    const serverName = path.basename(options.file, path.extname(options.file));
+    benchmark(serverName, readToolFile(options.file));
+  } else {
+    for (const [serverName, tools] of Object.entries(DATASETS)) benchmark(serverName, tools);
+    results.sort((a, b) => b.overallTQI - a.overallTQI);
+  }
+
+  const markdown = (comparison ? formatComparison(comparison) : '') + formatMarkdownLeaderboard(results);
+  if (options.json) {
+    console.log(JSON.stringify(comparison ? { comparison, benchmark: results } : results, null, 2));
+  } else {
+    console.log(markdown);
+  }
+
+  if (options.html !== undefined) {
+    const resolvedHtmlPath = path.resolve(options.html);
+    fs.writeFileSync(resolvedHtmlPath, generateHtmlReport(results, comparison), 'utf-8');
+    console.error(`📄 HTML report written to ${resolvedHtmlPath}`);
+  }
+  if (process.env.GITHUB_STEP_SUMMARY) {
+    fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, markdown, 'utf-8');
+  }
+
+  const minScore = Math.min(...results.map(result => result.overallTQI));
+  if (options.failUnder !== null && minScore < options.failUnder) {
+    console.error(`CI Gate Failed: Minimum TQI score (${minScore}) is below required threshold (${options.failUnder}).`);
+    process.exitCode = 1;
+  }
+  if (options.failOn.includes('breaking') && comparison?.breakingChanges.length) {
+    console.error(`CI Gate Failed: ${comparison.breakingChanges.length} breaking catalog change(s).`);
+    process.exitCode = 1;
+  }
+
+  const minimumSeverity = options.failOn.includes('high') ? 'high'
+    : options.failOn.includes('critical') ? 'critical' : undefined;
+  if (minimumSeverity) {
+    const diagnostics = comparison?.newDiagnostics
+      ?? results.flatMap(result => result.tools.flatMap(tool => tool.diagnostics ?? []));
+    const count = diagnostics.filter(finding =>
+      finding.severity === 'critical' || (minimumSeverity === 'high' && finding.severity === 'high')
+    ).length;
+    if (count) {
+      console.error(`CI Gate Failed: ${count} ${comparison ? 'new ' : ''}finding(s) at ${minimumSeverity} severity or higher.`);
+      process.exitCode = 1;
     }
   }
 }
 
-const htmlIdx = args.indexOf('--html');
-let htmlPath: string | null = null;
-if (htmlIdx !== -1) {
-  const candidate = args[htmlIdx + 1];
-  htmlPath = candidate && !candidate.startsWith('-') ? candidate : 'mcp-benchmark-report.html';
-}
-
-const results: ServerBenchmarkResult[] = [];
-
-if (cmdIdx !== -1) {
-  const rawCommand = args[cmdIdx + 1];
-  if (!rawCommand) {
-    console.error('Error: --cmd requires a server command string, e.g. --cmd "npx -y @scope/server".');
-    process.exit(1);
-  }
-
-  const [command, ...cmdArgs] = splitCommand(rawCommand);
-  let tools: McpToolDefinition[];
-  try {
-    tools = await fetchToolsFromStdioServer(command, cmdArgs);
-  } catch (e: any) {
-    console.error(`Error: Failed to inspect live MCP server "${rawCommand}": ${e.message}`);
-    process.exit(1);
-  }
-
-  results.push(benchmarkServerTools(rawCommand, tools));
-} else if (urlIdx !== -1) {
-  const rawUrl = args[urlIdx + 1];
-  if (!rawUrl) {
-    console.error('Error: --url requires an SSE / HTTP endpoint URL, e.g. --url "http://localhost:8000/sse".');
-    process.exit(1);
-  }
-
-  let tools: McpToolDefinition[];
-  try {
-    tools = await fetchToolsFromSseServer(rawUrl, Object.keys(headers).length > 0 ? headers : undefined);
-  } catch (e: any) {
-    console.error(`Error: Failed to inspect remote MCP server at "${rawUrl}": ${e.message}`);
-    process.exit(1);
-  }
-
-  results.push(benchmarkServerTools(rawUrl, tools));
-} else if (fileIdx !== -1 && args[fileIdx + 1]) {
-
-  const filePath = path.resolve(process.cwd(), args[fileIdx + 1]);
-  if (!fs.existsSync(filePath)) {
-    console.error(`Error: File not found at ${filePath}`);
-    process.exit(1);
-  }
-  const raw = fs.readFileSync(filePath, 'utf-8');
-  let parsed: any;
-  try {
-    parsed = JSON.parse(raw);
-  } catch (e: any) {
-    console.error(`Error: Invalid JSON in ${filePath}: ${e.message}`);
-    process.exit(1);
-  }
-
-  const tools: McpToolDefinition[] = Array.isArray(parsed) ? parsed : (parsed.tools || []);
-  const serverName = path.basename(filePath, path.extname(filePath));
-  results.push(benchmarkServerTools(serverName, tools));
-} else {
-  for (const [serverName, tools] of Object.entries(DATASETS)) {
-    results.push(benchmarkServerTools(serverName, tools));
-  }
-  results.sort((a, b) => b.overallTQI - a.overallTQI);
-}
-
-if (isJson) {
-  console.log(JSON.stringify(results, null, 2));
-} else {
-  console.log(formatMarkdownLeaderboard(results));
-}
-
-if (htmlPath !== null) {
-  const resolvedHtmlPath = path.resolve(process.cwd(), htmlPath);
-  fs.writeFileSync(resolvedHtmlPath, generateHtmlReport(results), 'utf-8');
-  console.error(`📄 HTML report written to ${resolvedHtmlPath}`);
-}
-
-if (process.env.GITHUB_STEP_SUMMARY) {
-  fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, formatMarkdownLeaderboard(results), 'utf-8');
-}
-
-if (failUnder !== null) {
-  const minScore = Math.min(...results.map((r) => r.overallTQI));
-  if (minScore < failUnder) {
-    console.error(`❌ CI Gate Failed: Minimum TQI score (${minScore}) is below required threshold (${failUnder}).`);
-    process.exit(1);
-  }
+try {
+  await run();
+} catch (error) {
+  console.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
+  process.exitCode = 1;
 }

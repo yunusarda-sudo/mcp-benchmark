@@ -3,6 +3,25 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import { McpToolDefinition } from './types.js';
 
+async function listAllTools(client: Client): Promise<McpToolDefinition[]> {
+  const tools: McpToolDefinition[] = [];
+  const seenCursors = new Set<string>();
+  let cursor: string | undefined;
+  do {
+    const page = await client.listTools(cursor === undefined ? undefined : { cursor });
+    for (const tool of page.tools) {
+      tools.push(tool);
+    }
+    cursor = page.nextCursor;
+    if (cursor !== undefined) {
+      if (seenCursors.has(cursor)) throw new Error('MCP server returned a repeated tools/list cursor.');
+      seenCursors.add(cursor);
+    }
+  } while (cursor !== undefined);
+
+  return tools;
+}
+
 /**
  * Spawn a local MCP server over stdio, connect to it, and retrieve its live
  * tool definitions. The transport is always closed before returning, even when
@@ -17,13 +36,7 @@ export async function fetchToolsFromStdioServer(
 
   try {
     await client.connect(transport);
-    const response = await client.listTools();
-
-    return response.tools.map((tool) => ({
-      name: tool.name,
-      description: tool.description,
-      inputSchema: tool.inputSchema as McpToolDefinition['inputSchema'],
-    }));
+    return await listAllTools(client);
   } finally {
     await transport.close();
   }
@@ -45,13 +58,7 @@ export async function fetchToolsFromSseServer(
 
   try {
     await client.connect(transport);
-    const response = await client.listTools();
-
-    return response.tools.map((tool) => ({
-      name: tool.name,
-      description: tool.description,
-      inputSchema: tool.inputSchema as McpToolDefinition['inputSchema'],
-    }));
+    return await listAllTools(client);
   } finally {
     await transport.close();
   }

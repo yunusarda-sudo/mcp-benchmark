@@ -1,12 +1,24 @@
 export interface McpToolDefinition {
     name: string;
     description?: string;
+    outputSchema?: Record<string, unknown>;
     inputSchema?: {
         type?: string;
         properties?: Record<string, any>;
         required?: string[];
         [key: string]: any;
     };
+}
+export type DiagnosticSeverity = 'info' | 'warning' | 'high' | 'critical';
+export interface ToolDiagnostic {
+    code: string;
+    severity: DiagnosticSeverity;
+    path: string;
+    message: string;
+    suggestion: string;
+}
+export interface AnalysisOptions {
+    englishStyle?: boolean;
 }
 export interface MetricBreakdown {
     schemaStrictness: number;
@@ -23,6 +35,8 @@ export interface ToolAnalysisReport {
     hasDescriptionsForParams: boolean;
     metrics: MetricBreakdown;
     findings: string[];
+    /** Stable rule IDs and JSON Pointers. Older persisted reports may omit this field. */
+    diagnostics?: ToolDiagnostic[];
 }
 export interface ServerBenchmarkResult {
     serverName: string;

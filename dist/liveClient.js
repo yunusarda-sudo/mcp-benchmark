@@ -1,6 +1,24 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
+async function listAllTools(client) {
+    const tools = [];
+    const seenCursors = new Set();
+    let cursor;
+    do {
+        const page = await client.listTools(cursor === undefined ? undefined : { cursor });
+        for (const tool of page.tools) {
+            tools.push(tool);
+        }
+        cursor = page.nextCursor;
+        if (cursor !== undefined) {
+            if (seenCursors.has(cursor))
+                throw new Error('MCP server returned a repeated tools/list cursor.');
+            seenCursors.add(cursor);
+        }
+    } while (cursor !== undefined);
+    return tools;
+}
 /**
  * Spawn a local MCP server over stdio, connect to it, and retrieve its live
  * tool definitions. The transport is always closed before returning, even when
@@ -11,12 +29,7 @@ export async function fetchToolsFromStdioServer(command, args = []) {
     const client = new Client({ name: 'mcp-benchmark', version: '1.1.0' });
     try {
         await client.connect(transport);
-        const response = await client.listTools();
-        return response.tools.map((tool) => ({
-            name: tool.name,
-            description: tool.description,
-            inputSchema: tool.inputSchema,
-        }));
+        return await listAllTools(client);
     }
     finally {
         await transport.close();
@@ -34,12 +47,7 @@ export async function fetchToolsFromSseServer(url, headers) {
     const client = new Client({ name: 'mcp-benchmark', version: '1.1.0' });
     try {
         await client.connect(transport);
-        const response = await client.listTools();
-        return response.tools.map((tool) => ({
-            name: tool.name,
-            description: tool.description,
-            inputSchema: tool.inputSchema,
-        }));
+        return await listAllTools(client);
     }
     finally {
         await transport.close();

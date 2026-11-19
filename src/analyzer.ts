@@ -1,4 +1,4 @@
-import { McpToolDefinition, MetricBreakdown, ServerBenchmarkResult, ToolAnalysisReport } from './types.js';
+import { AnalysisOptions, McpToolDefinition, ServerBenchmarkResult, ToolAnalysisReport, ToolDiagnostic } from './types.js';
 
 const IMPERATIVE_ACTION_VERBS = new Set([
   'get', 'list', 'create', 'update', 'delete', 'read', 'write',
@@ -18,28 +18,30 @@ const FLUFF_PATTERNS = [
 
 export const PROMPT_INJECTION_PATTERNS = [
   {
+    code: 'description.prompt-override',
     regex: /(ignore|override|bypass)\s+(all\s+)?((previous|prior|system|chat|base)\s+)*(instructions|prompts|rules|context)/i,
     severity: 'CRITICAL',
     title: 'Prompt injection / system prompt override directive detected in tool description',
   },
   {
+    code: 'description.possible-secret-disclosure',
     regex: /(exfiltrate|send|upload|post)\s+.*?(keys?|secrets?|tokens?|credentials?|passwords?|env)\s+.*?to/i,
     severity: 'CRITICAL',
     title: 'Potential data exfiltration directive detected in tool description',
   },
   {
+    code: 'description.hidden-action',
     regex: /do\s+not\s+(notify|tell|inform|warn)\s+(the\s+)?user/i,
     severity: 'HIGH',
     title: 'Covert stealth directive (hiding actions from user) detected in tool description',
   },
   {
+    code: 'description.silent-execution',
     regex: /\bsilently\b|\bwithout\s+(notifying|asking|prompting)\b/i,
     severity: 'HIGH',
     title: 'Silent execution directive detected in tool description',
   },
 ];
-
-
 
 export function estimateTokenCount(text: string): number {
   if (!text) return 0;
@@ -47,12 +49,37 @@ export function estimateTokenCount(text: string): number {
   return Math.ceil(text.length / 4);
 }
 
-export function analyzeToolDefinition(tool: McpToolDefinition): ToolAnalysisReport {
-  const findings: string[] = [];
+export function analyzeToolDefinition(tool: McpToolDefinition, options: AnalysisOptions = {}): ToolAnalysisReport {
+  const diagnostics: ToolDiagnostic[] = [];
+  const report = (
+    code: string,
+    severity: ToolDiagnostic['severity'],
+    path: string,
+    message: string,
+    suggestion: string,
+  ) => diagnostics.push({ code, severity, path, message, suggestion });
   const schema = tool.inputSchema || {};
   const properties = schema.properties || {};
   const propKeys = Object.keys(properties);
-  const required = schema.required || [];
+  const required = Array.isArray(schema.required) ? schema.required : [];
+  const validRequired = schema.required === undefined
+    || (Array.isArray(schema.required) && schema.required.every(key => typeof key === 'string'));
+  if (!validRequired) {
+    report('schema.invalid-required', 'critical', '/inputSchema/required', 'inputSchema.required must be an array of strings', 'List required property names as strings.');
+  }
+
+  for (const key of new Set(required)) {
+    if (typeof key !== 'string' || Object.hasOwn(properties, key)) continue;
+    const closed = schema.additionalProperties === false && Object.keys(schema.patternProperties ?? {}).length === 0;
+    const propertyPath = key.replace(/~/g, '~0').replace(/\//g, '~1');
+    report(
+      'schema.required-without-property',
+      closed ? 'critical' : 'warning',
+      `/inputSchema/properties/${propertyPath}`,
+      `Required field "${key}" has no explicit property definition`,
+      'Describe the field in properties or review whether it belongs in required.',
+    );
+  }
 
   const rawJson = JSON.stringify(tool);
   const tokenCount = estimateTokenCount(rawJson);
@@ -62,7 +89,7 @@ export function analyzeToolDefinition(tool: McpToolDefinition): ToolAnalysisRepo
   if (schema.type === 'object') {
     schemaScore += 20;
   } else {
-    findings.push('inputSchema missing root type: "object"');
+    report('schema.root-type', 'warning', '/inputSchema/type', 'inputSchema missing root type: "object"', 'Declare an object schema when the tool accepts named arguments.');
   }
 
   if (propKeys.length > 0) {
@@ -89,20 +116,16 @@ export function analyzeToolDefinition(tool: McpToolDefinition): ToolAnalysisRepo
     const typeRatio = typedCount / propKeys.length;
     schemaScore += Math.round(typeRatio * 30);
     if (typeRatio < 1.0) {
-      findings.push(`${propKeys.length - typedCount} parameters lack explicit JSON primitive types`);
+      report('schema.parameter-types', 'warning', '/inputSchema/properties', `${propKeys.length - typedCount} parameters lack explicit JSON primitive types`, 'Add types to parameters or document the schema composition when intentional.');
     }
 
     const descRatio = describedPropsCount / propKeys.length;
     schemaScore += Math.round(descRatio * 20);
     if (descRatio < 0.8) {
-      findings.push('Multiple input parameters lack descriptions');
+      report('schema.parameter-descriptions', 'warning', '/inputSchema/properties', 'Multiple input parameters lack descriptions', 'Explain the accepted values and units for each parameter.');
     }
 
-    if (Array.isArray(required)) {
-      schemaScore += 10;
-    } else {
-      findings.push('inputSchema is missing required array');
-    }
+    if (validRequired) schemaScore += 10;
 
     if (enumConstrainedCount > 0) {
       schemaScore += 10;
@@ -117,26 +140,23 @@ export function analyzeToolDefinition(tool: McpToolDefinition): ToolAnalysisRepo
   const desc = (tool.description || '').trim();
 
   if (desc.length === 0) {
-    findings.push('CRITICAL: Tool description is empty');
+    report('description.empty', 'critical', '/description', 'Tool description is empty', 'State what the tool does and when it should be used.');
   } else {
-    // Length adequacy (ideal: 25 - 350 chars)
+    semanticScore = 35;
+    // Length adequacy (ideal: 25–400 characters)
     if (desc.length >= 25 && desc.length <= 400) {
       semanticScore += 35;
     } else if (desc.length > 400) {
       semanticScore += 20;
-      findings.push('Tool description is overly verbose (>400 chars), increasing token overhead');
+      report('description.long', 'info', '/description', 'Tool description is overly verbose (>400 chars), increasing token overhead', 'Keep the purpose and key constraints, and remove repeated wording.');
     } else {
       semanticScore += 15;
-      findings.push('Tool description is too brief (<25 chars) to guide accurate model selection');
+      report('description.short', 'info', '/description', 'Tool description is too brief (<25 chars) to guide accurate model selection', 'Add context about when the tool should be selected.');
     }
 
-    // Imperative verb check
     const firstWord = desc.split(/[\s,.:;]/)[0]?.toLowerCase();
-    if (firstWord && IMPERATIVE_ACTION_VERBS.has(firstWord)) {
-      semanticScore += 35;
-    } else {
-      semanticScore += 15;
-      findings.push(`Description does not start with an imperative action verb (starts with "${firstWord}")`);
+    if (options.englishStyle && firstWord && !IMPERATIVE_ACTION_VERBS.has(firstWord)) {
+      report('description.english-action-verb', 'info', '/description', 'English description does not start with a recognized action verb', 'Consider leading with a concrete verb such as List or Read.');
     }
 
     // Fluff penalty
@@ -144,7 +164,7 @@ export function analyzeToolDefinition(tool: McpToolDefinition): ToolAnalysisRepo
     for (const pattern of FLUFF_PATTERNS) {
       if (pattern.test(desc)) {
         hasFluff = true;
-        findings.push('Description contains conversational filler phrases');
+        report('description.filler', 'info', '/description', 'Description contains conversational filler phrases', 'Start with the action and omit conversational filler.');
         break;
       }
     }
@@ -165,14 +185,20 @@ export function analyzeToolDefinition(tool: McpToolDefinition): ToolAnalysisRepo
     tokenScore = 50;
   } else {
     tokenScore = 30;
-    findings.push(`Heavy context token footprint (${tokenCount} tokens)`);
+    report('catalog.large-definition', 'info', '', `Heavy context token footprint (${tokenCount} tokens)`, 'Review long descriptions and redundant schema metadata.');
   }
 
   // 4. Security & Prompt-Injection Hygiene
   let securityPenalty = 0;
   for (const pattern of PROMPT_INJECTION_PATTERNS) {
     if (pattern.regex.test(desc)) {
-      findings.push(`${pattern.severity}: ${pattern.title}`);
+      report(
+        pattern.code,
+        pattern.severity === 'CRITICAL' ? 'critical' : 'high',
+        '/description',
+        pattern.title,
+        'Review the description and keep only the intended tool contract.',
+      );
       securityPenalty += pattern.severity === 'CRITICAL' ? 45 : 25;
     }
   }
@@ -199,11 +225,16 @@ export function analyzeToolDefinition(tool: McpToolDefinition): ToolAnalysisRepo
       tokenEfficiency: Math.min(100, Math.max(0, tokenScore)),
       overallScore: Math.min(100, Math.max(0, overallScore)),
     },
-    findings,
+    findings: diagnostics.map(diagnostic => (
+      diagnostic.severity === 'critical' || diagnostic.severity === 'high'
+        ? `${diagnostic.severity.toUpperCase()}: ${diagnostic.message}`
+        : diagnostic.message
+    )),
+    diagnostics,
   };
 }
 
-export function benchmarkServerTools(serverName: string, tools: McpToolDefinition[]): ServerBenchmarkResult {
+export function benchmarkServerTools(serverName: string, tools: McpToolDefinition[], options?: AnalysisOptions): ServerBenchmarkResult {
   if (tools.length === 0) {
     return {
       serverName,
@@ -219,7 +250,7 @@ export function benchmarkServerTools(serverName: string, tools: McpToolDefinitio
     };
   }
 
-  const toolReports = tools.map(analyzeToolDefinition);
+  const toolReports = tools.map(tool => analyzeToolDefinition(tool, options));
   const totalTokens = toolReports.reduce((acc, t) => acc + t.tokenCount, 0);
   const avgStrictness = Math.round(toolReports.reduce((acc, t) => acc + t.metrics.schemaStrictness, 0) / tools.length);
   const avgDensity = Math.round(toolReports.reduce((acc, t) => acc + t.metrics.semanticDensity, 0) / tools.length);

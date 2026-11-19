@@ -69,7 +69,7 @@ test('examples/sample-mcp-tools.json parses and produces expected scores', async
   const result = benchmarkServerTools('Sample Server', data.tools);
   assert.equal(result.toolsAnalyzed, 3);
   assert.equal(result.grade, 'B');
-  assert.ok(result.overallTQI >= 65 && result.overallTQI <= 75);
+  assert.equal(result.overallTQI, 73);
 });
 
 test('generateHtmlReport renders a self-contained HTML document', () => {
@@ -176,3 +176,53 @@ test('fetchToolsFromSseServer rejects when connecting to an unreachable or inval
   );
 });
 
+
+test('required-property diagnostics distinguish optional schemas and flag impossible required inputs', () => {
+  const tool = {
+    name: 'list_services',
+    description: 'List the services visible for this location.',
+    inputSchema: { type: 'object', properties: { location: { type: 'string', description: 'Location.' } } },
+  };
+  const optional = analyzeToolDefinition(tool);
+  assert.equal(optional.diagnostics.some(finding => finding.code.includes('required')), false);
+
+  const closed = analyzeToolDefinition({
+    ...tool,
+    inputSchema: { ...tool.inputSchema, additionalProperties: false, required: ['shop/~id'] },
+  });
+  const finding = closed.diagnostics.find(finding => finding.code === 'schema.required-without-property');
+  assert.equal(finding.severity, 'critical');
+  assert.equal(finding.path, '/inputSchema/properties/shop~1~0id');
+  assert.ok(finding.suggestion);
+});
+
+test('English style advice is opt-in and does not affect the score', () => {
+  const tool = {
+    name: 'list_services',
+    description: 'Mevcut hizmetleri ve yayımlanan fiyatlarını listele.',
+    inputSchema: { type: 'object' },
+  };
+  const normal = analyzeToolDefinition(tool);
+  const englishStyle = analyzeToolDefinition(tool, { englishStyle: true });
+  assert.equal(normal.diagnostics.some(finding => finding.code === 'description.english-action-verb'), false);
+  assert.equal(englishStyle.diagnostics.find(finding => finding.code === 'description.english-action-verb').severity, 'info');
+  assert.deepEqual(normal.metrics, englishStyle.metrics);
+});
+
+test('comparison ignores order and tracks output-schema changes', async () => {
+  const { compareToolCatalogs } = await import('../dist/index.js');
+  const tool = {
+    name: 'list_services',
+    description: 'List the services visible for this location.',
+    inputSchema: {
+      type: 'object',
+      properties: { a: { type: 'string' }, b: { type: 'string' } },
+      required: ['a', 'b'],
+    },
+  };
+  const candidate = { ...tool, inputSchema: { ...tool.inputSchema, required: ['b', 'a'] } };
+  assert.deepEqual(compareToolCatalogs([tool], [candidate]).changedTools, []);
+  const comparison = compareToolCatalogs([tool], [{ ...candidate, outputSchema: { type: 'object' } }]);
+  assert.deepEqual(comparison.changedTools, [{ toolName: 'list_services', fields: ['outputSchema'] }]);
+  assert.throws(() => compareToolCatalogs([tool, tool], [candidate]), /Duplicate tool name in baseline/);
+});

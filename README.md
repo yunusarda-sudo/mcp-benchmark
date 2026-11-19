@@ -1,162 +1,133 @@
-# 📊 MCP Benchmark (`mcp-benchmark`)
-
-<div align="center">
+# MCP Benchmark
 
 [![CI](https://github.com/yunusarda-sudo/mcp-benchmark/actions/workflows/ci.yml/badge.svg)](https://github.com/yunusarda-sudo/mcp-benchmark/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](https://opensource.org/licenses/MIT)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.8-blue?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-[![Model Context Protocol](https://img.shields.io/badge/MCP-Standard-6C5CE7?style=flat-square)](https://modelcontextprotocol.io/)
-[![Node.js](https://img.shields.io/badge/Node.js-18%2B-green?style=flat-square&logo=node.js&logoColor=white)](https://nodejs.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-**Deterministic quantitative quality benchmark and linter for Model Context Protocol (MCP) tool definitions.**
+MCP Benchmark scores tool definitions using deterministic rules for schema quality, description clarity, and estimated context size. Use it to review a tool catalog locally or catch score regressions in CI. It works without an LLM or API key.
 
-*Catch ambiguous descriptions, loose JSON schemas, and context token bloat before deploying agents to production.*
+## Quickstart
 
-</div>
-
----
-
-## 🎯 Why Tool Quality Matters
-
-Autonomous AI agents (Claude, GPT, Ollama) fail most frequently at **tool selection** and **parameter compilation**:
-- **Ambiguous Descriptions:** Tools with vague or conversational descriptions trigger tool selection hallucinations.
-- **Loose Schemas:** Missing `type`, missing `enum` constraints, or omitted parameter descriptions force LLMs to guess input shapes.
-- **Token Bloat:** Overly verbose schemas silently consume precious context window tokens on every single model turn.
-
-`mcp-benchmark` provides a deterministic scoring formula — the **Tool Quality Index (TQI)** — to audit and grade MCP servers from `A+` (90–100) to `F` (<50).
-
----
-
-## ⚡ Quickstart
-
-No installation required. Run the reference benchmark suite immediately:
+Run the bundled examples directly from GitHub with Node.js 18 or newer:
 
 ```bash
-# 1. Run reference benchmark across standard MCP servers:
-npx github:yunusarda-sudo/mcp-benchmark
-
-# 2. Audit a live MCP server directly over stdio (zero JSON export needed!):
-npx github:yunusarda-sudo/mcp-benchmark --cmd "npx -y @modelcontextprotocol/server-filesystem /tmp"
-npx github:yunusarda-sudo/mcp-benchmark --cmd "node dist/index.js"
-npx github:yunusarda-sudo/mcp-benchmark --cmd "python -m my_mcp_server"
-
-# 3. Audit a live remote MCP server over SSE / HTTP (FastMCP, Cloudflare, Docker):
-npx github:yunusarda-sudo/mcp-benchmark --url "http://localhost:8000/sse"
-npx github:yunusarda-sudo/mcp-benchmark -u "https://api.my-mcp.com/sse" -H "Authorization: Bearer <TOKEN>"
-
-# 4. Lint static tool definitions from a JSON file:
-npx github:yunusarda-sudo/mcp-benchmark --file ./examples/sample-mcp-tools.json
-
-# 5. Generate a self-contained interactive HTML dashboard:
-npx github:yunusarda-sudo/mcp-benchmark --html report.html
-
-# 6. Use as a strict CI/CD gate (exits with code 1 if below threshold):
-npx github:yunusarda-sudo/mcp-benchmark -f tools.json --fail-under 85
-
+npx --yes github:yunusarda-sudo/mcp-benchmark
 ```
 
----
+For repeatable runs, pin the Git dependency to a commit SHA. To work with the included sample file, clone the repository:
 
-## 🏆 Live Leaderboard (Reference Implementations)
-
-| Rank | MCP Server | Grade | TQI Score | Schema Strictness | Semantic Density | Token Efficiency | Avg Tokens/Tool |
-|:---:|:---|:---:|:---:|:---:|:---:|:---:|:---:|
-| 1 | **Postgres MCP (Official)** | `A+` | **96/100** | 90% | 100% | 100% | 68 tok |
-| 2 | **Filesystem MCP (Official)** | `A+` | **95/100** | 90% | 100% | 95% | 73 tok |
-| 3 | **Cremind MCP** | `A+` | **92/100** | 90% | 100% | 85% | 86 tok |
-| 4 | **Taskade MCP** | `A+` | **91/100** | 95% | 90% | 85% | 110 tok |
-| 5 | **Unoptimized Baseline** | `D` | **55/100** | 30% | 50% | 100% | 48 tok |
-
----
-
-## 📐 Scoring Methodology (Tool Quality Index - TQI)
-
-The Tool Quality Index evaluates three orthogonal dimensions:
-
-```
-TQI = (0.40 × Schema Strictness) + (0.35 × Semantic Density) + (0.25 × Token Efficiency)
+```bash
+git clone https://github.com/yunusarda-sudo/mcp-benchmark.git
+cd mcp-benchmark
+npm ci
+node dist/cli.js --file examples/sample-mcp-tools.json --json
 ```
 
-### 1. Schema Strictness (40% Weight)
-- Root type must be explicitly declared as `object`.
-- 100% of parameters must specify valid JSON schema primitive types (`string`, `number`, `integer`, `boolean`, `array`, `object`).
-- Parameter descriptions must be present on all arguments.
-- High-value constraints (`enum`, `pattern`, `minimum`, `maximum`) are rewarded.
+The sample has **3 tools** and scores **73/100 (B)** under the current rules. Use the [sample tool catalog](examples/sample-mcp-tools.json) as a starting point for your own input.
 
-### 2. Semantic Density (35% Weight)
-- **Imperative Action Verbs:** Tool descriptions should lead with action verbs (`read`, `query`, `create`, `search`, `validate`).
-- **Optimal Character Bounds:** Ideal description length is 25 to 400 characters (detailed enough to prevent ambiguity, concise enough to avoid bloat).
-- **Fluff Detection:** Penalizes conversational filler phrases (*"This tool allows you to...", "Basically used for..."*).
+## Inspect a catalog
 
-### 3. Context Token Footprint Efficiency (25% Weight)
-- Efficient schemas (under 160 tokens) preserve agent context memory.
-- Heavy schemas (>300 tokens) receive progressive efficiency penalties.
+| Input | Example |
+| --- | --- |
+| JSON file | `node dist/cli.js --file examples/sample-mcp-tools.json --json` |
+| Local MCP server over stdio | `node dist/cli.js --cmd "node fixtures/echo-mcp-server.mjs"` |
+| MCP server using the legacy HTTP+SSE transport | `node dist/cli.js --url http://localhost:8000/sse` |
 
-### 4. Security & Prompt-Injection Defense (Integrity Guardrails)
-- **Prompt Injection Directives:** Detects and flags system prompt override patterns (`ignore previous instructions`, `bypass rules`, etc.) with `CRITICAL` findings.
-- **Data Exfiltration Defense:** Flags covert instructions attempting to exfiltrate keys, tokens, or environment variables to remote destinations.
-- **Covert Stealth Directives:** Catches directives instructing the model not to notify or warn the user.
-- **Deterministic Penalty:** Malicious or compromised tool definitions receive heavy deductions preventing them from passing quality gates.
+A JSON input can be a tool array, an object with a `tools` array, or a complete [MCP `tools/list` JSON-RPC response](https://modelcontextprotocol.io/specification/2025-11-25/server/tools#listing-tools). For a paginated export, combine the tools from all pages into one array. Live inspection follows successive `nextCursor` values for the configured server and only lists tool definitions. The stdio mode starts the supplied executable, so use a command you trust.
 
----
+`--html report.html` saves a standalone report. `--json` sends only report JSON to stdout, with diagnostics on stderr. `--html` without a filename writes `mcp-benchmark-report.html`. Use `--help` for all options.
 
+## CI usage
 
-## 🤖 GitHub Actions CI/CD Integration
+Run this in an existing workflow step after checkout and Node setup:
 
-Prevent degraded tool schemas from reaching your `main` branch:
+```bash
+npx --yes github:yunusarda-sudo/mcp-benchmark --file ./tools.json --fail-under 70
+```
+
+Replace `./tools.json` with your catalog. Pick a threshold from 0 to 100 based on your current results. A score at the threshold passes. Invalid arguments, unreadable or incomplete exports, connection errors, and scores below the threshold exit with code `1`. If `GITHUB_STEP_SUMMARY` is set, the CLI writes a Markdown report there.
+
+## Compare changes in a pull request
+
+```bash
+node dist/cli.js --baseline examples/pr-base.json --file examples/pr-candidate.json \
+  --fail-on breaking --fail-on critical --html comparison.html
+```
+
+The example reports that `get_customer` was removed, `create_booking` gained a required `staffId`, and `list_services` lacks a description. It writes the report and exits with code `1`.
+
+- `--fail-on breaking` requires a baseline. It flags removed tools and newly required top-level input properties.
+- `--fail-on critical` or `--fail-on high` fails on findings at that severity or higher. With a baseline, it considers only new findings. Repeat `--fail-on` to combine checks.
+- Findings in `diagnostics` carry a stable `code`, `severity`, JSON Pointer `path`, `message`, and `suggestion`. The existing `findings` strings remain available.
+- Plain `--json` still returns a benchmark array. With `--baseline`, it returns an object with `comparison` and `benchmark` fields.
+
+This compares selected tool fields and reports common breaking changes. Semantic JSON Schema compatibility and client behavior require additional tests.
+
+For a project that tracks its catalog as `tools.json`, use this GitHub Actions workflow after these options are available on the benchmark ref. Pin that ref to an immutable commit for repeatable CI results.
 
 ```yaml
-name: Lint MCP Tools
-on: [push, pull_request]
-
+name: Compare MCP tools
+on: [pull_request]
+permissions:
+  contents: read
 jobs:
-  audit-tools:
+  compare:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
-      - name: Run MCP Benchmark Audit
-        run: npx mcp-benchmark --file ./src/tools.json --fail-under 80
+          node-version: 22
+      - name: Compare tool catalogs
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          git show "$BASE_SHA:tools.json" > "$RUNNER_TEMP/mcp-baseline.json"
+          npx --yes github:yunusarda-sudo/mcp-benchmark \
+            --baseline "$RUNNER_TEMP/mcp-baseline.json" --file tools.json \
+            --fail-on breaking --fail-on critical
 ```
 
----
+## Bundled examples
 
-## 💻 Programmatic Usage (TypeScript / Node.js)
+The default command scores the small illustrative definitions in [the CLI source](src/cli.ts). These scores are fixture results. They do not measure the live vendor implementations, current tool catalogs, or LLM performance.
 
-```typescript
-import { analyzeToolDefinition, benchmarkServerTools } from 'mcp-benchmark';
+| Fixture | Tools | Grade | TQI |
+| --- | ---: | --- | ---: |
+| Postgres-style | 1 | A+ | 96 |
+| Filesystem-style | 3 | A+ | 95 |
+| Taskade-style | 2 | A+ | 94 |
+| Cremind-style | 1 | A+ | 92 |
+| Ambiguous baseline | 1 | C | 62 |
+
+## Scoring
+
+The **Tool Quality Index (TQI)** averages tool scores across a server. Each tool score weights schema strictness at 40%, semantic density at 35%, and estimated token efficiency at 25%. The analyzer also subtracts penalties for matching suspicious text patterns. The [analyzer source](src/analyzer.ts) defines the rules and weights.
+
+- **Schema strictness** checks signals such as root type, property types, descriptions, and constraints. Full JSON Schema and MCP protocol validation are outside the scope of this score.
+- **Semantic density** checks description length and common filler phrases. Use `--english-style` for optional English action-verb advice. The advice does not affect TQI.
+- **Token efficiency** estimates tokens from serialized string length divided by four and rounded up. Actual counts vary by tokenizer.
+- **Security findings** are heuristic review signals. A clean report cannot establish that a tool is safe.
+
+When comparing runs, keep the input fixture and benchmark commit fixed. Use an offline export if the remote catalog can change between runs.
+
+## Library usage
+
+After installing from GitHub with `npm install github:yunusarda-sudo/mcp-benchmark`:
+
+```ts
+import { analyzeToolDefinition } from 'mcp-benchmark';
 
 const report = analyzeToolDefinition({
-  name: 'search_database',
-  description: 'Search customer records by verified email address.',
-  inputSchema: {
-    type: 'object',
-    required: ['email'],
-    properties: {
-      email: { type: 'string', description: 'Customer email address.' },
-    },
-  },
+  name: 'list_services',
+  description: 'List the available services and their published durations.',
+  inputSchema: { type: 'object', properties: {} },
 });
 
-console.log(`TQI Score: ${report.metrics.overallScore}/100`);
-console.log(`Findings:`, report.findings);
+console.log(report.metrics.overallScore, report.findings);
 ```
 
----
+## Contributing
 
-## 🤝 Contributing
-
-Contributions are warmly welcomed! Please read our [CONTRIBUTING.md](CONTRIBUTING.md) to get started.
-
-1. Fork the repository
-2. Create your topic branch (`git checkout -b feat/my-new-rule`)
-3. Verify test suite (`npm test`)
-4. Open a Pull Request
-
----
-
-## 📄 License
-
-MIT License © 2026 Yunus Arda Güney ([@yunusarda-sudo](https://github.com/yunusarda-sudo))
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the development workflow and fixture guidance. The project is licensed under [MIT](LICENSE).
