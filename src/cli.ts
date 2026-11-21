@@ -9,6 +9,7 @@ import { fetchToolsFromStdioServer, fetchToolsFromSseServer } from './liveClient
 import { fixToolCatalog } from './fixer.js';
 import { generateSarifReport } from './sarif.js';
 import { loadToolsFromConfig } from './configLoader.js';
+import { generateSvgBadge } from './badge.js';
 import { McpToolDefinition, ServerBenchmarkResult } from './types.js';
 
 
@@ -236,6 +237,7 @@ Options:
   --markdown, -m         Output results as a Markdown table (default)
   --html [path]          Write a self-contained HTML report to disk (default: mcp-benchmark-report.html)
   --sarif [path]         Write a GitHub Code Scanning SARIF v2.1.0 report (default: mcp-benchmark.sarif)
+  --badge [path]         Write a SVG quality badge for READMEs (default: mcp-badge.svg)
   --help, -h             Show this help message
 
 Examples:
@@ -250,6 +252,7 @@ Examples:
   mcp-benchmark --baseline before.json --file after.json --fail-on breaking --fail-on critical
   mcp-benchmark --html report.html      Write a shareable HTML report
   mcp-benchmark -f tools.json --sarif   Export SARIF report for GitHub Code Scanning
+  mcp-benchmark -f tools.json --badge   Generate SVG quality badge for README
 `);
   process.exit(0);
 }
@@ -261,6 +264,9 @@ function readOptions(args: string[]) {
     }
     if (arg === '--sarif' && (!args[i + 1] || args[i + 1].startsWith('-'))) {
       return '--sarif=mcp-benchmark.sarif';
+    }
+    if (arg === '--badge' && (!args[i + 1] || args[i + 1].startsWith('-'))) {
+      return '--badge=mcp-badge.svg';
     }
     if (arg === '--write' && (!args[i + 1] || args[i + 1].startsWith('-'))) {
       return '--write=__DEFAULT__';
@@ -285,6 +291,7 @@ function readOptions(args: string[]) {
       markdown: { type: 'boolean', short: 'm' },
       html: { type: 'string' },
       sarif: { type: 'string' },
+      badge: { type: 'string' },
     },
   });
 
@@ -446,6 +453,18 @@ async function run() {
     const sourceUri = options.file || options.cmd || options.url || options.config || 'bundled-datasets';
     fs.writeFileSync(resolvedSarifPath, generateSarifReport(results, sourceUri), 'utf-8');
     console.error(`🛡️ SARIF report written to ${resolvedSarifPath}`);
+  }
+  if (options.badge !== undefined) {
+    const resolvedBadgePath = path.resolve(options.badge);
+    const avgScore = results.length > 0 ? Math.round(results.reduce((sum, r) => sum + r.overallTQI, 0) / results.length) : 0;
+    let grade = 'F';
+    if (avgScore >= 90) grade = 'A+';
+    else if (avgScore >= 80) grade = 'A';
+    else if (avgScore >= 70) grade = 'B';
+    else if (avgScore >= 60) grade = 'C';
+    else if (avgScore >= 50) grade = 'D';
+    fs.writeFileSync(resolvedBadgePath, generateSvgBadge(avgScore, grade), 'utf-8');
+    console.error(`🛡️ SVG quality badge written to ${resolvedBadgePath}`);
   }
   if (process.env.GITHUB_STEP_SUMMARY) {
     fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, markdown, 'utf-8');

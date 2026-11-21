@@ -54,7 +54,29 @@ export function fixToolDefinition(tool: McpToolDefinition): { fixedTool: McpTool
 
   const props = fixed.inputSchema.properties ?? {};
 
-  // 2. Fix required fields
+  // 2. Fix empty enums and missing array items
+  for (const [propName, propVal] of Object.entries(props)) {
+    if (propVal && typeof propVal === 'object') {
+      if (Array.isArray(propVal.enum) && propVal.enum.length === 0) {
+        delete propVal.enum;
+        changes.push({
+          toolName,
+          action: 'remove-empty-enum',
+          detail: `Removed empty enum array from property "${propName}"`,
+        });
+      }
+      if (propVal.type === 'array' && !propVal.items) {
+        propVal.items = { type: 'string' };
+        changes.push({
+          toolName,
+          action: 'add-array-items',
+          detail: `Added default { type: "string" } items schema to array property "${propName}"`,
+        });
+      }
+    }
+  }
+
+  // 3. Fix required fields
   if (Array.isArray(fixed.inputSchema.required)) {
     const rawRequired = fixed.inputSchema.required;
     const deduplicated = [...new Set(rawRequired)].filter(key => typeof key === 'string');

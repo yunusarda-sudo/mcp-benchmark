@@ -35,7 +35,7 @@ The sample has **3 tools** and scores **73/100 (B)** under the current rules. Us
 
 A JSON input can be a tool array, an object with a `tools` array, or a complete [MCP `tools/list` JSON-RPC response](https://modelcontextprotocol.io/specification/2025-11-25/server/tools#listing-tools). For a paginated export, combine the tools from all pages into one array. Live inspection follows successive `nextCursor` values for the configured server and only lists tool definitions. The stdio mode starts the supplied executable, so use a command you trust.
 
-`--html report.html` saves a standalone report. `--sarif report.sarif` exports an OASIS SARIF v2.1.0 report for GitHub Code Scanning. `--json` sends only report JSON to stdout, with diagnostics on stderr. Use `--help` for all options.
+`--html report.html` saves a standalone interactive report with live tool search and diagnostic filtering. `--sarif report.sarif` exports an OASIS SARIF v2.1.0 report for GitHub Code Scanning. `--badge mcp-badge.svg` generates an SVG quality badge for your repository. `--json` sends only report JSON to stdout, with diagnostics on stderr. Use `--help` for all options.
 
 ## Automated Fixes (`--fix`)
 
@@ -53,6 +53,21 @@ The fixer automatically:
 - Injects missing root `type: "object"` and initializes `properties`.
 - Cleans conversational filler words ("This tool allows you to...", "Basically...", etc.) from descriptions.
 - Prunes non-existent fields and deduplicates entries in `inputSchema.required`.
+- Prunes empty enum arrays (`enum: []`).
+- Sets default `{ type: "string" }` items schema on `type: "array"` fields lacking `items`.
+
+## README SVG Quality Badge
+
+Generate a retina-crisp SVG badge to display your tool quality score:
+
+```bash
+node dist/cli.js --file tools.json --badge mcp-badge.svg
+```
+
+Embed it in your markdown:
+```markdown
+![MCP Quality](mcp-badge.svg)
+```
 
 ## GitHub Actions & SARIF Export
 

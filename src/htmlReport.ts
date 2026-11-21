@@ -160,6 +160,7 @@ function diagnosticsSection(results: ServerBenchmarkResult[]): string {
       <div class="panel-head">
         <h2>Tool-level Diagnostics</h2>
         <div class="toolbar">
+          <input type="text" id="tool-search" class="search-input" placeholder="Filter tools or diagnostics..." />
           <button type="button" data-action="expand">Expand all</button>
           <button type="button" data-action="collapse">Collapse all</button>
         </div>
@@ -365,6 +366,18 @@ details.tool-card[open] > summary::before { transform: rotate(90deg); }
 .findings li { color: var(--text); }
 .findings li::marker { color: var(--warn); }
 .findings-clean { margin: 0; color: var(--pass); font-size: 14px; }
+.search-input {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  padding: 4px 10px;
+  font-size: 13px;
+  outline: none;
+  width: 200px;
+  transition: border-color .15s ease;
+}
+.search-input:focus { border-color: var(--accent); }
 .empty { color: var(--muted); text-align: center; padding: 20px; }
 footer { margin-top: 28px; text-align: center; color: var(--muted); font-size: 12.5px; }
 `;
@@ -384,6 +397,25 @@ function scriptTag(): string {
     if (action === 'expand') setAll(true);
     if (action === 'collapse') setAll(false);
   });
+  var searchInput = document.getElementById('tool-search');
+  if (searchInput) {
+    searchInput.addEventListener('input', function (e) {
+      var query = e.target.value.toLowerCase().trim();
+      document.querySelectorAll('details.tool-card').forEach(function (card) {
+        if (!query) {
+          card.style.display = '';
+        } else {
+          var text = card.textContent.toLowerCase();
+          card.style.display = text.indexOf(query) !== -1 ? '' : 'none';
+          if (text.indexOf(query) !== -1) {
+            card.open = true;
+            var parent = card.closest('details.server-card');
+            if (parent) parent.open = true;
+          }
+        }
+      });
+    });
+  }
 })();
 </script>`;
 }

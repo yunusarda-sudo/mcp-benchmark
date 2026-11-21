@@ -6,3 +6,4 @@ export * from './compare.js';
 export * from './fixer.js';
 export * from './sarif.js';
 export * from './configLoader.js';
+export * from './badge.js';

@@ -8,6 +8,7 @@ import {
   fixToolDefinition,
   fixToolCatalog,
   generateSarifReport,
+  generateSvgBadge,
   loadToolsFromConfig,
   benchmarkServerTools,
 } from '../dist/index.js';
@@ -174,6 +175,99 @@ test('cli --file with --fix and --write cleans file on disk and --sarif exports 
     assert.equal(updatedTools[0].description, 'Read files.');
     assert.equal(updatedTools[0].inputSchema.type, 'object');
     assert.equal(updatedTools[0].inputSchema.required, undefined);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test('analyzeToolDefinition flags invalid regex pattern, empty enum, and invalid default type', () => {
+  const tool = {
+    name: 'test_advanced_schema',
+    description: 'Test patterns, enums and defaults.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        regex_field: {
+          type: 'string',
+          pattern: '[unclosed(regex',
+        },
+        enum_field: {
+          type: 'string',
+          enum: [],
+        },
+        default_field: {
+          type: 'string',
+          default: 12345, // invalid type mismatch!
+        },
+        polymorphic_field: {
+          oneOf: [
+            { type: 'string', description: 'String format' },
+            { type: 'number', description: 'Number format' },
+          ],
+          description: 'Polymorphic argument',
+        },
+      },
+    },
+  };
+
+  const report = analyzeToolDefinition(tool);
+  const codes = (report.diagnostics ?? []).map(d => d.code);
+  assert.ok(codes.includes('schema.invalid-pattern'), 'Should flag invalid regex pattern');
+  assert.ok(codes.includes('schema.empty-enum'), 'Should flag empty enum array');
+  assert.ok(codes.includes('schema.invalid-default'), 'Should flag default value type mismatch');
+  // polymorphic_field has oneOf with valid types, so parameter-types warning should NOT complain about polymorphic_field
+  const untypedWarning = (report.diagnostics ?? []).find(d => d.code === 'schema.parameter-types');
+  assert.equal(untypedWarning, undefined, 'oneOf property should be recognized as typed');
+});
+
+test('fixToolDefinition removes empty enums and fixes array missing items', () => {
+  const tool = {
+    name: 'enum_array_tool',
+    description: 'Fix empty enum and array without items.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        tags: { type: 'array' },
+        mode: { type: 'string', enum: [] },
+      },
+    },
+  };
+
+  const { fixedTool, changes } = fixToolDefinition(tool);
+  assert.equal(fixedTool.inputSchema?.properties?.mode.enum, undefined);
+  assert.deepEqual(fixedTool.inputSchema?.properties?.tags.items, { type: 'string' });
+  assert.ok(changes.some(c => c.action === 'remove-empty-enum'));
+  assert.ok(changes.some(c => c.action === 'add-array-items'));
+});
+
+test('generateSvgBadge creates crisp SVG with correct score and grade coloring', () => {
+  const svgPass = generateSvgBadge(95, 'A+');
+  assert.match(svgPass, /^<svg/);
+  assert.match(svgPass, /A\+ \(95\/100\)/);
+  assert.match(svgPass, /#4c1/); // green
+
+  const svgWarn = generateSvgBadge(65, 'C');
+  assert.match(svgWarn, /C \(65\/100\)/);
+  assert.match(svgWarn, /#dfb317/); // yellow
+});
+
+test('cli --badge exports SVG quality badge to file', async () => {
+  const { spawnSync } = await import('node:child_process');
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-badge-test-'));
+  const badgeFile = path.join(tmpDir, 'test-badge.svg');
+  const sample = path.resolve('examples/sample-mcp-tools.json');
+
+  try {
+    const cliPath = path.resolve('dist/cli.js');
+    const result = spawnSync(process.execPath, [cliPath, '-f', sample, '--badge', badgeFile, '--json'], {
+      encoding: 'utf8',
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.ok(fs.existsSync(badgeFile), 'SVG badge file should exist');
+    const badgeContent = fs.readFileSync(badgeFile, 'utf8');
+    assert.match(badgeContent, /^<svg/);
+    assert.match(badgeContent, /MCP Quality/);
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }

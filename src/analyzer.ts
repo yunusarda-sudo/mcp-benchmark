@@ -43,6 +43,23 @@ export const PROMPT_INJECTION_PATTERNS = [
   },
 ];
 
+function hasValidPropertyType(prop: any): boolean {
+  if (!prop || typeof prop !== 'object') return false;
+  if (prop.type && ['string', 'number', 'integer', 'boolean', 'array', 'object'].includes(prop.type)) {
+    return true;
+  }
+  if (Array.isArray(prop.type) && prop.type.length > 0) {
+    return prop.type.every((t: any) => ['string', 'number', 'integer', 'boolean', 'array', 'object', 'null'].includes(t));
+  }
+  if (Array.isArray(prop.oneOf) && prop.oneOf.length > 0) {
+    return prop.oneOf.every(hasValidPropertyType);
+  }
+  if (Array.isArray(prop.anyOf) && prop.anyOf.length > 0) {
+    return prop.anyOf.every(hasValidPropertyType);
+  }
+  return false;
+}
+
 export function estimateTokenCount(text: string): number {
   if (!text) return 0;
   // Standard heuristic: ~4 characters per token for English text/JSON
@@ -95,10 +112,11 @@ export function analyzeToolDefinition(tool: McpToolDefinition, options: Analysis
     );
   }
 
-  // Deep inspection for array items and nested object properties
+  // Deep inspection for array items, nested properties, enums, patterns, and defaults
   for (const key of propKeys) {
     const prop = properties[key];
     const propertyPath = key.replace(/~/g, '~0').replace(/\//g, '~1');
+
     if (prop && prop.type === 'array' && !prop.items) {
       report(
         'schema.array-without-items',
@@ -108,12 +126,59 @@ export function analyzeToolDefinition(tool: McpToolDefinition, options: Analysis
         'Specify the type or schema of array items using an "items" property.',
       );
     }
+
+    if (prop && Array.isArray(prop.enum) && prop.enum.length === 0) {
+      report(
+        'schema.empty-enum',
+        'critical',
+        `/inputSchema/properties/${propertyPath}/enum`,
+        `Property "${key}" defines an empty enum array`,
+        'Provide allowed values for the enum or remove the empty enum constraint.',
+      );
+    }
+
+    if (prop && typeof prop.pattern === 'string') {
+      try {
+        new RegExp(prop.pattern);
+      } catch {
+        report(
+          'schema.invalid-pattern',
+          'critical',
+          `/inputSchema/properties/${propertyPath}/pattern`,
+          `Property "${key}" defines an invalid regular expression pattern: "${prop.pattern}"`,
+          'Correct the regex syntax to avoid client runtime evaluation crashes.',
+        );
+      }
+    }
+
+    if (prop && prop.default !== undefined && typeof prop.type === 'string') {
+      const defaultType = typeof prop.default;
+      const expectedType = prop.type === 'integer' ? 'number' : prop.type;
+      if (prop.type === 'array' && !Array.isArray(prop.default)) {
+        report(
+          'schema.invalid-default',
+          'warning',
+          `/inputSchema/properties/${propertyPath}/default`,
+          `Default value for "${key}" is not an array`,
+          'Ensure default matches the declared array type.',
+        );
+      } else if (prop.type !== 'array' && prop.type !== 'object' && defaultType !== expectedType) {
+        report(
+          'schema.invalid-default',
+          'warning',
+          `/inputSchema/properties/${propertyPath}/default`,
+          `Default value type (${defaultType}) for "${key}" does not match declared schema type (${prop.type})`,
+          'Ensure default value matches the declared property type.',
+        );
+      }
+    }
+
     if (prop && prop.type === 'object' && prop.properties && typeof prop.properties === 'object') {
       const nestedKeys = Object.keys(prop.properties);
       for (const nKey of nestedKeys) {
         const nestedProp = prop.properties[nKey];
         const nestedPath = `${propertyPath}/properties/${nKey.replace(/~/g, '~0').replace(/\//g, '~1')}`;
-        if (!nestedProp || !nestedProp.type) {
+        if (!hasValidPropertyType(nestedProp)) {
           report(
             'schema.nested-parameter-types',
             'warning',
@@ -168,7 +233,7 @@ export function analyzeToolDefinition(tool: McpToolDefinition, options: Analysis
 
     for (const key of propKeys) {
       const prop = properties[key];
-      if (prop && prop.type && ['string', 'number', 'integer', 'boolean', 'array', 'object'].includes(prop.type)) {
+      if (hasValidPropertyType(prop)) {
         typedCount++;
       }
       if (prop && (prop.description || prop.title)) {

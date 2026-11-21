@@ -38,6 +38,23 @@ export const PROMPT_INJECTION_PATTERNS = [
         title: 'Silent execution directive detected in tool description',
     },
 ];
+function hasValidPropertyType(prop) {
+    if (!prop || typeof prop !== 'object')
+        return false;
+    if (prop.type && ['string', 'number', 'integer', 'boolean', 'array', 'object'].includes(prop.type)) {
+        return true;
+    }
+    if (Array.isArray(prop.type) && prop.type.length > 0) {
+        return prop.type.every((t) => ['string', 'number', 'integer', 'boolean', 'array', 'object', 'null'].includes(t));
+    }
+    if (Array.isArray(prop.oneOf) && prop.oneOf.length > 0) {
+        return prop.oneOf.every(hasValidPropertyType);
+    }
+    if (Array.isArray(prop.anyOf) && prop.anyOf.length > 0) {
+        return prop.anyOf.every(hasValidPropertyType);
+    }
+    return false;
+}
 export function estimateTokenCount(text) {
     if (!text)
         return 0;
@@ -76,19 +93,40 @@ export function analyzeToolDefinition(tool, options = {}) {
         const propertyPath = key.replace(/~/g, '~0').replace(/\//g, '~1');
         report('schema.required-without-property', closed ? 'critical' : 'warning', `/inputSchema/properties/${propertyPath}`, `Required field "${key}" has no explicit property definition`, 'Describe the field in properties or review whether it belongs in required.');
     }
-    // Deep inspection for array items and nested object properties
+    // Deep inspection for array items, nested properties, enums, patterns, and defaults
     for (const key of propKeys) {
         const prop = properties[key];
         const propertyPath = key.replace(/~/g, '~0').replace(/\//g, '~1');
         if (prop && prop.type === 'array' && !prop.items) {
             report('schema.array-without-items', 'warning', `/inputSchema/properties/${propertyPath}/items`, `Array parameter "${key}" lacks an "items" schema definition`, 'Specify the type or schema of array items using an "items" property.');
         }
+        if (prop && Array.isArray(prop.enum) && prop.enum.length === 0) {
+            report('schema.empty-enum', 'critical', `/inputSchema/properties/${propertyPath}/enum`, `Property "${key}" defines an empty enum array`, 'Provide allowed values for the enum or remove the empty enum constraint.');
+        }
+        if (prop && typeof prop.pattern === 'string') {
+            try {
+                new RegExp(prop.pattern);
+            }
+            catch {
+                report('schema.invalid-pattern', 'critical', `/inputSchema/properties/${propertyPath}/pattern`, `Property "${key}" defines an invalid regular expression pattern: "${prop.pattern}"`, 'Correct the regex syntax to avoid client runtime evaluation crashes.');
+            }
+        }
+        if (prop && prop.default !== undefined && typeof prop.type === 'string') {
+            const defaultType = typeof prop.default;
+            const expectedType = prop.type === 'integer' ? 'number' : prop.type;
+            if (prop.type === 'array' && !Array.isArray(prop.default)) {
+                report('schema.invalid-default', 'warning', `/inputSchema/properties/${propertyPath}/default`, `Default value for "${key}" is not an array`, 'Ensure default matches the declared array type.');
+            }
+            else if (prop.type !== 'array' && prop.type !== 'object' && defaultType !== expectedType) {
+                report('schema.invalid-default', 'warning', `/inputSchema/properties/${propertyPath}/default`, `Default value type (${defaultType}) for "${key}" does not match declared schema type (${prop.type})`, 'Ensure default value matches the declared property type.');
+            }
+        }
         if (prop && prop.type === 'object' && prop.properties && typeof prop.properties === 'object') {
             const nestedKeys = Object.keys(prop.properties);
             for (const nKey of nestedKeys) {
                 const nestedProp = prop.properties[nKey];
                 const nestedPath = `${propertyPath}/properties/${nKey.replace(/~/g, '~0').replace(/\//g, '~1')}`;
-                if (!nestedProp || !nestedProp.type) {
+                if (!hasValidPropertyType(nestedProp)) {
                     report('schema.nested-parameter-types', 'warning', `/inputSchema/properties/${nestedPath}`, `Nested property "${key}.${nKey}" lacks an explicit JSON primitive type`, 'Add an explicit type to the nested property.');
                 }
                 if (!nestedProp || (!nestedProp.description && !nestedProp.title)) {
@@ -127,7 +165,7 @@ export function analyzeToolDefinition(tool, options = {}) {
         let enumConstrainedCount = 0;
         for (const key of propKeys) {
             const prop = properties[key];
-            if (prop && prop.type && ['string', 'number', 'integer', 'boolean', 'array', 'object'].includes(prop.type)) {
+            if (hasValidPropertyType(prop)) {
                 typedCount++;
             }
             if (prop && (prop.description || prop.title)) {
