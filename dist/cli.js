@@ -6,6 +6,9 @@ import { benchmarkServerTools } from './analyzer.js';
 import { compareToolCatalogs } from './compare.js';
 import { generateHtmlReport } from './htmlReport.js';
 import { fetchToolsFromStdioServer, fetchToolsFromSseServer } from './liveClient.js';
+import { fixToolCatalog } from './fixer.js';
+import { generateSarifReport } from './sarif.js';
+import { loadToolsFromConfig } from './configLoader.js';
 // Split a command line string into executable + args, respecting quotes.
 function splitCommand(input) {
     const tokens = [];
@@ -216,7 +219,10 @@ Options:
   --file, -f <path>      Path to a JSON file containing tool definitions to lint
   --cmd <command>        Launch a local MCP server over stdio and benchmark its live tools
   --url, -u <endpoint>   Connect to a remote MCP server using legacy HTTP+SSE
+  --config, -c <path>    Load and benchmark all servers defined in a client config (claude_desktop_config.json, mcp.json)
   --header, -H <k:v>     Custom HTTP header for remote MCP connection (can be specified multiple times)
+  --fix                  Automatically clean conversational fluff and schema inconsistencies in --file
+  --write [path]         Save fixed tools back to disk (defaults to overwriting --file if path omitted)
   --fail-under <score>   Require a minimum TQI from 0 to 100
   --baseline <path>      Compare a tool catalog against the input source
   --fail-on <level>      Fail on critical, high (or higher), or breaking changes; repeatable
@@ -224,31 +230,47 @@ Options:
   --json                 Output results as JSON
   --markdown, -m         Output results as a Markdown table (default)
   --html [path]          Write a self-contained HTML report to disk (default: mcp-benchmark-report.html)
+  --sarif [path]         Write a GitHub Code Scanning SARIF v2.1.0 report (default: mcp-benchmark.sarif)
   --help, -h             Show this help message
 
 Examples:
   mcp-benchmark                         Run the bundled examples
   mcp-benchmark -f tools.json         Lint and score your own MCP tool definitions
+  mcp-benchmark -f tools.json --fix --write  Auto-clean descriptions and fix schema issues
+  mcp-benchmark -c ~/.cursor/mcp.json Benchmark all servers in a configuration file
   mcp-benchmark --cmd "node fixtures/echo-mcp-server.mjs"
   mcp-benchmark --url "http://localhost:8000/sse"
   mcp-benchmark -u "https://api.example.com/mcp/sse" -H "Authorization: Bearer token"
   mcp-benchmark -f tools.json --fail-under 80
   mcp-benchmark --baseline before.json --file after.json --fail-on breaking --fail-on critical
-  mcp-benchmark --html report.html    Write a shareable HTML report
+  mcp-benchmark --html report.html      Write a shareable HTML report
+  mcp-benchmark -f tools.json --sarif   Export SARIF report for GitHub Code Scanning
 `);
     process.exit(0);
 }
 function readOptions(args) {
-    const normalized = args.map((arg, i) => arg === '--html' && (!args[i + 1] || args[i + 1].startsWith('-'))
-        ? '--html=mcp-benchmark-report.html'
-        : arg);
+    const normalized = args.map((arg, i) => {
+        if (arg === '--html' && (!args[i + 1] || args[i + 1].startsWith('-'))) {
+            return '--html=mcp-benchmark-report.html';
+        }
+        if (arg === '--sarif' && (!args[i + 1] || args[i + 1].startsWith('-'))) {
+            return '--sarif=mcp-benchmark.sarif';
+        }
+        if (arg === '--write' && (!args[i + 1] || args[i + 1].startsWith('-'))) {
+            return '--write=__DEFAULT__';
+        }
+        return arg;
+    });
     const { values } = parseArgs({
         args: normalized,
         options: {
             file: { type: 'string', short: 'f' },
             cmd: { type: 'string' },
             url: { type: 'string', short: 'u' },
+            config: { type: 'string', short: 'c' },
             header: { type: 'string', short: 'H', multiple: true },
+            fix: { type: 'boolean' },
+            write: { type: 'string' },
             'fail-under': { type: 'string' },
             baseline: { type: 'string' },
             'fail-on': { type: 'string', multiple: true },
@@ -256,15 +278,19 @@ function readOptions(args) {
             json: { type: 'boolean' },
             markdown: { type: 'boolean', short: 'm' },
             html: { type: 'string' },
+            sarif: { type: 'string' },
         },
     });
-    const sources = [values.file, values.cmd, values.url].filter(value => value !== undefined);
+    const sources = [values.file, values.cmd, values.url, values.config].filter(value => value !== undefined);
     if (sources.length > 1)
-        throw new Error('Choose only one of --file, --cmd, or --url.');
+        throw new Error('Choose only one of --file, --cmd, --url, or --config.');
     if (sources.some(value => !value.trim()))
         throw new Error('The selected input option requires a non-empty value.');
     if (values.json && values.markdown)
         throw new Error('Choose either --json or --markdown.');
+    if (values.fix && !values.file) {
+        throw new Error('--fix requires --file to specify the tool catalog to clean.');
+    }
     const threshold = values['fail-under'];
     if (threshold !== undefined && (!/^\d+$/.test(threshold) || Number(threshold) > 100)) {
         throw new Error('--fail-under must be an integer from 0 to 100.');
@@ -274,7 +300,7 @@ function readOptions(args) {
         throw new Error('--fail-on must be critical, high, or breaking.');
     }
     if (values.baseline !== undefined && (!values.baseline.trim() || sources.length !== 1)) {
-        throw new Error('--baseline requires a file path and one of --file, --cmd, or --url.');
+        throw new Error('--baseline requires a file path and one of --file, --cmd, --url, or --config.');
     }
     if (failOn.includes('breaking') && !values.baseline)
         throw new Error('--fail-on breaking requires --baseline.');
@@ -346,6 +372,23 @@ function readToolFile(file) {
 async function run() {
     const options = readOptions(args);
     const analysis = { englishStyle: options['english-style'] };
+    if (options.fix && options.file) {
+        const rawTools = readToolFile(options.file);
+        const { tools: fixedTools, changes } = fixToolCatalog(rawTools);
+        if (options.write) {
+            const targetPath = options.write === '__DEFAULT__' ? path.resolve(options.file) : path.resolve(options.write);
+            fs.writeFileSync(targetPath, JSON.stringify({ tools: fixedTools }, null, 2), 'utf-8');
+            console.error(`✨ Fixed ${changes.length} issue(s) across ${fixedTools.length} tool(s). Saved to ${targetPath}`);
+        }
+        else {
+            console.error(`✨ Fixed ${changes.length} issue(s) across ${fixedTools.length} tool(s). (Pass --write to save)`);
+        }
+        if (changes.length > 0) {
+            for (const change of changes) {
+                console.error(`  - [${change.toolName}] ${change.action}: ${change.detail}`);
+            }
+        }
+    }
     const baseline = options.baseline === undefined ? undefined : readToolFile(options.baseline);
     const results = [];
     let comparison;
@@ -362,6 +405,17 @@ async function run() {
     }
     else if (options.url !== undefined) {
         benchmark(options.url, await fetchToolsFromSseServer(options.url, options.headers));
+    }
+    else if (options.config !== undefined) {
+        const loaded = await loadToolsFromConfig(options.config);
+        for (const server of loaded) {
+            if (server.error) {
+                console.error(`⚠️ Could not load server "${server.serverName}": ${server.error}`);
+            }
+            else {
+                benchmark(server.serverName, server.tools);
+            }
+        }
     }
     else if (options.file !== undefined) {
         const serverName = path.basename(options.file, path.extname(options.file));
@@ -383,6 +437,12 @@ async function run() {
         const resolvedHtmlPath = path.resolve(options.html);
         fs.writeFileSync(resolvedHtmlPath, generateHtmlReport(results, comparison), 'utf-8');
         console.error(`📄 HTML report written to ${resolvedHtmlPath}`);
+    }
+    if (options.sarif !== undefined) {
+        const resolvedSarifPath = path.resolve(options.sarif);
+        const sourceUri = options.file || options.cmd || options.url || options.config || 'bundled-datasets';
+        fs.writeFileSync(resolvedSarifPath, generateSarifReport(results, sourceUri), 'utf-8');
+        console.error(`🛡️ SARIF report written to ${resolvedSarifPath}`);
     }
     if (process.env.GITHUB_STEP_SUMMARY) {
         fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, markdown, 'utf-8');

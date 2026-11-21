@@ -50,3 +50,23 @@ export interface ServerBenchmarkResult {
     grade: 'A+' | 'A' | 'B' | 'C' | 'D' | 'F';
     tools: ToolAnalysisReport[];
 }
+export interface McpServerConfigEntry {
+    command?: string;
+    args?: string[];
+    env?: Record<string, string>;
+    url?: string;
+    headers?: Record<string, string>;
+}
+export interface McpConfigFile {
+    mcpServers?: Record<string, McpServerConfigEntry>;
+    servers?: Record<string, McpServerConfigEntry>;
+}
+export interface FixChange {
+    toolName: string;
+    action: string;
+    detail: string;
+}
+export interface FixResult {
+    tools: McpToolDefinition[];
+    changes: FixChange[];
+}

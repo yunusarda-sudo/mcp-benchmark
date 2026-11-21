@@ -47,6 +47,19 @@ export function estimateTokenCount(text) {
 export function analyzeToolDefinition(tool, options = {}) {
     const diagnostics = [];
     const report = (code, severity, path, message, suggestion) => diagnostics.push({ code, severity, path, message, suggestion });
+    // Tool name validation
+    const toolName = (tool.name || '').trim();
+    if (!toolName) {
+        report('tool.empty-name', 'critical', '/name', 'Tool name is empty', 'Provide a clear, descriptive name for the tool.');
+    }
+    else {
+        if (toolName.length > 64) {
+            report('tool.name-length', 'warning', '/name', `Tool name "${toolName}" exceeds 64 characters (${toolName.length} chars)`, 'Keep tool names under 64 characters for broad LLM provider compatibility.');
+        }
+        if (!/^[a-zA-Z0-9_.-]+$/.test(toolName)) {
+            report('tool.invalid-name-format', 'warning', '/name', `Tool name "${toolName}" contains special characters outside [a-zA-Z0-9_.-]`, 'Use alphanumeric characters, underscores, and hyphens in tool names.');
+        }
+    }
     const schema = tool.inputSchema || {};
     const properties = schema.properties || {};
     const propKeys = Object.keys(properties);
@@ -62,6 +75,39 @@ export function analyzeToolDefinition(tool, options = {}) {
         const closed = schema.additionalProperties === false && Object.keys(schema.patternProperties ?? {}).length === 0;
         const propertyPath = key.replace(/~/g, '~0').replace(/\//g, '~1');
         report('schema.required-without-property', closed ? 'critical' : 'warning', `/inputSchema/properties/${propertyPath}`, `Required field "${key}" has no explicit property definition`, 'Describe the field in properties or review whether it belongs in required.');
+    }
+    // Deep inspection for array items and nested object properties
+    for (const key of propKeys) {
+        const prop = properties[key];
+        const propertyPath = key.replace(/~/g, '~0').replace(/\//g, '~1');
+        if (prop && prop.type === 'array' && !prop.items) {
+            report('schema.array-without-items', 'warning', `/inputSchema/properties/${propertyPath}/items`, `Array parameter "${key}" lacks an "items" schema definition`, 'Specify the type or schema of array items using an "items" property.');
+        }
+        if (prop && prop.type === 'object' && prop.properties && typeof prop.properties === 'object') {
+            const nestedKeys = Object.keys(prop.properties);
+            for (const nKey of nestedKeys) {
+                const nestedProp = prop.properties[nKey];
+                const nestedPath = `${propertyPath}/properties/${nKey.replace(/~/g, '~0').replace(/\//g, '~1')}`;
+                if (!nestedProp || !nestedProp.type) {
+                    report('schema.nested-parameter-types', 'warning', `/inputSchema/properties/${nestedPath}`, `Nested property "${key}.${nKey}" lacks an explicit JSON primitive type`, 'Add an explicit type to the nested property.');
+                }
+                if (!nestedProp || (!nestedProp.description && !nestedProp.title)) {
+                    report('schema.nested-parameter-descriptions', 'info', `/inputSchema/properties/${nestedPath}`, `Nested property "${key}.${nKey}" lacks a description`, 'Explain the accepted values and constraints for this nested field.');
+                }
+            }
+        }
+    }
+    // Output schema validation
+    if (tool.outputSchema !== undefined) {
+        if (typeof tool.outputSchema !== 'object' || tool.outputSchema === null) {
+            report('schema.output-invalid', 'critical', '/outputSchema', 'outputSchema must be an object', 'Provide a valid JSON schema object for outputSchema.');
+        }
+        else {
+            const outSchema = tool.outputSchema;
+            if (outSchema.type && outSchema.type !== 'object') {
+                report('schema.output-root-type', 'warning', '/outputSchema/type', 'outputSchema should specify type: "object"', 'Declare an object schema for structured tool outputs.');
+            }
+        }
     }
     const rawJson = JSON.stringify(tool);
     const tokenCount = estimateTokenCount(rawJson);

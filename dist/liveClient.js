@@ -26,7 +26,7 @@ async function listAllTools(client) {
  */
 export async function fetchToolsFromStdioServer(command, args = []) {
     const transport = new StdioClientTransport({ command, args });
-    const client = new Client({ name: 'mcp-benchmark', version: '1.1.0' });
+    const client = new Client({ name: 'mcp-benchmark', version: '1.2.0' });
     try {
         await client.connect(transport);
         return await listAllTools(client);
@@ -44,7 +44,7 @@ export async function fetchToolsFromSseServer(url, headers) {
     const transport = new SSEClientTransport(endpoint, {
         requestInit: headers ? { headers } : undefined,
     });
-    const client = new Client({ name: 'mcp-benchmark', version: '1.1.0' });
+    const client = new Client({ name: 'mcp-benchmark', version: '1.2.0' });
     try {
         await client.connect(transport);
         return await listAllTools(client);

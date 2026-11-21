@@ -32,7 +32,7 @@ export async function fetchToolsFromStdioServer(
   args: string[] = []
 ): Promise<McpToolDefinition[]> {
   const transport = new StdioClientTransport({ command, args });
-  const client = new Client({ name: 'mcp-benchmark', version: '1.1.0' });
+  const client = new Client({ name: 'mcp-benchmark', version: '1.2.0' });
 
   try {
     await client.connect(transport);
@@ -54,7 +54,7 @@ export async function fetchToolsFromSseServer(
   const transport = new SSEClientTransport(endpoint, {
     requestInit: headers ? { headers } : undefined,
   });
-  const client = new Client({ name: 'mcp-benchmark', version: '1.1.0' });
+  const client = new Client({ name: 'mcp-benchmark', version: '1.2.0' });
 
   try {
     await client.connect(transport);

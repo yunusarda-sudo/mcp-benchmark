@@ -3,3 +3,6 @@ export * from './analyzer.js';
 export * from './htmlReport.js';
 export * from './liveClient.js';
 export * from './compare.js';
+export * from './fixer.js';
+export * from './sarif.js';
+export * from './configLoader.js';

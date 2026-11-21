@@ -31,10 +31,47 @@ The sample has **3 tools** and scores **73/100 (B)** under the current rules. Us
 | JSON file | `node dist/cli.js --file examples/sample-mcp-tools.json --json` |
 | Local MCP server over stdio | `node dist/cli.js --cmd "node fixtures/echo-mcp-server.mjs"` |
 | MCP server using the legacy HTTP+SSE transport | `node dist/cli.js --url http://localhost:8000/sse` |
+| Multi-server config (Claude Desktop / Cursor) | `node dist/cli.js --config ~/.cursor/mcp.json` |
 
 A JSON input can be a tool array, an object with a `tools` array, or a complete [MCP `tools/list` JSON-RPC response](https://modelcontextprotocol.io/specification/2025-11-25/server/tools#listing-tools). For a paginated export, combine the tools from all pages into one array. Live inspection follows successive `nextCursor` values for the configured server and only lists tool definitions. The stdio mode starts the supplied executable, so use a command you trust.
 
-`--html report.html` saves a standalone report. `--json` sends only report JSON to stdout, with diagnostics on stderr. `--html` without a filename writes `mcp-benchmark-report.html`. Use `--help` for all options.
+`--html report.html` saves a standalone report. `--sarif report.sarif` exports an OASIS SARIF v2.1.0 report for GitHub Code Scanning. `--json` sends only report JSON to stdout, with diagnostics on stderr. Use `--help` for all options.
+
+## Automated Fixes (`--fix`)
+
+Automatically clean up common schema issues and conversational filler:
+
+```bash
+# Preview fixes in terminal
+node dist/cli.js --file tools.json --fix
+
+# Apply and save cleaned definitions directly to file
+node dist/cli.js --file tools.json --fix --write
+```
+
+The fixer automatically:
+- Injects missing root `type: "object"` and initializes `properties`.
+- Cleans conversational filler words ("This tool allows you to...", "Basically...", etc.) from descriptions.
+- Prunes non-existent fields and deduplicates entries in `inputSchema.required`.
+
+## GitHub Actions & SARIF Export
+
+Use the composite GitHub Action directly in your workflows:
+
+```yaml
+- name: Run MCP Benchmark
+  uses: yunusarda-sudo/mcp-benchmark@v1
+  with:
+    file: 'tools.json'
+    fail-under: '80'
+    sarif: 'mcp-results.sarif'
+
+- name: Upload SARIF to GitHub Code Scanning
+  uses: github/codeql-action/upload-sarif@v3
+  if: always()
+  with:
+    sarif_file: 'mcp-results.sarif'
+```
 
 ## CI usage
 
