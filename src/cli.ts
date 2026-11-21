@@ -14,6 +14,9 @@ import { ECOSYSTEM_SERVERS } from './ecosystem.js';
 import { estimateTokenEconomics, formatTokenEconomicsMarkdown } from './costEstimator.js';
 import { formatPrComment } from './prComment.js';
 import { McpToolDefinition, ServerBenchmarkResult } from './types.js';
+import { getAllRules } from './rules/index.js';
+import { findLocalMcpConfigs, formatDiscoveryReport } from './wizard.js';
+import { updateReadmeLeaderboard, registerServer } from './registry.js';
 
 
 // Split a command line string into executable + args, respecting quotes.
@@ -244,6 +247,13 @@ Options:
   --ecosystem            Benchmark the full 100+ server MCP ecosystem corpus
   --cost                 Estimate context window token consumption and financial cost
   --pr-comment [path]    Write a formatted GitHub PR comment markdown summary (default: mcp-pr-comment.md)
+  --rules, --list-rules  List all available linter and benchmark quality rules
+  --discover             Scan local machine for MCP client configs (Claude, Cursor, VS Code)
+  --submit <path>        Submit an MCP server definition to the official registry
+  --update-leaderboard   Recompute and refresh the README.md Leaderboard from registry
+  --name <name>          Custom name when submitting a server (used with --submit)
+  --category <category>  Ecosystem category for submission (used with --submit)
+  --repo <url>           Repository URL for submission (used with --submit)
   --help, -h             Show this help message
 
 Examples:
@@ -306,6 +316,14 @@ function readOptions(args: string[]) {
       ecosystem: { type: 'boolean' },
       cost: { type: 'boolean' },
       'pr-comment': { type: 'string' },
+      rules: { type: 'boolean' },
+      'list-rules': { type: 'boolean' },
+      discover: { type: 'boolean' },
+      'update-leaderboard': { type: 'boolean' },
+      submit: { type: 'string' },
+      name: { type: 'string' },
+      category: { type: 'string' },
+      repo: { type: 'string' },
     },
   });
 
@@ -401,6 +419,53 @@ function readToolFile(file: string): McpToolDefinition[] {
 async function run() {
   const options = readOptions(args);
   const analysis = { englishStyle: options['english-style'] };
+
+  if (options.rules || options['list-rules']) {
+    const rules = getAllRules();
+    console.log('# 📋 Model Context Protocol (MCP) Benchmark & Linter Rules\n');
+    console.log('| Rule ID | Category | Severity | Description |');
+    console.log('|:---|:---:|:---:|:---|');
+    for (const rule of rules) {
+      console.log(`| \`${rule.id}\` | \`${rule.category}\` | \`${rule.defaultSeverity}\` | ${rule.description} |`);
+    }
+    return;
+  }
+
+  if (options.discover) {
+    const configs = findLocalMcpConfigs();
+    console.log(formatDiscoveryReport(configs));
+    return;
+  }
+
+  if (options['update-leaderboard']) {
+    const result = updateReadmeLeaderboard();
+    if (result.updated) {
+      console.error(`🏆 Successfully updated Leaderboard in README.md with ${result.count} ranked MCP servers!`);
+    } else {
+      console.error(`Leaderboard in README.md is already up to date (${result.count} servers).`);
+    }
+    return;
+  }
+
+  if (options.submit) {
+    const tools = readToolFile(options.submit);
+    const serverName = options.name || path.basename(options.submit, path.extname(options.submit));
+    const category = options.category || 'Other';
+    const repository = options.repo;
+    const registeredPath = registerServer({
+      name: serverName,
+      category,
+      repository,
+      tools,
+    });
+    console.error(`✅ Server registered at ${registeredPath}`);
+    const bench = benchmarkServerTools(serverName, tools, analysis);
+    console.log(`\n🏆 Benchmark Result for ${serverName}: Grade ${bench.grade} (${bench.overallTQI}/100 TQI)`);
+    console.log(`   Tokens: ${bench.totalTokens} (${bench.averageTokensPerTool} tok/tool)`);
+    console.log(`   Strictness: ${bench.averageSchemaStrictness}% · Density: ${bench.averageSemanticDensity}% · Efficiency: ${bench.averageTokenEfficiency}%`);
+    updateReadmeLeaderboard();
+    return;
+  }
 
   if (options.fix && options.file) {
     const rawTools = readToolFile(options.file);

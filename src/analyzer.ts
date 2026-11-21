@@ -1,64 +1,19 @@
 import { AnalysisOptions, McpToolDefinition, ServerBenchmarkResult, ToolAnalysisReport, ToolDiagnostic } from './types.js';
+import {
+  ALL_RULES,
+  RuleContext,
+  hasValidPropertyType,
+  PROMPT_INJECTION_PATTERNS,
+  FLUFF_PATTERNS,
+  IMPERATIVE_ACTION_VERBS,
+} from './rules/index.js';
 
-const IMPERATIVE_ACTION_VERBS = new Set([
-  'get', 'list', 'create', 'update', 'delete', 'read', 'write',
-  'fetch', 'search', 'find', 'execute', 'run', 'send', 'query',
-  'check', 'inspect', 'generate', 'transform', 'validate', 'resolve',
-  'connect', 'publish', 'download', 'upload', 'remove', 'add',
-]);
-
-const FLUFF_PATTERNS = [
-  /this tool allows (you )?to/i,
-  /used for (the )?purpose of/i,
-  /a simple (utility|tool|helper) to/i,
-  /please note that/i,
-  /basically/i,
-  /you can use this tool to/i,
-];
-
-export const PROMPT_INJECTION_PATTERNS = [
-  {
-    code: 'description.prompt-override',
-    regex: /(ignore|override|bypass)\s+(all\s+)?((previous|prior|system|chat|base)\s+)*(instructions|prompts|rules|context)/i,
-    severity: 'CRITICAL',
-    title: 'Prompt injection / system prompt override directive detected in tool description',
-  },
-  {
-    code: 'description.possible-secret-disclosure',
-    regex: /(exfiltrate|send|upload|post)\s+.*?(keys?|secrets?|tokens?|credentials?|passwords?|env)\s+.*?to/i,
-    severity: 'CRITICAL',
-    title: 'Potential data exfiltration directive detected in tool description',
-  },
-  {
-    code: 'description.hidden-action',
-    regex: /do\s+not\s+(notify|tell|inform|warn)\s+(the\s+)?user/i,
-    severity: 'HIGH',
-    title: 'Covert stealth directive (hiding actions from user) detected in tool description',
-  },
-  {
-    code: 'description.silent-execution',
-    regex: /\bsilently\b|\bwithout\s+(notifying|asking|prompting)\b/i,
-    severity: 'HIGH',
-    title: 'Silent execution directive detected in tool description',
-  },
-];
-
-function hasValidPropertyType(prop: any): boolean {
-  if (!prop || typeof prop !== 'object') return false;
-  if (prop.type && ['string', 'number', 'integer', 'boolean', 'array', 'object'].includes(prop.type)) {
-    return true;
-  }
-  if (Array.isArray(prop.type) && prop.type.length > 0) {
-    return prop.type.every((t: any) => ['string', 'number', 'integer', 'boolean', 'array', 'object', 'null'].includes(t));
-  }
-  if (Array.isArray(prop.oneOf) && prop.oneOf.length > 0) {
-    return prop.oneOf.every(hasValidPropertyType);
-  }
-  if (Array.isArray(prop.anyOf) && prop.anyOf.length > 0) {
-    return prop.anyOf.every(hasValidPropertyType);
-  }
-  return false;
-}
+export {
+  hasValidPropertyType,
+  PROMPT_INJECTION_PATTERNS,
+  FLUFF_PATTERNS,
+  IMPERATIVE_ACTION_VERBS,
+};
 
 export function estimateTokenCount(text: string): number {
   if (!text) return 0;
@@ -67,166 +22,43 @@ export function estimateTokenCount(text: string): number {
 }
 
 export function analyzeToolDefinition(tool: McpToolDefinition, options: AnalysisOptions = {}): ToolAnalysisReport {
-  const diagnostics: ToolDiagnostic[] = [];
-  const report = (
-    code: string,
-    severity: ToolDiagnostic['severity'],
-    path: string,
-    message: string,
-    suggestion: string,
-  ) => diagnostics.push({ code, severity, path, message, suggestion });
-
-  // Tool name validation
-  const toolName = (tool.name || '').trim();
-  if (!toolName) {
-    report('tool.empty-name', 'critical', '/name', 'Tool name is empty', 'Provide a clear, descriptive name for the tool.');
-  } else {
-    if (toolName.length > 64) {
-      report('tool.name-length', 'warning', '/name', `Tool name "${toolName}" exceeds 64 characters (${toolName.length} chars)`, 'Keep tool names under 64 characters for broad LLM provider compatibility.');
-    }
-    if (!/^[a-zA-Z0-9_.-]+$/.test(toolName)) {
-      report('tool.invalid-name-format', 'warning', '/name', `Tool name "${toolName}" contains special characters outside [a-zA-Z0-9_.-]`, 'Use alphanumeric characters, underscores, and hyphens in tool names.');
-    }
-  }
-
   const schema = tool.inputSchema || {};
   const properties = schema.properties || {};
   const propKeys = Object.keys(properties);
   const required = Array.isArray(schema.required) ? schema.required : [];
   const validRequired = schema.required === undefined
     || (Array.isArray(schema.required) && schema.required.every(key => typeof key === 'string'));
-  if (!validRequired) {
-    report('schema.invalid-required', 'critical', '/inputSchema/required', 'inputSchema.required must be an array of strings', 'List required property names as strings.');
-  }
-
-  for (const key of new Set(required)) {
-    if (typeof key !== 'string' || Object.hasOwn(properties, key)) continue;
-    const closed = schema.additionalProperties === false && Object.keys(schema.patternProperties ?? {}).length === 0;
-    const propertyPath = key.replace(/~/g, '~0').replace(/\//g, '~1');
-    report(
-      'schema.required-without-property',
-      closed ? 'critical' : 'warning',
-      `/inputSchema/properties/${propertyPath}`,
-      `Required field "${key}" has no explicit property definition`,
-      'Describe the field in properties or review whether it belongs in required.',
-    );
-  }
-
-  // Deep inspection for array items, nested properties, enums, patterns, and defaults
-  for (const key of propKeys) {
-    const prop = properties[key];
-    const propertyPath = key.replace(/~/g, '~0').replace(/\//g, '~1');
-
-    if (prop && prop.type === 'array' && !prop.items) {
-      report(
-        'schema.array-without-items',
-        'warning',
-        `/inputSchema/properties/${propertyPath}/items`,
-        `Array parameter "${key}" lacks an "items" schema definition`,
-        'Specify the type or schema of array items using an "items" property.',
-      );
-    }
-
-    if (prop && Array.isArray(prop.enum) && prop.enum.length === 0) {
-      report(
-        'schema.empty-enum',
-        'critical',
-        `/inputSchema/properties/${propertyPath}/enum`,
-        `Property "${key}" defines an empty enum array`,
-        'Provide allowed values for the enum or remove the empty enum constraint.',
-      );
-    }
-
-    if (prop && typeof prop.pattern === 'string') {
-      try {
-        new RegExp(prop.pattern);
-      } catch {
-        report(
-          'schema.invalid-pattern',
-          'critical',
-          `/inputSchema/properties/${propertyPath}/pattern`,
-          `Property "${key}" defines an invalid regular expression pattern: "${prop.pattern}"`,
-          'Correct the regex syntax to avoid client runtime evaluation crashes.',
-        );
-      }
-    }
-
-    if (prop && prop.default !== undefined && typeof prop.type === 'string') {
-      const defaultType = typeof prop.default;
-      const expectedType = prop.type === 'integer' ? 'number' : prop.type;
-      if (prop.type === 'array' && !Array.isArray(prop.default)) {
-        report(
-          'schema.invalid-default',
-          'warning',
-          `/inputSchema/properties/${propertyPath}/default`,
-          `Default value for "${key}" is not an array`,
-          'Ensure default matches the declared array type.',
-        );
-      } else if (prop.type !== 'array' && prop.type !== 'object' && defaultType !== expectedType) {
-        report(
-          'schema.invalid-default',
-          'warning',
-          `/inputSchema/properties/${propertyPath}/default`,
-          `Default value type (${defaultType}) for "${key}" does not match declared schema type (${prop.type})`,
-          'Ensure default value matches the declared property type.',
-        );
-      }
-    }
-
-    if (prop && prop.type === 'object' && prop.properties && typeof prop.properties === 'object') {
-      const nestedKeys = Object.keys(prop.properties);
-      for (const nKey of nestedKeys) {
-        const nestedProp = prop.properties[nKey];
-        const nestedPath = `${propertyPath}/properties/${nKey.replace(/~/g, '~0').replace(/\//g, '~1')}`;
-        if (!hasValidPropertyType(nestedProp)) {
-          report(
-            'schema.nested-parameter-types',
-            'warning',
-            `/inputSchema/properties/${nestedPath}`,
-            `Nested property "${key}.${nKey}" lacks an explicit JSON primitive type`,
-            'Add an explicit type to the nested property.',
-          );
-        }
-        if (!nestedProp || (!nestedProp.description && !nestedProp.title)) {
-          report(
-            'schema.nested-parameter-descriptions',
-            'info',
-            `/inputSchema/properties/${nestedPath}`,
-            `Nested property "${key}.${nKey}" lacks a description`,
-            'Explain the accepted values and constraints for this nested field.',
-          );
-        }
-      }
-    }
-  }
-
-  // Output schema validation
-  if (tool.outputSchema !== undefined) {
-    if (typeof tool.outputSchema !== 'object' || tool.outputSchema === null) {
-      report('schema.output-invalid', 'critical', '/outputSchema', 'outputSchema must be an object', 'Provide a valid JSON schema object for outputSchema.');
-    } else {
-      const outSchema = tool.outputSchema as Record<string, any>;
-      if (outSchema.type && outSchema.type !== 'object') {
-        report('schema.output-root-type', 'warning', '/outputSchema/type', 'outputSchema should specify type: "object"', 'Declare an object schema for structured tool outputs.');
-      }
-    }
-  }
-
+  const desc = (tool.description || '').trim();
   const rawJson = JSON.stringify(tool);
   const tokenCount = estimateTokenCount(rawJson);
+
+  const context: RuleContext = {
+    tool,
+    options,
+    properties,
+    propKeys,
+    required,
+    validRequired,
+    desc,
+    tokenCount,
+  };
+
+  // Run all pluggable rules to gather diagnostics
+  const diagnostics: ToolDiagnostic[] = [];
+  for (const rule of ALL_RULES) {
+    const findings = rule.check(context);
+    diagnostics.push(...findings);
+  }
 
   // 1. Schema Strictness Evaluation (0 - 100)
   let schemaScore = 0;
   if (schema.type === 'object') {
     schemaScore += 20;
-  } else {
-    report('schema.root-type', 'warning', '/inputSchema/type', 'inputSchema missing root type: "object"', 'Declare an object schema when the tool accepts named arguments.');
   }
 
   if (propKeys.length > 0) {
     schemaScore += 10;
     
-    // Check property typing
     let typedCount = 0;
     let describedPropsCount = 0;
     let enumConstrainedCount = 0;
@@ -246,15 +78,9 @@ export function analyzeToolDefinition(tool: McpToolDefinition, options: Analysis
 
     const typeRatio = typedCount / propKeys.length;
     schemaScore += Math.round(typeRatio * 30);
-    if (typeRatio < 1.0) {
-      report('schema.parameter-types', 'warning', '/inputSchema/properties', `${propKeys.length - typedCount} parameters lack explicit JSON primitive types`, 'Add types to parameters or document the schema composition when intentional.');
-    }
 
     const descRatio = describedPropsCount / propKeys.length;
     schemaScore += Math.round(descRatio * 20);
-    if (descRatio < 0.8) {
-      report('schema.parameter-descriptions', 'warning', '/inputSchema/properties', 'Multiple input parameters lack descriptions', 'Explain the accepted values and units for each parameter.');
-    }
 
     if (validRequired) schemaScore += 10;
 
@@ -268,34 +94,20 @@ export function analyzeToolDefinition(tool: McpToolDefinition, options: Analysis
 
   // 2. Semantic Density Evaluation (0 - 100)
   let semanticScore = 0;
-  const desc = (tool.description || '').trim();
-
-  if (desc.length === 0) {
-    report('description.empty', 'critical', '/description', 'Tool description is empty', 'State what the tool does and when it should be used.');
-  } else {
+  if (desc.length > 0) {
     semanticScore = 35;
-    // Length adequacy (ideal: 25–400 characters)
     if (desc.length >= 25 && desc.length <= 400) {
       semanticScore += 35;
     } else if (desc.length > 400) {
       semanticScore += 20;
-      report('description.long', 'info', '/description', 'Tool description is overly verbose (>400 chars), increasing token overhead', 'Keep the purpose and key constraints, and remove repeated wording.');
     } else {
       semanticScore += 15;
-      report('description.short', 'info', '/description', 'Tool description is too brief (<25 chars) to guide accurate model selection', 'Add context about when the tool should be selected.');
     }
 
-    const firstWord = desc.split(/[\s,.:;]/)[0]?.toLowerCase();
-    if (options.englishStyle && firstWord && !IMPERATIVE_ACTION_VERBS.has(firstWord)) {
-      report('description.english-action-verb', 'info', '/description', 'English description does not start with a recognized action verb', 'Consider leading with a concrete verb such as List or Read.');
-    }
-
-    // Fluff penalty
     let hasFluff = false;
     for (const pattern of FLUFF_PATTERNS) {
       if (pattern.test(desc)) {
         hasFluff = true;
-        report('description.filler', 'info', '/description', 'Description contains conversational filler phrases', 'Start with the action and omit conversational filler.');
         break;
       }
     }
@@ -316,21 +128,13 @@ export function analyzeToolDefinition(tool: McpToolDefinition, options: Analysis
     tokenScore = 50;
   } else {
     tokenScore = 30;
-    report('catalog.large-definition', 'info', '', `Heavy context token footprint (${tokenCount} tokens)`, 'Review long descriptions and redundant schema metadata.');
   }
 
   // 4. Security & Prompt-Injection Hygiene
   let securityPenalty = 0;
   for (const pattern of PROMPT_INJECTION_PATTERNS) {
     if (pattern.regex.test(desc)) {
-      report(
-        pattern.code,
-        pattern.severity === 'CRITICAL' ? 'critical' : 'high',
-        '/description',
-        pattern.title,
-        'Review the description and keep only the intended tool contract.',
-      );
-      securityPenalty += pattern.severity === 'CRITICAL' ? 45 : 25;
+      securityPenalty += pattern.penalty;
     }
   }
 
@@ -341,7 +145,6 @@ export function analyzeToolDefinition(tool: McpToolDefinition, options: Analysis
     tokenScore * 0.25
   );
   const overallScore = Math.max(0, rawScore - securityPenalty);
-
 
   return {
     toolName: tool.name,

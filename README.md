@@ -407,6 +407,36 @@ const report = analyzeToolDefinition({
 console.log(report.metrics.overallScore, report.findings);
 ```
 
+## 🤝 Community & Contributions
+
+We want MCP Benchmark to be shaped and driven by the global MCP developer community.
+
+### 🚀 Submit Your MCP Server to the Leaderboard
+Want your MCP server ranked on the official leaderboard and get a quality badge?
+1. Open a PR adding a single JSON file to [`registry/servers/<your-server>.json`](registry/servers/) following [`registry/schema.json`](registry/schema.json).
+2. Or run:
+   ```bash
+   node dist/cli.js --submit my-tools.json \
+     --name "My Server" \
+     --category "Databases & Storage" \
+     --repo "https://github.com/org/my-server"
+   ```
+3. Or submit via the [GitHub Issue Form](https://github.com/yunusarda-sudo/mcp-benchmark/issues/new?template=submit_server.yml).
+
+### 📐 Pluggable Linter & Benchmark Rules
+All linting and scoring rules are modularized under [`src/rules/`](src/rules/).
+- List all available rules:
+  ```bash
+  npx mcp-benchmark --rules
+  ```
+- Propose or add new checks (e.g. schema, security, naming, efficiency) by following our [Rule Contribution Guide](CONTRIBUTING.md#-2-add-a-new-benchmark-or-linter-rule).
+
+### 🔍 Auto-Discover Local Client Configs
+Scan your machine for installed MCP servers across Claude Desktop, Cursor, and VS Code:
+```bash
+npx mcp-benchmark --discover
+```
+
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for the development workflow and fixture guidance. The project is licensed under [MIT](LICENSE).
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the development workflow, server registry schema, and rule authoring guide. The project is licensed under [MIT](LICENSE).
