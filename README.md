@@ -24,6 +24,158 @@ Or generate a searchable HTML report:
 node dist/cli.js --ecosystem --html ecosystem-leaderboard.html
 ```
 
+## 🏆 Official MCP Ecosystem Leaderboard (Rankings)
+
+Deterministic quality benchmarks for **102 standard MCP servers**, evaluated by the **Tool Quality Index (TQI)** across Schema Strictness (40%), Semantic Density (35%), and Context Token Footprint (25%).
+
+> 💡 **Where does your MCP server rank?** Test your catalog locally:
+> ```bash
+> npx --yes github:yunusarda-sudo/mcp-benchmark -f tools.json
+> ```
+
+### Top 25 MCP Servers
+
+| Rank | MCP Server | Grade | TQI Score | Schema Strictness | Semantic Density | Token Efficiency | Avg Tokens/Tool |
+|:---:|:---|:---:|:---:|:---:|:---:|:---:|:---:|
+| 1 | **BetterStack MCP** | `A+` | **100/100** | 100% | 100% | 100% | 64 tok |
+| 2 | **Shopify Store MCP** | `A+` | **100/100** | 100% | 100% | 100% | 65 tok |
+| 3 | **Git MCP** | `A+` | **96/100** | 90% | 100% | 100% | 72 tok |
+| 4 | **GitLab MCP** | `A+` | **96/100** | 100% | 100% | 85% | 94 tok |
+| 5 | **PostgreSQL MCP** | `A+` | **96/100** | 90% | 100% | 100% | 59 tok |
+| 6 | **SQLite MCP** | `A+` | **96/100** | 90% | 100% | 100% | 74 tok |
+| 7 | **MySQL MCP** | `A+` | **96/100** | 90% | 100% | 100% | 60 tok |
+| 8 | **ClickHouse MCP** | `A+` | **96/100** | 100% | 100% | 85% | 91 tok |
+| 9 | **S3 MinIO MCP** | `A+` | **96/100** | 90% | 100% | 100% | 77 tok |
+| 10 | **Tavily Search MCP** | `A+` | **96/100** | 100% | 100% | 85% | 85 tok |
+| 11 | **Perplexity MCP** | `A+` | **96/100** | 90% | 100% | 100% | 60 tok |
+| 12 | **Notion MCP** | `A+` | **96/100** | 90% | 100% | 100% | 65 tok |
+| 13 | **Obsidian MCP** | `A+` | **96/100** | 90% | 100% | 100% | 62 tok |
+| 14 | **Jira MCP** | `A+` | **96/100** | 90% | 100% | 100% | 67 tok |
+| 15 | **Confluence MCP** | `A+` | **96/100** | 90% | 100% | 100% | 64 tok |
+| 16 | **Trello MCP** | `A+` | **96/100** | 90% | 100% | 100% | 77 tok |
+| 17 | **Asana MCP** | `A+` | **96/100** | 90% | 100% | 100% | 77 tok |
+| 18 | **ClickUp MCP** | `A+` | **96/100** | 90% | 100% | 100% | 70 tok |
+| 19 | **Todoist MCP** | `A+` | **96/100** | 90% | 100% | 100% | 64 tok |
+| 20 | **Telegram MCP** | `A+` | **96/100** | 90% | 100% | 100% | 75 tok |
+| 21 | **Zendesk MCP** | `A+` | **96/100** | 90% | 100% | 100% | 80 tok |
+| 22 | **Intercom MCP** | `A+` | **96/100** | 90% | 100% | 100% | 80 tok |
+| 23 | **PagerDuty MCP** | `A+` | **96/100** | 100% | 100% | 85% | 116 tok |
+| 24 | **Twilio MCP** | `A+` | **96/100** | 90% | 100% | 100% | 77 tok |
+| 25 | **AWS Cloud MCP** | `A+` | **96/100** | 90% | 100% | 100% | 65 tok |
+
+<details>
+<summary><b>👉 Click here to expand and view all 102 MCP Server Rankings (Full Leaderboard)</b></summary>
+<br>
+
+| Rank | MCP Server | Grade | TQI Score | Schema Strictness | Semantic Density | Token Efficiency | Avg Tokens/Tool |
+|:---:|:---|:---:|:---:|:---:|:---:|:---:|:---:|
+| 1 | **BetterStack MCP** | `A+` | **100/100** | 100% | 100% | 100% | 64 tok |
+| 2 | **Shopify Store MCP** | `A+` | **100/100** | 100% | 100% | 100% | 65 tok |
+| 3 | **Git MCP** | `A+` | **96/100** | 90% | 100% | 100% | 72 tok |
+| 4 | **GitLab MCP** | `A+` | **96/100** | 100% | 100% | 85% | 94 tok |
+| 5 | **PostgreSQL MCP** | `A+` | **96/100** | 90% | 100% | 100% | 59 tok |
+| 6 | **SQLite MCP** | `A+` | **96/100** | 90% | 100% | 100% | 74 tok |
+| 7 | **MySQL MCP** | `A+` | **96/100** | 90% | 100% | 100% | 60 tok |
+| 8 | **ClickHouse MCP** | `A+` | **96/100** | 100% | 100% | 85% | 91 tok |
+| 9 | **S3 MinIO MCP** | `A+` | **96/100** | 90% | 100% | 100% | 77 tok |
+| 10 | **Tavily Search MCP** | `A+` | **96/100** | 100% | 100% | 85% | 85 tok |
+| 11 | **Perplexity MCP** | `A+` | **96/100** | 90% | 100% | 100% | 60 tok |
+| 12 | **Notion MCP** | `A+` | **96/100** | 90% | 100% | 100% | 65 tok |
+| 13 | **Obsidian MCP** | `A+` | **96/100** | 90% | 100% | 100% | 62 tok |
+| 14 | **Jira MCP** | `A+` | **96/100** | 90% | 100% | 100% | 67 tok |
+| 15 | **Confluence MCP** | `A+` | **96/100** | 90% | 100% | 100% | 64 tok |
+| 16 | **Trello MCP** | `A+` | **96/100** | 90% | 100% | 100% | 77 tok |
+| 17 | **Asana MCP** | `A+` | **96/100** | 90% | 100% | 100% | 77 tok |
+| 18 | **ClickUp MCP** | `A+` | **96/100** | 90% | 100% | 100% | 70 tok |
+| 19 | **Todoist MCP** | `A+` | **96/100** | 90% | 100% | 100% | 64 tok |
+| 20 | **Telegram MCP** | `A+` | **96/100** | 90% | 100% | 100% | 75 tok |
+| 21 | **Zendesk MCP** | `A+` | **96/100** | 90% | 100% | 100% | 80 tok |
+| 22 | **Intercom MCP** | `A+` | **96/100** | 90% | 100% | 100% | 80 tok |
+| 23 | **PagerDuty MCP** | `A+` | **96/100** | 100% | 100% | 85% | 116 tok |
+| 24 | **Twilio MCP** | `A+` | **96/100** | 90% | 100% | 100% | 77 tok |
+| 25 | **AWS Cloud MCP** | `A+` | **96/100** | 90% | 100% | 100% | 65 tok |
+| 26 | **Azure Cloud MCP** | `A+` | **96/100** | 90% | 100% | 100% | 57 tok |
+| 27 | **Vercel MCP** | `A+` | **96/100** | 90% | 100% | 100% | 63 tok |
+| 28 | **Netlify MCP** | `A+` | **96/100** | 90% | 100% | 100% | 59 tok |
+| 29 | **Railway MCP** | `A+` | **96/100** | 90% | 100% | 100% | 65 tok |
+| 30 | **Render MCP** | `A+` | **96/100** | 90% | 100% | 100% | 61 tok |
+| 31 | **Fly.io MCP** | `A+` | **96/100** | 90% | 100% | 100% | 57 tok |
+| 32 | **DigitalOcean MCP** | `A+` | **96/100** | 90% | 100% | 100% | 58 tok |
+| 33 | **Sentry MCP** | `A+` | **96/100** | 90% | 100% | 100% | 64 tok |
+| 34 | **Grafana MCP** | `A+` | **96/100** | 90% | 100% | 100% | 58 tok |
+| 35 | **Prometheus MCP** | `A+` | **96/100** | 90% | 100% | 100% | 64 tok |
+| 36 | **New Relic MCP** | `A+` | **96/100** | 90% | 100% | 100% | 58 tok |
+| 37 | **Mixpanel MCP** | `A+` | **96/100** | 90% | 100% | 100% | 62 tok |
+| 38 | **Puppeteer MCP** | `A+` | **96/100** | 90% | 100% | 100% | 60 tok |
+| 39 | **Playwright MCP** | `A+` | **96/100** | 90% | 100% | 100% | 63 tok |
+| 40 | **Fetch HTTP MCP** | `A+` | **96/100** | 100% | 100% | 85% | 82 tok |
+| 41 | **Crawl4AI MCP** | `A+` | **96/100** | 90% | 100% | 100% | 65 tok |
+| 42 | **Browserless MCP** | `A+` | **96/100** | 90% | 100% | 100% | 63 tok |
+| 43 | **BrightData MCP** | `A+` | **96/100** | 90% | 100% | 100% | 62 tok |
+| 44 | **Make.com MCP** | `A+` | **96/100** | 90% | 100% | 100% | 64 tok |
+| 45 | **PayPal MCP** | `A+` | **96/100** | 90% | 100% | 100% | 63 tok |
+| 46 | **Square MCP** | `A+` | **96/100** | 90% | 100% | 100% | 63 tok |
+| 47 | **Plaid Banking MCP** | `A+` | **96/100** | 90% | 100% | 100% | 68 tok |
+| 48 | **HubSpot CRM MCP** | `A+` | **96/100** | 90% | 100% | 100% | 63 tok |
+| 49 | **Salesforce MCP** | `A+` | **96/100** | 90% | 100% | 100% | 60 tok |
+| 50 | **QuickBooks MCP** | `A+` | **96/100** | 90% | 100% | 100% | 64 tok |
+| 51 | **Xero Accounting MCP** | `A+` | **96/100** | 90% | 100% | 100% | 60 tok |
+| 52 | **PubMed Bio MCP** | `A+` | **96/100** | 90% | 100% | 100% | 67 tok |
+| 53 | **Spotify Music MCP** | `A+` | **96/100** | 90% | 100% | 100% | 64 tok |
+| 54 | **Reddit MCP** | `A+` | **96/100** | 100% | 100% | 85% | 89 tok |
+| 55 | **Twitter X MCP** | `A+` | **96/100** | 90% | 100% | 100% | 62 tok |
+| 56 | **HackerNews MCP** | `A+` | **96/100** | 90% | 100% | 100% | 62 tok |
+| 57 | **Weather MCP** | `A+` | **96/100** | 90% | 100% | 100% | 72 tok |
+| 58 | **Google Drive MCP** | `A+` | **96/100** | 90% | 100% | 100% | 66 tok |
+| 59 | **Google Calendar MCP** | `A+` | **96/100** | 90% | 100% | 100% | 80 tok |
+| 60 | **Filesystem MCP** | `A+` | **95/100** | 90% | 100% | 95% | 70 tok |
+| 61 | **Docker MCP** | `A+` | **94/100** | 90% | 100% | 93% | 75 tok |
+| 62 | **Redis MCP** | `A+` | **94/100** | 90% | 100% | 93% | 76 tok |
+| 63 | **GitHub MCP** | `A+` | **92/100** | 90% | 100% | 85% | 119 tok |
+| 64 | **VS Code MCP** | `A+` | **92/100** | 90% | 100% | 85% | 96 tok |
+| 65 | **Kubernetes MCP** | `A+` | **92/100** | 90% | 100% | 85% | 86 tok |
+| 66 | **Terraform MCP** | `A+` | **92/100** | 90% | 100% | 85% | 88 tok |
+| 67 | **Ansible MCP** | `A+` | **92/100** | 90% | 100% | 85% | 106 tok |
+| 68 | **Jenkins MCP** | `A+` | **92/100** | 90% | 100% | 85% | 84 tok |
+| 69 | **MongoDB MCP** | `A+` | **92/100** | 90% | 100% | 85% | 102 tok |
+| 70 | **Elasticsearch MCP** | `A+` | **92/100** | 90% | 100% | 85% | 81 tok |
+| 71 | **Snowflake MCP** | `A+` | **92/100** | 90% | 100% | 85% | 81 tok |
+| 72 | **BigQuery MCP** | `A+` | **92/100** | 90% | 100% | 85% | 86 tok |
+| 73 | **Supabase MCP** | `A+` | **92/100** | 90% | 100% | 85% | 88 tok |
+| 74 | **Firebase MCP** | `A+` | **92/100** | 90% | 100% | 85% | 85 tok |
+| 75 | **Pinecone MCP** | `A+` | **92/100** | 90% | 100% | 85% | 91 tok |
+| 76 | **Qdrant MCP** | `A+` | **92/100** | 90% | 100% | 85% | 111 tok |
+| 77 | **Weaviate MCP** | `A+` | **92/100** | 90% | 100% | 85% | 88 tok |
+| 78 | **Chroma MCP** | `A+` | **92/100** | 90% | 100% | 85% | 97 tok |
+| 79 | **Milvus MCP** | `A+` | **92/100** | 90% | 100% | 85% | 93 tok |
+| 80 | **Neo4j Graph MCP** | `A+` | **92/100** | 90% | 100% | 85% | 82 tok |
+| 81 | **Brave Search MCP** | `A+` | **92/100** | 90% | 100% | 85% | 83 tok |
+| 82 | **Exa Neural Search MCP** | `A+` | **92/100** | 90% | 100% | 85% | 83 tok |
+| 83 | **Linear MCP** | `A+` | **92/100** | 90% | 100% | 85% | 102 tok |
+| 84 | **Airtable MCP** | `A+` | **92/100** | 90% | 100% | 85% | 81 tok |
+| 85 | **Slack MCP** | `A+` | **92/100** | 90% | 100% | 85% | 82 tok |
+| 86 | **Discord MCP** | `A+` | **92/100** | 90% | 100% | 85% | 83 tok |
+| 87 | **Microsoft Teams MCP** | `A+` | **92/100** | 90% | 100% | 85% | 99 tok |
+| 88 | **SendGrid MCP** | `A+` | **92/100** | 90% | 100% | 85% | 97 tok |
+| 89 | **Mailchimp MCP** | `A+` | **92/100** | 90% | 100% | 85% | 83 tok |
+| 90 | **Google Cloud MCP** | `A+` | **92/100** | 90% | 100% | 85% | 84 tok |
+| 91 | **Cloudflare MCP** | `A+` | **92/100** | 90% | 100% | 85% | 85 tok |
+| 92 | **Datadog MCP** | `A+` | **92/100** | 90% | 100% | 85% | 103 tok |
+| 93 | **PostHog MCP** | `A+` | **92/100** | 90% | 100% | 85% | 85 tok |
+| 94 | **Segment MCP** | `A+` | **92/100** | 90% | 100% | 85% | 98 tok |
+| 95 | **LaunchDarkly MCP** | `A+` | **92/100** | 90% | 100% | 85% | 99 tok |
+| 96 | **Cheerio MCP** | `A+` | **92/100** | 90% | 100% | 85% | 86 tok |
+| 97 | **Apify MCP** | `A+` | **92/100** | 90% | 100% | 85% | 82 tok |
+| 98 | **n8n Automation MCP** | `A+` | **92/100** | 90% | 100% | 85% | 84 tok |
+| 99 | **Stripe Payments MCP** | `A+` | **92/100** | 90% | 100% | 85% | 95 tok |
+| 100 | **Google Sheets MCP** | `A+` | **92/100** | 90% | 100% | 85% | 118 tok |
+| 101 | **YouTube Transcript MCP** | `A+` | **92/100** | 90% | 100% | 85% | 86 tok |
+| 102 | **ArXiv Research MCP** | `A+` | **92/100** | 90% | 100% | 85% | 84 tok |
+
+</details>
+
+---
+
 ### Ecosystem Breakdown by Category
 
 | Category | Servers | Representative Servers Included |
