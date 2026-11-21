@@ -1,9 +1,46 @@
 # MCP Benchmark
 
 [![CI](https://github.com/yunusarda-sudo/mcp-benchmark/actions/workflows/ci.yml/badge.svg)](https://github.com/yunusarda-sudo/mcp-benchmark/actions/workflows/ci.yml)
+[![Ecosystem Servers](https://img.shields.io/badge/MCP_Ecosystem-102_Servers-blueviolet)](fixtures/ecosystem-100.json)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-MCP Benchmark scores tool definitions using deterministic rules for schema quality, description clarity, and estimated context size. Use it to review a tool catalog locally or catch score regressions in CI. It works without an LLM or API key.
+MCP Benchmark is a quantitative quality benchmark, linter, and auto-fixer for **Model Context Protocol (MCP)** tool definitions. It scores tool catalogs using deterministic rules for schema strictness, semantic density, and context token efficiency — working entirely offline without needing an LLM or API keys.
+
+---
+
+## 🌐 Ecosystem Benchmark Corpus (102 Standard MCP Servers)
+
+MCP Benchmark includes a comprehensive reference corpus of **102 standard MCP servers** spanning developer tools, cloud providers, databases, and APIs.
+
+Run the ecosystem benchmark across all 102 servers with one command:
+
+```bash
+npx --yes github:yunusarda-sudo/mcp-benchmark --ecosystem
+```
+
+Or generate a searchable HTML report:
+
+```bash
+node dist/cli.js --ecosystem --html ecosystem-leaderboard.html
+```
+
+### Ecosystem Breakdown by Category
+
+| Category | Servers | Representative Servers Included |
+| --- | :---: | --- |
+| **Developer Tools & VCS** | 10 | Filesystem, Git, GitHub, GitLab, VS Code, Docker, Kubernetes, Terraform, Ansible, Jenkins |
+| **Databases & Storage** | 12 | PostgreSQL, SQLite, MySQL, Redis, MongoDB, Elasticsearch, ClickHouse, Snowflake, BigQuery, Supabase, Firebase, S3/MinIO |
+| **Vector DBs & AI Search** | 10 | Pinecone, Qdrant, Weaviate, Chroma, Milvus, Neo4j Graph, Tavily, Brave Search, Perplexity, Exa |
+| **Productivity & Notes** | 10 | Notion, Obsidian, Linear, Jira, Confluence, Trello, Asana, ClickUp, Airtable, Todoist |
+| **Communication & Alerting** | 10 | Slack, Discord, Telegram, Microsoft Teams, Zendesk, Intercom, PagerDuty, Twilio, SendGrid, Mailchimp |
+| **Cloud & Hosting Platforms** | 10 | AWS Cloud, Google Cloud, Azure, Cloudflare, Vercel, Netlify, Railway, Render, Fly.io, DigitalOcean |
+| **Observability & Analytics** | 10 | Sentry, Datadog, Grafana, Prometheus, New Relic, PostHog, Mixpanel, Segment, BetterStack, LaunchDarkly |
+| **Web Scraping & Automation** | 10 | Puppeteer, Playwright, Fetch HTTP, Cheerio, Crawl4AI, Browserless, BrightData, Apify, n8n, Make.com |
+| **Payments, CRM & Finance** | 10 | Stripe, Shopify, PayPal, Square, Plaid Banking, HubSpot CRM, Salesforce, QuickBooks, Xero, Google Sheets |
+| **Social, Media & Knowledge** | 10 | YouTube Transcript, ArXiv, PubMed Bio, Spotify, Reddit, Twitter/X, HackerNews, Weather, Google Drive, Google Calendar |
+| **Total Benchmark Corpus** | **102** | *All catalog definitions available in [`fixtures/ecosystem-100.json`](fixtures/ecosystem-100.json)* |
+
+---
 
 ## Quickstart
 
