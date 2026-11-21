@@ -7,3 +7,4 @@ export * from './fixer.js';
 export * from './sarif.js';
 export * from './configLoader.js';
 export * from './badge.js';
+export * from './ecosystem.js';

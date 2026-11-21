@@ -28,12 +28,15 @@ The sample has **3 tools** and scores **73/100 (B)** under the current rules. Us
 
 | Input | Example |
 | --- | --- |
+| 100+ Ecosystem benchmark corpus | `node dist/cli.js --ecosystem --html report.html` |
 | JSON file | `node dist/cli.js --file examples/sample-mcp-tools.json --json` |
 | Local MCP server over stdio | `node dist/cli.js --cmd "node fixtures/echo-mcp-server.mjs"` |
 | MCP server using the legacy HTTP+SSE transport | `node dist/cli.js --url http://localhost:8000/sse` |
 | Multi-server config (Claude Desktop / Cursor) | `node dist/cli.js --config ~/.cursor/mcp.json` |
 
 A JSON input can be a tool array, an object with a `tools` array, or a complete [MCP `tools/list` JSON-RPC response](https://modelcontextprotocol.io/specification/2025-11-25/server/tools#listing-tools). For a paginated export, combine the tools from all pages into one array. Live inspection follows successive `nextCursor` values for the configured server and only lists tool definitions. The stdio mode starts the supplied executable, so use a command you trust.
+
+`--ecosystem` benchmarks the curated corpus of **102 standard MCP servers** spanning developer tools, databases, vector search, cloud providers, and productivity APIs.
 
 `--html report.html` saves a standalone interactive report with live tool search and diagnostic filtering. `--sarif report.sarif` exports an OASIS SARIF v2.1.0 report for GitHub Code Scanning. `--badge mcp-badge.svg` generates an SVG quality badge for your repository. `--json` sends only report JSON to stdout, with diagnostics on stderr. Use `--help` for all options.
 

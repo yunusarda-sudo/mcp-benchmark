@@ -10,6 +10,7 @@ import { fixToolCatalog } from './fixer.js';
 import { generateSarifReport } from './sarif.js';
 import { loadToolsFromConfig } from './configLoader.js';
 import { generateSvgBadge } from './badge.js';
+import { ECOSYSTEM_SERVERS } from './ecosystem.js';
 import { McpToolDefinition, ServerBenchmarkResult } from './types.js';
 
 
@@ -238,10 +239,12 @@ Options:
   --html [path]          Write a self-contained HTML report to disk (default: mcp-benchmark-report.html)
   --sarif [path]         Write a GitHub Code Scanning SARIF v2.1.0 report (default: mcp-benchmark.sarif)
   --badge [path]         Write a SVG quality badge for READMEs (default: mcp-badge.svg)
+  --ecosystem            Benchmark the full 100+ server MCP ecosystem corpus
   --help, -h             Show this help message
 
 Examples:
   mcp-benchmark                         Run the bundled examples
+  mcp-benchmark --ecosystem             Benchmark 100+ official and community MCP servers
   mcp-benchmark -f tools.json         Lint and score your own MCP tool definitions
   mcp-benchmark -f tools.json --fix --write  Auto-clean descriptions and fix schema issues
   mcp-benchmark -c ~/.cursor/mcp.json Benchmark all servers in a configuration file
@@ -292,6 +295,7 @@ function readOptions(args: string[]) {
       html: { type: 'string' },
       sarif: { type: 'string' },
       badge: { type: 'string' },
+      ecosystem: { type: 'boolean' },
     },
   });
 
@@ -431,6 +435,9 @@ async function run() {
   } else if (options.file !== undefined) {
     const serverName = path.basename(options.file, path.extname(options.file));
     benchmark(serverName, readToolFile(options.file));
+  } else if (options.ecosystem) {
+    for (const [serverName, tools] of Object.entries(ECOSYSTEM_SERVERS)) benchmark(serverName, tools);
+    results.sort((a, b) => b.overallTQI - a.overallTQI);
   } else {
     for (const [serverName, tools] of Object.entries(DATASETS)) benchmark(serverName, tools);
     results.sort((a, b) => b.overallTQI - a.overallTQI);
