@@ -3,6 +3,16 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import { McpToolDefinition } from './types.js';
 
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, operation: string): Promise<T> {
+  let timer: NodeJS.Timeout;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      reject(new Error(`MCP server operation timed out after ${timeoutMs}ms while ${operation}.`));
+    }, timeoutMs);
+  });
+  return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timer));
+}
+
 async function listAllTools(client: Client): Promise<McpToolDefinition[]> {
   const tools: McpToolDefinition[] = [];
   const seenCursors = new Set<string>();
@@ -29,14 +39,21 @@ async function listAllTools(client: Client): Promise<McpToolDefinition[]> {
  */
 export async function fetchToolsFromStdioServer(
   command: string,
-  args: string[] = []
+  args: string[] = [],
+  timeoutMs: number = 20000
 ): Promise<McpToolDefinition[]> {
   const transport = new StdioClientTransport({ command, args });
   const client = new Client({ name: 'mcp-benchmark', version: '1.2.0' });
 
   try {
-    await client.connect(transport);
-    return await listAllTools(client);
+    return await withTimeout(
+      (async () => {
+        await client.connect(transport);
+        return await listAllTools(client);
+      })(),
+      timeoutMs,
+      `executing stdio command "${command}"`
+    );
   } finally {
     await transport.close();
   }
@@ -48,7 +65,8 @@ export async function fetchToolsFromStdioServer(
  */
 export async function fetchToolsFromSseServer(
   url: string | URL,
-  headers?: Record<string, string>
+  headers?: Record<string, string>,
+  timeoutMs: number = 20000
 ): Promise<McpToolDefinition[]> {
   const endpoint = typeof url === 'string' ? new URL(url) : url;
   const transport = new SSEClientTransport(endpoint, {
@@ -57,8 +75,14 @@ export async function fetchToolsFromSseServer(
   const client = new Client({ name: 'mcp-benchmark', version: '1.2.0' });
 
   try {
-    await client.connect(transport);
-    return await listAllTools(client);
+    return await withTimeout(
+      (async () => {
+        await client.connect(transport);
+        return await listAllTools(client);
+      })(),
+      timeoutMs,
+      `connecting to SSE endpoint "${endpoint.href}"`
+    );
   } finally {
     await transport.close();
   }

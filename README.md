@@ -248,6 +248,41 @@ The fixer automatically:
 - Prunes empty enum arrays (`enum: []`).
 - Sets default `{ type: "string" }` items schema on `type: "array"` fields lacking `items`.
 
+## 💰 Token Economics & Cost Estimator (`--cost`)
+
+In multi-turn autonomous agent conversations, tool schemas are re-injected into the context window on **every single turn**. Bloated descriptions and loose parameter schemas silently cost thousands of dollars in LLM API bills.
+
+Calculate your context token consumption and estimated monthly API spend across 1,000 multi-turn sessions:
+
+```bash
+node dist/cli.js --file tools.json --cost
+```
+
+Output:
+```markdown
+### 💰 Context Window Token Economics
+
+* **Catalog Size:** 320 tokens per model turn (~64 tok/tool)
+* **15-Turn Agent Session:** 4,800 tokens consumed by tool schemas alone
+* **At 1,000 sessions/month:** 4,800,000 tokens injected into LLM context
+
+| LLM Provider | Estimated Schema Cost / 1k Sessions |
+|:---|:---:|
+| **Anthropic Claude 3.5 Sonnet** ($3/M) | $14.40 |
+| **OpenAI GPT-4o** ($2.50/M) | $12.00 |
+| **Google Gemini 1.5 Pro** ($2/M) | $9.60 |
+```
+
+## 💬 Automated GitHub PR Comment (`--pr-comment`)
+
+Generate a structured, ready-to-post GitHub PR comment comparing candidate changes against baseline:
+
+```bash
+node dist/cli.js --baseline base.json --file candidate.json --pr-comment pr-comment.md
+```
+
+Includes delta scores, token footprint diff, breaking change warnings, and collapsible diagnostic details.
+
 ## README SVG Quality Badge
 
 Generate a retina-crisp SVG badge to display your tool quality score:

@@ -12,6 +12,10 @@ import {
   loadToolsFromConfig,
   benchmarkServerTools,
   ECOSYSTEM_SERVERS,
+  estimateTokenEconomics,
+  formatTokenEconomicsMarkdown,
+  formatPrComment,
+  compareToolCatalogs,
 } from '../dist/index.js';
 
 test('analyzeToolDefinition flags array without items and nested properties lacking types', () => {
@@ -290,4 +294,63 @@ test('ECOSYSTEM_SERVERS corpus contains at least 100 servers and benchmarks clea
   const benchmarkResults = JSON.parse(result.stdout);
   assert.equal(benchmarkResults.length, serverNames.length);
   assert.ok(benchmarkResults.every(r => r.overallTQI >= 0 && r.overallTQI <= 100));
+});
+
+test('estimateTokenEconomics computes correct multi-turn projections and costs', () => {
+  const report = estimateTokenEconomics(500, 5, 1000, 15);
+  assert.equal(report.totalTokens, 500);
+  assert.equal(report.averageTokensPerTool, 100);
+  assert.equal(report.tokensPer10TurnSession, 7500);
+  assert.equal(report.tokensPer1000Sessions, 7500000);
+  assert.equal(report.monthlyCostEstimates.claudeSonnet, 22.5); // 7.5M * $3
+  assert.equal(report.monthlyCostEstimates.gpt4o, 18.75);       // 7.5M * $2.5
+
+  const markdown = formatTokenEconomicsMarkdown(report);
+  assert.match(markdown, /Token Economics/);
+  assert.match(markdown, /\$22\.50/);
+});
+
+test('formatPrComment generates structured markdown table comparing baseline and candidate', () => {
+  const baseTool = { name: 'calc', description: 'Calculate numbers.', inputSchema: { type: 'object' } };
+  const candTool = { name: 'calc', description: 'Calculate numbers accurately.', inputSchema: { type: 'object' } };
+  const comparison = compareToolCatalogs([baseTool], [candTool]);
+
+  const baseResult = benchmarkServerTools('baseline', [baseTool]);
+  const candResult = benchmarkServerTools('candidate', [candTool]);
+
+  const prComment = formatPrComment(comparison, candResult, baseResult);
+  assert.match(prComment, /PR Summary/);
+  assert.match(prComment, /Overall TQI Score/);
+  assert.match(prComment, /0 ✅/); // No breaking changes
+});
+
+test('cli supports --cost and --pr-comment flags', async () => {
+  const { spawnSync } = await import('node:child_process');
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-pr-test-'));
+  const commentFile = path.join(tmpDir, 'pr-comment.md');
+  const base = path.resolve('examples/pr-base.json');
+  const cand = path.resolve('examples/pr-candidate.json');
+
+  try {
+    const cliPath = path.resolve('dist/cli.js');
+    const result = spawnSync(process.execPath, [
+      cliPath,
+      '--baseline', base,
+      '--file', cand,
+      '--cost',
+      '--pr-comment', commentFile,
+    ], {
+      encoding: 'utf8',
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /Token Economics/);
+    assert.ok(fs.existsSync(commentFile), 'PR comment file should be written');
+
+    const commentContent = fs.readFileSync(commentFile, 'utf8');
+    assert.match(commentContent, /Breaking Changes Detected/);
+    assert.match(commentContent, /create_booking/);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
 });

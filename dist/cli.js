@@ -11,6 +11,8 @@ import { generateSarifReport } from './sarif.js';
 import { loadToolsFromConfig } from './configLoader.js';
 import { generateSvgBadge } from './badge.js';
 import { ECOSYSTEM_SERVERS } from './ecosystem.js';
+import { estimateTokenEconomics, formatTokenEconomicsMarkdown } from './costEstimator.js';
+import { formatPrComment } from './prComment.js';
 // Split a command line string into executable + args, respecting quotes.
 function splitCommand(input) {
     const tokens = [];
@@ -235,19 +237,22 @@ Options:
   --sarif [path]         Write a GitHub Code Scanning SARIF v2.1.0 report (default: mcp-benchmark.sarif)
   --badge [path]         Write a SVG quality badge for READMEs (default: mcp-badge.svg)
   --ecosystem            Benchmark the full 100+ server MCP ecosystem corpus
+  --cost                 Estimate context window token consumption and financial cost
+  --pr-comment [path]    Write a formatted GitHub PR comment markdown summary (default: mcp-pr-comment.md)
   --help, -h             Show this help message
 
 Examples:
   mcp-benchmark                         Run the bundled examples
   mcp-benchmark --ecosystem             Benchmark 100+ official and community MCP servers
   mcp-benchmark -f tools.json         Lint and score your own MCP tool definitions
+  mcp-benchmark -f tools.json --cost  Estimate token footprint & API cost per 1k sessions
   mcp-benchmark -f tools.json --fix --write  Auto-clean descriptions and fix schema issues
   mcp-benchmark -c ~/.cursor/mcp.json Benchmark all servers in a configuration file
   mcp-benchmark --cmd "node fixtures/echo-mcp-server.mjs"
   mcp-benchmark --url "http://localhost:8000/sse"
   mcp-benchmark -u "https://api.example.com/mcp/sse" -H "Authorization: Bearer token"
   mcp-benchmark -f tools.json --fail-under 80
-  mcp-benchmark --baseline before.json --file after.json --fail-on breaking --fail-on critical
+  mcp-benchmark --baseline before.json --file after.json --pr-comment pr-comment.md
   mcp-benchmark --html report.html      Write a shareable HTML report
   mcp-benchmark -f tools.json --sarif   Export SARIF report for GitHub Code Scanning
   mcp-benchmark -f tools.json --badge   Generate SVG quality badge for README
@@ -264,6 +269,9 @@ function readOptions(args) {
         }
         if (arg === '--badge' && (!args[i + 1] || args[i + 1].startsWith('-'))) {
             return '--badge=mcp-badge.svg';
+        }
+        if (arg === '--pr-comment' && (!args[i + 1] || args[i + 1].startsWith('-'))) {
+            return '--pr-comment=mcp-pr-comment.md';
         }
         if (arg === '--write' && (!args[i + 1] || args[i + 1].startsWith('-'))) {
             return '--write=__DEFAULT__';
@@ -290,6 +298,8 @@ function readOptions(args) {
             sarif: { type: 'string' },
             badge: { type: 'string' },
             ecosystem: { type: 'boolean' },
+            cost: { type: 'boolean' },
+            'pr-comment': { type: 'string' },
         },
     });
     const sources = [values.file, values.cmd, values.url, values.config].filter(value => value !== undefined);
@@ -476,6 +486,23 @@ async function run() {
             grade = 'D';
         fs.writeFileSync(resolvedBadgePath, generateSvgBadge(avgScore, grade), 'utf-8');
         console.error(`🛡️ SVG quality badge written to ${resolvedBadgePath}`);
+    }
+    if (options.cost) {
+        const totalTokens = results.reduce((acc, r) => acc + r.totalTokens, 0);
+        const totalTools = results.reduce((acc, r) => acc + r.toolsAnalyzed, 0);
+        const costReport = estimateTokenEconomics(totalTokens, totalTools);
+        console.log('\n' + formatTokenEconomicsMarkdown(costReport));
+    }
+    if (options['pr-comment'] !== undefined) {
+        if (!comparison) {
+            throw new Error('--pr-comment requires --baseline to compare changes against.');
+        }
+        const resolvedPrCommentPath = path.resolve(options['pr-comment']);
+        const baselineBenchmark = baseline ? benchmarkServerTools('baseline', baseline, analysis) : undefined;
+        const candidateBenchmark = results[0] ?? benchmarkServerTools('candidate', [], analysis);
+        const prCommentMd = formatPrComment(comparison, candidateBenchmark, baselineBenchmark);
+        fs.writeFileSync(resolvedPrCommentPath, prCommentMd, 'utf-8');
+        console.error(`💬 GitHub PR comment written to ${resolvedPrCommentPath}`);
     }
     if (process.env.GITHUB_STEP_SUMMARY) {
         fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, markdown, 'utf-8');

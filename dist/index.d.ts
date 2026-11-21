@@ -8,3 +8,5 @@ export * from './sarif.js';
 export * from './configLoader.js';
 export * from './badge.js';
 export * from './ecosystem.js';
+export * from './costEstimator.js';
+export * from './prComment.js';
