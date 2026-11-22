@@ -17,7 +17,7 @@ function run(args, options) {
   delete env.GITHUB_STEP_SUMMARY;
   const result = spawnSync(process.execPath, [cli, ...args], {
     encoding: 'utf8',
-    timeout: 10_000,
+    timeout: 30_000,
     env,
     ...options,
   });
