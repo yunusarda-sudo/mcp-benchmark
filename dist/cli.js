@@ -432,6 +432,10 @@ async function run() {
         if (result.updated) {
             console.error(`🏆 Successfully updated Leaderboard in README.md with ${result.count} ranked MCP servers!`);
         }
+        else if (!result.markersFound) {
+            console.error('README.md has no <!-- LEADERBOARD_START --> / <!-- LEADERBOARD_END --> markers; nothing to update. ' +
+                'In the mcp-benchmark repository, run `npm run generate-ecosystem` to regenerate LEADERBOARD.md.');
+        }
         else {
             console.error(`Leaderboard in README.md is already up to date (${result.count} servers).`);
         }
