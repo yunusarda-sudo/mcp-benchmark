@@ -1,0 +1,391 @@
+{
+  "$schema": "../schema.json",
+  "name": "com.opensubtitles/mcp-server",
+  "title": "OpenSubtitles",
+  "category": "Other",
+  "description": "Search, inspect and download subtitles for movies and TV from OpenSubtitles.com.",
+  "repository": "https://github.com/opensubtitles/mcp.opensubtitles.com",
+  "tools": [
+    {
+      "name": "search_subtitles",
+      "description": "Find subtitles for a movie or TV episode and get file_ids to download. Search by title (query), video filename, IMDb/TMDB/feature id with optional season/episode, or moviehash; filter by language and flags. Results are ranked with exact title, episode and release-name matches first.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "query": {
+            "description": "Title to search for, e.g. \"The Matrix\". Not needed when an id, moviehash or filename is given.",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "filename": {
+            "description": "Video filename, e.g. \"Chicago.Fire.S14E01.1080p.WEB.h264-ETHEL.mkv\". Parsed with guessit-js into title/year/season/episode; its release name ranks matching subtitles first.",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "imdb_id": {
+            "description": "IMDb id (tt0133093 or 133093). With season_number/episode_number it is the show's id.",
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "string",
+                "pattern": "^(tt)?\\d{1,10}$"
+              }
+            ]
+          },
+          "tmdb_id": {
+            "description": "TMDB id. With season_number/episode_number it is the show's id.",
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "feature_id": {
+            "description": "OpenSubtitles feature id from search_features. With season_number/episode_number it is the show's id.",
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "season_number": {
+            "description": "TV season number; use with episode_number and the show's query or id",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 999
+          },
+          "episode_number": {
+            "description": "TV episode number within season_number",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9999
+          },
+          "year": {
+            "description": "Release year, to tell remakes and same-name titles apart",
+            "type": "integer",
+            "minimum": 1870,
+            "maximum": 2100
+          },
+          "type": {
+            "description": "Restrict to movies or TV episodes",
+            "type": "string",
+            "enum": [
+              "movie",
+              "episode",
+              "all"
+            ]
+          },
+          "languages": {
+            "description": "Subtitle languages in order of preference, e.g. [\"en\", \"pt-BR\"]. Omit for all languages.",
+            "minItems": 1,
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z]{2,3}(-[A-Za-z]{2,4})?$",
+              "description": "Language code as listed by list_languages, e.g. en, de, pt-BR, zh-CN"
+            }
+          },
+          "moviehash": {
+            "description": "OpenSubtitles hash of the video file (calculate_file_hash in local mode). Exact file matches are flagged moviehash_match and ranked first.",
+            "type": "string",
+            "pattern": "^[0-9a-fA-F]{16}$"
+          },
+          "hearing_impaired": {
+            "default": "include",
+            "description": "Subtitles for the deaf and hard of hearing (SDH)",
+            "type": "string",
+            "enum": [
+              "include",
+              "exclude",
+              "only"
+            ]
+          },
+          "foreign_parts_only": {
+            "default": "include",
+            "description": "Subtitles that only cover foreign-language dialogue",
+            "type": "string",
+            "enum": [
+              "include",
+              "exclude",
+              "only"
+            ]
+          },
+          "include_ai_translated": {
+            "default": true,
+            "description": "Include AI-translated subtitles",
+            "type": "boolean"
+          },
+          "include_machine_translated": {
+            "default": false,
+            "description": "Include machine-translated subtitles (usually low quality)",
+            "type": "boolean"
+          },
+          "trusted_only": {
+            "default": false,
+            "description": "Only subtitles from trusted uploaders",
+            "type": "boolean"
+          },
+          "order_by": {
+            "default": "relevance",
+            "description": "relevance = exact title/episode and release-name matches first, then popularity",
+            "type": "string",
+            "enum": [
+              "relevance",
+              "download_count",
+              "upload_date",
+              "rating",
+              "votes"
+            ]
+          },
+          "exact_title": {
+            "default": true,
+            "description": "When searching by title, first resolve it to the exact movie/show (so \"The Matrix\" does not return \"The Matrix Revisited\"). Set false for a fuzzy text search.",
+            "type": "boolean"
+          },
+          "page": {
+            "default": 1,
+            "description": "Result page, starting at 1",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000
+          },
+          "per_page": {
+            "default": 20,
+            "description": "Results per page (1-100)",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          }
+        }
+      }
+    },
+    {
+      "name": "get_subtitle_details",
+      "description": "Full metadata for one subtitle from a search result: all files (multi-CD), uploader, comments, links, and related subtitles for the same title and language. Does not use download quota.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "subtitle_id": {
+            "description": "subtitle_id from search_subtitles",
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^\\d{1,12}$"
+              },
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              }
+            ]
+          },
+          "feature_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "feature.feature_id of the same search result"
+          },
+          "language": {
+            "description": "The subtitle's language (speeds up the lookup)",
+            "type": "string",
+            "pattern": "^[A-Za-z]{2,3}(-[A-Za-z]{2,4})?$"
+          },
+          "related_limit": {
+            "default": 5,
+            "description": "How many related subtitles (same title and language) to return, 0-20",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 20
+          }
+        },
+        "required": [
+          "subtitle_id",
+          "feature_id"
+        ]
+      }
+    },
+    {
+      "name": "download_subtitle",
+      "description": "Download one subtitle file by file_id and return its text (or a temporary link), with optional format conversion, FPS conversion or time shift. Each call uses one download from the user's daily OpenSubtitles quota, so pick the file with search_subtitles first; the result reports the remaining quota.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "file_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "file_id from search_subtitles or get_subtitle_details"
+          },
+          "sub_format": {
+            "description": "Convert to this format. Omit to keep the original (usually srt).",
+            "type": "string",
+            "enum": [
+              "srt",
+              "webvtt",
+              "sub",
+              "mpl",
+              "dfxp",
+              "txt"
+            ]
+          },
+          "in_fps": {
+            "description": "Frame rate the subtitle was timed for (use with out_fps)",
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "maximum": 240
+          },
+          "out_fps": {
+            "description": "Frame rate of your video (use with in_fps)",
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "maximum": 240
+          },
+          "timeshift": {
+            "description": "Shift all cues by this many seconds, e.g. 2.5 or -1",
+            "type": "number",
+            "minimum": -3600,
+            "maximum": 3600
+          },
+          "delivery": {
+            "default": "content",
+            "description": "content = return the subtitle text; link = return only a temporary download URL (for large files or saving to disk)",
+            "type": "string",
+            "enum": [
+              "content",
+              "link"
+            ]
+          }
+        },
+        "required": [
+          "file_id"
+        ]
+      }
+    },
+    {
+      "name": "search_features",
+      "description": "Look up movies, TV shows and episodes on OpenSubtitles (title, year, IMDb/TMDB/feature ids, seasons and episode counts, subtitle counts per language). Use it to disambiguate a title before search_subtitles, or to find a show's seasons and episodes.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "query": {
+            "description": "Title, e.g. \"Chicago Fire\"",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "imdb_id": {
+            "description": "IMDb id (tt0133093 or 133093)",
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "string",
+                "pattern": "^(tt)?\\d{1,10}$"
+              }
+            ]
+          },
+          "tmdb_id": {
+            "description": "TMDB id",
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "feature_id": {
+            "description": "OpenSubtitles feature id",
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "type": {
+            "default": "all",
+            "description": "Restrict to movies, TV shows or episodes",
+            "type": "string",
+            "enum": [
+              "movie",
+              "tvshow",
+              "episode",
+              "all"
+            ]
+          },
+          "year": {
+            "description": "Release year",
+            "type": "integer",
+            "minimum": 1870,
+            "maximum": 2100
+          },
+          "include_episodes": {
+            "default": false,
+            "description": "List every episode (title, feature_id, IMDb id) per season for TV shows",
+            "type": "boolean"
+          },
+          "limit": {
+            "default": 10,
+            "description": "Maximum results to return (1-50)",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50
+          }
+        }
+      }
+    },
+    {
+      "name": "list_languages",
+      "description": "The subtitle language codes OpenSubtitles supports (e.g. en, pt-BR, zh-CN) with their names. Use the codes in search_subtitles.languages. Also available as the opensubtitles://languages resource.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "guess_filename",
+      "description": "Parse a movie or episode filename with guessit-js (title, year, season, episode, release group, resolution, source, codec). Offline and free; use it to build a precise search_subtitles call, or pass the filename to search_subtitles directly.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "filename": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500,
+            "description": "e.g. \"The.Matrix.1999.1080p.BluRay.x264-GROUP.mkv\""
+          }
+        },
+        "required": [
+          "filename"
+        ]
+      }
+    },
+    {
+      "name": "get_user_info",
+      "description": "The logged-in OpenSubtitles user's level, VIP status, daily download allowance and downloads remaining, so you can plan downloads. Needs a configured login; does not use quota.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {},
+        "additionalProperties": false
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "com.opensubtitles/mcp-server",
+    "version": "2.0.3",
+    "remoteUrl": "https://mcp.opensubtitles.com/mcp",
+    "publishedAt": "2026-11-22T12:14:43.863546Z",
+    "fetchedAt": "2026-11-22T12:49:37.224Z",
+    "toolsSha256": "ed2d9af4619fe018e45e6673826b4020263a1c371cd5afefed8445c57c47278a"
+  }
+}

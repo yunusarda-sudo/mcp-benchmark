@@ -1,0 +1,530 @@
+{
+  "$schema": "../schema.json",
+  "name": "app.hedgr/hedgr",
+  "title": "Hedgr FX Risk & Hedging",
+  "category": "Other",
+  "description": "Read-only FX exposure, hedge cover, cash timing and FX P&L from your accounting data, for SME teams.",
+  "tools": [
+    {
+      "name": "get_platform_capabilities",
+      "description": "Use this when the user asks what Hedgr can do for their company's currency risk, which accounting systems it reads (Xero, QuickBooks, Sage, Holded), or what the connector and Scout can answer. Returns a safe, client-facing capability map for Hedgr. Do not use for the user's own exposure or P&L figures, for executing trades or payments, or for investment advice: Hedgr is read-only. The map lists dashboard tabs, data sources, what the MCP already exposes, a coverage summary counting how many client-facing surfaces the published tools answer, the Scout/MCP boundary, and what is intentionally not exposed. Does not reveal private prompts, formulas, credentials, admin pages, source paths, internal routes, feature flags, or implementation IP.",
+      "inputSchema": {
+        "type": "object",
+        "description": "No inputs. Returns Hedgr's read-only tool catalogue and what each surface can answer for the whole workspace.",
+        "properties": {}
+      }
+    },
+    {
+      "name": "get_dashboard_context",
+      "description": "Use this when the user asks for an overview of their company's FX position: total currency exposure, FX gains and losses, which foreign currencies they hold, and how fresh their accounting data is. Returns a compact read-only snapshot of the authenticated Hedgr dashboard. Do not use for live market rates, currency conversion, or placing a trade or payment: Hedgr is read-only. The snapshot carries organisation, provider, base currency, selected entity/workspace context, data timestamp, FX currencies, invoice counts, headline exposure and P&L totals, and available rates. Also returns Scout-aligned blocks: book_value (open and settled FX invoice face-value sums), invoice_book (counts, receivable/payable and local/foreign splits, per-currency open/overdue, ageing, top open invoices), profit_and_revenue (net profit, operating profit, revenue, profit_basis, provider_has_unrealised_fx), data_coverage (invoice lookback and rate-history window), inter_company lens state and totals.dashboard_total_fx_impact_base. Also returns entity_scope: when the workspace consolidates several entities, entity_scope.ask_user is true and the block carries a scope question and its options (consolidated group, or one entity with its entity_id).",
+      "inputSchema": {
+        "type": "object",
+        "description": "Omit entity_id for a whole-workspace snapshot of the current dashboard (headline KPIs, exposure, P&L). Pass entity_id to scope the P&L totals and the bank revaluation leg to one entity; aligned_blocks_scope_basis then names every block that stays whole-workspace.",
+        "properties": {
+          "entity_id": {
+            "type": "string",
+            "description": "Scope the P&L totals and the bank leg to one entity, the same blocks get_pnl_attribution scopes. Omit for the consolidated group. Use an entity_id from entity_scope.options or list_entities."
+          }
+        }
+      }
+    },
+    {
+      "name": "get_account_status",
+      "description": "Use this when the user asks whether Hedgr is set up, which accounting systems are connected (Xero, QuickBooks, Sage, Holded, Google Sheets or a CSV upload), or why no FX figures appear yet. Returns the current state of the user's Hedgr account: which accounting systems, Google Sheets workspaces, CSV/manual cloud workspaces, and setup sections are available. Do not use for exposure or P&L figures, or to connect a system: the tool reports account status only. Returns entity_scope: on a workspace that consolidates several entities, entity_scope.ask_user is true and entity_scope carries a scope question with its options (consolidated group, or one named entity with its entity_id). When no usable source is connected, connection_status.state is 'setup_required' and the response carries setup_url and setup_steps. Accounting providers (Xero, QuickBooks, Sage, Holded) supply company settings automatically; Google Sheets and CSV/manual workspaces need Company & reporting completed, and CSV/manual workspaces are readable once saved to cloud.",
+      "inputSchema": {
+        "type": "object",
+        "description": "No inputs. Returns workspace connection and onboarding status.",
+        "properties": {}
+      }
+    },
+    {
+      "name": "list_entities",
+      "description": "Use this when the user asks about one company inside a group, for example a UK Ltd, a US Inc and a DE GmbH that each report in their own base currency. Lists all connected legal entities with their base currencies and source accounting systems. Do not use for the exposure or P&L figures themselves: this tool returns the list of entities only. Returns entity_scope with a scope question (consolidated group or one entity) and the entity_id for each option when the workspace consolidates several entities.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "include_disconnected": {
+            "type": "boolean",
+            "description": "Include entities that exist in policy config but have no connected accounting system. Useful for showing the user what's missing.",
+            "default": false
+          }
+        }
+      }
+    },
+    {
+      "name": "get_fx_exposure",
+      "description": "Use this when the user asks how much foreign currency their company owes or expects to receive, what their currency risk is, or which currency is their largest exposure. Returns net FX exposure by currency pair, entity, and time bucket (overdue, 0-30d, 31-60d, 61-90d, 90d+, undated) from the user's connected accounting data. Do not use for live exchange rates, currency conversion, or placing a trade or payment: Hedgr is read-only. An invoice with no due date has no tenor, so it stays in net exposure and sits in the undated bucket. Each exposure line distinguishes confirmed (invoices and POs from the accounting system) from forecasted, and includes a source field citing provenance ('€2.3M from 47 Xero invoices'). On multi-entity books the exposure honours the workspace inter-company mode and the response carries an intercompany block naming that mode; realised P&L does not move with that mode, and it is reported as the accounting system recorded it, so settled inter-company invoices stay inside it. On an unscoped call also returns counterparty_concentration (per contact/currency/direction with share of gross exposure), risk_snapshot (top currency and share, signed and gross net position, breach and overdue counts, worst-case as published), sensitivity (impact of a 1% move per currency) and total_net_exposure_base, all lifted from the same context the in-app Scout assistant answers from.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "entity_id": {
+            "type": "string",
+            "description": "Specific entity ID from list_entities. Omit for consolidated group exposure."
+          },
+          "currency": {
+            "type": "string",
+            "description": "ISO 4217 code to filter to one currency (e.g. 'EUR', 'USD'). Omit for all currencies.",
+            "pattern": "^[A-Z]{3}$"
+          },
+          "horizon_days": {
+            "type": "integer",
+            "description": "Forward-looking window in days.",
+            "default": 90,
+            "minimum": 1,
+            "maximum": 730
+          },
+          "include_forecasted": {
+            "type": "boolean",
+            "description": "Include forecasted exposure alongside confirmed accounting-system data.",
+            "default": true
+          },
+          "include_chart": {
+            "type": "boolean",
+            "description": "When true, the tool response includes an image/png content block containing a horizontal bar chart of net exposure by currency (green = receivable, red = payable). Requires no additional API calls - uses the same data as the text response.",
+            "default": false
+          }
+        }
+      }
+    },
+    {
+      "name": "get_cash_position",
+      "description": "Use this when the user asks how much cash their company holds in each currency, or whether foreign-currency bank balances already cover invoices in the same currency. Returns current cash balances by currency and entity. Do not use for moving cash, converting currency or making a payment: Hedgr is read-only. Shows whether FX cash offsets invoice exposure in the same currency.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "entity_id": {
+            "type": "string",
+            "description": "Specific entity ID. Omit for group-level consolidated cash position."
+          },
+          "currency": {
+            "type": "string",
+            "description": "Filter to a single currency.",
+            "pattern": "^[A-Z]{3}$"
+          },
+          "include_chart": {
+            "type": "boolean",
+            "description": "When true, includes an image/png content block: horizontal bar chart of cash balance by currency (native units). Blue bars = positive, red = overdraft.",
+            "default": false
+          }
+        }
+      }
+    },
+    {
+      "name": "get_hedge_portfolio",
+      "description": "Use this when the user asks about their existing currency hedges or forward contracts, how much of a currency is already covered, or their hedge ratio on a currency such as EUR. Returns all open forward contracts and hedges with maturity date, notional amount, contracted rate, and current mark-to-market value. Do not use for booking, extending or closing a hedge: Hedgr is read-only. hedges[] is drawdown-normalised: a parent forward is listed once at its remaining notional and child draws are excluded, exactly as the dashboard hedge book counts cover. Also returns coverage (Protection Ratio and over-hedge flag as published by the dashboard), policy_band (hedge-ratio policy band and per-currency status), residual_coverage (net exposure vs active hedge notional per currency), drawdowns (original, drawn and remaining notional per parent) and hedge_mark_to_market.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "entity_id": {
+            "type": "string",
+            "description": "Filter to a single entity's hedges."
+          },
+          "currency": {
+            "type": "string",
+            "description": "Filter to hedges on a specific currency.",
+            "pattern": "^[A-Z]{3}$"
+          },
+          "include_expired": {
+            "type": "boolean",
+            "description": "Include hedges that have already matured.",
+            "default": false
+          }
+        }
+      }
+    },
+    {
+      "name": "simulate_scenario",
+      "description": "Use this when the user asks what a currency move would do to their profit, for example 'What happens if GBP/EUR moves 3% before Q3 close?' or 'What is our worst case?'. Models the P&L impact of exchange rate moves on the user's current net exposure (invoices + cash) and existing hedges. Do not use for rate forecasts or for advice on whether to hedge: the tool measures a stated move and predicts nothing. Four modes: (1) supply explicit `scenarios` for a linear what-if on named pairs; (2) set `worst_case: true` (scenarios optional) to revalue each currency at its OWN worst adverse 30-day historical move, the same worst-case the Monitor dashboard shows; (3) `adverse_pct` for one uniform move against every position; (4) `base_move_pct` for the base currency moving against all foreign currencies (negative = base weaker). Every mode measures the whole book (every open invoice and every open forward, as the dashboard does) unless horizon_days is given. Worst-case is a historical realised downside, not a forecast or a recommendation. Cross-currency pairs (neither leg is the reporting currency) are shocked base-neutrally.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "worst_case": {
+            "type": "boolean",
+            "description": "When true, ignore linear shocks and apply each currency's own worst adverse 30-day historical move (adverse-aligned, always a loss). Matches the Monitor worst-case KPI when every exposed currency receives a move; partial coverage is reported in worst_case.coverage and worst_case.coverage_complete, and a partial gross_impact_base covers only the currencies listed in by_currency. scenarios becomes optional.",
+            "default": false
+          },
+          "adverse_pct": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "maximum": 50,
+            "description": "Uniform adverse move: each currency moves this percentage against its own net position after open forwards (a net receivable currency weakens, a net payable currency strengthens), so every row is a loss. Use for 'a 10% adverse move' or 'everything moves 10% against me'. scenarios becomes optional."
+          },
+          "base_move_pct": {
+            "type": "number",
+            "minimum": -50,
+            "maximum": 50,
+            "description": "The base currency moves this percentage against every foreign currency. Negative = base WEAKER (e.g. 'ZAR 10% weaker' on a ZAR book is -10), positive = base stronger. Use this instead of composing pairs for a base-currency move. scenarios becomes optional."
+          },
+          "scenarios": {
+            "type": "array",
+            "description": "Rate shocks to apply (required unless worst_case is true). Multiple entries are applied simultaneously (correlated move).",
+            "minItems": 1,
+            "maxItems": 10,
+            "items": {
+              "type": "object",
+              "required": [
+                "currency_pair",
+                "shock_bps"
+              ],
+              "properties": {
+                "currency_pair": {
+                  "type": "string",
+                  "description": "Currency pair, e.g. 'GBPEUR' or 'EUR/GBP'. Base currency strengthens when shock_bps is positive."
+                },
+                "shock_bps": {
+                  "type": "integer",
+                  "description": "Rate shock in basis points. Positive = base currency strengthens. 300 = +3%."
+                }
+              }
+            }
+          },
+          "horizon_days": {
+            "type": "integer",
+            "description": "Forward-looking window in days. An open invoice due after it and an open forward maturing after it are left out. With no horizon_days, in every mode, no horizon applies: every open invoice and every open forward counts, the same book the Monitor worst-case card and the Model tab Stress Test measure, and the response carries horizon_days null. Pass it only when the user names a period.",
+            "minimum": 1,
+            "maximum": 365
+          },
+          "include_hedges": {
+            "type": "boolean",
+            "description": "Apply offsetting effect of existing hedges. Set false to see gross (unhedged) impact.",
+            "default": true
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_protection_candidates",
+      "description": "Use this when the user asks how much of an open currency exposure their hedging policy suggests covering. Returns policy-derived candidate rows showing suggested notional amounts for open currency exposures. Do not use for booking a hedge or a trade: the rows are read-only, and the tool does not execute trades, open dealing pages, or transfer assets.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "entity_id": {
+            "type": "string",
+            "description": "Limit to a single entity. Omit for group-level candidates."
+          },
+          "currency": {
+            "type": "string",
+            "description": "Limit to a specific currency (e.g. 'EUR').",
+            "pattern": "^[A-Z]{3}$"
+          },
+          "policy_override": {
+            "type": "object",
+            "description": "Temporary policy adjustments for this calculation only. Does not modify the stored policy.",
+            "properties": {
+              "target_hedge_ratio": {
+                "type": "number",
+                "description": "Override target hedge ratio (0-1). 0.7 = 70% hedged.",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "max_tenor_days": {
+                "type": "integer",
+                "description": "Override maximum forward contract tenor in days.",
+                "minimum": 1,
+                "maximum": 730
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "get_policy",
+      "description": "Use this when the user asks about their FX hedging policy: the hedge ratio target, the allowed instrument, the hedge horizon, comfort limits or budget rates. Returns the user's saved FX policy in declared form. Do not use for changing the policy or for advice on what it should be: the tool reads the saved settings only. The response holds one workspace coverage target (target_hedge_ratio_pct, 0 when none is set), the allowed instrument, the hedge horizon, and a policy_settings block naming every stored field with its meaning, including per-currency comfort-limit rows (a row with limit 0 is treated as unset and is named as such), budget rates, and fees. max_single_trade_base and approval_threshold_base are published as null with a basis, because no Hedgr surface writes them today. Nothing in the stored policy is passed through undeclared.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "entity_id": {
+            "type": "string",
+            "description": "Fetch the policy for a specific entity. Omit for the group-level policy."
+          }
+        }
+      }
+    },
+    {
+      "name": "get_market_regime",
+      "description": "Use this when the user asks whether a currency pair such as GBP/USD is calm or volatile, how far it moved in the last 30 days, or what the market backdrop is for the currencies they hold. Returns a current Hedgr regime snapshot for one or more currency pairs. Volatility regimes are Settled / Directional / Choppy / Stressed. Do not use for rate forecasts, dealing quotes or currency conversion. Regimes are not trade recommendations. The scores are analytical only. The snapshot holds a compact headline, sorted snapshot rows, latest rate, realised-volatility regime, 30-day change, methodology, and dashboard surface. Also returns a market_environment block matching the Monitor Market Environment KPI cards when the book has exposure: the exposure-weighted Composite score (0-100), Volatility score, and 30-day Trend (change and direction). Also returns dashboard_market_environment (the Composite, Trend and Volatility scores, levels and the Global Backdrop score/sentiment exactly as the dashboard published them; null with a reason until the Monitor tab has published), dashboard_regimes (per-pair regime label and recent range as shown on screen), and market_environment.trend_score, adverse_currencies and trend_summary from the server engine.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "pairs": {
+            "type": "array",
+            "description": "Currency pairs to query, e.g. ['GBPEUR', 'GBPUSD', 'USDZAR']. Omit to return regimes for all pairs relevant to the user's current exposure.",
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Z]{6}$"
+            },
+            "maxItems": 20
+          },
+          "include_history": {
+            "type": "boolean",
+            "description": "Include the historical regime series (date + regime + volatility per point). Useful for charting or for the agent to describe how stable the current regime is.",
+            "default": false
+          },
+          "history_years": {
+            "type": "number",
+            "description": "How many years of history to include when include_history is true. Defaults to 2.",
+            "default": 2,
+            "minimum": 0.25,
+            "maximum": 10
+          },
+          "include_chart": {
+            "type": "boolean",
+            "description": "When true, includes one or two image/png content blocks: (1) a horizontal bar chart of realised-volatility % by pair, colour-coded by regime (green=Settled, blue=Directional, amber=Choppy, red=Stressed); (2) when include_history is also true, a rate + Bollinger-band line chart for the most-stressed pair.",
+            "default": false
+          }
+        }
+      }
+    },
+    {
+      "name": "get_pnl_attribution",
+      "description": "Use this when the user asks how much their company gained or lost on currency moves, which currencies are hurting them, what their total FX impact is this period, or wants P&L by currency. Returns FX P&L broken down by currency with top contributor, unrealised mark-to-market (open invoices, booking rate vs current spot), and realised gain/loss from settled invoices where the accounting system provides it. Do not use for tax or accounting advice, or for live exchange rates. All amounts are in base currency. Sorts by absolute total P&L so the biggest contributors appear first. Also returns the Scout-aligned P&L family: dashboard_hero (the Monitor Total FX Impact exactly as the dashboard published it), totals.bank_pnl_base and totals.hedge_mtm_base, the four contributor families (top_unrealised_contributors, top_realised_contributors, bank_contributors, hedge_contributors), materiality (FX as % of profit and revenue, margin before/after FX on the operating basis only), fy_windows (realised by settlement date for the current FY, previous FY and all-time) and provider_fx_ledger. Every aligned block is the figure the in-app Scout assistant quotes.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "entity_id": {
+            "type": "string",
+            "description": "Filter to a specific entity. Omit for consolidated group."
+          },
+          "include_unrealised": {
+            "type": "boolean",
+            "description": "Include unrealised P&L from open invoices (booking rate vs current spot). Default true.",
+            "default": true
+          },
+          "include_realised": {
+            "type": "boolean",
+            "description": "Include realised P&L from settled invoices where the accounting system provides the FX gain/loss. Default true.",
+            "default": true
+          },
+          "include_chart": {
+            "type": "boolean",
+            "description": "When true, the tool response includes an image/png content block containing a horizontal bar chart of P&L by currency (green = gain, red = loss). Uses the same data as the text response.",
+            "default": false
+          }
+        }
+      }
+    },
+    {
+      "name": "get_limit_status",
+      "description": "Use this when the user asks whether their currency exposure is within limits, which currencies need attention, or how their USD exposure compares with their comfort limit. Compares current net FX exposure against per-currency comfort limits configured in Hedgr's Control tab. Do not use for setting or changing a limit: limits are set in Control > Comfort Limits. Returns breach status per currency: breaching (exposure exceeds limit), approaching (≥80% of limit), within_limit, or no_limit_set.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "entity_id": {
+            "type": "string",
+            "description": "Filter to a specific entity's exposures. Omit for group-level consolidated."
+          }
+        }
+      }
+    },
+    {
+      "name": "get_transaction_log_summary",
+      "description": "Use this when the user asks which invoices or bank rows make up their FX gains and losses, or wants to see the rows behind a P&L figure. Returns a safe read-only transaction-log summary for Explain > Detailed Transaction Logs: top open-invoice unrealised FX rows, settled-invoice realised FX rows, bank/cash rows, counts, and row provenance. Do not use for raw accounting exports or for editing records: the tool does not expose raw provider payloads, hidden reconciliation notes, credentials, or private calculation internals. Also returns invoice_rows: the ranked (open first, largest base equivalent first) invoice table the in-app Scout assistant reads, home-currency rows included, capped at 80 rows with invoice_rows_total for the true book size.",
+      "inputSchema": {
+        "type": "object",
+        "description": "Optional scope filters. Omit both for the whole-workspace report.",
+        "properties": {
+          "entity_id": {
+            "type": "string",
+            "description": "Specific entity ID from list_entities. Omit for the whole workspace (all entities)."
+          },
+          "currency": {
+            "type": "string",
+            "description": "ISO 4217 code to filter to one currency (e.g. 'EUR', 'USD'). Omit for all currencies.",
+            "pattern": "^[A-Z]{3}$"
+          }
+        }
+      }
+    },
+    {
+      "name": "get_overdue_drivers",
+      "description": "Use this when the user asks what is driving their overdue foreign-currency invoices, or what overdue invoices have cost them in FX terms. Returns overdue invoice drivers by currency and top contact, prioritised by largest exposure per currency. Do not use for credit decisions or for chasing customers: the tool reports FX drivers only. Separates total unrealised FX P&L from since-due P&L and explicitly reports when due-date rates are unavailable. An invoice carrying no due date is undated and never overdue, so it appears in no driver row; it is published beside them as undated_invoice_count, undated_base_amount and undated_by_currency.",
+      "inputSchema": {
+        "type": "object",
+        "description": "Optional scope filters. Omit both for the whole-workspace report.",
+        "properties": {
+          "entity_id": {
+            "type": "string",
+            "description": "Specific entity ID from list_entities. Omit for the whole workspace (all entities)."
+          },
+          "currency": {
+            "type": "string",
+            "description": "ISO 4217 code to filter to one currency (e.g. 'EUR', 'USD'). Omit for all currencies.",
+            "pattern": "^[A-Z]{3}$"
+          }
+        }
+      }
+    },
+    {
+      "name": "get_data_quality",
+      "description": "Use this when the user asks why a CSV import failed, why FX P&L is incomplete, or whether their invoice data is complete enough to rely on. Returns safe import and data-quality diagnostics: duplicate invoice IDs, first visible issue rows, missing currency/date/amount fields, missing booking rates, missing spot rates, and per-currency P&L readiness. Do not use for fixing records: Hedgr reads the accounting data and does not write to it. On an unscoped call also returns decision_readiness (workspace ready/limited/blocked verdict with gaps and basis), balance_validation (bank balance source and discrepancy check), scout_currency_quality and data_coverage (invoice lookback and rate-history window held).",
+      "inputSchema": {
+        "type": "object",
+        "description": "Optional scope filters. Omit both for the whole-workspace report.",
+        "properties": {
+          "entity_id": {
+            "type": "string",
+            "description": "Specific entity ID from list_entities. Omit for the whole workspace (all entities)."
+          },
+          "currency": {
+            "type": "string",
+            "description": "ISO 4217 code to filter to one currency (e.g. 'EUR', 'USD'). Omit for all currencies.",
+            "pattern": "^[A-Z]{3}$"
+          }
+        }
+      }
+    },
+    {
+      "name": "get_payment_patterns",
+      "description": "Use this when the user asks which customers or suppliers pay late or early, and in which currency. Returns detected payment timing patterns by counterparty and currency where available, or derives a conservative summary from settled invoice dates. Do not use for realised FX gains or losses: this tool reports timing only.",
+      "inputSchema": {
+        "type": "object",
+        "description": "Optional scope filters. Omit both for the whole-workspace report.",
+        "properties": {
+          "entity_id": {
+            "type": "string",
+            "description": "Specific entity ID from list_entities. Omit for the whole workspace (all entities)."
+          },
+          "currency": {
+            "type": "string",
+            "description": "ISO 4217 code to filter to one currency (e.g. 'EUR', 'USD'). Omit for all currencies.",
+            "pattern": "^[A-Z]{3}$"
+          }
+        }
+      }
+    },
+    {
+      "name": "get_cashflow_timing",
+      "description": "Use this when the user asks when foreign-currency receivables, payables, bank cash and hedge maturities fall due, or whether same-currency cash covers the next 30 to 90 days. Returns FX cashflow timing by currency and bucket, separating receivables, payables, bank cash, and hedge maturities where available. Do not use for a projection built from customer payment behaviour, or for moving cash. It answers Monitor > Exposure & Cash Flow questions about overdue, next 30, 31-60, 61-90, beyond 90, undated, liquidity timing, or same-currency cash coverage. On an unscoped call also returns maturity_ladder (receivables, payables and bank cash per bucket and currency in base), cashflow_coverage (near-term surplus/shortfall verdict per currency) and hedge_maturity_coverage (hedge notional laid against exposure per bucket with coverage percent).",
+      "inputSchema": {
+        "type": "object",
+        "description": "Optional scope filters. Omit both for the whole-workspace report.",
+        "properties": {
+          "entity_id": {
+            "type": "string",
+            "description": "Specific entity ID from list_entities. Omit for the whole workspace (all entities)."
+          },
+          "currency": {
+            "type": "string",
+            "description": "ISO 4217 code to filter to one currency (e.g. 'EUR', 'USD'). Omit for all currencies.",
+            "pattern": "^[A-Z]{3}$"
+          }
+        }
+      }
+    },
+    {
+      "name": "get_cashflow_forecast",
+      "description": "Use this when the user asks how much cash they expect to receive or pay in each currency over the coming weeks, based on how their customers and suppliers actually settle. Projects the user's OWN expected net cashflow per currency over the next N weeks (default 8), from their OWN settlement history. Do not use for exchange-rate predictions: this is deterministic statistics on settlement behaviour and makes no FX-rate forecast. The projection covers expected settlement of existing open invoices (due date shifted by how late each customer usually pays), plus projected recurring and seasonal flows. Returns a per-currency net with a P10-P90 band, named drivers, and the walk-forward accuracy of the settlement model (inside-band % and median error in days). sufficient_history is false when the settlement history is too short for a reliable band.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "horizon_weeks": {
+            "type": "integer",
+            "description": "Projection horizon in weeks (1-52, default 8). Pass the period the user names: 13 for three months, 26 for six, 52 for twelve."
+          },
+          "currency": {
+            "type": "string",
+            "description": "Optional 3-letter currency code to filter to one currency."
+          }
+        }
+      }
+    },
+    {
+      "name": "get_funding_forecast",
+      "description": "Use this when the user asks whether their company will hold enough of each currency, home currency included, to settle upcoming supplier bills and customer receipts, and when a currency first runs short. TMS liquidity/funding view: per-currency running cash balance seeded from the user's REAL bank balances, INCLUDING base currency (which the FX-exposure tools deliberately exclude). Do not use for placing the implied trade or a payment: Hedgr is read-only. Answers whether the user will hold the units to settle upcoming payables/receivables, the first date each currency runs short and by how much, the trade the gap implies (BUY on a projected shortfall by its date, SELL on a surplus), and whether base-currency cash can fund the foreign purchases (can_self_fund + base_funding_shortfall). Uses real bank balances + real invoices plus the projected settlement component with its band and accuracy. Trade direction is a mechanical consequence of the gap sign and is not a recommendation. sufficient_history is false when the settlement history is too short for a reliable band.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "horizon_weeks": {
+            "type": "integer",
+            "description": "Projection horizon in weeks (1-52, default 8). Pass the period the user names: 13 for three months, 26 for six, 52 for twelve."
+          },
+          "currency": {
+            "type": "string",
+            "description": "Optional 3-letter currency code to filter to one currency."
+          }
+        }
+      }
+    },
+    {
+      "name": "get_protection_builder_snapshot",
+      "description": "Use this when the user asks what currency exposure is left after their active hedges, or wants to see the rows in Hedgr's Protection Builder. Returns the read-only Protection Builder / Scenario Builder snapshot: simulated row inputs, residual exposure after active hedges, cashflow-aware grouping basis, and policy sizing context. Do not use for booking a hedge or getting a quote: it does not execute trades, produce broker instructions, return quote IDs, or recommend a hedge.",
+      "inputSchema": {
+        "type": "object",
+        "description": "Optional currency filter. Omit for every currency with open exposure.",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "description": "ISO 4217 code to return one currency's simulated row (e.g. 'USD'). Omit for all currencies. applied_filters echoes it.",
+            "pattern": "^[A-Z]{3}$"
+          }
+        }
+      }
+    },
+    {
+      "name": "get_policy_backtest_summary",
+      "description": "Use this when the user asks how their FX hedging policy would have performed over past currency moves. Returns a saved Control > Backtest policy replay summary when available, plus the policy snapshot used for context. Do not use for predicting future performance or choosing policy settings: the replay is historical only and does not recommend settings.",
+      "inputSchema": {
+        "type": "object",
+        "description": "No inputs. Returns the latest FX policy backtest summary.",
+        "properties": {}
+      }
+    },
+    {
+      "name": "get_rate_assumptions",
+      "description": "Use this when the user asks which exchange rate Hedgr used for a figure, where a number came from, or why a rate or FX P&L figure is unavailable. Returns rate assumptions used by the dashboard: spot rates, source labels, timestamps, custom override presence, missing spot rates, and invoice rows with missing or placeholder booking rates. Do not use for a dealing quote or currency conversion: these are the rates behind the dashboard figures. Also returns spot_rates_market_convention (the pair orientation the Control panel shows), forward_rates with forward_rates_basis (empty with the reason stated when no feed supplies a forward curve) and unsupported_currencies.",
+      "inputSchema": {
+        "type": "object",
+        "description": "No inputs. Returns the market-rate assumptions (source and as-of date) the tools use.",
+        "properties": {}
+      }
+    },
+    {
+      "name": "get_export_manifest",
+      "description": "Use this when the user asks which FX reports or exports Hedgr offers and where to generate them in the dashboard. Returns a read-only manifest of Hedgr exports available in the dashboard and where to generate them. Do not use for downloading a file: the tool does not download files, expose temporary URLs, or generate private report drafts through MCP.",
+      "inputSchema": {
+        "type": "object",
+        "description": "No inputs. Returns the reports and exports available for the workspace.",
+        "properties": {}
+      }
+    },
+    {
+      "name": "get_navigation_targets",
+      "description": "Use this when the user asks where to find something in Hedgr, such as their currency exposure, hedges or FX policy. Returns safe client-facing Hedgr navigation targets: current tab/subtab labels and what each surface is used for. Do not use for the figures themselves: this tool returns places in the app. Excludes admin routes, operator pages, and feature-flag internals.",
+      "inputSchema": {
+        "type": "object",
+        "description": "No inputs. Returns deep-link navigation targets into the Hedgr app.",
+        "properties": {}
+      }
+    },
+    {
+      "name": "get_workspace_setup_state",
+      "description": "Use this when the user asks how to set up Hedgr from Xero, QuickBooks, Sage, Holded, Google Sheets or a CSV of invoices, or whether Company & reporting must be completed first. Returns setup state for accounting, Google Sheets, and CSV/manual workspaces, and explains whether Company & reporting is required for MCP. Do not use for connecting an account or uploading data: setup happens in the Hedgr app. Accounting providers supply company settings automatically; Google Sheets and CSV/manual workspaces may need Company & reporting completed.",
+      "inputSchema": {
+        "type": "object",
+        "description": "No inputs. Returns onboarding and setup completeness for the workspace.",
+        "properties": {}
+      }
+    },
+    {
+      "name": "get_fx_guidance",
+      "description": "Use this when the user asks how Hedgr treats an FX accounting or methodology question, such as the margin basis under IAS 21, realised versus unrealised FX, or overlap with Xero unrealised FX. Returns Hedgr's shared FX-guidance canon: the same read-only methodology Scout uses in-app. Public-safe subset only; internal partner/marketing guidance is filtered out. Do not use for financial, legal, tax, or investment advice: the canon describes methodology only and is not advice.",
+      "inputSchema": {
+        "type": "object",
+        "description": "No inputs. Returns Hedgr's shared read-only FX-guidance canon (methodology, e.g. IAS 21 margin basis).",
+        "properties": {}
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "app.hedgr/hedgr",
+    "version": "1.0.1",
+    "remoteUrl": "https://hedgr.app/mcp",
+    "publishedAt": "2026-11-21T20:22:48.861927Z",
+    "fetchedAt": "2026-11-22T12:49:37.224Z",
+    "toolsSha256": "b13cd77c4c8894c01ff8c549200306a5ee7745aef36ccab4c783c7a348afa8a2"
+  }
+}

@@ -1,0 +1,738 @@
+{
+  "$schema": "../schema.json",
+  "name": "xyz.twzrd.intel/twzrd-agent-intel",
+  "title": "TWZRD Agent Intelligence",
+  "category": "Other",
+  "description": "Pre-spend trust for AI agents that buy: check x402 services and product listings before paying.",
+  "repository": "https://github.com/twzrd-sol/twzrd-trust",
+  "tools": [
+    {
+      "name": "get_readiness_card_tool",
+      "description": "\n    PRIMARY free pre-spend gate (advisory). Pass seller_wallet OR resource_name.\n    wash_flagged=true never soft-allows. Unlabeled leftover 0.05 / leftover=0 is not a unit price.\n\n    When to use: before any x402 payment to a seller/resource.\n    When not to use: after you already decided to refuse; use verify_receipt for signed receipts only.\n\n    Pricing: free. Result is advisory (buyer policy still applies).\n\n    Hard-stops:\n      wash_flagged=true never soft-allows (decision=block / do_not_pay; no warn/allow/quick).\n      Unlabeled leftover 0.05 / leftover=0 is not a unit price; read price_kind.\n      Caller-supplied or scheme/price_kind=exact 0.05 stays a unit price.\n\n    Decision semantics (top-level, no nesting via MCP):\n      decision=block / recommended_action=do_not_pay -> DO NOT PAY.\n      decision=warn / recommended_action=proceed_with_cap -> pay only up to maximum_recommended_spend_usdc.\n      decision=allow / recommended_action=proceed_for_small_spend -> proceed under agent policy (no free-tier cap).\n\n    next_action (enrollment handoff — do not stop after free card):\n      next_step_type / payment_required / executable / command describe an\n      optional next step. A host may use command only under its own policy.\n      Never paste path templates (:pubkey / {pubkey}) as seller_wallet.\n\n    Also returns reason_codes[], confidence, model_version, decision_envelope.\n\n    No counterparty named (seller_wallet missing / a template / not a wallet, and\n    no resource_name or resource_url): decision=block, trust_score null, score null,\n    null_reason=no_subject, reason_codes NO_COUNTERPARTY (+ PLACEHOLDER_SELLER_WALLET),\n    seller_wallet_rejected echoes what you sent. That is an input bug, not a seller\n    verdict: fix the input and re-run.\n\n    Unknown counterparty (a wallet or resource TWZRD has no evidence about, e.g. a\n    mistyped payTo): subject_known=false, trust_score null, score null,\n    null_reason=unknown_subject, can_spend=false at any price. Check the payTo\n    against the seller's real 402 challenge before anything else.\n\n    trust_score is a free heuristic, NOT the full corpus.\n    Next: on allow/warn for material spend, next_action.command is the\n    optional AgentCash paid-trust or AutoGate install string, then verify_receipt\n    on the signed V7 receipt.\n    Optional: twzrd_watch_add for re-check after recheck_after_unix.\n\n    Additive: top-level aop_bind program registry (evidence hierarchy) when enabled;\n    never mutates decision / can_spend.\n    ",
+      "inputSchema": {
+        "properties": {
+          "resource_name": {
+            "default": null,
+            "description": "Provider or resource label in a marketplace (for example marketplace:agent-name). Provide this OR seller_wallet.",
+            "title": "Resource Name",
+            "type": "string"
+          },
+          "seller_wallet": {
+            "default": null,
+            "description": "Seller payTo for the listing or endpoint: a Solana base58 wallet (32-44 chars) or a Base 0x address. Provide this OR resource_name. CRITICAL: never pass OpenAPI templates (:pubkey, {pubkey}, {seller_wallet}, SELLER_WALLET, PAY_TO_WALLET) — use accepts[].payTo from a 402 challenge.",
+            "title": "Seller Wallet",
+            "type": "string"
+          },
+          "resource_url": {
+            "default": null,
+            "description": "Canonical endpoint URL for the resource, if available.",
+            "title": "Resource Url",
+            "type": "string"
+          },
+          "price_usdc": {
+            "default": null,
+            "description": "Caller-supplied exact unit price in USDC. Leave unset unless you have an exact quote. Unlabeled leftover 0.05 / leftover=0 is not a unit price.",
+            "title": "Price Usdc",
+            "type": "number"
+          },
+          "buyer_wallet": {
+            "default": null,
+            "description": "Buyer's Solana wallet public key used for spend-context checks.",
+            "title": "Buyer Wallet",
+            "type": "string"
+          },
+          "agent_intent": {
+            "default": null,
+            "description": "Natural-language intent describing the planned paid action.",
+            "title": "Agent Intent",
+            "type": "string"
+          },
+          "marketplace_score": {
+            "default": null,
+            "description": "Optional upstream marketplace trust score (0-100) to blend into preflight context.",
+            "title": "Marketplace Score",
+            "type": "integer"
+          },
+          "queried_pubkey": {
+            "default": null,
+            "description": "Consumer pubkey, echoed on output when provided (attribution only).",
+            "title": "Queried Pubkey",
+            "type": "string"
+          }
+        },
+        "title": "get_readiness_card_toolArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "evaluate_x402_resource",
+      "description": "\n    One-shot x402 guard. Fetches resource_url, extracts the seller wallet from the 402 accepts\n    array (prefers Solana network entries), runs TWZRD preflight, and returns a spending decision.\n    The accepts array is read from the JSON body; when the body names no payTo (x402 v2 sellers\n    may send an empty body, and HEAD always does), it is read from the base64 PAYMENT-REQUIRED\n    header. If the body and the header name different payTo wallets, nothing is evaluated\n    (decision=warn). A challenge that cannot be read returns decision=warn with an error and\n    no trust_score; it is never scored.\n    Side effect: a live 402 observation (resource_url, payTo, price) is upserted into the\n    service catalog when the catalog database is configured; this tool is not read-only.\n    wash_flagged=true never soft-allows. Unlabeled leftover 0.05 / leftover=0 is not a unit price.\n\n    Decision:\n      \"allow\"   -> proceed only under agent policy. Never when wash_flagged=true.\n      \"warn\"    -> proceed with caution up to the cap; first paid hop is teaser_url ($0.001 /quick). Optional V7 receipt_url is $0.05.\n      \"block\"   -> DO NOT PAY. Stop immediately.\n      \"unknown\" -> is_x402 == False: no 402 challenge was issued at all, so nothing was\n                   evaluated -- this is NOT a trust verdict. A seller can trivially make\n                   this happen by returning a non-402 status to this probe while charging\n                   through a different path for a real caller. Never treat \"unknown\" as\n                   a green light; if the caller actually intends to pay this resource_url,\n                   that separate payment path needs its own evaluation.\n\n    Hard-stops:\n      wash_flagged=true never soft-allows (decision=block).\n      price_usdc is a unit price only when price_kind=exact. Unlabeled leftover 0.05 /\n      leftover=0 and scheme=upto leftover defaults are not a per-request price.\n\n    Revenue path: when decision is \"warn\", fetch teaser_url first ($0.001 USDC to TWZRD,\n    GET /v1/intel/quick/{seller}). Optional receipt_url is the $0.05 V7 signed credential.\n    ",
+      "inputSchema": {
+        "properties": {
+          "resource_url": {
+            "description": "URL of the x402 resource to evaluate before paying. Will be fetched to extract 402 payment requirements.",
+            "title": "Resource Url",
+            "type": "string"
+          },
+          "method": {
+            "default": "GET",
+            "description": "HTTP method to use when probing the resource. Default: GET.",
+            "title": "Method",
+            "type": "string"
+          },
+          "agent_intent": {
+            "default": null,
+            "description": "Natural-language description of what the agent intends to purchase.",
+            "title": "Agent Intent",
+            "type": "string"
+          },
+          "price_usdc": {
+            "default": null,
+            "description": "Caller-supplied exact unit price in USDC — overrides a 402 exact quote. Leave unset to use the 402-reported amount when price_kind=exact. Unlabeled leftover 0.05 / leftover=0 is not a unit price.",
+            "title": "Price Usdc",
+            "type": "number"
+          }
+        },
+        "required": [
+          "resource_url"
+        ],
+        "title": "evaluate_x402_resourceArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "low_level_preflight",
+      "description": "\n    Low-level preflight check. Returns a richer result object including\n    paid_quick_endpoint ($0.001 first hop) and optional paid_trust_endpoint ($0.05 V7).\n    wash_flagged=true never soft-allows. Unlabeled leftover 0.05 / leftover=0 is not a unit price.\n\n    Prefer get_readiness_card_tool for most callers. Use this when you need\n    max_spend_recommendation_usdc, full_report_hint, or the suggest_full_report\n    flag. The embedded `readiness_card` carries the SAME full shape as\n    get_readiness_card_tool (see the outputSchema).\n\n    Hard-stops:\n      wash_flagged=true never soft-allows (decision=block; no warn/allow/quick).\n      Unlabeled leftover 0.05 / leftover=0 is not a unit price; read readiness_card.price_kind.\n    ",
+      "inputSchema": {
+        "properties": {
+          "resource_name": {
+            "default": null,
+            "description": "Provider or listing identifier to evaluate before payment.",
+            "title": "Resource Name",
+            "type": "string"
+          },
+          "seller_wallet": {
+            "default": null,
+            "description": "Seller payTo (Solana base58 or Base 0x address) for reputation and spend checks.",
+            "title": "Seller Wallet",
+            "type": "string"
+          },
+          "price_usdc": {
+            "default": null,
+            "description": "Caller-supplied exact unit price in USDC. Leave unset unless you have an exact quote. Unlabeled leftover 0.05 / leftover=0 is not a unit price.",
+            "title": "Price Usdc",
+            "type": "number"
+          },
+          "agent_intent": {
+            "default": null,
+            "description": "What the agent intends to do with the purchased response or tool.",
+            "title": "Agent Intent",
+            "type": "string"
+          },
+          "marketplace_score": {
+            "default": null,
+            "description": "Optional marketplace-provided score (0-100) for blend-in scoring context.",
+            "title": "Marketplace Score",
+            "type": "integer"
+          },
+          "buyer_wallet": {
+            "default": null,
+            "description": "Buyer's Solana wallet public key; enables buyer-context evidence in scoring.",
+            "title": "Buyer Wallet",
+            "type": "string"
+          },
+          "resource_url": {
+            "default": null,
+            "description": "Canonical endpoint URL for the resource, if available.",
+            "title": "Resource Url",
+            "type": "string"
+          }
+        },
+        "title": "low_level_preflightArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "verify_root_inputs",
+      "description": "Independent root verification: recomputes the leaves, dataset hash and root from the public root data.",
+      "inputSchema": {
+        "properties": {
+          "root_seq": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Specific root sequence to verify. If omitted, best-effort resolution via resource metadata or latest.",
+            "title": "Root Seq"
+          },
+          "resource_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Legacy on-chain protocol resource (deposit/claim/settle) for auto-detection and seq hints.",
+            "title": "Resource Name"
+          },
+          "seller_wallet": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Seller wallet for legacy on-chain protocol resource detection.",
+            "title": "Seller Wallet"
+          }
+        },
+        "title": "verify_root_inputsArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "score_wallet_for_intel",
+      "description": "\n    Free discovery: PAYER-side 0-100 intel score for a wallet from the x402\n    payments it SENT (paid calls, distinct counterparties, volume, recency).\n    Not a seller check: to vet a seller/payTo before paying, use\n    get_readiness_card_tool (gate) or get_provider_reputation / get_merchant_card\n    (seller reputation). A pure seller scores 0 here by construction and the\n    response says so in seller_side_hint. A Base 0x wallet is scored from the\n    relayer-attributed x402_base_daily rollup (90d) with the same shape; no Base\n    wash graph exists yet, so its wash_flag is \"unknown\" unless single-counterparty.\n\n    Uses a simple transparent heuristic (volume log + breadth + spend log + recency\n    decay) — the exact formula is returned inline as `score_model`. Returns\n    intel_score, the wash-discounted effective_score + wash_flag/wash_factor\n    (cheap Sybil signal), counts, component breakdown, and a data_available flag.\n    Malformed pubkeys are rejected cleanly; the failure path returns the same\n    shape as success.\n\n    Sourced from the cross-facilitator corpus via the public Rust HTTP endpoint\n    GET /v1/agents/{wallet}/x402 (backed by the x402_solana_payer_agg matview).\n    First paid hop is the score-only teaser GET /v1/intel/quick/{wallet} (0.001 USDC).\n    Optional V7 signed receipt (intel_renorm_v1_1: score_raw, confidence,\n    breadth_factor, wash_factor) is GET /v1/intel/trust/{wallet} (0.05 USDC).\n    ",
+      "inputSchema": {
+        "properties": {
+          "wallet": {
+            "description": "Wallet to score: a Solana base58 pubkey or a Base 0x address, using x402 payment-history intelligence.",
+            "title": "Wallet",
+            "type": "string"
+          }
+        },
+        "required": [
+          "wallet"
+        ],
+        "title": "score_wallet_for_intelArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "get_top_intel_agents",
+      "description": "\n    Leaderboard of observed payer wallets in the x402 settlement graph, each\n    with its intel score. This is behavioral corpus research, not identity\n    proof or evidence that the wallet is a TWZRD customer.\n\n    Ranks by the wash-discounted effective_score (single-counterparty fleets are\n    demoted, not hidden) with a deterministic tiebreaker. Set min_paid_calls to\n    suppress one-shot wallets and max_days_since_last to suppress dormant ones.\n    ",
+      "inputSchema": {
+        "properties": {
+          "limit": {
+            "default": 10,
+            "description": "Maximum number of ranked payer wallets to return (default 10).",
+            "maximum": 100,
+            "minimum": 1,
+            "title": "Limit",
+            "type": "integer"
+          },
+          "min_paid_calls": {
+            "default": 0,
+            "description": "Filter out wallets with fewer than this many observed paid calls (default 0 = no filter). Use to get credible *active* counterparties, not a raw dump.",
+            "minimum": 0,
+            "title": "Min Paid Calls",
+            "type": "integer"
+          },
+          "max_days_since_last": {
+            "default": null,
+            "description": "Only include wallets active within this many days (default null = no recency filter). Use e.g. 14 to exclude dormant or historical payers.",
+            "minimum": 0,
+            "title": "Max Days Since Last",
+            "type": "number"
+          }
+        },
+        "title": "get_top_intel_agentsArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "get_provider_reputation",
+      "description": "\n    Free discovery: corpus-backed SELLER reputation for a merchant/provider wallet.\n\n    Answers \"is this provider organic, narrow, or a wash fleet?\" from the merchant's\n    inbound payment graph over the last 90 days: unique payers, repeat-payer %,\n    heavy-fleet revenue concentration, captive-payer % (onboarding-sink proxy), and\n    a scripted-fleet uniformity signal, and top_payer_tx_pct (captive\n    concentration). Returns wash_label + reputation tier + wash_flagged\n    (tri-state: true | false | null; null = never evaluated, not clean).\n\n    Complements score_wallet_for_intel (payer side) with the seller side.\n    wash_flagged=true never soft-allows (buyer refuse; preflight block). Fail-open:\n    a DB gap returns wash_label/tier \"unknown\" AND wash_flagged=null (plus\n    wash_confidence) - an unevaluated verdict, never a clean one. This is the free\n    seller signal. First paid hop is GET /v1/intel/quick/{wallet} (0.001 USDC).\n    Optional V7 renorm + signed receipt is GET /v1/intel/trust/{wallet} (0.05 USDC).\n    ",
+      "inputSchema": {
+        "properties": {
+          "merchant": {
+            "description": "Seller/merchant pay_to address to score on inbound corpus reputation: a Solana base58 wallet or a Base 0x address.",
+            "title": "Merchant",
+            "type": "string"
+          }
+        },
+        "required": [
+          "merchant"
+        ],
+        "title": "get_provider_reputationArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "verify_x402_settled_claim",
+      "description": "Verify a receipts-ledger settlement; this is evidence, not a spend decision.",
+      "inputSchema": {
+        "properties": {
+          "settlement_tx": {
+            "description": "Solana transaction signature only. No claim body is accepted. Verifies that signature against x402_payment_receipts and a freshly fetched finalized transaction: match requires the only positive USDC balance change to credit that row's merchant for that row's amount, and the only USDC debit to be that amount from that row's payer, which match returns as payer. Returns match, mismatch, or unknown. Unknown does not block payment.",
+            "title": "Settlement Tx",
+            "type": "string"
+          }
+        },
+        "required": [
+          "settlement_tx"
+        ],
+        "title": "verify_x402_settled_claimArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "submit_contribution_claims",
+      "description": "\n    PoECX bridge: report settlements from your OWN rails (not TWZRD's paid\n    routes) for cross-check against TWZRD's independently-ingested x402\n    corpus, by on-chain signature.\n\n    A claim whose tx_signature, payer/merchant, and amount all match what\n    TWZRD's own ingest independently observed is materially stronger evidence\n    than either a bare self-report or the anonymous corpus alone — the\n    signature is real and on-chain, and a mismatch can't be forged to pass.\n    Unmatched claims are returned too, with a reason, never silently dropped.\n\n    This is a preview, not an unlock: `claimable` is always false. It exists\n    to let a real counterparty with its own settlement volume start feeding\n    PoECX before any on-chain payout path exists — see the PoECX plan.\n\n    Capped at 25 claims per call (discovery convenience, not bulk export);\n    extras are dropped, never silently ignored — see `capped`/`claims_requested`.\n    Within that cap, only the first claim per (chain, tx_signature,\n    transfer_index) is checked. Omitted transfer_index is the first leg\n    (dedup key 0). Later copies of the same leg appear in `unverified`\n    with reason_code `duplicate_claim` and `duplicate_of` pointing to the\n    zero-based first input index. Two legs of one tx count twice. This\n    deduplicates one preview report, not claims across separate calls.\n    ",
+      "inputSchema": {
+        "properties": {
+          "wallet": {
+            "description": "The wallet these settlement claims are being reported for.",
+            "title": "Wallet",
+            "type": "string"
+          },
+          "claims": {
+            "description": "Self-reported settlements to cross-check. Each item: {\"tx_signature\": str, \"chain\": \"solana\"|\"base\", \"amount_usdc\": float (optional), \"transfer_index\": int (optional, Solana transfer_index / Base log_index; omitted is first leg)}. Any other chain value is rejected before it ever reaches a query.",
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Claims",
+            "type": "array"
+          }
+        },
+        "required": [
+          "wallet",
+          "claims"
+        ],
+        "title": "submit_contribution_claimsArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "get_poec_score",
+      "description": "\n    Free preview: PoEC v0 (Proof of Economic Contribution) for a payer wallet,\n    computed from the same observed x402 snapshot score_wallet_for_intel returns.\n\n    poec_score = log10(1 + observed USDC sent) x success_quality x diversity\n    x wash_cleanliness, behind hard floors (>=5 paid calls, >=3 distinct\n    counterparties, wash_factor >= 0.5, not single-counterparty, wash_flag\n    clean). Any failed floor, or an unobservable corpus, scores 0.0 with\n    floors_passed=false - the floors fail closed, never open. wash_factor is a\n    cleanliness multiplier (1.0 = clean) and is never inverted.\n\n    Honesty contract: `claimable` is ALWAYS false. Volume here is\n    corpus-observed, not a payout unlock. `success_quality` comes from the\n    payer join onto signed `receipt_settlement_leaves` (0211); if that join\n    is unobservable, `success_rate` stays in evidence_gaps and the score\n    reads 0.0. What this surface already shows honestly is the floor filter\n    (eligible_v0) and every component the score is built from. Self-reported\n    settlements go through submit_contribution_claims.\n\n    Base (EVM) 0x wallets are scored from the relayer-attributed x402_base_daily\n    rollup (90d) with the same shape, but no wash/sybil graph exists for Base\n    payers yet, so their wash_flag reads \"unknown\" (never \"clean\"), the wash\n    floor stays closed, and poec_score stays 0.0 regardless of real volume.\n    A wallet the corpus could not observe at all returns `error` set; on that\n    path any real observed Base volume is attached under `base_observed`.\n    ",
+      "inputSchema": {
+        "properties": {
+          "wallet": {
+            "description": "Payer wallet (Solana base58 or Base 0x) to score for Proof of Economic Contribution.",
+            "title": "Wallet",
+            "type": "string"
+          }
+        },
+        "required": [
+          "wallet"
+        ],
+        "title": "get_poec_scoreArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "get_merchant_card",
+      "description": "\n    Free merchant card: observed inbound payment-graph quality around a Solana\n    or Base receive wallet.\n\n    Dual input (PR-3): pass ``wallet`` and/or ``resource_id``. Resource resolves via\n    the first-party registry (TWZRD seed) to a pay_to, then the same graph card.\n    Does NOT claim service quality (resource_listing_only / catalog_listing_only).\n\n    HTTP twin: GET /v1/intel/merchant_card/{wallet_or_resource_id}.\n    Compact (default) includes observed_at, stale, corpus_complete_day,\n    corpus_age_days. Catalog services stay behind full=true.\n\n    wash_flagged is tri-state: true (flagged) | false (evaluated clean) |\n    null (never evaluated - NOT clean). wash_flagged=true never soft-allows\n    (next_action.decision=refuse; no warn/allow/quick). Unlabeled leftover\n    0.05 / leftover=0 is not a unit price; cheapest_listed_price_usdc omits\n    leftover and upto_cap amounts. Route on next_action.decision\n    (refuse | insufficient_evidence | no_negative_signal); the card is\n    down-only and never returns allow. `reason` carries the specific\n    finding (e.g. a soft wash risk collapsed into \"refuse\", or a corpus\n    outage collapsed into \"insufficient_evidence\") when the 3-value\n    decision alone is not enough context.\n    ",
+      "inputSchema": {
+        "properties": {
+          "wallet": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Receive wallet (x402 pay_to / merchant pubkey). Observed payment-graph card only — not a business, demand, or identity attestation.",
+            "title": "Wallet"
+          },
+          "resource_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Optional registry resource_id (HTTP path template or mcp:tool). Resolved to merchant_wallet via PR-3 seed; claim resource_listing_only.",
+            "title": "Resource Id"
+          },
+          "full": {
+            "default": false,
+            "description": "If true, include catalog services. Default is the compact decision surface.",
+            "title": "Full",
+            "type": "boolean"
+          }
+        },
+        "title": "get_merchant_cardArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "is_wash_fleet",
+      "description": "\n    Free discovery: cheap circular-flow (wash) check for a payer wallet.\n\n    Returns the CATEGORICAL classification (clean / self_pay / reciprocal /\n    self+reciprocal), an is_circular bool, and the observed event counts +\n    distinct_merchants from the wallet's corpus edges. Use as a fast Sybil/wash\n    gate before trusting a counterparty.\n\n    Accepts a Solana public key or a Base/EVM address. On Base the signal reads\n    the high-confidence x402 rollup only, and the 3-cycle ring runs as a live\n    query instead of the Solana precomputed matview. Read ring_evaluated: when it\n    is false, ring_events=0 means NOT EVALUATED, never \"no rings observed\".\n\n    Fail-open: a DB gap returns classification \"unknown\". The numeric wash discount\n    (wash_factor / wash_ratio) and the full renormalized model stay paid — they are\n    NOT returned here.\n    ",
+      "inputSchema": {
+        "properties": {
+          "wallet": {
+            "description": "Wallet to check for circular-flow / wash behavior: a Solana public key (32-44 base58 chars) or a Base/EVM address (0x + 40 hex).",
+            "title": "Wallet",
+            "type": "string"
+          }
+        },
+        "required": [
+          "wallet"
+        ],
+        "title": "is_wash_fleetArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "verify_receipt",
+      "description": "\n    Free utility: offline-verify a portable V7 trust receipt (earlier V5/V6 receipts\n    still verify), the \"after you pay\" half of the loop.\n\n    Recomputes the Keccak256 leaf from the receipt's preimage (tamper-evidence) AND\n    verifies the Ed25519 signature against the published TWZRD receipt-signing key\n    (authenticity). Returns valid/leaf_valid/signature_valid plus the recomputed\n    leaf and any errors. Pure and offline — no DB, no network, no payment.\n\n    Pass the entire PaidReceipt object you were issued. Trust is anchored on the\n    published key (or expected_pubkey), NOT on whatever pubkey the receipt carries.\n\n    max_age_seconds: optional freshness gate (replay protection). Same semantics\n    as the Python library verify_paid_receipt(..., max_age_seconds=...) and the\n    standalone CLI --max-age.\n    ",
+      "inputSchema": {
+        "properties": {
+          "receipt": {
+            "additionalProperties": true,
+            "description": "The full signed receipt object (leaf + preimage + signature + signing_pubkey) returned by the paid /v1/intel/trust surface (V7; earlier V5/V6 receipts still verify).",
+            "title": "Receipt",
+            "type": "object"
+          },
+          "require_signature": {
+            "default": true,
+            "description": "Require and verify the Ed25519 signature (default true). Set false only to inspect an unsigned preview.",
+            "title": "Require Signature",
+            "type": "boolean"
+          },
+          "expected_pubkey": {
+            "default": null,
+            "description": "Override the trusted signing pubkey to verify against (default: the published TWZRD receipt key).",
+            "title": "Expected Pubkey",
+            "type": "string"
+          },
+          "max_age_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "If > 0, reject the receipt if its preimage.timestamp_unix is older than this many seconds (replay/freshness protection, same as CLI --max-age and library).",
+            "title": "Max Age Seconds"
+          }
+        },
+        "required": [
+          "receipt"
+        ],
+        "title": "verify_receiptArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "get_facilitator_footprint",
+      "description": "\n    Free discovery: which x402 facilitators a payer has settled through, and how many.\n\n    unique_facilitators = 1 is a thin/captive agent (locked to one rail); breadth\n    across facilitators indicates a more established cross-rail agent. Returns the\n    facilitator_ids list plus tx/merchant context. Fail-open: a DB gap returns\n    data_available=false rather than erroring.\n    ",
+      "inputSchema": {
+        "properties": {
+          "wallet": {
+            "description": "Solana wallet public key (32-44 base58 chars) to look up its x402 facilitator footprint.",
+            "title": "Wallet",
+            "type": "string"
+          }
+        },
+        "required": [
+          "wallet"
+        ],
+        "title": "get_facilitator_footprintArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "get_counterparties",
+      "description": "\n    Free discovery (capped teaser): the top-N merchants a wallet actually pays, by\n    event count, with per-edge tx_count / total_usdc / first+last timestamps.\n\n    See WHO a counterparty transacts with before trusting it. The list is capped\n    (default 10, max 25) and `capped`/`total_distinct_merchants` disclose how much\n    is withheld; the FULL deduped payment graph and numeric edge weights are part\n    of the paid intel surface (GET /v1/intel/trust/{wallet}). Fail-open.\n    ",
+      "inputSchema": {
+        "properties": {
+          "wallet": {
+            "description": "Payer Solana wallet public key (32-44 base58 chars) whose counterparties (merchants paid) to list.",
+            "title": "Wallet",
+            "type": "string"
+          },
+          "limit": {
+            "default": 10,
+            "description": "Max counterparties to return (default 10, hard cap 25 - this is a capped teaser).",
+            "maximum": 25,
+            "minimum": 1,
+            "title": "Limit",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "wallet"
+        ],
+        "title": "get_counterpartiesArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "score_wallets_batch",
+      "description": "\n    Free discovery: score up to 25 wallets in a single call (each via the same\n    transparent model as score_wallet_for_intel). Convenience for triaging a set of\n    candidate counterparties at once; `requested`/`capped` disclose any truncation.\n    ",
+      "inputSchema": {
+        "properties": {
+          "wallets": {
+            "description": "List of wallets (Solana base58 or Base 0x) to score in one call (hard cap 25; extras are dropped).",
+            "items": {},
+            "title": "Wallets",
+            "type": "array"
+          }
+        },
+        "required": [
+          "wallets"
+        ],
+        "title": "score_wallets_batchArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "compare_wallets",
+      "description": "\n    Free discovery: side-by-side intel for two wallets (e.g. choosing between two\n    candidate providers). Returns both full score objects and which ranks higher by\n    the wash-discounted effective_score (\"tie\" on equal, null if a side is unavailable).\n    ",
+      "inputSchema": {
+        "properties": {
+          "wallet_a": {
+            "description": "First wallet (Solana base58 or Base 0x) to compare.",
+            "title": "Wallet A",
+            "type": "string"
+          },
+          "wallet_b": {
+            "description": "Second wallet (Solana base58 or Base 0x) to compare.",
+            "title": "Wallet B",
+            "type": "string"
+          }
+        },
+        "required": [
+          "wallet_a",
+          "wallet_b"
+        ],
+        "title": "compare_walletsArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "get_x402_directory",
+      "description": "Wash overlay on ingested PayAI/CDP/Agentic listings (PayAI not_indexed).\n\n    Prefer HTTP GET /v1/intel/resources for the resource join SOT (callable URL +\n    discovery claim listed|live_402 + settlement reputation on pay_to). That\n    surface is HTTP-only. Use this tool when you need\n    the ingested listing overlay indexed by payTo. Not GET /v1/intel/bazaar/offers\n    (TWZRD Bazaar catalog) and not 402 extensions.bazaar.\n\n    Solana wash overlay is the only wash graph. Base listings additionally\n    carry high-confidence EIP-3009 corpus membership from x402_base_daily;\n    they remain wash_unknown. Polygon listings carry wash_unknown.\n\n    Query params — flagged_only, limit, source — mirror GET /v1/intel/x402-directory.\n    ",
+      "inputSchema": {
+        "properties": {
+          "flagged_only": {
+            "default": false,
+            "description": "Return only wash-flagged listings.",
+            "title": "Flagged Only",
+            "type": "boolean"
+          },
+          "limit": {
+            "default": 100,
+            "description": "Max directory rows to return (1-500).",
+            "title": "Limit",
+            "type": "integer"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Source filter: payai_bazaar, cdp_bazaar, agentic_market, or None for all.",
+            "title": "Source"
+          }
+        },
+        "title": "get_x402_directoryArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "twzrd_watch_add",
+      "description": "Register a re-call watch on a seller wallet.\n\n    After registration, TWZRD will proactively re-check the seller's trust intel\n    when `recheck_after_unix` elapses and POST a notification to your webhook_url\n    if the score/decision materially changes.\n\n    The watch routes are control-proof authenticated (fail closed): signature\n    and timestamp prove the caller holds the payer wallet's key. Return the\n    watch row with the computed recheck_after_unix timestamp so your agent\n    knows exactly when to expect a re-call or proactively re-check itself.\n    ",
+      "inputSchema": {
+        "properties": {
+          "payer_wallet": {
+            "description": "Your agent wallet address (the watcher).",
+            "title": "Payer Wallet",
+            "type": "string"
+          },
+          "seller_wallet": {
+            "description": "The seller/merchant wallet to watch.",
+            "title": "Seller Wallet",
+            "type": "string"
+          },
+          "signature": {
+            "description": "base58 ed25519 signature made with the payer wallet's key over the twzrd-watch/v1 message for action=register: the seven lines [twzrd-watch/v1, register, str(timestamp), payer_wallet, seller_wallet, webhook_url or '', ''] joined by newlines.",
+            "title": "Signature",
+            "type": "string"
+          },
+          "timestamp": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "description": "Unix seconds used in the signed message (freshness window: 300s).",
+            "title": "Timestamp"
+          },
+          "webhook_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Optional HTTPS URL to POST when intel goes stale.",
+            "title": "Webhook Url"
+          }
+        },
+        "required": [
+          "payer_wallet",
+          "seller_wallet",
+          "signature",
+          "timestamp"
+        ],
+        "title": "twzrd_watch_addArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "twzrd_watch_list",
+      "description": "List active re-call watches for your agent wallet.\n\n    Each watch shows the seller, current score/decision, and recheck_after_unix\n    timestamp (untrusted V5/V6 hint). evaluateRecall / shouldRecheckTrusted is\n    the consumer gate; do not treat due / shouldRecheck as a trusted allow.\n    Control-proof authenticated (fail closed) via signature + timestamp.\n    ",
+      "inputSchema": {
+        "properties": {
+          "payer_wallet": {
+            "description": "Your agent wallet address.",
+            "title": "Payer Wallet",
+            "type": "string"
+          },
+          "signature": {
+            "description": "base58 ed25519 signature made with the payer wallet's key over the twzrd-watch/v1 message for action=list: the seven lines [twzrd-watch/v1, list, str(timestamp), payer_wallet, '', '', ''] joined by newlines.",
+            "title": "Signature",
+            "type": "string"
+          },
+          "timestamp": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "description": "Unix seconds used in the signed message (freshness window: 300s).",
+            "title": "Timestamp"
+          }
+        },
+        "required": [
+          "payer_wallet",
+          "signature",
+          "timestamp"
+        ],
+        "title": "twzrd_watch_listArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "twzrd_watch_remove",
+      "description": "Deactivate a re-call watch by ID. payer_wallet must match the owner.\n\n    Control-proof authenticated (fail closed): signature + timestamp prove the\n    caller holds the payer wallet's key before the row is touched.\n    ",
+      "inputSchema": {
+        "properties": {
+          "watch_id": {
+            "description": "Watch ID from twzrd_watch_list.",
+            "title": "Watch Id",
+            "type": "integer"
+          },
+          "payer_wallet": {
+            "description": "Your agent wallet address (must match the watch owner).",
+            "title": "Payer Wallet",
+            "type": "string"
+          },
+          "signature": {
+            "description": "base58 ed25519 signature made with the payer wallet's key over the twzrd-watch/v1 message for action=remove: the seven lines [twzrd-watch/v1, remove, str(timestamp), payer_wallet, '', '', str(watch_id)] joined by newlines.",
+            "title": "Signature",
+            "type": "string"
+          },
+          "timestamp": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "description": "Unix seconds used in the signed message (freshness window: 300s).",
+            "title": "Timestamp"
+          }
+        },
+        "required": [
+          "watch_id",
+          "payer_wallet",
+          "signature",
+          "timestamp"
+        ],
+        "title": "twzrd_watch_removeArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "twzrd_demo_gate",
+      "description": "\n    No-spend transcript of the TWZRD buyer-side x402 trust gate, a recorded example,\n    not a live run - discoverable at runtime with no install and no human.\n\n    Returns a deterministic transcript showing the gate's behaviour on a fixture\n    counterparty: the block path ABORTS and a wallet/signer is never contacted, the\n    allow path would proceed, and ok=true. Spends no USDC, contacts no wallet.\n\n    This call surfaces an EXTERNAL_RUN *candidate* in TWZRD's honest attribution\n    ledger (it carries a non-internal integration id + your run_id, tagged with your\n    real inbound IP). A candidate is NOT an EXTERNAL_RUN: TWZRD's operator still has\n    to match your run_id to a non-internal caller and confirm it.\n    See the returned not_external_run_proof.\n    ",
+      "inputSchema": {
+        "properties": {
+          "integration": {
+            "default": "mcp-agent-discovery",
+            "description": "Stable label for your integration (e.g. your agent/app name). Echo it plus the returned run_id in your own transcript so a run can later be confirmed. Defaults to a generic MCP-discovery label.",
+            "title": "Integration",
+            "type": "string"
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Optional caller-supplied run id to correlate with your transcript. Omit to have one generated for this call.",
+            "title": "Run Id"
+          }
+        },
+        "title": "twzrd_demo_gateArguments",
+        "type": "object"
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "xyz.twzrd.intel/twzrd-agent-intel",
+    "version": "1.0.15",
+    "remoteUrl": "https://intel.twzrd.xyz/mcp",
+    "publishedAt": "2026-11-22T07:11:59.997015Z",
+    "fetchedAt": "2026-11-22T12:49:37.224Z",
+    "toolsSha256": "91dc997915632244b04cd100283617c57c01614009f7df703ae898a9099c77ef"
+  }
+}

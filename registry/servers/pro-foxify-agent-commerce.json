@@ -1,0 +1,565 @@
+{
+  "$schema": "../schema.json",
+  "name": "pro.foxify/agent-commerce",
+  "title": "FOXIFY Agent Commerce",
+  "category": "Payments, CRM & Finance",
+  "description": "Preflight agent payments/actions before execution: ALLOW, REVIEW or DENY with evidence.",
+  "repository": "https://github.com/speeedy10/agent-authority-check",
+  "tools": [
+    {
+      "name": "foxify_preflight_info",
+      "description": "Free metadata for FOXIFY machine-payable authority preflight tools.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "verify_agent_payment_intent",
+      "description": "Paid transaction preflight. Checks mandate, amount, destination, merchant, expiry and replay risk before an autonomous payment executes. Costs $0.05 USDC on Base.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "intent_id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Unique payment-intent identifier"
+          },
+          "nonce": {
+            "type": "string",
+            "minLength": 8,
+            "description": "Unique anti-replay nonce"
+          },
+          "expires_at": {
+            "type": "string",
+            "description": "ISO-8601 intent expiry"
+          },
+          "agent": {
+            "description": "Optional caller agent metadata. Assertions are advisory unless independently verified.",
+            "type": "object",
+            "properties": {
+              "id": {
+                "description": "Optional caller agent identifier.",
+                "type": "string"
+              },
+              "signature_verified": {
+                "description": "Whether the caller asserts that the agent signature was verified before this preflight.",
+                "type": "boolean"
+              }
+            },
+            "additionalProperties": {}
+          },
+          "merchant": {
+            "type": "object",
+            "properties": {
+              "domain": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Merchant domain the payment is intended for."
+              },
+              "expected_recipient": {
+                "description": "Optional merchant-side expected payment recipient for cross-checking.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "domain"
+            ],
+            "additionalProperties": {},
+            "description": "Merchant identity and optional recipient expectation."
+          },
+          "payment": {
+            "type": "object",
+            "properties": {
+              "network": {
+                "type": "string",
+                "description": "Payment network identifier, for example eip155:8453 for Base."
+              },
+              "currency": {
+                "type": "string",
+                "description": "Payment asset or currency symbol, for example USDC."
+              },
+              "amount": {
+                "description": "Requested payment amount in the caller contract units.",
+                "type": [
+                  "string",
+                  "number"
+                ]
+              },
+              "recipient": {
+                "type": "string",
+                "description": "Destination account or address that would receive the payment."
+              }
+            },
+            "required": [
+              "network",
+              "currency",
+              "amount",
+              "recipient"
+            ],
+            "additionalProperties": {},
+            "description": "Payment facts to compare with the caller authorization envelope."
+          },
+          "authorization": {
+            "type": "object",
+            "properties": {
+              "max_amount": {
+                "description": "Maximum amount authorized by the caller mandate.",
+                "type": [
+                  "string",
+                  "number"
+                ]
+              },
+              "expected_recipient": {
+                "description": "Optional recipient required by the authorization boundary; compared with the requested payment recipient.",
+                "type": "string"
+              },
+              "allowed_domains": {
+                "description": "Optional allowlist of merchant domains authorized for this payment.",
+                "maxItems": 64,
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "human_confirmed": {
+                "description": "Whether the caller asserts that required human confirmation has occurred.",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "max_amount"
+            ],
+            "additionalProperties": {},
+            "description": "Caller-provided payment authorization boundary used for advisory comparison."
+          }
+        },
+        "required": [
+          "intent_id",
+          "nonce",
+          "expires_at",
+          "merchant",
+          "payment",
+          "authorization"
+        ]
+      }
+    },
+    {
+      "name": "verify_x402_payment_required",
+      "description": "Paid wire-bound x402 v2 preflight. Give FOXIFY the merchant's actual PAYMENT-REQUIRED challenge, exact intended HTTP request and independent caller authority; FOXIFY derives payment facts and returns advisory ALLOW, REVIEW or DENY evidence. Costs $0.05 USDC on Base.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "payment_required": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {}
+              }
+            ],
+            "description": "Raw x402 v2 PAYMENT-REQUIRED header value or its decoded object."
+          },
+          "intended_request": {
+            "type": "object",
+            "properties": {
+              "method": {
+                "type": "string",
+                "minLength": 3,
+                "maxLength": 16,
+                "description": "Exact HTTP method the buyer intends to execute."
+              },
+              "url": {
+                "type": "string",
+                "format": "uri",
+                "description": "Exact resource URL the buyer intends to execute."
+              }
+            },
+            "required": [
+              "method",
+              "url"
+            ],
+            "additionalProperties": false,
+            "description": "Exact HTTP request bound to the merchant x402 challenge."
+          },
+          "accept_index": {
+            "description": "Explicit accepted-payment index when the challenge contains multiple eligible exact-USDC options.",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "agent": {
+            "description": "Optional caller agent context.",
+            "type": "object",
+            "properties": {
+              "id": {
+                "description": "Optional caller agent identifier.",
+                "type": "string"
+              },
+              "signature_verified": {
+                "description": "Whether the caller asserts that its agent identity/signature was independently verified.",
+                "type": "boolean"
+              }
+            },
+            "additionalProperties": {}
+          },
+          "authorization": {
+            "type": "object",
+            "properties": {
+              "max_amount_atomic": {
+                "type": "string",
+                "pattern": "^(0|[1-9][0-9]*)$",
+                "description": "Maximum atomic USDC amount independently authorized by the caller."
+              },
+              "expected_recipient": {
+                "description": "Recipient required by caller authority; compared with the merchant challenge payTo.",
+                "type": "string"
+              },
+              "allowed_domains": {
+                "minItems": 1,
+                "maxItems": 64,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "description": "Merchant domains independently authorized by the caller."
+              },
+              "allowed_payment_flows": {
+                "description": "Optional x402 payment-flow allowlist. Defaults to authorization only.",
+                "minItems": 1,
+                "maxItems": 8,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "authorization",
+                    "upfront"
+                  ]
+                }
+              },
+              "allowed_asset_transfer_methods": {
+                "description": "Optional EVM transfer-method allowlist. Defaults to eip3009 only.",
+                "minItems": 1,
+                "maxItems": 8,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "eip3009",
+                    "permit2",
+                    "erc7710"
+                  ]
+                }
+              },
+              "human_confirmed": {
+                "description": "Whether the caller asserts that required human confirmation has occurred.",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "max_amount_atomic",
+              "allowed_domains"
+            ],
+            "additionalProperties": {},
+            "description": "Independent caller authority. Merchant PAYMENT-REQUIRED facts never authorize themselves."
+          }
+        },
+        "required": [
+          "payment_required",
+          "intended_request",
+          "authorization"
+        ]
+      }
+    },
+    {
+      "name": "verify_agent_action_intent",
+      "description": "Paid exact-action authority preflight for consequential agent tool calls. Binds subject, tool, operation, target, canonical parameters, authority lifetime, retries and postcondition requirements. Costs $0.25 USDC on Base.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "action_id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Unique action-intent identifier"
+          },
+          "nonce": {
+            "type": "string",
+            "minLength": 8,
+            "description": "Unique anti-replay nonce"
+          },
+          "expires_at": {
+            "type": "string",
+            "description": "ISO-8601 action-intent expiry"
+          },
+          "subject": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Stable identifier for the agent or subject requesting the action."
+              },
+              "identity_verified": {
+                "description": "Whether the caller asserts that the subject identity was verified.",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "id"
+            ],
+            "additionalProperties": {},
+            "description": "Subject identity facts for the requested action."
+          },
+          "action": {
+            "type": "object",
+            "properties": {
+              "tool": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Tool or capability that would perform the action."
+              },
+              "operation": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Exact operation or method requested on the tool."
+              },
+              "consequence": {
+                "type": "string",
+                "enum": [
+                  "read",
+                  "write",
+                  "send",
+                  "deploy",
+                  "payment",
+                  "delete",
+                  "account_mutation",
+                  "external_submission",
+                  "device_mutation"
+                ],
+                "description": "Consequence class of the requested action."
+              },
+              "target": {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Target type or namespace."
+                  },
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Exact target identifier within that type."
+                  }
+                },
+                "required": [
+                  "kind",
+                  "id"
+                ],
+                "additionalProperties": {},
+                "description": "Exact action target."
+              },
+              "parameters": {
+                "description": "Canonical caller-supplied action parameters to bind into the authority decision.",
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {}
+              }
+            },
+            "required": [
+              "tool",
+              "operation",
+              "consequence",
+              "target"
+            ],
+            "additionalProperties": {},
+            "description": "Exact consequential action being considered before execution."
+          },
+          "authority": {
+            "type": "object",
+            "properties": {
+              "expires_at": {
+                "type": "string",
+                "description": "UTC ISO-8601 expiry of the authority grant."
+              },
+              "subject_id": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Subject identifier that the authority grant applies to."
+              },
+              "attestation_verified": {
+                "description": "Whether the caller asserts that an authority attestation was independently verified.",
+                "type": "boolean"
+              },
+              "allowed_tools": {
+                "minItems": 1,
+                "maxItems": 64,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "description": "Tools permitted by the authority grant."
+              },
+              "allowed_operations": {
+                "minItems": 1,
+                "maxItems": 64,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "description": "Operations permitted by the authority grant."
+              },
+              "allowed_targets": {
+                "minItems": 1,
+                "maxItems": 64,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "Allowed target type or namespace."
+                    },
+                    "id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "Allowed target identifier within that type."
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "id"
+                  ],
+                  "additionalProperties": {},
+                  "description": "One allowed target"
+                },
+                "description": "Targets permitted by the authority grant."
+              },
+              "expected_parameters_hash": {
+                "description": "Optional expected digest of canonical action parameters.",
+                "type": "string"
+              },
+              "human_confirmation_required": {
+                "description": "Whether the authority grant requires a human confirmation step.",
+                "type": "boolean"
+              },
+              "human_confirmed": {
+                "description": "Whether the caller asserts that the required human confirmation was completed.",
+                "type": "boolean"
+              },
+              "max_attempts": {
+                "description": "Maximum execution attempts permitted by the authority grant.",
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "allow_retry": {
+                "description": "Whether a retry is explicitly permitted by the authority grant.",
+                "type": "boolean"
+              },
+              "postcondition_required": {
+                "description": "Whether authoritative postcondition verification is required after execution.",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "expires_at",
+              "subject_id",
+              "allowed_tools",
+              "allowed_operations",
+              "allowed_targets"
+            ],
+            "additionalProperties": {},
+            "description": "Caller-provided authority envelope to compare against the requested action."
+          },
+          "execution": {
+            "description": "Retry and prior-outcome state for this logical operation.",
+            "type": "object",
+            "properties": {
+              "attempt": {
+                "description": "Current logical execution attempt number.",
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "prior_outcome": {
+                "description": "Authoritative knowledge about any prior attempt outcome.",
+                "type": "string",
+                "enum": [
+                  "NONE",
+                  "KNOWN_NO_EFFECT",
+                  "EFFECT_CONFIRMED",
+                  "UNKNOWN"
+                ]
+              },
+              "retry_authorized": {
+                "description": "Whether the caller explicitly authorizes this retry after reconciling prior outcome.",
+                "type": "boolean"
+              },
+              "idempotency_key": {
+                "description": "Optional stable idempotency key for the logical operation.",
+                "type": "string"
+              }
+            },
+            "additionalProperties": {}
+          },
+          "postcondition": {
+            "description": "Expected authoritative postcondition contract for the action.",
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Type of postcondition that must be verified after execution."
+              },
+              "authoritative_source": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Provider or exact owner that can authoritatively confirm the postcondition."
+              }
+            },
+            "required": [
+              "type",
+              "authoritative_source"
+            ],
+            "additionalProperties": {}
+          }
+        },
+        "required": [
+          "action_id",
+          "nonce",
+          "expires_at",
+          "subject",
+          "action",
+          "authority"
+        ]
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "pro.foxify/agent-commerce",
+    "version": "0.2.2",
+    "remoteUrl": "https://foxify.pro/mcp",
+    "publishedAt": "2026-11-20T22:15:53.518834Z",
+    "fetchedAt": "2026-11-22T12:49:37.224Z",
+    "toolsSha256": "46acc53b53ce0a5b45ff2682fe0952edce68997ebbaf9bdeb3677bd9701f02cc"
+  }
+}
