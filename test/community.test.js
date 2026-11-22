@@ -10,6 +10,7 @@ import {
   loadRegistry,
   benchmarkRegistry,
   registerServer,
+  generateLeaderboardMarkdown,
   findLocalMcpConfigs,
   formatDiscoveryReport,
 } from '../dist/index.js';
@@ -30,14 +31,35 @@ test('Rule engine exports all rules and filters by category and id', () => {
   assert.ok(securityRules.length >= 1);
 });
 
-test('Registry loads server definitions and benchmarks corpus', () => {
-  const { servers, metadata } = loadRegistry();
-  const count = Object.keys(servers).length;
-  assert.ok(count >= 100, `Expected at least 100 registry servers, got ${count}`);
+const SAMPLE_REGISTRY = path.join(process.cwd(), 'fixtures', 'registry-sample');
 
-  const results = benchmarkRegistry();
-  assert.equal(results.length, count);
-  assert.ok(results[0].overallTQI >= results[results.length - 1].overallTQI);
+test('loadRegistry keeps entries with source provenance and skips unsourced ones', () => {
+  const { servers, metadata } = loadRegistry(SAMPLE_REGISTRY);
+
+  assert.deepEqual(Object.keys(servers).sort(), ['Notes Manual MCP', 'io.example/weather']);
+  assert.equal(metadata['io.example/weather'].source.type, 'registry');
+  assert.equal(metadata['Notes Manual MCP'].source.type, 'manual');
+});
+
+test('benchmarkRegistry ranks every loaded entry in descending TQI order', () => {
+  const results = benchmarkRegistry(SAMPLE_REGISTRY);
+
+  assert.equal(results.length, 2);
+  assert.ok(results[0].overallTQI >= results[1].overallTQI);
+});
+
+test('generateLeaderboardMarkdown escapes untrusted names and marks manual entries', () => {
+  const results = benchmarkRegistry(SAMPLE_REGISTRY);
+  const { metadata } = loadRegistry(SAMPLE_REGISTRY);
+  const hostile = { ...metadata['io.example/weather'], title: 'Evil <img src=x onerror=alert(1)> | [link](javascript:x)' };
+
+  const md = generateLeaderboardMarkdown(results, { ...metadata, 'io.example/weather': hostile });
+
+  assert.ok(!md.includes('<img'), 'raw HTML must be escaped');
+  assert.ok(md.includes('&lt;img'));
+  assert.ok(md.includes('\\|'), 'pipes must be escaped so the table row stays intact');
+  assert.ok(md.includes('\\[link\\]'), 'link syntax must be escaped');
+  assert.match(md, /Notes Manual MCP.*manual entry/);
 });
 
 test('registerServer creates new server entry in target registry', () => {
@@ -68,6 +90,9 @@ test('registerServer creates new server entry in target registry', () => {
     assert.equal(content.name, 'Acme Custom MCP');
     assert.equal(content.category, 'Developer Tools & VCS');
     assert.equal(content.tools.length, 1);
+    assert.equal(content.source.type, 'manual');
+    assert.ok(!Number.isNaN(Date.parse(content.source.submittedAt)));
+    assert.equal(path.basename(filePath), 'manual-acme-custom-mcp.json');
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
