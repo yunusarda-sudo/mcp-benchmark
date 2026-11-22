@@ -11,6 +11,7 @@ export interface RegistrySource {
   name: string;
   version: string;
   remoteUrl: string;
+  publishedAt?: string;
   fetchedAt: string;
   toolsSha256: string;
 }

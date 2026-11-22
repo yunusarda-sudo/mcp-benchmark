@@ -15,6 +15,10 @@ import {
   isLatestActive,
   isValidRegistryName,
   orderCandidates,
+  nextBacklogCursor,
+  namesOverOperatorCap,
+  operatorOf,
+  publishedAtOf,
   parseSseMessages,
   postJson,
   probeServer,
@@ -228,7 +232,7 @@ test('buildServerEntry writes a source provenance block with a tools hash', () =
     repository: { url: 'https://github.com/example/weather', source: 'github' },
   };
 
-  const entry = buildServerEntry({ server, remoteUrl: 'https://weather.example.com/mcp', tools, fetchedAt: '2026-11-22T00:00:00.000Z' });
+  const entry = buildServerEntry({ server, remoteUrl: 'https://weather.example.com/mcp', tools, fetchedAt: '2026-11-22T00:00:00.000Z', publishedAt: '2026-11-01T00:00:00Z' });
 
   assert.deepEqual(entry.source, {
     type: 'registry',
@@ -236,6 +240,7 @@ test('buildServerEntry writes a source provenance block with a tools hash', () =
     name: 'io.example/weather',
     version: '1.2.3',
     remoteUrl: 'https://weather.example.com/mcp',
+    publishedAt: '2026-11-01T00:00:00Z',
     fetchedAt: '2026-11-22T00:00:00.000Z',
     toolsSha256: crypto.createHash('sha256').update(JSON.stringify(tools)).digest('hex'),
   });
@@ -306,17 +311,86 @@ test('probeServer reports 401 as authRequired', async () => {
   assert.equal(classifyFailure(new Error('timeout')), 'failed');
 });
 
-test('orderCandidates puts changed servers first and rotates the never-listed backlog', () => {
-  const c = (name, version = '1', remoteUrl = `https://${name}.example.com/mcp`) => ({ server: { name: `io.x/${name}`, version }, remoteUrl });
+const cand = (name, publishedAt, { version = '1', operator = `${name}.example`, remoteUrl = `https://mcp.${name}.example/mcp` } = {}) => ({
+  server: { name: `io.x/${name}`, version },
+  remoteUrl,
+  publishedAt,
+  operator,
+});
+const names = list => list.map(x => x.server.name.slice(5));
+
+test('orderCandidates probes changed servers first, then never-listed ones newest first', () => {
   const known = new Map([
-    ['io.x/changed', { version: '1', remoteUrl: 'https://changed.example.com/mcp' }],
-    ['io.x/same', { version: '1', remoteUrl: 'https://same.example.com/mcp' }],
+    ['io.x/changed', { version: '1', remoteUrl: 'https://mcp.changed.example/mcp' }],
+    ['io.x/same', { version: '1', remoteUrl: 'https://mcp.same.example/mcp' }],
   ]);
-  const candidates = [c('same'), c('d'), c('changed', '2'), c('a'), c('c'), c('b')];
+  const candidates = [
+    cand('same', '2026-11-01T00:00:00Z'),
+    cand('old', '2025-01-01T00:00:00Z'),
+    cand('changed', '2024-01-01T00:00:00Z', { version: '2' }),
+    cand('newest', '2026-11-20T00:00:00Z'),
+    cand('middle', '2026-06-01T00:00:00Z'),
+  ];
 
-  const names = list => list.map(x => x.server.name.slice(5));
+  assert.deepEqual(names(orderCandidates(candidates, { known })), ['changed', 'newest', 'middle', 'old', 'same']);
+});
 
-  assert.deepEqual(names(orderCandidates(candidates, known)), ['changed', 'a', 'b', 'c', 'd', 'same']);
-  assert.deepEqual(names(orderCandidates(candidates, known, 'io.x/b')), ['changed', 'c', 'd', 'a', 'b', 'same']);
-  assert.deepEqual(names(orderCandidates(candidates, known, 'io.x/zzz')), ['changed', 'a', 'b', 'c', 'd', 'same']);
+test('orderCandidates puts releases since the last run before the backlog and skips the covered window', () => {
+  const candidates = [
+    cand('covered', '2026-05-01T00:00:00Z'), // newer than the cursor, older than lastRun: already probed
+    cand('backlog-new', '2026-03-01T00:00:00Z'),
+    cand('released', '2026-11-21T00:00:00Z'),
+    cand('backlog-old', '2025-03-01T00:00:00Z'),
+  ];
+  const options = { known: new Map(), lastRun: '2026-11-15T00:00:00Z', backlogCursor: '2026-04-01T00:00:00Z\u0000io.x/zzz' };
+
+  assert.deepEqual(names(orderCandidates(candidates, options)), ['released', 'backlog-new', 'backlog-old']);
+});
+
+test('nextBacklogCursor returns the oldest backlog key that was probed', () => {
+  const probed = [cand('released', '2026-11-21T00:00:00Z'), cand('b', '2026-03-01T00:00:00Z'), cand('c', '2026-02-01T00:00:00Z')];
+
+  const cursor = nextBacklogCursor(probed, { known: new Map(), lastRun: '2026-11-15T00:00:00Z' });
+
+  assert.equal(cursor, '2026-02-01T00:00:00Z\u0000io.x/c');
+});
+
+test('orderCandidates limits how many candidates one operator can use', () => {
+  const candidates = ['a', 'b', 'c', 'd'].map((n, i) => cand(n, `2026-0${i + 1}-01T00:00:00Z`, { operator: 'bulk.example' }));
+  candidates.push(cand('solo', '2020-01-01T00:00:00Z'));
+
+  const ordered = orderCandidates(candidates, { known: new Map(), maxProbesPerOperator: 2 });
+
+  assert.deepEqual(names(ordered), ['d', 'c', 'solo']);
+});
+
+test('namesOverOperatorCap keeps the most recently published servers of each operator', () => {
+  const entries = [
+    { name: 'io.x/a', operator: 'bulk.example', publishedAt: '2026-01-01T00:00:00Z' },
+    { name: 'io.x/b', operator: 'bulk.example', publishedAt: '2026-03-01T00:00:00Z' },
+    { name: 'io.x/c', operator: 'bulk.example', publishedAt: '2026-02-01T00:00:00Z' },
+    { name: 'io.x/d', operator: 'bulk.example' },
+    { name: 'io.x/solo', operator: 'solo.example', publishedAt: '2020-01-01T00:00:00Z' },
+  ];
+
+  assert.deepEqual(namesOverOperatorCap(entries, 2), ['io.x/a', 'io.x/d']);
+  assert.deepEqual(namesOverOperatorCap(entries, 10), []);
+});
+
+test('operatorOf groups by registrable domain and separates shared-hosting tenants', () => {
+  assert.equal(operatorOf('https://a.mcp.agentapigate.ai/mcp'), 'agentapigate.ai');
+  assert.equal(operatorOf('https://b.agentapigate.ai/x'), 'agentapigate.ai');
+  assert.equal(operatorOf('https://api.example.co.uk/mcp'), 'example.co.uk');
+  assert.equal(operatorOf('https://one.workers.dev/mcp'), 'one.workers.dev');
+  assert.equal(operatorOf('https://foo.bar.workers.dev/mcp'), 'bar.workers.dev');
+  assert.notEqual(operatorOf('https://alice.vercel.app'), operatorOf('https://bob.vercel.app'));
+});
+
+test('publishedAtOf prefers publishedAt and falls back to updatedAt', () => {
+  const item = meta => ({ _meta: { 'io.modelcontextprotocol.registry/official': meta } });
+
+  assert.equal(publishedAtOf(item({ publishedAt: '2026-01-01T00:00:00Z', updatedAt: '2026-02-01T00:00:00Z' })), '2026-01-01T00:00:00Z');
+  assert.equal(publishedAtOf(item({ updatedAt: '2026-02-01T00:00:00Z' })), '2026-02-01T00:00:00Z');
+  assert.equal(publishedAtOf(item({ publishedAt: 'garbage' })), '');
+  assert.equal(publishedAtOf({}), '');
 });

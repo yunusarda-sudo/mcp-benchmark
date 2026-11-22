@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// Regenerates the README leaderboard, docs/ecosystem-data.js and
-// fixtures/ecosystem-registry.json from registry/servers. Requires `npm run build`.
+// Regenerates the README leaderboard and docs/ecosystem-data.js from
+// registry/servers. Requires `npm run build`.
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -23,6 +23,7 @@ function syncSummary(state, results, metadata) {
   const lines = [
     `**${results.length} servers · ${totalTools} tools · last sync ${date}.**`,
     `Last run: ${counts.scanned ?? 0} registry entries scanned, ${counts.candidates ?? 0} auth-free remote candidates, ${counts.ok ?? 0} returned tools, ${counts.authRequired ?? 0} required authentication, ${counts.failed ?? 0} failed${state.truncated ? ' (probe cap reached)' : ''}.`,
+    `Probed newest first by registry publish date, at most ${state.limits?.maxProbes ?? '?'} per run and at most ${state.limits?.maxPerOperator ?? '?'} listed servers per operator (registrable domain of the remote host).`,
   ];
   if (manual > 0) lines.push(`${manual} of the listed servers are manual community entries (marked "manual entry"), not live probes.`);
   return lines.join('\n');
@@ -38,7 +39,7 @@ export async function generateEcosystemArtifacts(rootDir) {
   const statePath = path.join(rootDir, 'registry', 'sync-state.json');
   const state = fs.existsSync(statePath) ? JSON.parse(fs.readFileSync(statePath, 'utf8')) : {};
 
-  const { servers, metadata } = loadRegistry(registryDir);
+  const { metadata } = loadRegistry(registryDir);
   const results = benchmarkRegistry(registryDir);
   updateReadmeLeaderboard({ readmePath, registryDir });
 
@@ -78,6 +79,7 @@ export async function generateEcosystemArtifacts(rootDir) {
       repository: meta.repository ?? null,
       sourceType: meta.source.type,
       fetchedAt: meta.source.type === 'registry' ? meta.source.fetchedAt : meta.source.submittedAt,
+      publishedAt: meta.source.type === 'registry' ? meta.source.publishedAt ?? null : null,
       toolsCount: r.toolsAnalyzed,
       tools: r.tools.map(t => ({ name: t.toolName, tokens: t.tokenCount, score: t.metrics.overallScore })),
     };
@@ -90,9 +92,7 @@ export async function generateEcosystemArtifacts(rootDir) {
     'utf8'
   );
 
-  const fixturePath = path.join(rootDir, 'fixtures', 'ecosystem-registry.json');
-  fs.writeFileSync(fixturePath, `${JSON.stringify(servers, null, 1)}\n`, 'utf8');
-  console.log(`Regenerated README leaderboard, ${path.relative(rootDir, docsPath)} and ${path.relative(rootDir, fixturePath)} (${results.length} servers)`);
+  console.log(`Regenerated README leaderboard and ${path.relative(rootDir, docsPath)} (${results.length} servers)`);
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

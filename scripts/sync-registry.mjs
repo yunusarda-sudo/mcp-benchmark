@@ -4,7 +4,9 @@
 // Phase 1 scope: only auth-free remote (streamable-http) servers are probed with
 // a live initialize → tools/list handshake. Packages are never downloaded or run.
 // A server is written only when it returns at least one valid tool; nothing is
-// invented. Env: MAX_PROBES (default 400), FULL_SYNC=1 to ignore lastSync.
+// invented. Candidates are probed newest first (registry publishedAt).
+// Env: MAX_PROBES (default 1500), MAX_PER_OPERATOR (default 3 listed servers per
+// remote registrable domain), FULL_SYNC=1 to ignore lastSync.
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -18,6 +20,10 @@ import {
   mapWithConcurrency,
   officialMeta,
   orderCandidates,
+  nextBacklogCursor,
+  namesOverOperatorCap,
+  operatorOf,
+  publishedAtOf,
   isLatestActive,
   probeServer,
   selectRemote,
@@ -36,13 +42,18 @@ const CONCURRENCY = 6;
 const PAGE_SIZE = 100;
 const MAX_REGISTRY_PAGES = 2000;
 const MAX_REGISTRY_PAGE_BYTES = 8 * 1024 * 1024;
-const DEFAULT_MAX_PROBES = 400;
+// A local run probed 400 servers in about a minute at concurrency 6; 1500 keeps
+// a CI run (registry scan + probes) well under 15 minutes.
+const DEFAULT_MAX_PROBES = 1500;
+const DEFAULT_MAX_PER_OPERATOR = 3;
+// Probe a few more than the listing cap per operator so auth failures do not starve it.
+const PROBES_PER_LISTED_SLOT = 2;
 
-function parseMaxProbes(raw) {
-  if (raw === undefined || raw === '') return DEFAULT_MAX_PROBES;
-  const value = Number.parseInt(raw, 10);
-  if (!Number.isInteger(value) || value < 0 || value > 100_000) {
-    throw new Error(`MAX_PROBES must be an integer between 0 and 100000, got "${raw}"`);
+function parseIntEnv(name, raw, fallback, { min, max }) {
+  if (raw === undefined || raw === '') return fallback;
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value < min || value > max) {
+    throw new Error(`${name} must be an integer between ${min} and ${max}, got "${raw}"`);
   }
   return value;
 }
@@ -161,13 +172,14 @@ function applyResult(result, existing, takenSlugs, counts, fetchedAt) {
   if (sameSnapshot(previous, candidate, result.tools)) return;
   const slug = assignSlug(name, existing, takenSlugs);
   if (!slug) return;
-  const entry = buildServerEntry({ server: candidate.server, remoteUrl: candidate.remoteUrl, tools: result.tools, fetchedAt });
+  const entry = buildServerEntry({ server: candidate.server, remoteUrl: candidate.remoteUrl, tools: result.tools, fetchedAt, publishedAt: candidate.publishedAt });
   fs.writeFileSync(serverFilePath(registryDir, slug), `${JSON.stringify(entry, null, 2)}\n`, 'utf8');
   existing.byName.set(name, { slug, entry });
 }
 
 async function main() {
-  const maxProbes = parseMaxProbes(process.env.MAX_PROBES);
+  const maxProbes = parseIntEnv('MAX_PROBES', process.env.MAX_PROBES, DEFAULT_MAX_PROBES, { min: 0, max: 100_000 });
+  const maxPerOperator = parseIntEnv('MAX_PER_OPERATOR', process.env.MAX_PER_OPERATOR, DEFAULT_MAX_PER_OPERATOR, { min: 1, max: 10_000 });
   const state = readState();
   const isFull = process.env.FULL_SYNC === '1' || !state.lastSync;
   const startedAt = new Date().toISOString();
@@ -176,7 +188,7 @@ async function main() {
   console.log(`Scanning ${REGISTRY_BASE_URL} (${isFull ? 'full' : `updated since ${state.lastSync}`})`);
   const items = await scanRegistry(isFull ? undefined : state.lastSync);
 
-  const counts = { scanned: items.length, latestActive: 0, candidates: 0, probed: 0, ok: 0, authRequired: 0, failed: 0, removed: 0 };
+  const counts = { scanned: items.length, latestActive: 0, candidates: 0, probed: 0, ok: 0, authRequired: 0, failed: 0, removed: 0, operatorCapped: 0 };
   const existing = loadSyncedEntries();
   const takenSlugs = new Set(existing.slugs);
   const candidates = [];
@@ -198,7 +210,7 @@ async function main() {
       removeEntry(existing, server.name, counts); // no longer has an auth-free remote
       continue;
     }
-    candidates.push({ server, remoteUrl });
+    candidates.push({ server, remoteUrl, publishedAt: publishedAtOf(item), operator: operatorOf(remoteUrl) });
   }
   counts.candidates = candidates.length;
 
@@ -208,15 +220,23 @@ async function main() {
   }
 
   const known = new Map([...existing.byName].map(([name, { entry }]) => [name, entry.source]));
-  const ordered = orderCandidates(candidates, known, state.resumeAfter);
+  const orderOptions = { known, lastRun: state.lastRun, backlogCursor: state.backlogCursor, maxProbesPerOperator: maxPerOperator * PROBES_PER_LISTED_SLOT };
+  const ordered = orderCandidates(candidates, orderOptions);
   const toProbe = ordered.slice(0, maxProbes);
   const isTruncated = ordered.length > toProbe.length;
-  const lastFresh = toProbe.filter(c => !known.has(c.server.name)).at(-1);
+  const backlogCursor = isTruncated ? nextBacklogCursor(toProbe, orderOptions) ?? state.backlogCursor : undefined;
   counts.probed = toProbe.length;
   console.log(`${counts.latestActive} latest active servers, ${counts.candidates} auth-free remote candidates, probing ${toProbe.length}`);
 
   const results = await mapWithConcurrency(toProbe, CONCURRENCY, probeCandidate);
   for (const result of results) applyResult(result, existing, takenSlugs, counts, startedAt);
+
+  const listed = [...existing.byName].map(([name, { entry }]) => ({ name, operator: operatorOf(entry.source.remoteUrl), publishedAt: entry.source.publishedAt }));
+  for (const name of namesOverOperatorCap(listed, maxPerOperator)) {
+    removeEntry(existing, name, counts);
+    counts.removed -= 1;
+    counts.operatorCapped += 1;
+  }
 
   const nextState = {
     // A capped run does not advance lastSync, so skipped candidates are retried
@@ -225,8 +245,9 @@ async function main() {
     lastRun: startedAt,
     mode: isFull ? 'full' : 'incremental',
     truncated: isTruncated,
-    // Where the next capped run continues probing never-listed servers.
-    ...(isTruncated && lastFresh ? { resumeAfter: lastFresh.server.name } : {}),
+    // Where the next capped run continues the never-listed backlog (newest first).
+    ...(backlogCursor ? { backlogCursor } : {}),
+    limits: { maxProbes, maxPerOperator },
     listedServers: existing.byName.size,
     counts,
   };
