@@ -1,0 +1,882 @@
+{
+  "$schema": "../schema.json",
+  "name": "ai.brownmatter/brainz",
+  "title": "Brainz",
+  "category": "Social, Media & Knowledge",
+  "description": "Shared product-knowledge graph for AI agent fleets — vault tools + agent self-signup over MCP.",
+  "tools": [
+    {
+      "name": "search_concepts",
+      "description": "Search the product knowledge vault by free-text query. Useful when you need product knowledge but don't yet know which concept ids exist. Returns ranked hits (id, title, type, score, snippet) only; get_concept returns one full note and get_context an assembled briefing. An empty hit list means nothing matched.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Free-text search query, e.g. \"lead scoring\" or \"session auth\"."
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "hybrid",
+              "keyword",
+              "semantic"
+            ],
+            "default": "hybrid",
+            "description": "Search mode. \"hybrid\" (default) fuses keyword and semantic ranking; semantic silently falls back to keyword if embeddings are unavailable."
+          },
+          "product": {
+            "type": "string",
+            "description": "Only return concepts belonging to this product."
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Only return concepts carrying ALL of these tags."
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "concept",
+              "domain",
+              "feature",
+              "story",
+              "spec",
+              "workflow",
+              "task",
+              "decision",
+              "constraint",
+              "pattern",
+              "glossary",
+              "iteration",
+              "milestone",
+              "epic"
+            ],
+            "description": "Only return concepts of this type."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50,
+            "default": 10,
+            "description": "Max hits to return (default 10)."
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "get_concept",
+      "description": "Fetch one concept by exact id: full markdown body, metadata, and its direct graph neighbors (each with the relation that connects it). Use after search_concepts or when another note wiki-links an id you need in full. The neighbors list tells you what to fetch next. If you don't know the id, use search_concepts instead.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Exact concept id (slug), e.g. \"lead-scoring\"."
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "get_related",
+      "description": "Walk the knowledge graph outward from a concept and return everything within `depth` hops, with distance and the edge path that reached it. Use to map the blast radius before changing a feature (what depends on it, what constrains it, which decisions apply) or to discover structure that keyword search misses. Filter by relation names (e.g. depends_on) to follow only one kind of edge.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Concept id to start from."
+          },
+          "depth": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 3,
+            "default": 1,
+            "description": "How many hops to traverse (1-3, default 1)."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Max related nodes to return."
+          },
+          "relations": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Only follow edges with these relation names, e.g. [\"depends_on\", \"part_of\"]."
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "get_context",
+      "description": "Assemble a markdown briefing of the concepts most relevant to a query and/or explicit ids, expanded through the graph and trimmed to a token budget. The briefing is self-contained, so it can be handed to another agent or pasted into a prompt as-is. The final JSON line reports which concept ids were included, whether the bundle was truncated, and its approximate token count. Provide at least one of `query` or `ids`.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Search query used to pick seed concepts."
+          },
+          "ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Explicit seed concept ids (kept first, in order)."
+          },
+          "product": {
+            "type": "string",
+            "description": "Restrict expansion to concepts of this product."
+          },
+          "depth": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 3,
+            "default": 1,
+            "description": "Graph hops to expand from the seeds (default 1)."
+          },
+          "tokenBudget": {
+            "type": "integer",
+            "minimum": 1,
+            "default": 4000,
+            "description": "Approximate token cap for the bundle (chars/4, default 4000)."
+          }
+        },
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "upsert_concept",
+      "description": "Write a concept note into the vault (creates or overwrites the markdown file, then reindexes it). Use to capture new product knowledge discovered during a task — a decision made, a constraint hit, a pattern adopted — so future agents can find it. Omit `id` to derive a slug from the title; pass an existing id to update that note. Body is markdown; [[wiki-links]] to other concept ids create graph edges. Returns the saved concept's metadata.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Concept id (slug). Omit to derive from title; pass an existing id to update."
+          },
+          "title": {
+            "type": "string",
+            "description": "Human-readable title (required, non-empty)."
+          },
+          "body": {
+            "type": "string",
+            "description": "Markdown body. [[other-id]] wiki-links become graph edges."
+          },
+          "type": {
+            "type": "string",
+            "description": "Concept type (default \"concept\"). The 14 built-in types are concept, domain, feature, story, spec, workflow, task, decision, constraint, pattern, glossary, iteration (a time-box such as a sprint) and milestone (a scoped deliverable with a target date) and epic (an overarching body of work that tasks and features are part_of); a vault may also define custom types. An unknown type falls back to \"concept\"."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "draft",
+              "deprecated"
+            ],
+            "description": "Lifecycle status (default \"active\")."
+          },
+          "product": {
+            "type": "string",
+            "description": "Product grouping key."
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Tags for filtering."
+          },
+          "codeAreas": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Rough codebase paths/globs where this knowledge lives, e.g. [\"packages/core/src/vault.ts\", \"apps/web/src/routes/**\"] — lets agents briefed by get_context know where to apply it."
+          },
+          "taskStatus": {
+            "type": "string",
+            "enum": [
+              "open",
+              "taken",
+              "done"
+            ],
+            "description": "For type=\"task\" concepts: lifecycle \"open\" | \"taken\" | \"done\" (default \"open\"). Prefer the task tools (create_task / take_task / complete_task) over setting this directly."
+          },
+          "takenBy": {
+            "type": "string",
+            "description": "For tasks: label of the agent/orchestrator that claimed it."
+          },
+          "takenAt": {
+            "type": "string",
+            "description": "For tasks: ISO timestamp when claimed."
+          },
+          "doneAt": {
+            "type": "string",
+            "description": "For tasks: ISO timestamp when completed."
+          },
+          "startDate": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "For iterations/milestones: start day YYYY-MM-DD (null clears it)."
+          },
+          "endDate": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "For iterations/milestones: end or target day YYYY-MM-DD (null clears it)."
+          },
+          "estimate": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "For tasks: story points (null clears it)."
+          },
+          "relations": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "description": "Typed edges, e.g. {\"depends_on\": [\"auth-system\"]}. Conventions: part_of (feature/story/task → domain), realized_by (story → features), realizes (task → stories/features), governs (spec → what it constrains), governed_by (task → specs), depends_on, constrains, supersedes, related_to. For domain concepts, prefer linking to OTHER domains (related_to / depends_on) wherever they share a boundary or hand off responsibility — connected domains reveal how the product's areas overlap instead of floating as isolated islands."
+          }
+        },
+        "required": [
+          "title",
+          "body"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "delete_concept",
+      "description": "Remove a concept from the vault and all of its outgoing edges. Use to clear a note that is wrong, obsolete, or junk (e.g. a probe or test node that shouldn't be in the graph). Idempotent: deleting an id that doesn't exist is a no-op success (deleted:false), not an error. Deletion is permanent — prefer upsert_concept to correct a note you want to keep. Returns { deleted, id }.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Exact concept id (slug) to delete, e.g. \"lead-scoring\"."
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "link_concepts",
+      "description": "Add a typed, directed edge between two existing concepts by editing the `from` note's frontmatter (e.g. lead-scoring depends_on contact-model). Use when you notice a relationship the vault is missing. Both concepts should already exist; use upsert_concept first if not.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "description": "Source concept id (its file gains the relation)."
+          },
+          "to": {
+            "type": "string",
+            "description": "Target concept id."
+          },
+          "relation": {
+            "type": "string",
+            "default": "related_to",
+            "description": "Edge type, e.g. part_of | realized_by | governs | depends_on | constrains | supersedes | related_to (default). Domain→domain links (related_to / depends_on) are encouraged where two domains share a boundary, so the graph shows how areas overlap."
+          }
+        },
+        "required": [
+          "from",
+          "to"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "list_concepts",
+      "description": "Enumerate concept metadata (no bodies), optionally filtered by product, type, or a single tag. Use to get the lay of the land in an unfamiliar vault, to audit what exists (e.g. all decisions for a product), or when search vocabulary isn't matching. For content, follow up with get_concept or get_context.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "product": {
+            "type": "string",
+            "description": "Only concepts of this product."
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "concept",
+              "domain",
+              "feature",
+              "story",
+              "spec",
+              "workflow",
+              "task",
+              "decision",
+              "constraint",
+              "pattern",
+              "glossary",
+              "iteration",
+              "milestone",
+              "epic"
+            ],
+            "description": "Only concepts of this type."
+          },
+          "tag": {
+            "type": "string",
+            "description": "Only concepts carrying this tag."
+          }
+        },
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "vault_stats",
+      "description": "Summarize the vault: counts of concepts and edges, the products and tags in use, a breakdown by concept type, and whether semantic search is available. Useful for gauging how much knowledge is here and which product/tag filters exist.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "onboard",
+      "description": "Index an existing product's codebase into this vault. {action: \"start\"} returns the onboarding playbook: a method for surveying the codebase and recording its product knowledge (domains, features, stories, specs, workflows, decisions, constraints) as concepts via upsert_concept, each anchored to the code with codeAreas. {action: \"status\", areaList} reports onboarded state, concept counts and, given your repo's source areas (Brainz can't read the repo), which areas are covered or uncovered. {action: \"complete\", summary, areaList} marks the vault onboarded and stores the summary; it is rejected while too many areas are uncovered. Until onboarding completes, search_concepts and get_context results include a one-line note saying so.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "start",
+              "complete",
+              "status"
+            ],
+            "description": "\"start\" returns the onboarding playbook, \"complete\" marks the vault onboarded (requires `summary`), \"status\" reports onboarded state and concept counts."
+          },
+          "productName": {
+            "type": "string",
+            "description": "With \"start\": the product's name, echoed into the playbook heading."
+          },
+          "repoHint": {
+            "type": "string",
+            "description": "With \"start\": where the codebase lives (path or URL), echoed into the playbook."
+          },
+          "summary": {
+            "type": "string",
+            "description": "Required with \"complete\": 2–5 sentences on what was indexed and any notable gaps — stored as the product-onboarding-summary concept."
+          },
+          "areaList": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "With \"status\" or \"complete\": the repo's top-level source areas (packages/*, apps/*/src subtrees, major dirs) from your own repo walk — Brainz can't read the repo. \"status\" diffs concepts' code_areas against this to report covered vs uncovered areas; \"complete\" is REJECTED if too many areas are still uncovered."
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "sync",
+      "description": "Re-index an onboarded vault after the code changes (drift). {action: \"start\"} returns the sync playbook: the vault's last_synced_at, a coverage map over the concepts' code_areas, and a method for re-indexing only what changed (you run git — Brainz can't read the repo — and pass back changedPaths + areaList): update stale concepts in place, add concepts or tasks for new work, and report coverage gaps. {action: \"status\", areaList} reports onboarded state, last sync time, staleness, concept counts and coverage. {action: \"complete\", summary, areaList} stamps last_synced_at and appends the summary to the product-onboarding-summary concept (a running sync log). After ~14 days without a sync, get_context and search results include a one-line note saying so.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "start",
+              "complete",
+              "status"
+            ],
+            "description": "\"start\" returns the sync (re-onboard) playbook — a DRIFT playbook scoped to what changed since the last sync (NOT the full onboarding playbook). \"complete\" records last_synced_at and appends the summary to the running sync log (requires `summary`). \"status\" reports onboarded state, last sync time, concept counts, staleness, and (with areaList) coverage."
+          },
+          "productName": {
+            "type": "string",
+            "description": "With \"start\": the product's name, echoed into the playbook heading."
+          },
+          "summary": {
+            "type": "string",
+            "description": "Required with \"complete\": 2–5 sentences on what changed, what you updated, and what you indexed — APPENDED to the product-onboarding-summary concept as a running sync log (never overwritten)."
+          },
+          "areaList": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "With \"start\", \"status\", or \"complete\": the repo's top-level source areas from your own repo walk (Brainz can't read the repo). Used to compute the coverage map (covered vs uncovered areas) — \"complete\" is REJECTED if too many areas are still uncovered."
+          },
+          "changedPaths": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "With \"start\": paths you found CHANGED since last_synced_at (from your own git diff/log). The playbook focuses the fan-out on the areas these fall under."
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "dream",
+      "description": "Dreaming: a scheduled consolidation sweep over this vault. Light stages what changed since the last dream (near-duplicate concepts, finished task outcomes, hygiene counts); REM asks an LLM for proposals; deep applies the ones that pass threshold gates: merges duplicates (edges redirected, the other tombstoned), promotes outcome knowledge into concepts, adds missing links, and files a task for each contradiction. A sweep that would touch too much of the vault is rejected; every applied dream keeps preimages and can be reverted. {action: \"status\"} shows schedule + last dream; {action: \"run\"} dreams now; {action: \"diary\"} reads the Dream Diary; {action: \"revert\", id} undoes one dream; {action: \"configure\", ...} sets the schedule, mode (apply, propose, light-only), phases, thresholds, caps, a stricter loss rail and the LLM choice; {action: \"apply\", id, proposals?} decides a proposed dream. Without an LLM only light runs.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "status",
+              "run",
+              "diary",
+              "revert",
+              "configure",
+              "apply"
+            ],
+            "description": "\"status\" reports the settings, the last/next dream and any sweep in flight. \"run\" starts (or continues) a sweep NOW and advances it as far as one request allows. \"diary\" returns recent Dream Diary entries (newest first). \"revert\" undoes one dream via its preimages (requires `id`). \"configure\" changes this vault's dreaming settings. \"apply\" decides a proposed dream (propose mode): applies the listed `proposals` (all when omitted) and rejects the rest (requires `id`)."
+          },
+          "id": {
+            "type": "string",
+            "description": "With \"revert\" or \"apply\": the dream id (from \"diary\" or \"status\")."
+          },
+          "proposals": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "maxItems": 200,
+            "description": "With \"apply\": the proposal numbers (`n`) to approve; omit for all, [] to reject all."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50,
+            "description": "With \"diary\": how many entries to return (default 10)."
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "With \"configure\": Turn scheduled dreaming on or off."
+          },
+          "cadenceHours": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 168,
+            "description": "With \"configure\": Hours between dreams (default 24)."
+          },
+          "runHourUtc": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 23
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "With \"configure\": Preferred UTC hour for a dream when the cadence is 24h or more; null clears it."
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "apply",
+              "propose",
+              "light-only"
+            ],
+            "description": "With \"configure\": \"apply\" writes the changes that pass the gates (default); \"propose\" holds them in the Dream Diary until approved with {action: \"apply\"}; \"light-only\" never calls an LLM."
+          },
+          "phases": {
+            "type": "object",
+            "properties": {
+              "merges": {
+                "type": "boolean"
+              },
+              "promotions": {
+                "type": "boolean"
+              },
+              "links": {
+                "type": "boolean"
+              },
+              "contradictions": {
+                "type": "boolean"
+              }
+            },
+            "additionalProperties": false,
+            "description": "With \"configure\": Turn individual kinds of change on or off: merges, promotions, links, contradictions."
+          },
+          "thresholds": {
+            "type": "object",
+            "properties": {
+              "merge": {
+                "type": "number",
+                "minimum": 0.5,
+                "maximum": 1
+              },
+              "promote": {
+                "$ref": "#/properties/thresholds/properties/merge"
+              },
+              "link": {
+                "$ref": "#/properties/thresholds/properties/merge"
+              },
+              "contradiction": {
+                "$ref": "#/properties/thresholds/properties/merge"
+              }
+            },
+            "additionalProperties": false,
+            "description": "With \"configure\": Minimum confidence (0.5-1) per kind: merge 0.8, promote 0.7, link 0.7, contradiction 0.6 by default."
+          },
+          "caps": {
+            "type": "object",
+            "properties": {
+              "maxMerges": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 20
+              },
+              "maxPromotions": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 20
+              },
+              "maxLinks": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 50
+              },
+              "maxContradictions": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 10
+              }
+            },
+            "additionalProperties": false,
+            "description": "With \"configure\": Most changes per dream: maxMerges 5 (1-20), maxPromotions 5 (1-20), maxLinks 10 (1-50), maxContradictions 3 (1-10)."
+          },
+          "lossRail": {
+            "type": "object",
+            "properties": {
+              "maxTouchFraction": {
+                "type": "number",
+                "minimum": 0.01,
+                "maximum": 0.2
+              },
+              "minTouchAllowance": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 3
+              }
+            },
+            "additionalProperties": false,
+            "description": "With \"configure\": How much of the vault one dream may modify: maxTouchFraction (0.01-0.2) and minTouchAllowance (0-3). Can only be made stricter than the defaults."
+          },
+          "llm": {
+            "type": "object",
+            "properties": {
+              "provider": {
+                "type": "string",
+                "enum": [
+                  "auto",
+                  "workers-ai",
+                  "byok"
+                ]
+              },
+              "model": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200,
+                    "pattern": "^[A-Za-z0-9._:/@-]+$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "additionalProperties": false,
+            "description": "With \"configure\": Cloud: which LLM the REM step uses — \"auto\" (default), \"workers-ai\", or \"byok\" (only the account's own key) — and a model id for the account's own key; null clears it."
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "list_tasks",
+      "description": "List the vault's work pile: `task`-type concepts with their lifecycle (open/taken/done), oldest first, including who has taken each one (takenBy). Filter by taskStatus or by the domain the tasks are part_of. Read-only; take_task is what claims a task.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "taskStatus": {
+            "type": "string",
+            "enum": [
+              "open",
+              "taken",
+              "done"
+            ],
+            "description": "Only tasks in this lifecycle state (\"open\" | \"taken\" | \"done\"). Omit for all."
+          },
+          "domain": {
+            "type": "string",
+            "description": "Only tasks that are part_of this domain concept id."
+          }
+        },
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "burndown",
+      "description": "Burndown and flow metrics for the vault's tasks, computed from their recorded history. `scope` is a concept id (an iteration, milestone, feature, domain or any concept tasks are part_of / realize, including nested containers) or `tag:<tag>`; omit it for every task. Returns, for the window: open vs done over time with an ideal line when the scope has start/end dates, scope changes, velocity per iteration or week, a projected completion date with an optimistic/pessimistic range, lead and cycle time per agent label, and claims held longer than `staleAfterHours`. `metrics` limits the sections returned. Read-only.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "scope": {
+            "type": "string",
+            "description": "A concept id (iteration, milestone, feature, domain, …) or `tag:<tag>`. Omit for every task in the vault."
+          },
+          "from": {
+            "type": "string",
+            "description": "Window start (YYYY-MM-DD or ISO). Default: the scope's startDate, else 8 weeks ago."
+          },
+          "to": {
+            "$ref": "#/properties/from",
+            "description": "Window end (YYYY-MM-DD or ISO). Default: the later of the scope's endDate and now."
+          },
+          "bucket": {
+            "type": "string",
+            "enum": [
+              "day",
+              "week"
+            ],
+            "description": "Series granularity. Default: day for windows up to 120 days, else week."
+          },
+          "unit": {
+            "type": "string",
+            "enum": [
+              "tasks",
+              "points"
+            ],
+            "description": "Count tasks (default) or sum their `estimate` points."
+          },
+          "staleAfterHours": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "A claim held longer than this is stale (default 24)."
+          },
+          "metrics": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "series",
+                "scopeChanges",
+                "velocity",
+                "projection",
+                "cycle",
+                "agents",
+                "stale"
+              ]
+            },
+            "description": "Sections to include: series, scopeChanges, velocity, projection, cycle, agents, stale (default all)."
+          }
+        },
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "take_task",
+      "description": "Claim a task and get its briefing in one call. Pass an `id` to claim a specific task, or omit it to claim the next open task (oldest open by createdAt then id). Atomically flips the task to \"taken\" and records takenBy/takenAt; errors if it's already taken or done. Returns the task and a get_context-style briefing for its part_of domain plus the concepts it realizes / is governed_by (with code_areas). complete_task marks it done.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Claim this specific task by id. Omit to claim THE next open task (oldest by createdAt then id)."
+          },
+          "takenBy": {
+            "type": "string",
+            "description": "Label for who's claiming it (agent/orchestrator name). Defaults to a generic label."
+          }
+        },
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "complete_task",
+      "description": "Mark a task done. Sets taskStatus=done + doneAt and appends `outcome` to the task body as an Outcome section. The result carries a one-line `reminder` that the rest of the graph is not updated automatically.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Id of the task to mark done."
+          },
+          "outcome": {
+            "type": "string",
+            "description": "A short account of what was done — appended to the task body as an Outcome section."
+          }
+        },
+        "required": [
+          "id",
+          "outcome"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "create_task",
+      "description": "Turn a finding into first-class work: creates a `task`-type concept with taskStatus=open and the given relations — part_of a domain and/or an epic, `realizes` stories/features, `governed_by` specs — plus codeAreas pointing at where the work lands. Use when you discover work that isn't reflected in the codebase yet (a gap, a needed fix, a follow-up). The task then shows up in list_tasks / take_task and on the Kanban board.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "description": "Human-readable task title (required, non-empty)."
+          },
+          "body": {
+            "type": "string",
+            "description": "Markdown description of the work. [[wiki-links]] become edges."
+          },
+          "domain": {
+            "type": "string",
+            "description": "Domain concept id this task is part_of."
+          },
+          "epic": {
+            "type": "string",
+            "description": "Epic concept id this task is part_of (the overarching body of work it belongs to)."
+          },
+          "realizes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Story/feature concept ids this task realizes (creates `realizes` edges)."
+          },
+          "governedBy": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Spec concept ids that govern this task (creates `governed_by` edges)."
+          },
+          "codeAreas": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Rough codebase paths/globs where the work lands."
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Tags, e.g. a priority tag like \"high\" or an area tag."
+          }
+        },
+        "required": [
+          "title",
+          "body"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "create_vault",
+      "description": "Create a new, empty vault owned by you and add it to this connection. Returns the new vault and the vaults this connection can now use. Once a connection covers more than one vault, every vault tool takes a `vault` argument (a slug or id) and list_vaults lists the vaults. Each account has a vault limit and an hourly creation limit.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The new vault's display name."
+          },
+          "slug": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Optional slug (lowercase letters, digits, dashes). Derived from `name` when omitted; must not already be used by one of your vaults."
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "ai.brownmatter/brainz",
+    "version": "0.1.0",
+    "remoteUrl": "https://brainz.brownmatter.ai/mcp",
+    "fetchedAt": "2026-11-22T10:21:23.861Z",
+    "toolsSha256": "ba24e161ff7ed3729ea1efe7ba9d3b4d98a5d910f8df05def3000b95a492303c"
+  }
+}

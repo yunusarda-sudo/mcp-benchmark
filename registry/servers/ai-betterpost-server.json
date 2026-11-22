@@ -1,0 +1,642 @@
+{
+  "$schema": "../schema.json",
+  "name": "ai.betterpost/server",
+  "title": "BetterPost",
+  "category": "Social, Media & Knowledge",
+  "description": "Finds timely sources across news, social, and the web and writes posts worth publishing.",
+  "repository": "https://github.com/betterpost/betterpost-plugin",
+  "tools": [
+    {
+      "name": "betterpost_create_project",
+      "description": "Create a content project. Slow, one-shot: infers config (criteria, industry, tone), discovers sources, and gathers/ranks an initial set of timely stories. Best called after the inferred audience, description, and tone have been confirmed with the user, since the config shapes everything downstream.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "audience": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": {
+            "type": "string"
+          },
+          "tone": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "audience"
+        ]
+      }
+    },
+    {
+      "name": "betterpost_generate_content",
+      "description": "Generate a new piece of content for a project from its timely, relevant stories. Fast in steady state. Charges credits on success only. If you pass a `topic` the project has no stories about, this returns a `topic_unavailable` error (no charge) carrying an `inScope` flag and next steps — it never silently writes an off-topic piece.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "blog",
+              "newsletter",
+              "linkedin",
+              "x",
+              "bluesky"
+            ],
+            "description": "Output format. 'x' and 'bluesky' are generated as a single post or, more often, a short numbered thread of connected posts (multiple tweets) when there is enough to say — this is the default for those channels. 'blog', 'newsletter', and 'linkedin' are one piece."
+          },
+          "topic": {
+            "description": "Steer the piece to a specific topic. Generation only writes from stories actually about it. If none exist yet, it returns topic_unavailable (no charge) with an inScope flag: inScope:true means the topic fits the project and betterpost_expand_coverage can gather it, while inScope:false means it is outside the project scope so expanding to it requires the user's confirmation.",
+            "type": "string"
+          },
+          "reuse": {
+            "description": "Reuse the most recent topic.",
+            "type": "boolean"
+          },
+          "tieIn": {
+            "description": "A product/service to weave in.",
+            "type": "string"
+          },
+          "wordLimit": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "projectId",
+          "type"
+        ]
+      }
+    },
+    {
+      "name": "betterpost_derive_content",
+      "description": "Transform an existing piece into another format (e.g. newsletter → tweet). No fetching; reuses the source stories and topic.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "fromContentId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "blog",
+              "newsletter",
+              "linkedin",
+              "x",
+              "bluesky"
+            ]
+          },
+          "tieIn": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "fromContentId",
+          "type"
+        ]
+      }
+    },
+    {
+      "name": "betterpost_list_content",
+      "description": "List a project's content (summaries + shareable `publicUrl` links).",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          }
+        },
+        "required": [
+          "projectId"
+        ]
+      }
+    },
+    {
+      "name": "betterpost_get_content",
+      "description": "Fetch one piece of content in full.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "contentId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          }
+        },
+        "required": [
+          "contentId"
+        ]
+      }
+    },
+    {
+      "name": "betterpost_delete_content",
+      "description": "Delete a piece of content and its hosted images.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "contentId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          }
+        },
+        "required": [
+          "contentId"
+        ]
+      }
+    },
+    {
+      "name": "betterpost_list_projects",
+      "description": "Returns your projects, each with its relevance `criteria` (with ids) that define what counts as on-topic.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "betterpost_get_project",
+      "description": "Returns one project with its relevance `criteria` (each with an id, so a criterion can be targeted for removal via betterpost_update_project).",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          }
+        },
+        "required": [
+          "projectId"
+        ]
+      }
+    },
+    {
+      "name": "betterpost_update_project",
+      "description": "Updates a project's title, audience, description, tone, freshness window, timezone, or relevance criteria, and returns the updated project with its criteria. Changing title/audience/description re-derives the relevance criteria (replace-all), which broadens or narrows what counts as on-topic. To edit criteria incrementally instead, pass `patch.addCriteria` (texts to append) and/or `patch.removeCriteria` (criterion ids from get_project/list_projects). Dates default to US Eastern unless a `timezone` (an IANA name like \"America/New_York\") is set.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "patch": {
+            "description": "Partial update: EVERY field is optional — include only the fields you want to change and omit the rest (an omitted field is left untouched; there are no required patch fields). Passing an empty object or omitting `patch` entirely is a no-op. Fields: title, audience, description, tone, maxStoryAgeDays, additionalInstructions, timezone, addCriteria, removeCriteria.",
+            "type": "object",
+            "properties": {
+              "title": {
+                "type": "string"
+              },
+              "audience": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "tone": {
+                "type": "string"
+              },
+              "maxStoryAgeDays": {
+                "description": "Freshness window in days (default 14, allowed 1–30; 7–14 is optimal). Generation only uses stories newer than this. Widen it toward 30 for slow or evergreen niches where timely stories are sparse and generate_content returns no_stories; narrow it for fast-moving topics.",
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 30
+              },
+              "additionalInstructions": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "timezone": {
+                "type": "string"
+              },
+              "addCriteria": {
+                "description": "Relevance-criterion texts to APPEND (incremental, never replace-all).",
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "removeCriteria": {
+                "description": "Criterion ids (from get_project/list_projects) to remove.",
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                }
+              }
+            }
+          }
+        },
+        "required": [
+          "projectId"
+        ]
+      }
+    },
+    {
+      "name": "betterpost_delete_project",
+      "description": "Permanently deletes a project and everything in it — its sources, stories, and content. Cannot be undone.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          }
+        },
+        "required": [
+          "projectId"
+        ]
+      }
+    },
+    {
+      "name": "betterpost_list_sources",
+      "description": "Returns one slimmed page of a project's sources plus project-wide `total` and `counts` (ok/failing/disabled/pending, and byType). Page with `limit` (default 50) and `offset`, following the returned `nextOffset` until it is null.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "limit": {
+            "description": "Max sources to return (default 50).",
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 200
+          },
+          "offset": {
+            "description": "Number of sources to skip; use the returned nextOffset to page.",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "projectId"
+        ]
+      }
+    },
+    {
+      "name": "betterpost_add_source",
+      "description": "Adds a source to a project and fetches it immediately (bounded by a few seconds), returning `storiesAdded` so the next generate_content can use it; if it is still fetching it returns `fetched:false` with a note. Doubles as manual source import: paste any URL (RSS/Atom feed, article, or a page, profile, or post on a supported platform) and leave `type` as autodetect, or create a recurring keyword search by setting `value` to the search terms and `type` to a search kind (see `type`).",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "value": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "type": {
+            "default": "autodetect",
+            "description": "Source kind (one of the enum values; defaults to 'autodetect'). 'autodetect' infers the kind from `value` (a URL): RSS/Atom feeds, web pages, news, Reddit subreddits, X and Bluesky posts/users, LinkedIn company pages, Instagram profiles, YouTube videos, and Hacker News items — leave it as 'autodetect' for any URL. For a recurring keyword search that re-runs over time, set `value` to the search terms and pick a search kind: 'web-search', 'reddit-search', 'youtube-search', 'x' (X/Twitter search), or 'bluesky' (Bluesky search).",
+            "type": "string",
+            "enum": [
+              "autodetect",
+              "web-search",
+              "reddit-search",
+              "youtube-search",
+              "x",
+              "bluesky"
+            ]
+          }
+        },
+        "required": [
+          "projectId",
+          "value"
+        ]
+      }
+    },
+    {
+      "name": "betterpost_remove_source",
+      "description": "Removes a source from a project. Its already-gathered stories stay; the source is no longer fetched.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "sourceId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          }
+        },
+        "required": [
+          "sourceId"
+        ]
+      }
+    },
+    {
+      "name": "betterpost_list_stories",
+      "description": "Returns a project's gathered stories, each with `title`, `url`, `summary`, `relevancy`, `publicationDate`, and `isManual`/`isHidden` flags. Pass includeHidden to include hidden ones.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "includeHidden": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "projectId"
+        ]
+      }
+    },
+    {
+      "name": "betterpost_add_story",
+      "description": "Manually imports a story you read about from its URL (pinned relevance, flagged is_manual) so generation can draw on it.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "title": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId",
+          "url"
+        ]
+      }
+    },
+    {
+      "name": "betterpost_hide_story",
+      "description": "Hides a story so generation ignores it. Reversible with unhide_story.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "storyId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          }
+        },
+        "required": [
+          "storyId"
+        ]
+      }
+    },
+    {
+      "name": "betterpost_unhide_story",
+      "description": "Unhides a previously hidden story so generation can use it again.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "storyId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          }
+        },
+        "required": [
+          "storyId"
+        ]
+      }
+    },
+    {
+      "name": "betterpost_suggest_topics",
+      "description": "Clusters a project's current stories into a few candidate angles — each with a label, how many stories back it, and example headlines — and warms the project (gathers and ranks fresh stories) in the process. Returns topics you can offer the user before generate_content.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "blog",
+              "newsletter",
+              "linkedin",
+              "x",
+              "bluesky"
+            ]
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 5
+          }
+        },
+        "required": [
+          "projectId"
+        ]
+      }
+    },
+    {
+      "name": "betterpost_get_usage",
+      "description": "Your credit balance, freeze state, and recent spend.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "betterpost_get_settings",
+      "description": "Returns a project's per-content-type settings (wordLimit and additionalInstructions for each channel).",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          }
+        },
+        "required": [
+          "projectId"
+        ]
+      }
+    },
+    {
+      "name": "betterpost_update_settings",
+      "description": "Patches one content type's wordLimit and/or additionalInstructions (free-form writing guidance for that type; pass an empty string to clear it). Project-wide preferences (title/audience/tone, project-wide additionalInstructions) live on betterpost_update_project.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "blog",
+              "newsletter",
+              "linkedin",
+              "x",
+              "bluesky"
+            ]
+          },
+          "wordLimit": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "additionalInstructions": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "projectId",
+          "type"
+        ]
+      }
+    },
+    {
+      "name": "betterpost_expand_coverage",
+      "description": "Broadens a project's coverage: expands the relevance criteria (when needed), finds more sources across news, the web, and the relevant social platforms, and fetches them inline. Applies on a `topic_unavailable`, `no_stories`, or low-coverage signal. May return `warming: true` with `retryAfterMs` (~60s), meaning the newly gathered stories are still landing. An out-of-scope `focus` requires `confirmedByUser: true`; without it, it returns a `confirmation_required` error. No credits are charged.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "focus": {
+            "description": "The topic to get more on (e.g. \"League of Legends\"). Omit to broaden the whole project.",
+            "type": "string"
+          },
+          "addAsCriteria": {
+            "description": "Also append an in-scope `focus` as a standing relevance criterion (out-of-scope, confirmed foci are added automatically).",
+            "type": "boolean"
+          },
+          "confirmedByUser": {
+            "description": "Set true once the user has agreed to widen the project to an out-of-scope `focus`.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "projectId"
+        ]
+      }
+    },
+    {
+      "name": "betterpost_humanize",
+      "description": "Rewrite existing text into BetterPost's readable, human voice. Preserves the meaning, facts, links, and format; returns the rewritten text plus short notes on what changed. Pass `projectId` to write in that project's tone and instructions, `type` to apply a channel's style, or `tone` to set the voice directly.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 30000,
+            "description": "The text to humanize (max 30,000 characters)."
+          },
+          "projectId": {
+            "description": "Use this project's tone and writing instructions.",
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "type": {
+            "description": "Apply this channel's style rules to the rewrite.",
+            "type": "string",
+            "enum": [
+              "blog",
+              "newsletter",
+              "linkedin",
+              "x",
+              "bluesky"
+            ]
+          },
+          "tone": {
+            "description": "Tone override; wins over the project tone.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ]
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "ai.betterpost/server",
+    "version": "2.0.0",
+    "remoteUrl": "https://betterpost.ai/mcp",
+    "fetchedAt": "2026-11-22T10:21:23.861Z",
+    "toolsSha256": "c70822b6d123db4ab5ae8eda0b91ee58153e406d97e5f2ac5c4fd475e83c0b09"
+  }
+}
