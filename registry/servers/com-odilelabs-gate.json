@@ -1,0 +1,926 @@
+{
+  "$schema": "../schema.json",
+  "name": "com.odilelabs/gate",
+  "title": "Odile Gate",
+  "category": "Developer Tools & VCS",
+  "description": "Create a free Gate project. Give each app its own API key and choose which calls it can make.",
+  "tools": [
+    {
+      "name": "gate_create_project",
+      "description": "Create a Free project in front of an existing HTTPS API. No signup or payment required. For a credential-free demo use https://sandbox.gate.odilelabs.com with GET /customers/:cid/tickets/:id (customer A holds tickets 1-3, B holds 4-5: try GET /customers/A/tickets/1). Returns project_id, admin_key (shown once) and the gateway base URL apps call instead of the API. A real API and its credentials need owner authorization.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "upstream"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "A name for the project, e.g. \"Shop API\""
+          },
+          "upstream": {
+            "type": "string",
+            "description": "The API base URL, https only, e.g. https://api.example.com/v1"
+          },
+          "header_name": {
+            "type": "string",
+            "description": "Optional: the secret header your API expects, e.g. Authorization or apikey"
+          },
+          "header_value": {
+            "type": "string",
+            "description": "Optional: its value. Stored encrypted; apps never see it."
+          }
+        }
+      }
+    },
+    {
+      "name": "gate_update_project",
+      "description": "Update the project rejection-alert threshold or idle-app window using its existing settings API. Omitted settings and the webhook destination stay unchanged. threshold counts rejections per app in ten minutes (5–1000); idle_days flags apps after 1–90 idle days, never revokes them. Requires the owner key or an admin member key. Returns current alert settings; does not rename or delete the project.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "project_id",
+          "admin_key"
+        ],
+        "anyOf": [
+          {
+            "required": [
+              "threshold"
+            ]
+          },
+          {
+            "required": [
+              "idle_days"
+            ]
+          }
+        ],
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "description": "The project id from gate_create_project, e.g. p1a2b3..."
+          },
+          "admin_key": {
+            "type": "string",
+            "description": "The project owner key (ga_...) or an admin member key (gm_...). Never print it."
+          },
+          "threshold": {
+            "type": "integer",
+            "minimum": 5,
+            "maximum": 1000,
+            "description": "Rejections per app within ten minutes that trigger an alert."
+          },
+          "idle_days": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 90,
+            "description": "Idle days before flagging an app; never revokes it."
+          }
+        }
+      }
+    },
+    {
+      "name": "gate_create_app",
+      "description": "Give one app its own key and the calls it may make. Routes are rules like \"GET /orders/:id\", \"POST /orders\", \"GET /users/{user}/orders\" (per-user), or example calls like \"GET /orders/42\", which become rules allowing any id. Returns key (shown once), app.id and normalized rules. Send key as Authorization: Bearer <key> to the project gateway; never send the admin key to the workload.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "project_id",
+          "admin_key",
+          "name"
+        ],
+        "anyOf": [
+          {
+            "required": [
+              "routes"
+            ]
+          },
+          {
+            "required": [
+              "template"
+            ]
+          }
+        ],
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "description": "The project id from gate_create_project, e.g. p1a2b3..."
+          },
+          "admin_key": {
+            "type": "string",
+            "description": "The project admin key (ga_...). Read it from the .env; never print it."
+          },
+          "name": {
+            "type": "string",
+            "description": "The app name, e.g. \"storefront\" or \"nightly sync\""
+          },
+          "template": {
+            "type": "string",
+            "enum": [
+              "stripe",
+              "github",
+              "shopify",
+              "hubspot",
+              "supabase",
+              "slack",
+              "recall",
+              "quickbooks",
+              "xero"
+            ],
+            "description": "Ready-made API policy: reads allowed, risky writes held, destructive calls refused. Explicit routes replace the entire template policy. Free and Pro; configure the project upstream first. See /templates."
+          },
+          "routes": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 50,
+            "items": {
+              "type": "string"
+            },
+            "description": "Only the calls this app makes, one \"METHOD /path\" per item"
+          },
+          "per_minute": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 6000,
+            "description": "Calls per minute for this app (default 60)"
+          },
+          "expires_at": {
+            "type": "string",
+            "description": "Pro: optional future ISO time with timezone, at most 30 days from creation. Rotation preserves this expiry.",
+            "format": "date-time"
+          },
+          "max_calls": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100000,
+            "description": "Pro: optional lifetime call allowance for this app. Rotation preserves its count."
+          },
+          "models": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 50,
+            "items": {
+              "type": "string"
+            },
+            "description": "For a model API: the only models this app may ask for, exact names or a prefix ending in * (e.g. [\"gpt-4.1-mini\", \"claude-haiku-*\"]). Omit for no model limit."
+          },
+          "runs": {
+            "type": "string",
+            "enum": [
+              "off",
+              "writes",
+              "all"
+            ],
+            "description": "Whether calls need a Gate Actions run (x-odile-run). Default writes: the app's writes need a run. Use off for a model or MCP gateway, where every call is a POST, or for direct writes; template apps default to off (their writes are held for approval)."
+          }
+        }
+      }
+    },
+    {
+      "name": "gate_list_apps",
+      "description": "Read the project's apps, allowed calls, limits, state, idle flags and anomaly-guard settings. Use it to select an app id. Use gate_manage_app_key to rotate its key or revoke a retired app.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "project_id",
+          "admin_key"
+        ],
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "description": "The project id from gate_create_project, e.g. p1a2b3..."
+          },
+          "admin_key": {
+            "type": "string",
+            "description": "The project admin key (ga_...). Read it from the .env; never print it."
+          }
+        }
+      }
+    },
+    {
+      "name": "gate_manage_app_key",
+      "description": "Rotate one app key (new key shown once, old key stops immediately) or revoke the app permanently. Both operations keep other apps unchanged; revoke requires gate_create_app to restore access. Use gate_list_apps to find the app; use gate_configure_app to change its settings without replacing its key.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "operation"
+        ],
+        "properties": {
+          "operation": {
+            "type": "string",
+            "description": "Perform exactly one operation: rotate, revoke.",
+            "enum": [
+              "rotate",
+              "revoke"
+            ]
+          },
+          "project_id": {
+            "type": "string",
+            "description": "The project id from gate_create_project, e.g. p1a2b3..."
+          },
+          "admin_key": {
+            "type": "string",
+            "description": "The project admin key (ga_...). Read it from the .env; never print it."
+          },
+          "app": {
+            "type": "string",
+            "description": "The app id (app_...) from gate_list_apps"
+          }
+        },
+        "oneOf": [
+          {
+            "properties": {
+              "project_id": {
+                "type": "string",
+                "description": "The project id from gate_create_project, e.g. p1a2b3..."
+              },
+              "admin_key": {
+                "type": "string",
+                "description": "The project admin key (ga_...). Read it from the .env; never print it."
+              },
+              "app": {
+                "type": "string",
+                "description": "The app id (app_...) from gate_list_apps"
+              },
+              "operation": {
+                "type": "string",
+                "description": "Perform exactly one operation: rotate, revoke.",
+                "enum": [
+                  "rotate",
+                  "revoke"
+                ],
+                "const": "rotate"
+              }
+            },
+            "required": [
+              "project_id",
+              "admin_key",
+              "app"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "properties": {
+              "project_id": {
+                "type": "string",
+                "description": "The project id from gate_create_project, e.g. p1a2b3..."
+              },
+              "admin_key": {
+                "type": "string",
+                "description": "The project admin key (ga_...). Read it from the .env; never print it."
+              },
+              "app": {
+                "type": "string",
+                "description": "The app id (app_...) from gate_list_apps"
+              },
+              "operation": {
+                "type": "string",
+                "description": "Perform exactly one operation: rotate, revoke.",
+                "enum": [
+                  "rotate",
+                  "revoke"
+                ],
+                "const": "revoke"
+              }
+            },
+            "required": [
+              "project_id",
+              "admin_key",
+              "app"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "gate_configure_app",
+      "description": "Set models, mandatory runs, response fields, or add one confirmed literal route to an existing app. Choose exactly one operation; models:null removes the model limit, response allow:null disables filtering, and runs:off removes the run requirement. Use gate_check_setup to inspect settings; apply learned routes and rate limits on the oversight endpoint, /mcp/oversight.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "operation"
+        ],
+        "properties": {
+          "operation": {
+            "type": "string",
+            "description": "Perform exactly one operation: models, runs, response, add_route.",
+            "enum": [
+              "models",
+              "runs",
+              "response",
+              "add_route"
+            ]
+          },
+          "project_id": {
+            "type": "string",
+            "description": "The project id from gate_create_project, e.g. p1a2b3..."
+          },
+          "admin_key": {
+            "type": "string",
+            "description": "The project admin key (ga_...). Read it from the .env; never print it."
+          },
+          "app": {
+            "type": "string",
+            "description": "The active app id from gate_list_apps.",
+            "pattern": "^app_[0-9a-f]{16}$"
+          },
+          "models": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "maxItems": 50,
+            "items": {
+              "type": "string"
+            },
+            "description": "Exact names or prefixes ending in *; null for no limit"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "off",
+              "writes",
+              "all"
+            ],
+            "description": "Run requirement: off, writes, or all."
+          },
+          "allow": {
+            "anyOf": [
+              {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 32,
+                "items": {
+                  "type": "string",
+                  "maxLength": 256
+                }
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Allowed JSON Pointer paths (1–32), or null to disable response filtering."
+          },
+          "rule": {
+            "type": "string",
+            "description": "One exact rule, e.g. GET /health; no *, :param, {user} or query."
+          },
+          "confirm": {
+            "type": "boolean",
+            "enum": [
+              true
+            ],
+            "description": "Explicit owner-authorized confirmation to add this exact route."
+          }
+        },
+        "oneOf": [
+          {
+            "properties": {
+              "project_id": {
+                "type": "string",
+                "description": "The project id from gate_create_project, e.g. p1a2b3..."
+              },
+              "admin_key": {
+                "type": "string",
+                "description": "The project admin key (ga_...). Read it from the .env; never print it."
+              },
+              "app": {
+                "type": "string",
+                "description": "The active app id from gate_list_apps.",
+                "pattern": "^app_[0-9a-f]{16}$"
+              },
+              "models": {
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "maxItems": 50,
+                "items": {
+                  "type": "string"
+                },
+                "description": "Exact names or prefixes ending in *; null for no limit"
+              },
+              "operation": {
+                "type": "string",
+                "description": "Perform exactly one operation: models, runs, response, add_route.",
+                "enum": [
+                  "models",
+                  "runs",
+                  "response",
+                  "add_route"
+                ],
+                "const": "models"
+              }
+            },
+            "required": [
+              "project_id",
+              "admin_key",
+              "app",
+              "models"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "properties": {
+              "project_id": {
+                "type": "string",
+                "description": "The project id from gate_create_project, e.g. p1a2b3..."
+              },
+              "admin_key": {
+                "type": "string",
+                "description": "The project admin key (ga_...). Read it from the .env; never print it."
+              },
+              "app": {
+                "type": "string",
+                "description": "The active app id from gate_list_apps.",
+                "pattern": "^app_[0-9a-f]{16}$"
+              },
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "off",
+                  "writes",
+                  "all"
+                ],
+                "description": "Run requirement: off, writes, or all."
+              },
+              "operation": {
+                "type": "string",
+                "description": "Perform exactly one operation: models, runs, response, add_route.",
+                "enum": [
+                  "models",
+                  "runs",
+                  "response",
+                  "add_route"
+                ],
+                "const": "runs"
+              }
+            },
+            "required": [
+              "project_id",
+              "admin_key",
+              "app",
+              "mode"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "properties": {
+              "project_id": {
+                "type": "string",
+                "description": "The project id from gate_create_project, e.g. p1a2b3..."
+              },
+              "admin_key": {
+                "type": "string",
+                "description": "The project admin key (ga_...). Read it from the .env; never print it."
+              },
+              "app": {
+                "type": "string",
+                "description": "The active app id from gate_list_apps.",
+                "pattern": "^app_[0-9a-f]{16}$"
+              },
+              "allow": {
+                "anyOf": [
+                  {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 32,
+                    "items": {
+                      "type": "string",
+                      "maxLength": 256
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "Allowed JSON Pointer paths (1–32), or null to disable response filtering."
+              },
+              "operation": {
+                "type": "string",
+                "description": "Perform exactly one operation: models, runs, response, add_route.",
+                "enum": [
+                  "models",
+                  "runs",
+                  "response",
+                  "add_route"
+                ],
+                "const": "response"
+              }
+            },
+            "required": [
+              "project_id",
+              "admin_key",
+              "app",
+              "allow"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "properties": {
+              "project_id": {
+                "type": "string",
+                "description": "The project id from gate_create_project, e.g. p1a2b3..."
+              },
+              "admin_key": {
+                "type": "string",
+                "description": "The project admin key (ga_...). Read it from the .env; never print it."
+              },
+              "app": {
+                "type": "string",
+                "description": "The active app id from gate_list_apps.",
+                "pattern": "^app_[0-9a-f]{16}$"
+              },
+              "rule": {
+                "type": "string",
+                "description": "One exact rule, e.g. GET /health; no *, :param, {user} or query."
+              },
+              "confirm": {
+                "type": "boolean",
+                "enum": [
+                  true
+                ],
+                "description": "Explicit owner-authorized confirmation to add this exact route."
+              },
+              "operation": {
+                "type": "string",
+                "description": "Perform exactly one operation: models, runs, response, add_route.",
+                "enum": [
+                  "models",
+                  "runs",
+                  "response",
+                  "add_route"
+                ],
+                "const": "add_route"
+              }
+            },
+            "required": [
+              "project_id",
+              "admin_key",
+              "app",
+              "rule",
+              "confirm"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "gate_check_setup",
+      "description": "Read actual project protection settings and configuration gaps without changing them. Configuration analysis only: no upstream requests, runtime enforcement test or security certificate. Config-file validation and application are separate capabilities when enabled.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "project_id",
+          "admin_key"
+        ],
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "description": "The project id from gate_create_project, e.g. p1a2b3..."
+          },
+          "admin_key": {
+            "type": "string",
+            "description": "The project admin key (ga_...). Read it from the .env; never print it."
+          },
+          "app": {
+            "type": "string",
+            "description": "Optional: check one active app id (app_...) instead of all active apps"
+          }
+        }
+      }
+    },
+    {
+      "name": "gate_create_approver",
+      "description": "Approvers are people who decide held actions. Create a dedicated approver key (shown once) before granting approval actions; give it to that person, never to an agent. Only an active approver key can approve, reject or reopen actions in the dashboard.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "project_id",
+          "admin_key",
+          "name"
+        ],
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "description": "The project id from gate_create_project, e.g. p1a2b3..."
+          },
+          "admin_key": {
+            "type": "string",
+            "description": "The project admin key (ga_...). Read it from the .env; never print it."
+          },
+          "name": {
+            "type": "string",
+            "description": "Who approves, e.g. \"Dana (support lead)\""
+          }
+        }
+      }
+    },
+    {
+      "name": "gate_list_approvers",
+      "description": "Approvers are people who decide held actions. List active and revoked dedicated approvers with ids, names and creation times; never returns keys or hashes. Team members with the approver role are a separate list. Requires the project owner key or an active member key. Use gate_create_approver to issue a key, gate_revoke_approver to revoke one, or gate_manage_members to inspect team roles.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "project_id",
+          "admin_key"
+        ],
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "description": "The project id from gate_create_project, e.g. p1a2b3..."
+          },
+          "admin_key": {
+            "type": "string",
+            "description": "The project owner key (ga_...) or an active member key (gm_...). Never print it."
+          }
+        }
+      }
+    },
+    {
+      "name": "gate_revoke_approver",
+      "description": "Invalidate one dedicated approver key immediately; use gate_list_approvers to find its id. Requires the project owner key or an admin member key. A missing or already revoked id returns an error. To restore access issue a new key with gate_create_approver; to revoke a team member use gate_manage_members.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "project_id",
+          "admin_key",
+          "approver"
+        ],
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "description": "The project id from gate_create_project, e.g. p1a2b3..."
+          },
+          "admin_key": {
+            "type": "string",
+            "description": "The project owner key (ga_...) or an admin member key (gm_...). Never print it."
+          },
+          "approver": {
+            "type": "string",
+            "description": "The dedicated approver id from gate_list_approvers; not a member id or key.",
+            "pattern": "^[0-9a-f]{16}$"
+          }
+        }
+      }
+    },
+    {
+      "name": "gate_list_actions",
+      "description": "Which actions are waiting for a human decision? Read held actions (pending by default, or another requested state) and their exact calls; this tool cannot decide or resubmit them. This also expires overdue held actions in the project and clears their stored request paths and bodies. Approving or rejecting a held action is done by a person with an approver key in the dashboard, by design. No MCP tool can approve actions.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "project_id",
+          "admin_key"
+        ],
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "description": "The project id from gate_create_project, e.g. p1a2b3..."
+          },
+          "admin_key": {
+            "type": "string",
+            "description": "The project admin key (ga_...). Read it from the .env; never print it."
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "approved",
+              "rejected",
+              "executed",
+              "unknown",
+              "expired"
+            ],
+            "description": "Default: pending"
+          }
+        }
+      }
+    },
+    {
+      "name": "gate_manage_members",
+      "description": "Members are people with project administration access according to their role. Use the project owner key to invite, list or revoke them; viewer and approver roles have narrower access than admins. Invites expire after 72 hours and their links and accepted keys are shown once; listing returns no secrets. Revocation invalidates a key or pending invite and is safe to repeat. Gate sends no email. For dedicated approval keys use gate_create_approver, gate_list_approvers and gate_revoke_approver.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "operation"
+        ],
+        "properties": {
+          "operation": {
+            "type": "string",
+            "description": "Perform exactly one operation: invite, list, revoke.",
+            "enum": [
+              "invite",
+              "list",
+              "revoke"
+            ]
+          },
+          "project_id": {
+            "type": "string",
+            "description": "The project id from gate_create_project, e.g. p1a2b3..."
+          },
+          "admin_key": {
+            "type": "string",
+            "description": "The project admin key (ga_...). Read it from the .env; never print it."
+          },
+          "name": {
+            "type": "string",
+            "description": "The person's name",
+            "minLength": 1,
+            "maxLength": 60
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "viewer",
+              "approver",
+              "admin"
+            ],
+            "description": "Invited member role: viewer, approver, or admin."
+          },
+          "member": {
+            "type": "string",
+            "description": "The member id (mem_...) from gate_manage_members with operation=\"list\"",
+            "pattern": "^mem_[0-9a-f]{16}$"
+          }
+        },
+        "oneOf": [
+          {
+            "properties": {
+              "project_id": {
+                "type": "string",
+                "description": "The project id from gate_create_project, e.g. p1a2b3..."
+              },
+              "admin_key": {
+                "type": "string",
+                "description": "The project admin key (ga_...). Read it from the .env; never print it."
+              },
+              "name": {
+                "type": "string",
+                "description": "The person's name",
+                "minLength": 1,
+                "maxLength": 60
+              },
+              "role": {
+                "type": "string",
+                "enum": [
+                  "viewer",
+                  "approver",
+                  "admin"
+                ],
+                "description": "Invited member role: viewer, approver, or admin."
+              },
+              "operation": {
+                "type": "string",
+                "description": "Perform exactly one operation: invite, list, revoke.",
+                "enum": [
+                  "invite",
+                  "list",
+                  "revoke"
+                ],
+                "const": "invite"
+              }
+            },
+            "required": [
+              "project_id",
+              "admin_key",
+              "name",
+              "role"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "properties": {
+              "project_id": {
+                "type": "string",
+                "description": "The project id from gate_create_project, e.g. p1a2b3..."
+              },
+              "admin_key": {
+                "type": "string",
+                "description": "The project admin key (ga_...). Read it from the .env; never print it."
+              },
+              "operation": {
+                "type": "string",
+                "description": "Perform exactly one operation: invite, list, revoke.",
+                "enum": [
+                  "invite",
+                  "list",
+                  "revoke"
+                ],
+                "const": "list"
+              }
+            },
+            "required": [
+              "project_id",
+              "admin_key"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "properties": {
+              "project_id": {
+                "type": "string",
+                "description": "The project id from gate_create_project, e.g. p1a2b3..."
+              },
+              "admin_key": {
+                "type": "string",
+                "description": "The project admin key (ga_...). Read it from the .env; never print it."
+              },
+              "member": {
+                "type": "string",
+                "description": "The member id (mem_...) from gate_manage_members with operation=\"list\"",
+                "pattern": "^mem_[0-9a-f]{16}$"
+              },
+              "operation": {
+                "type": "string",
+                "description": "Perform exactly one operation: invite, list, revoke.",
+                "enum": [
+                  "invite",
+                  "list",
+                  "revoke"
+                ],
+                "const": "revoke"
+              }
+            },
+            "required": [
+              "project_id",
+              "admin_key",
+              "member"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "gate_validate_config",
+      "description": "Validate and normalize an odile.yaml or JSON config without reading or changing a project. Returns errors, warnings and normalized config. Use gate_check_setup for actual project settings; use gate_sync_declarative to apply the validated file.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "config"
+        ],
+        "properties": {
+          "config": {
+            "type": "string",
+            "description": "The whole odile.yaml (or the same as JSON) as text"
+          }
+        }
+      }
+    },
+    {
+      "name": "gate_sync_declarative",
+      "description": "Apply an odile.yaml or JSON config to create missing resources and reconcile supported settings. dry_run previews steps; new keys are shown once. Never revokes or deletes; existing route or rate differences are drift, not applied. Use gate_validate_config to check a file or gate_check_setup to inspect project protection.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "config"
+        ],
+        "properties": {
+          "config": {
+            "type": "string",
+            "description": "The whole odile.yaml (or the same as JSON) as text"
+          },
+          "project_id": {
+            "type": "string",
+            "description": "Optional: an existing project to sync"
+          },
+          "admin_key": {
+            "type": "string",
+            "description": "Its admin key (ga_...), required with project_id. Read it from the .env; never print it."
+          },
+          "dry_run": {
+            "type": "boolean",
+            "description": "List the steps without changing anything"
+          }
+        }
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "com.odilelabs/gate",
+    "version": "1.8.2",
+    "remoteUrl": "https://gate.odilelabs.com/mcp/setup",
+    "publishedAt": "2026-11-20T23:55:48.41817Z",
+    "fetchedAt": "2026-11-22T12:49:37.224Z",
+    "toolsSha256": "5f299c16295e038abc670fedd3fa8dd83bef98b0410a96a25c4a7843767d7d7c"
+  }
+}

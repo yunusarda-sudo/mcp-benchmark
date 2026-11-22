@@ -1,0 +1,879 @@
+{
+  "$schema": "../schema.json",
+  "name": "io.github.snayyar00/webability",
+  "category": "Developer Tools & VCS",
+  "description": "Free WCAG 2.2/ADA/508 accessibility MCP: scan, AI fixes, verify, vision audit, localhost tunnel",
+  "repository": "https://github.com/snayyar00/webability-mcp",
+  "tools": [
+    {
+      "name": "scan_page",
+      "description": "Scan a web page for WCAG accessibility issues. Works on any URL — deployed sites, localhost, staging. Returns `issues` (violations the scanner stands behind; findings the engines cannot decide are settled by the AI judge — a violation with a fix, or a pass recorded in `judged[]` with its reason — and anything unsettled is dropped, never listed for review) and a `summary`. On React ≤18 / Vue dev builds each issue carries `source` ({file, line, column, component}) read from the live component tree. Every issue carries a structured `fix.op` (add-attribute | set-attribute | remove-attribute | add-element | remove-element | add-text-content | suggest) with `fix.attribute` / `fix.value` when known, and a `fixability` tier (mechanical = apply as given; contextual = op known, value needs judgment; visual = needs rendered output, propose only). NOTE: on this HOSTED server, localhost and private addresses are refused — it runs in our cloud and cannot reach your machine. Two ways to scan a local dev server: run the MCP locally (`npx -y @webability/mcp`, simplest — nothing leaves the machine), or open a tunnel (`webability-tunnel --port 3000`) and pass its URL as `url` together with the printed secret as `tunnel_secret`.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "URL to scan (e.g. https://webability.io or http://localhost:3000)"
+          },
+          "rootSelector": {
+            "type": "string",
+            "description": "CSS selector to limit scan scope (optional)"
+          },
+          "viewport": {
+            "type": "string",
+            "enum": [
+              "desktop",
+              "tablet",
+              "mobile"
+            ],
+            "description": "Viewport size (default: desktop)"
+          },
+          "widgetView": {
+            "type": "string",
+            "enum": [
+              "source",
+              "applied"
+            ],
+            "description": "Which DOM to measure when the page embeds the WebAbility widget. \"source\" (default) blocks our widget so the scan sees the site's own markup. \"applied\" waits for the widget to finish patching and measures the visitor's view — slower, and reported as `widget.visitorVerified: true` only when the widget confirmed it had finished."
+          },
+          "sourceRoot": {
+            "type": "string",
+            "description": "Local project root (local installs only). Issues without a framework `source` pointer get `sourceCandidates[]` — files whose contents match the selector's id/class/attribute tokens."
+          },
+          "storageState": {
+            "type": "string",
+            "description": "Local MCP only. Path to a Playwright storage-state JSON file (cookies + localStorage) for pages behind a login. Make one by logging in once: `npx @webability/cli flow <login-url> --save-storage-state auth.json`. The hosted server refuses this argument."
+          },
+          "level": {
+            "type": "string",
+            "enum": [
+              "A",
+              "AA",
+              "AAA"
+            ],
+            "description": "Highest WCAG conformance level to report. Default \"AA\" — Level AAA criteria are not reported. Pass \"AAA\" to include them (naming one AAA criterion in `wcag`, e.g. \"3.2.5\", also includes it)."
+          },
+          "minImpact": {
+            "type": "string",
+            "enum": [
+              "critical",
+              "serious",
+              "moderate",
+              "minor"
+            ],
+            "description": "Only findings at this severity or above (critical > serious > moderate > minor)"
+          },
+          "rules": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Only these rule ids (WebAbility type such as \"missing_alt\" or axe rule id such as \"image-alt\"). See get_rules."
+          },
+          "wcag": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Only these WCAG criteria. A prefix selects the whole guideline (\"1.4\") or principle (\"2\")."
+          },
+          "format": {
+            "type": "string",
+            "enum": [
+              "json",
+              "compact"
+            ],
+            "description": "\"compact\" prints one line per element with rule metadata once. \"json\" returns every field (html, fix values, source). Default: JSON when it fits inline (under ~24k chars), otherwise compact plus a JSON summary of every count. On the hosted server the default is compact."
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Start the issue list at this index of the severity-sorted entries. The response carries `nextOffset` when more remain; pass it to read the next page. Default 0. Each call scans the page again, so on a live page the list can shift between calls; treat the offset as a position, not a snapshot."
+          },
+          "tunnel_secret": {
+            "type": "string",
+            "description": "Secret printed by `webability-tunnel`. Required when `url` is a tunnel URL; the URL alone will be refused by the relay. Ignored otherwise."
+          },
+          "context": {
+            "type": "string",
+            "description": "Explain in 15-25 words, in third person, why this tool is called and how it supports the user's goal. For analytics only. You MUST describe only the abstract purpose of the tool call. NEVER include, repeat, paraphrase, or infer personal, sensitive, or identifying information from the user request or tool results, including names, emails, phone numbers, IPs, IDs, or credentials. You MUST generalize specific entities into roles such as \"a user\", \"the customer\", or \"an account\". Example: \"Retrieving a customer's recent orders to investigate a billing issue and help support determine the appropriate resolution.\""
+          },
+          "llm_model": {
+            "type": "string",
+            "description": "The exact model identifier you (the assistant) are running as, taken from your system prompt or environment (e.g. \"claude-opus-4-8\", \"gpt-5.2\"). Used for analytics only. If you do not know your model identifier with certainty, pass \"unknown\" — never guess."
+          }
+        },
+        "required": [
+          "url"
+        ]
+      }
+    },
+    {
+      "name": "verify_fix",
+      "description": "Re-scan a specific element after applying an accessibility fix and confirm the violation is gone. After you edit the code and serve it (deployed, staging, or http://localhost:3000), call this with the URL and the selector you fixed to get a machine-checked verified: true|false (DOM engines only — visual_audit findings are out of scope). Pass the WCAG criterion (e.g. \"1.1.1\") or axe rule id (e.g. \"color-contrast\") to check just that criterion; omit it to require the element be clean of ALL violations. A blocked page (bot-challenge / HTTP error) is reported as unverified, never a pass — verification fails closed. verified: true is only returned when the selector matched at least one element AND the criterion is one the DOM engines check; if the selector matches no element the result is verified: false with reason \"not-found\" (\"selector matched no elements\"), a criterion outside the coverage set returns reason \"not-verifiable\" (\"not checked by any WebAbility tool\"); a finding in scope that only the AI judge can settle, when the judge did not run or gave no verdict, also returns \"not-verifiable\", and shadow-DOM (>>>) / iframe selectors return \"unsupported-selector\" — pass the element's current selector, or re-run scan_page if your fix removed the element. Pair with scan_page → generate_ai_fix → verify_fix for a full find-fix-verify cycle. NOTE: on this HOSTED server, localhost and private addresses are refused — it runs in our cloud and cannot reach your machine. Two ways to scan a local dev server: run the MCP locally (`npx -y @webability/mcp`, simplest — nothing leaves the machine), or open a tunnel (`webability-tunnel --port 3000`) and pass its URL as `url` together with the printed secret as `tunnel_secret`.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "URL now serving the fix (deployed, staging, or http://localhost:3000). Also accepted as `page` or `pageUrl`."
+          },
+          "selector": {
+            "type": "string",
+            "description": "CSS selector of the element you fixed — use the `selector` from the original scan_page issue"
+          },
+          "wcag": {
+            "type": "string",
+            "description": "Optional: WCAG criterion (e.g. \"1.1.1\", \"1.4.3\") or axe rule id (e.g. \"color-contrast\") to verify specifically. Omit to require the element be free of ALL violations."
+          },
+          "viewport": {
+            "type": "string",
+            "enum": [
+              "desktop",
+              "tablet",
+              "mobile"
+            ],
+            "description": "Viewport size (default: desktop). Use the same viewport the issue was found at."
+          },
+          "tunnel_secret": {
+            "type": "string",
+            "description": "Secret printed by `webability-tunnel`. Required when `url` is a tunnel URL; the URL alone will be refused by the relay. Ignored otherwise."
+          },
+          "context": {
+            "type": "string",
+            "description": "Explain in 15-25 words, in third person, why this tool is called and how it supports the user's goal. For analytics only. You MUST describe only the abstract purpose of the tool call. NEVER include, repeat, paraphrase, or infer personal, sensitive, or identifying information from the user request or tool results, including names, emails, phone numbers, IPs, IDs, or credentials. You MUST generalize specific entities into roles such as \"a user\", \"the customer\", or \"an account\". Example: \"Retrieving a customer's recent orders to investigate a billing issue and help support determine the appropriate resolution.\""
+          },
+          "llm_model": {
+            "type": "string",
+            "description": "The exact model identifier you (the assistant) are running as, taken from your system prompt or environment (e.g. \"claude-opus-4-8\", \"gpt-5.2\"). Used for analytics only. If you do not know your model identifier with certainty, pass \"unknown\" — never guess."
+          }
+        },
+        "required": [
+          "url",
+          "selector"
+        ]
+      }
+    },
+    {
+      "name": "diff_scan",
+      "description": "Compare two scans of the same page and report what changed: `fixed[]` (in the baseline, gone now), `new[]` (regressions — not in the baseline, present now), `remaining[]` (still there). Page-level complement to verify_fix (one element). Baseline is a scan_history id (`baselineId`, local installs) or a live scan of `baselineUrl`; current is `url` (scanned live now) or another history id (`currentId`). Live scans run a second time when they differ, and a difference that does not hold goes to `unstable[]`, so a changed page can take twice as long. Findings are matched by issue id (rule + element), so a changed class/id on a fixed element reads as fixed AND new — check `new[]` before calling it a regression. Typical loop: scan_page → edit → diff_scan(baselineId=<that scan id>, url=<same url>) → confirm new[] is empty. NOTE: on this HOSTED server, localhost and private addresses are refused — it runs in our cloud and cannot reach your machine. Two ways to scan a local dev server: run the MCP locally (`npx -y @webability/mcp`, simplest — nothing leaves the machine), or open a tunnel (`webability-tunnel --port 3000`) and pass its URL as `url` together with the printed secret as `tunnel_secret`.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "URL to scan now as the CURRENT side (deployed, staging, or http://localhost:3000). Omit when passing currentId."
+          },
+          "baselineId": {
+            "type": "string",
+            "description": "scan_history id of the BASELINE scan (local installs only)"
+          },
+          "baselineUrl": {
+            "type": "string",
+            "description": "Scan this URL live as the baseline (e.g. production) — use when there is no stored baseline"
+          },
+          "currentId": {
+            "type": "string",
+            "description": "scan_history id to use as the CURRENT side instead of scanning `url`"
+          },
+          "rootSelector": {
+            "type": "string",
+            "description": "CSS selector to limit live scans to (optional)"
+          },
+          "viewport": {
+            "type": "string",
+            "enum": [
+              "desktop",
+              "tablet",
+              "mobile"
+            ],
+            "description": "Viewport for live scans (default: desktop). Use the same viewport the baseline used."
+          },
+          "widgetView": {
+            "type": "string",
+            "enum": [
+              "source",
+              "applied"
+            ],
+            "description": "Which DOM both live scans measure when the page embeds the WebAbility widget. \"source\" (default) blocks our widget; \"applied\" measures the visitor's patched view. Both sides must measure the same DOM — a source baseline against an applied current reports our widget's own patches as fixed/new, and the reply says so when the two sides disagree."
+          },
+          "level": {
+            "type": "string",
+            "enum": [
+              "A",
+              "AA",
+              "AAA"
+            ],
+            "description": "Highest WCAG conformance level to report. Default \"AA\" — Level AAA criteria are not reported. Pass \"AAA\" to include them (naming one AAA criterion in `wcag`, e.g. \"3.2.5\", also includes it)."
+          },
+          "minImpact": {
+            "type": "string",
+            "enum": [
+              "critical",
+              "serious",
+              "moderate",
+              "minor"
+            ],
+            "description": "Only findings at this severity or above (critical > serious > moderate > minor)"
+          },
+          "rules": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Only these rule ids (WebAbility type such as \"missing_alt\" or axe rule id such as \"image-alt\"). See get_rules."
+          },
+          "wcag": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Only these WCAG criteria. A prefix selects the whole guideline (\"1.4\") or principle (\"2\")."
+          },
+          "format": {
+            "type": "string",
+            "enum": [
+              "json",
+              "compact"
+            ],
+            "description": "\"compact\" prints one line per element with rule metadata once. \"json\" returns every field (html, fix values, source). Default: JSON when it fits inline (under ~24k chars), otherwise compact plus a JSON summary of every count. On the hosted server the default is compact."
+          },
+          "tunnel_secret": {
+            "type": "string",
+            "description": "Secret printed by `webability-tunnel`. Required when `url` is a tunnel URL; the URL alone will be refused by the relay. Ignored otherwise."
+          },
+          "context": {
+            "type": "string",
+            "description": "Explain in 15-25 words, in third person, why this tool is called and how it supports the user's goal. For analytics only. You MUST describe only the abstract purpose of the tool call. NEVER include, repeat, paraphrase, or infer personal, sensitive, or identifying information from the user request or tool results, including names, emails, phone numbers, IPs, IDs, or credentials. You MUST generalize specific entities into roles such as \"a user\", \"the customer\", or \"an account\". Example: \"Retrieving a customer's recent orders to investigate a billing issue and help support determine the appropriate resolution.\""
+          },
+          "llm_model": {
+            "type": "string",
+            "description": "The exact model identifier you (the assistant) are running as, taken from your system prompt or environment (e.g. \"claude-opus-4-8\", \"gpt-5.2\"). Used for analytics only. If you do not know your model identifier with certainty, pass \"unknown\" — never guess."
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "start_audit",
+      "description": "Kick off a FULL accessibility audit deliverable for a URL — a persistent, timestamped artifact, not an inline scan. Runs the server-side pipeline (axe + advanced checks + mobile viewports + annotated screenshots + optional agent spot-check) and produces a downloadable report and a formatted Excel workbook (Cover / Status / Barriers / ADA context sheets) stored durably. Returns immediately with an audit `id`; poll `get_audit` for progress and, when complete, download URLs. structuredContent carries `{id, status, pollAfterSeconds, next, expiresAt}`; `expiresAt` is null until the API reports a retention time (download URLs last about 1 hour), and an unknown or expired id returns an `audit_not_found` error. Use this when someone needs a durable artifact to attach as evidence of testing effort for a compliance officer or legal response — for iterating on code, use scan_page + verify_fix instead. Needs a free WebAbility account (sign in by connecting https://mcp.webability.io/mcp/auth, or run `webability login`). Set includeAgent:true to add the slower agentic manual-audit pass. To audit a local dev server, open a tunnel (`webability-tunnel --port 3000`) and pass its URL as `url` with the printed secret as `tunnel_secret`; keep the tunnel open until get_audit reports complete (about 5 minutes) — the pipeline loads the page several times.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "URL to audit (a public/staging URL the server can reach, or a webability-tunnel URL — not localhost)"
+          },
+          "includeAgent": {
+            "type": "boolean",
+            "description": "Also run the agentic manual-audit pass (keyboard/focus/modal exploration). Slower. Default false."
+          },
+          "tunnel_secret": {
+            "type": "string",
+            "description": "Secret printed by `webability-tunnel`. Required when `url` is a tunnel URL; the URL alone will be refused by the relay. Ignored otherwise."
+          },
+          "context": {
+            "type": "string",
+            "description": "Explain in 15-25 words, in third person, why this tool is called and how it supports the user's goal. For analytics only. You MUST describe only the abstract purpose of the tool call. NEVER include, repeat, paraphrase, or infer personal, sensitive, or identifying information from the user request or tool results, including names, emails, phone numbers, IPs, IDs, or credentials. You MUST generalize specific entities into roles such as \"a user\", \"the customer\", or \"an account\". Example: \"Retrieving a customer's recent orders to investigate a billing issue and help support determine the appropriate resolution.\""
+          },
+          "llm_model": {
+            "type": "string",
+            "description": "The exact model identifier you (the assistant) are running as, taken from your system prompt or environment (e.g. \"claude-opus-4-8\", \"gpt-5.2\"). Used for analytics only. If you do not know your model identifier with certainty, pass \"unknown\" — never guess."
+          }
+        },
+        "required": [
+          "url"
+        ]
+      }
+    },
+    {
+      "name": "add_site",
+      "description": "Add a website to the signed-in WebAbility account. The site gets the full widget for its first 30 days and a first scan. Returns the site id and plan tier. Next: put the get_install_snippet tag on the site, and use create_upgrade_link to get a payment link for the WebAbility Pro plan. Needs a free WebAbility account (an AI agent can sign itself up with \"Sign in with AgentID\").",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "The site to add, for example https://shop.example.com. One domain per site."
+          },
+          "context": {
+            "type": "string",
+            "description": "Explain in 15-25 words, in third person, why this tool is called and how it supports the user's goal. For analytics only. You MUST describe only the abstract purpose of the tool call. NEVER include, repeat, paraphrase, or infer personal, sensitive, or identifying information from the user request or tool results, including names, emails, phone numbers, IPs, IDs, or credentials. You MUST generalize specific entities into roles such as \"a user\", \"the customer\", or \"an account\". Example: \"Retrieving a customer's recent orders to investigate a billing issue and help support determine the appropriate resolution.\""
+          },
+          "llm_model": {
+            "type": "string",
+            "description": "The exact model identifier you (the assistant) are running as, taken from your system prompt or environment (e.g. \"claude-opus-4-8\", \"gpt-5.2\"). Used for analytics only. If you do not know your model identifier with certainty, pass \"unknown\" — never guess."
+          }
+        },
+        "required": [
+          "url"
+        ]
+      }
+    },
+    {
+      "name": "list_sites",
+      "description": "List the sites on the signed-in WebAbility account with each site id, plan tier and the date the current plan ends. Use it to check that a payment activated WebAbility Pro on a site. Needs a free WebAbility account.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "context": {
+            "type": "string",
+            "description": "Explain in 15-25 words, in third person, why this tool is called and how it supports the user's goal. For analytics only. You MUST describe only the abstract purpose of the tool call. NEVER include, repeat, paraphrase, or infer personal, sensitive, or identifying information from the user request or tool results, including names, emails, phone numbers, IPs, IDs, or credentials. You MUST generalize specific entities into roles such as \"a user\", \"the customer\", or \"an account\". Example: \"Retrieving a customer's recent orders to investigate a billing issue and help support determine the appropriate resolution.\""
+          },
+          "llm_model": {
+            "type": "string",
+            "description": "The exact model identifier you (the assistant) are running as, taken from your system prompt or environment (e.g. \"claude-opus-4-8\", \"gpt-5.2\"). Used for analytics only. If you do not know your model identifier with certainty, pass \"unknown\" — never guess."
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "get_install_snippet",
+      "description": "Get the one-line script tag that installs the WebAbility accessibility widget. Put it in the <head> or before </body> of every page of a site added with add_site. The widget finds the site by its domain, so the same tag works on every site. No account needed.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "context": {
+            "type": "string",
+            "description": "Explain in 15-25 words, in third person, why this tool is called and how it supports the user's goal. For analytics only. You MUST describe only the abstract purpose of the tool call. NEVER include, repeat, paraphrase, or infer personal, sensitive, or identifying information from the user request or tool results, including names, emails, phone numbers, IPs, IDs, or credentials. You MUST generalize specific entities into roles such as \"a user\", \"the customer\", or \"an account\". Example: \"Retrieving a customer's recent orders to investigate a billing issue and help support determine the appropriate resolution.\""
+          },
+          "llm_model": {
+            "type": "string",
+            "description": "The exact model identifier you (the assistant) are running as, taken from your system prompt or environment (e.g. \"claude-opus-4-8\", \"gpt-5.2\"). Used for analytics only. If you do not know your model identifier with certainty, pass \"unknown\" — never guess."
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "create_upgrade_link",
+      "description": "Get a Stripe Checkout link that puts one site on the WebAbility Pro plan (the widget subscription). Give the link to the human who pays (your owner). When they pay, the plan activates on that site automatically; check with list_sites. You never handle card details. The site must be on the account (add_site first). Needs a free WebAbility account.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "domain": {
+            "type": "string",
+            "description": "The site to upgrade, as added with add_site (for example shop.example.com)"
+          },
+          "billing_interval": {
+            "type": "string",
+            "enum": [
+              "monthly",
+              "yearly"
+            ],
+            "description": "Billing period. Default monthly."
+          },
+          "context": {
+            "type": "string",
+            "description": "Explain in 15-25 words, in third person, why this tool is called and how it supports the user's goal. For analytics only. You MUST describe only the abstract purpose of the tool call. NEVER include, repeat, paraphrase, or infer personal, sensitive, or identifying information from the user request or tool results, including names, emails, phone numbers, IPs, IDs, or credentials. You MUST generalize specific entities into roles such as \"a user\", \"the customer\", or \"an account\". Example: \"Retrieving a customer's recent orders to investigate a billing issue and help support determine the appropriate resolution.\""
+          },
+          "llm_model": {
+            "type": "string",
+            "description": "The exact model identifier you (the assistant) are running as, taken from your system prompt or environment (e.g. \"claude-opus-4-8\", \"gpt-5.2\"). Used for analytics only. If you do not know your model identifier with certainty, pass \"unknown\" — never guess."
+          }
+        },
+        "required": [
+          "domain"
+        ]
+      }
+    },
+    {
+      "name": "get_audit",
+      "description": "Check an audit started with start_audit: returns overall status, per-step progress (scan → viewports → screenshots → agent → excel → publish), and — once complete — a severity summary plus short-lived download URLs for the report (JSON) and the Excel workbook. Poll every ~15s while status is pending/running. Only the account that started an audit can read it. Free with a WebAbility account.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "number",
+            "description": "The audit id returned by start_audit"
+          },
+          "context": {
+            "type": "string",
+            "description": "Explain in 15-25 words, in third person, why this tool is called and how it supports the user's goal. For analytics only. You MUST describe only the abstract purpose of the tool call. NEVER include, repeat, paraphrase, or infer personal, sensitive, or identifying information from the user request or tool results, including names, emails, phone numbers, IPs, IDs, or credentials. You MUST generalize specific entities into roles such as \"a user\", \"the customer\", or \"an account\". Example: \"Retrieving a customer's recent orders to investigate a billing issue and help support determine the appropriate resolution.\""
+          },
+          "llm_model": {
+            "type": "string",
+            "description": "The exact model identifier you (the assistant) are running as, taken from your system prompt or environment (e.g. \"claude-opus-4-8\", \"gpt-5.2\"). Used for analytics only. If you do not know your model identifier with certainty, pass \"unknown\" — never guess."
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    },
+    {
+      "name": "flow_scan",
+      "description": "Scan a multi-page user journey. Walks startUrl plus the `autoNavigate` URLs sequentially (deterministic — one page fully rendered and scanned before the next), then returns ONE consolidated report with issues deduplicated across pages, each carrying the same fix payload as scan_page. Every requested URL gets an explicit outcome in `pages[]` (scanned / nav_failed / scan_failed / redirected_duplicate / duplicate_request / skipped_cap / blocked — bot-challenge, not a clean page / auth_redirect — storageState was given but the page is a sign-in page, session likely expired) — a page is never silently dropped. It only visits URLs: it does not click, type or log in. For pages behind a login, pass `storageState` (local MCP only), a session file saved after logging in once. Without `autoNavigate` it scans only startUrl, exactly like scan_page. NOTE: on this HOSTED server, localhost and private addresses are refused — it runs in our cloud and cannot reach your machine. Two ways to scan a local dev server: run the MCP locally (`npx -y @webability/mcp`, simplest — nothing leaves the machine), or open a tunnel (`webability-tunnel --port 3000`) and pass its URL as `url` together with the printed secret as `tunnel_secret`.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "startUrl": {
+            "type": "string",
+            "description": "Starting URL of the journey"
+          },
+          "maxPages": {
+            "type": "number",
+            "description": "Max pages to scan (default 10; at most 10 on the hosted server)"
+          },
+          "autoNavigate": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The URLs to walk after startUrl, in order (the MCP server is headless and cannot discover a journey interactively). Omit or pass [] to scan only startUrl as a single page."
+          },
+          "sourceRoot": {
+            "type": "string",
+            "description": "Local project root (local installs only) for `sourceCandidates[]` on issues without a framework `source` pointer."
+          },
+          "storageState": {
+            "type": "string",
+            "description": "Local MCP only. Path to a Playwright storage-state JSON file (cookies + localStorage) for pages behind a login. Make one by logging in once: `npx @webability/cli flow <login-url> --save-storage-state auth.json`. The hosted server refuses this argument."
+          },
+          "level": {
+            "type": "string",
+            "enum": [
+              "A",
+              "AA",
+              "AAA"
+            ],
+            "description": "Highest WCAG conformance level to report. Default \"AA\" — Level AAA criteria are not reported. Pass \"AAA\" to include them (naming one AAA criterion in `wcag`, e.g. \"3.2.5\", also includes it)."
+          },
+          "minImpact": {
+            "type": "string",
+            "enum": [
+              "critical",
+              "serious",
+              "moderate",
+              "minor"
+            ],
+            "description": "Only findings at this severity or above (critical > serious > moderate > minor)"
+          },
+          "rules": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Only these rule ids (WebAbility type such as \"missing_alt\" or axe rule id such as \"image-alt\"). See get_rules."
+          },
+          "wcag": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Only these WCAG criteria. A prefix selects the whole guideline (\"1.4\") or principle (\"2\")."
+          },
+          "format": {
+            "type": "string",
+            "enum": [
+              "json",
+              "compact"
+            ],
+            "description": "\"compact\" prints one line per element with rule metadata once. \"json\" returns every field (html, fix values, source). Default: JSON when it fits inline (under ~24k chars), otherwise compact plus a JSON summary of every count. On the hosted server the default is compact."
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Start the issue list at this index of the severity-sorted entries. The response carries `nextOffset` when more remain; pass it to read the next page. Default 0. Each call scans the page again, so on a live page the list can shift between calls; treat the offset as a position, not a snapshot."
+          },
+          "tunnel_secret": {
+            "type": "string",
+            "description": "Secret printed by `webability-tunnel`. Required when `url` is a tunnel URL; the URL alone will be refused by the relay. Ignored otherwise."
+          },
+          "context": {
+            "type": "string",
+            "description": "Explain in 15-25 words, in third person, why this tool is called and how it supports the user's goal. For analytics only. You MUST describe only the abstract purpose of the tool call. NEVER include, repeat, paraphrase, or infer personal, sensitive, or identifying information from the user request or tool results, including names, emails, phone numbers, IPs, IDs, or credentials. You MUST generalize specific entities into roles such as \"a user\", \"the customer\", or \"an account\". Example: \"Retrieving a customer's recent orders to investigate a billing issue and help support determine the appropriate resolution.\""
+          },
+          "llm_model": {
+            "type": "string",
+            "description": "The exact model identifier you (the assistant) are running as, taken from your system prompt or environment (e.g. \"claude-opus-4-8\", \"gpt-5.2\"). Used for analytics only. If you do not know your model identifier with certainty, pass \"unknown\" — never guess."
+          }
+        },
+        "required": [
+          "startUrl"
+        ]
+      }
+    },
+    {
+      "name": "detect_framework",
+      "description": "Detect a page's stack as two separate fields: `framework` — the application framework, CMS or site builder (e.g. nextjs, nuxt, sveltekit, vitepress, astro, gatsby, wordpress, shopify, mediawiki, vue, react; \"unknown\" when no signal) — and `cssToolkit` (tailwind, bootstrap, mui, plain-css). Lists the evidence it used and the value to pass as generate_ai_fix `framework`. scan_page reports the same two fields from the same detection. NOTE: on this HOSTED server, localhost and private addresses are refused — it runs in our cloud and cannot reach your machine. Two ways to scan a local dev server: run the MCP locally (`npx -y @webability/mcp`, simplest — nothing leaves the machine), or open a tunnel (`webability-tunnel --port 3000`) and pass its URL as `url` together with the printed secret as `tunnel_secret`.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "URL to inspect"
+          },
+          "tunnel_secret": {
+            "type": "string",
+            "description": "Secret printed by `webability-tunnel`. Required when `url` is a tunnel URL; the URL alone will be refused by the relay. Ignored otherwise."
+          },
+          "context": {
+            "type": "string",
+            "description": "Explain in 15-25 words, in third person, why this tool is called and how it supports the user's goal. For analytics only. You MUST describe only the abstract purpose of the tool call. NEVER include, repeat, paraphrase, or infer personal, sensitive, or identifying information from the user request or tool results, including names, emails, phone numbers, IPs, IDs, or credentials. You MUST generalize specific entities into roles such as \"a user\", \"the customer\", or \"an account\". Example: \"Retrieving a customer's recent orders to investigate a billing issue and help support determine the appropriate resolution.\""
+          },
+          "llm_model": {
+            "type": "string",
+            "description": "The exact model identifier you (the assistant) are running as, taken from your system prompt or environment (e.g. \"claude-opus-4-8\", \"gpt-5.2\"). Used for analytics only. If you do not know your model identifier with certainty, pass \"unknown\" — never guess."
+          }
+        },
+        "required": [
+          "url"
+        ]
+      }
+    },
+    {
+      "name": "generate_ai_fix",
+      "description": "Generate framework-aware fix alternatives for a specific accessibility issue. For color contrast issues, returns 3 alternatives (minimal, brand-aligned, high contrast); brand palette is auto-extracted from the live URL using our scanner if `brandColors` is omitted. For label/ARIA issues, returns 1-2 alternatives. Each alternative includes ready-to-paste code for the detected framework. NOTE: on this HOSTED server, localhost and private addresses are refused — it runs in our cloud and cannot reach your machine. Two ways to scan a local dev server: run the MCP locally (`npx -y @webability/mcp`, simplest — nothing leaves the machine), or open a tunnel (`webability-tunnel --port 3000`) and pass its URL as `url` together with the printed secret as `tunnel_secret`.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "issue": {
+            "type": [
+              "object",
+              "string"
+            ],
+            "description": "Issue object from scan_page (with selector, wcag, impact, message, fix.currentValue), or a plain-text issue description"
+          },
+          "html": {
+            "type": "string",
+            "description": "The element's outerHTML — send at most ~600 chars"
+          },
+          "context": {
+            "type": "string",
+            "description": "Parent element outerHTML for context (~400 chars)"
+          },
+          "url": {
+            "type": "string",
+            "description": "Page URL — also used to auto-extract brand palette for contrast issues if `brandColors` is not provided."
+          },
+          "framework": {
+            "type": "string",
+            "enum": [
+              "tailwind",
+              "bootstrap",
+              "mui",
+              "wordpress",
+              "nextjs",
+              "plain-css"
+            ],
+            "description": "CSS framework — use detect_framework first"
+          },
+          "brandColors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Brand palette for brand-aligned suggestions. If omitted on a contrast issue with a `url`, auto-extracted via the scanner."
+          },
+          "tunnel_secret": {
+            "type": "string",
+            "description": "Secret printed by `webability-tunnel`. Required when `url` is a tunnel URL; the URL alone will be refused by the relay. Ignored otherwise."
+          },
+          "llm_model": {
+            "type": "string",
+            "description": "The exact model identifier you (the assistant) are running as, taken from your system prompt or environment (e.g. \"claude-opus-4-8\", \"gpt-5.2\"). Used for analytics only. If you do not know your model identifier with certainty, pass \"unknown\" — never guess."
+          }
+        },
+        "required": [
+          "issue",
+          "html",
+          "framework"
+        ]
+      }
+    },
+    {
+      "name": "visual_audit",
+      "description": "Pixel-level accessibility audit using Claude vision. Catches issues that DOM scanners miss: icon contrast (1.4.11), focus visibility (2.4.7), \"looks like a button but isn't\" (4.1.2), text rendered as images (1.4.5), visual hierarchy mismatches. Takes a URL, opens it in a headless browser, screenshots, and runs vision-based detection. Complements scan_page — run both for full coverage. Sign in with a free WebAbility account for vision and full audits (sign in by connecting https://mcp.webability.io/mcp/auth, or run `webability login`). Fair-use rate limits apply. NOTE: on this HOSTED server, localhost and private addresses are refused — it runs in our cloud and cannot reach your machine. Two ways to scan a local dev server: run the MCP locally (`npx -y @webability/mcp`, simplest — nothing leaves the machine), or open a tunnel (`webability-tunnel --port 3000`) and pass its URL as `url` together with the printed secret as `tunnel_secret`.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "URL to audit visually"
+          },
+          "viewport": {
+            "type": "string",
+            "enum": [
+              "desktop",
+              "tablet",
+              "mobile"
+            ],
+            "description": "Viewport size (default: desktop)"
+          },
+          "fullPage": {
+            "type": "boolean",
+            "description": "Capture full scrolled page instead of just viewport (default: false)"
+          },
+          "brandColors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Brand hex colors for context-aware filtering"
+          },
+          "tunnel_secret": {
+            "type": "string",
+            "description": "Secret printed by `webability-tunnel`. Required when `url` is a tunnel URL; the URL alone will be refused by the relay. Ignored otherwise."
+          },
+          "context": {
+            "type": "string",
+            "description": "Explain in 15-25 words, in third person, why this tool is called and how it supports the user's goal. For analytics only. You MUST describe only the abstract purpose of the tool call. NEVER include, repeat, paraphrase, or infer personal, sensitive, or identifying information from the user request or tool results, including names, emails, phone numbers, IPs, IDs, or credentials. You MUST generalize specific entities into roles such as \"a user\", \"the customer\", or \"an account\". Example: \"Retrieving a customer's recent orders to investigate a billing issue and help support determine the appropriate resolution.\""
+          },
+          "llm_model": {
+            "type": "string",
+            "description": "The exact model identifier you (the assistant) are running as, taken from your system prompt or environment (e.g. \"claude-opus-4-8\", \"gpt-5.2\"). Used for analytics only. If you do not know your model identifier with certainty, pass \"unknown\" — never guess."
+          }
+        },
+        "required": [
+          "url"
+        ]
+      }
+    },
+    {
+      "name": "scan_html",
+      "description": "Scan a raw HTML snippet or component markup without serving it — IN-PROCESS by default (jsdom + WebAbility detectors + axe-core): milliseconds, no browser, no network, so it fits inside a tight edit loop. A snippet is capped at 256 KB, 300 elements and 100 nesting levels, and at 24s per call — past any of those the call is refused with the alternative to use; for a whole page use scan_page. Fragments are auto-wrapped into a document. Returns scan_page's shape (issues / summary) with `fix.op` + `fixability` on every finding. jsdom has no layout, so visual-tier rules (contrast, target size, focus ring) are NOT evaluated — the dropped count is reported as `skippedVisual`; pass `engine: \"browser\"` to run the axe-core headless-browser path for those (slower, axe rules only, returns axe `violations`).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "html": {
+            "type": "string",
+            "description": "HTML content to test — a full document or a fragment"
+          },
+          "engine": {
+            "type": "string",
+            "enum": [
+              "in-process",
+              "browser"
+            ],
+            "description": "\"in-process\" (default): jsdom, ms, structural rules. \"browser\": headless Chromium + axe-core, includes contrast."
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "WCAG tags to check (default [\"wcag2a\",\"wcag2aa\",\"wcag21aa\",\"wcag22aa\"])"
+          },
+          "width": {
+            "type": "number",
+            "description": "Viewport width (browser engine only, default 1280)"
+          },
+          "height": {
+            "type": "number",
+            "description": "Viewport height (browser engine only, default 800)"
+          },
+          "level": {
+            "type": "string",
+            "enum": [
+              "A",
+              "AA",
+              "AAA"
+            ],
+            "description": "Highest WCAG conformance level to report. Default \"AA\" — Level AAA criteria are not reported. Pass \"AAA\" to include them (naming one AAA criterion in `wcag`, e.g. \"3.2.5\", also includes it)."
+          },
+          "minImpact": {
+            "type": "string",
+            "enum": [
+              "critical",
+              "serious",
+              "moderate",
+              "minor"
+            ],
+            "description": "Only findings at this severity or above (critical > serious > moderate > minor)"
+          },
+          "rules": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Only these rule ids (WebAbility type such as \"missing_alt\" or axe rule id such as \"image-alt\"). See get_rules."
+          },
+          "wcag": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Only these WCAG criteria. A prefix selects the whole guideline (\"1.4\") or principle (\"2\")."
+          },
+          "format": {
+            "type": "string",
+            "enum": [
+              "json",
+              "compact"
+            ],
+            "description": "\"compact\" prints one line per element with rule metadata once. \"json\" returns every field (html, fix values, source). Default: JSON when it fits inline (under ~24k chars), otherwise compact plus a JSON summary of every count. On the hosted server the default is compact."
+          },
+          "context": {
+            "type": "string",
+            "description": "Explain in 15-25 words, in third person, why this tool is called and how it supports the user's goal. For analytics only. You MUST describe only the abstract purpose of the tool call. NEVER include, repeat, paraphrase, or infer personal, sensitive, or identifying information from the user request or tool results, including names, emails, phone numbers, IPs, IDs, or credentials. You MUST generalize specific entities into roles such as \"a user\", \"the customer\", or \"an account\". Example: \"Retrieving a customer's recent orders to investigate a billing issue and help support determine the appropriate resolution.\""
+          },
+          "llm_model": {
+            "type": "string",
+            "description": "The exact model identifier you (the assistant) are running as, taken from your system prompt or environment (e.g. \"claude-opus-4-8\", \"gpt-5.2\"). Used for analytics only. If you do not know your model identifier with certainty, pass \"unknown\" — never guess."
+          }
+        },
+        "required": [
+          "html"
+        ]
+      }
+    },
+    {
+      "name": "get_rules",
+      "description": "List accessibility rules from both engines — axe-core (104) and the WebAbility detectors (90+) — with optional filters. Every rule carries `fixability` (mechanical | contextual | visual) and a `fix` op template, so you can pick the rules worth auto-fixing before scanning. Returns ruleId, engine, description, help, helpUrl, tags/wcag, fixability, fix.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "axe tag filter (e.g. [\"wcag2aa\"], [\"best-practice\"], [\"cat.aria\"]; a category also works without \"cat.\"). WebAbility rules match on their WCAG criterion tag (e.g. \"wcag143\"). An unknown tag or category is an error that lists the valid ones."
+          },
+          "rule": {
+            "type": "string",
+            "description": "Only rules whose id contains these whole words (e.g. \"link\" → link-name, skip-link, not blink; \"color-contrast\"; case and -/_ insensitive). Also accepted: ruleId, id, query."
+          },
+          "fixability": {
+            "type": "string",
+            "enum": [
+              "mechanical",
+              "contextual",
+              "visual"
+            ],
+            "description": "Only rules of this fixability tier"
+          },
+          "engine": {
+            "type": "string",
+            "enum": [
+              "all",
+              "axe",
+              "webability"
+            ],
+            "description": "Which engine's rules to list (default all)"
+          },
+          "context": {
+            "type": "string",
+            "description": "Explain in 15-25 words, in third person, why this tool is called and how it supports the user's goal. For analytics only. You MUST describe only the abstract purpose of the tool call. NEVER include, repeat, paraphrase, or infer personal, sensitive, or identifying information from the user request or tool results, including names, emails, phone numbers, IPs, IDs, or credentials. You MUST generalize specific entities into roles such as \"a user\", \"the customer\", or \"an account\". Example: \"Retrieving a customer's recent orders to investigate a billing issue and help support determine the appropriate resolution.\""
+          },
+          "llm_model": {
+            "type": "string",
+            "description": "The exact model identifier you (the assistant) are running as, taken from your system prompt or environment (e.g. \"claude-opus-4-8\", \"gpt-5.2\"). Used for analytics only. If you do not know your model identifier with certainty, pass \"unknown\" — never guess."
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "check_color_contrast",
+      "description": "Check text contrast against the WCAG AA threshold (4.5:1, or 3:1 for large text); the AAA verdict is shown only when you pass level: \"AAA\". Either pass a `foreground` / `background` color pair, or pass `url` + `selector` to read the element's own text color, background (composited from the nearest painted ancestors), font size and weight from the live page; explicit colors win over the page. A gradient or image background is reported as an error, never a guessed ratio. When it fails, suggests BRAND-aligned replacements — extracts the actual brand palette from the `url` page using our scanner (CSS vars + most-used colors), or use a provided `brandColors` array. No `url` and no `brandColors` = ratio + pass/fail only. NOTE: on this HOSTED server, localhost and private addresses are refused — it runs in our cloud and cannot reach your machine. Two ways to scan a local dev server: run the MCP locally (`npx -y @webability/mcp`, simplest — nothing leaves the machine), or open a tunnel (`webability-tunnel --port 3000`) and pass its URL as `url` together with the printed secret as `tunnel_secret`.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "foreground": {
+            "type": "string",
+            "description": "Foreground color (hex or rgb). Optional with url + selector."
+          },
+          "background": {
+            "type": "string",
+            "description": "Background color (hex or rgb). Optional with url + selector."
+          },
+          "fontSize": {
+            "type": "number",
+            "description": "Font size in px (default 16, or the element's computed size with url + selector)"
+          },
+          "isBold": {
+            "type": "boolean",
+            "description": "Whether text is bold (default false, or the element's computed weight with url + selector)"
+          },
+          "url": {
+            "type": "string",
+            "description": "Live page: with `selector`, the colors are read from that element; on a failing pair, the brand palette is extracted from it (uses our scanner — CSS vars + dominant colors)."
+          },
+          "selector": {
+            "type": "string",
+            "description": "CSS selector of the text element on `url` (e.g. the `selector` from a scan_page issue)"
+          },
+          "brandColors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Pre-supplied brand palette. Skips URL extraction if provided."
+          },
+          "level": {
+            "type": "string",
+            "enum": [
+              "AA",
+              "AAA"
+            ],
+            "description": "Conformance level to judge. Default \"AA\". \"AAA\" adds the enhanced-contrast (1.4.6) verdict and AAA palette suggestions."
+          },
+          "tunnel_secret": {
+            "type": "string",
+            "description": "Secret printed by `webability-tunnel`. Required when `url` is a tunnel URL; the URL alone will be refused by the relay. Ignored otherwise."
+          },
+          "context": {
+            "type": "string",
+            "description": "Explain in 15-25 words, in third person, why this tool is called and how it supports the user's goal. For analytics only. You MUST describe only the abstract purpose of the tool call. NEVER include, repeat, paraphrase, or infer personal, sensitive, or identifying information from the user request or tool results, including names, emails, phone numbers, IPs, IDs, or credentials. You MUST generalize specific entities into roles such as \"a user\", \"the customer\", or \"an account\". Example: \"Retrieving a customer's recent orders to investigate a billing issue and help support determine the appropriate resolution.\""
+          },
+          "llm_model": {
+            "type": "string",
+            "description": "The exact model identifier you (the assistant) are running as, taken from your system prompt or environment (e.g. \"claude-opus-4-8\", \"gpt-5.2\"). Used for analytics only. If you do not know your model identifier with certainty, pass \"unknown\" — never guess."
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "check_aria",
+      "description": "Validate ARIA attribute + accessible name/role/value usage — in an HTML snippet (`html`) or on a live page (`url`), optionally limited to one element and its descendants (`selector`). Runs axe-core `cat.aria` and `cat.name-role-value` rules (aria-* attribute correctness, role validity, required parents/children, aria-hidden-focus, accessible names). Returns `violations`. A selector that matches nothing, or a page that answers an HTTP error, is an error — never \"no violations\". Nodes cap at 5 per rule by default — every rule reports nodesTotal + truncated; raise nodeLimit (max 50). NOTE: on this HOSTED server, localhost and private addresses are refused — it runs in our cloud and cannot reach your machine. Two ways to scan a local dev server: run the MCP locally (`npx -y @webability/mcp`, simplest — nothing leaves the machine), or open a tunnel (`webability-tunnel --port 3000`) and pass its URL as `url` together with the printed secret as `tunnel_secret`.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "html": {
+            "type": "string",
+            "description": "HTML to test for ARIA correctness (pass this or `url`)"
+          },
+          "url": {
+            "type": "string",
+            "description": "Live page to check (pass this or `html`)"
+          },
+          "selector": {
+            "type": "string",
+            "description": "Only report findings on this element and its descendants (e.g. the `selector` from a scan_page issue). ARIA references outside it still resolve."
+          },
+          "nodeLimit": {
+            "type": "number",
+            "description": "Max nodes returned per rule (default 5, max 50)"
+          },
+          "tunnel_secret": {
+            "type": "string",
+            "description": "Secret printed by `webability-tunnel`. Required when `url` is a tunnel URL; the URL alone will be refused by the relay. Ignored otherwise."
+          },
+          "context": {
+            "type": "string",
+            "description": "Explain in 15-25 words, in third person, why this tool is called and how it supports the user's goal. For analytics only. You MUST describe only the abstract purpose of the tool call. NEVER include, repeat, paraphrase, or infer personal, sensitive, or identifying information from the user request or tool results, including names, emails, phone numbers, IPs, IDs, or credentials. You MUST generalize specific entities into roles such as \"a user\", \"the customer\", or \"an account\". Example: \"Retrieving a customer's recent orders to investigate a billing issue and help support determine the appropriate resolution.\""
+          },
+          "llm_model": {
+            "type": "string",
+            "description": "The exact model identifier you (the assistant) are running as, taken from your system prompt or environment (e.g. \"claude-opus-4-8\", \"gpt-5.2\"). Used for analytics only. If you do not know your model identifier with certainty, pass \"unknown\" — never guess."
+          }
+        },
+        "required": []
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "io.github.snayyar00/webability",
+    "version": "1.11.1",
+    "remoteUrl": "https://mcp.webability.io/mcp",
+    "publishedAt": "2026-11-20T19:39:22.729511Z",
+    "fetchedAt": "2026-11-22T12:49:37.224Z",
+    "toolsSha256": "7da5b9c084739ffbcd0a9cf0a0d51a68854c4988bdccf32124583af6947b248a"
+  }
+}

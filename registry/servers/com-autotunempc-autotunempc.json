@@ -1,0 +1,1741 @@
+{
+  "$schema": "../schema.json",
+  "name": "com.autotunempc/autotunempc",
+  "title": "AutoTuneMPC",
+  "category": "Other",
+  "description": "Constrained nonlinear MPC and Optuna tuning over HTTPS JSON.",
+  "repository": "https://github.com/kaiden8/autotunempc-examples",
+  "tools": [
+    {
+      "name": "identify_discrete_plant",
+      "description": "Fit a discrete linear A, B, and dt from logged (t, u, y) samples.\n\nThis tool stays free when payment enforcement is on. It does not call\nIPOPT. Pass the returned matrices to ``solve_mpc`` as a linear system.\nSend 4 to 2000 samples. Each ``y`` has length 1..24 and each ``u`` has\nlength 1..12, the same widths on every row, all finite, with strictly\nincreasing timestamps. Anything else is rejected before the fit.",
+      "inputSchema": {
+        "properties": {
+          "request": {
+            "additionalProperties": false,
+            "description": "Logged (t, u, y) samples for a free discrete linear fit. No X-API-Key and no x402 charge. Pass A, B, and dt to solve_mpc after a free validate_problem.",
+            "properties": {
+              "samples": {
+                "description": "Logged (t, u, y) rows. Length 4 to 2000. This fit is free: no X-API-Key and no x402 charge.",
+                "items": {
+                  "additionalProperties": false,
+                  "description": "One logged sample. ``u`` and ``y`` are scalars or vectors.",
+                  "properties": {
+                    "t": {
+                      "description": "Sample time. Must be finite, and strictly increasing from row to row. Use one time unit for the whole log.",
+                      "type": "number"
+                    },
+                    "u": {
+                      "description": "Input sample, length 1 to 12. A scalar is wrapped as a one-element list. Every row uses the same length.",
+                      "items": {
+                        "type": "number"
+                      },
+                      "maxItems": 12,
+                      "minItems": 1,
+                      "type": "array"
+                    },
+                    "y": {
+                      "description": "Output sample, length 1 to 24. A scalar is wrapped as a one-element list. Every row uses the same length.",
+                      "items": {
+                        "type": "number"
+                      },
+                      "maxItems": 24,
+                      "minItems": 1,
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "t",
+                    "u",
+                    "y"
+                  ],
+                  "type": "object"
+                },
+                "maxItems": 2000,
+                "minItems": 4,
+                "type": "array"
+              }
+            },
+            "required": [
+              "samples"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "request"
+        ],
+        "type": "object",
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "validate_problem",
+      "description": "Check dimensions, bounds, and linear controllability before a solve.\n\nThis is POST /v1/validate and stays free when payment enforcement is on.\nIt does not use X-API-Key and it does not return HTTP 402. Call it before\nsolve_mpc when you want the plant rejected without spending a credit.",
+      "inputSchema": {
+        "properties": {
+          "request": {
+            "additionalProperties": false,
+            "properties": {
+              "system": {
+                "description": "Plant to check. This call is free: no X-API-Key and no x402 charge. Run it before the paid solve, and before autotune.",
+                "oneOf": [
+                  {
+                    "additionalProperties": false,
+                    "description": "Discrete or continuous linear plant.\n\nContinuous ``(A, B, Bd)`` are converted with a matrix exponential / zero-order\nhold at ``dt``. Discrete matrices are used as given. ``Bd`` defaults to ``B``\n(input disturbance) when omitted.",
+                    "properties": {
+                      "kind": {
+                        "const": "linear",
+                        "default": "linear",
+                        "description": "Plant kind. Must be \"linear\" for matrices A and B.",
+                        "type": "string"
+                      },
+                      "time_mode": {
+                        "default": "discrete",
+                        "description": "discrete uses A and B as given. continuous is zero-order-hold discretized at dt. Default discrete.",
+                        "enum": [
+                          "discrete",
+                          "continuous"
+                        ],
+                        "type": "string"
+                      },
+                      "A": {
+                        "description": "State matrix, shape nx by nx, with nx <= 24. Discrete map or continuous xdot, matching time_mode.",
+                        "items": {
+                          "items": {
+                            "type": "number"
+                          },
+                          "type": "array"
+                        },
+                        "type": "array"
+                      },
+                      "B": {
+                        "description": "Input matrix, shape nx by nu, with nu <= 12.",
+                        "items": {
+                          "items": {
+                            "type": "number"
+                          },
+                          "type": "array"
+                        },
+                        "type": "array"
+                      },
+                      "C": {
+                        "anyOf": [
+                          {
+                            "items": {
+                              "items": {
+                                "type": "number"
+                              },
+                              "type": "array"
+                            },
+                            "type": "array"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "default": null,
+                        "description": "Output matrix, shape ny by nx. Omit for identity, which uses the full state."
+                      },
+                      "D": {
+                        "anyOf": [
+                          {
+                            "items": {
+                              "items": {
+                                "type": "number"
+                              },
+                              "type": "array"
+                            },
+                            "type": "array"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "default": null,
+                        "description": "Feedthrough matrix, shape ny by nu. Omit when there is no direct term."
+                      },
+                      "Bd": {
+                        "anyOf": [
+                          {
+                            "items": {
+                              "items": {
+                                "type": "number"
+                              },
+                              "type": "array"
+                            },
+                            "type": "array"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "default": null,
+                        "description": "Disturbance matrix, shape nx by nd, with nd <= 12. Omit to reuse B as an input disturbance."
+                      },
+                      "dt": {
+                        "description": "Sample time. Must be > 0. Continuous plants are zero-order-hold discretized at this step. Use seconds unless A is written in another time unit.",
+                        "exclusiveMinimum": 0,
+                        "type": "number"
+                      },
+                      "N": {
+                        "description": "Prediction horizon in steps. Must be >= 1. Values above 100 are rejected.",
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      "x_min": {
+                        "anyOf": [
+                          {
+                            "items": {
+                              "type": "number"
+                            },
+                            "type": "array"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "default": null,
+                        "description": "Lower state bounds, length nx, in the plant's state units. Omit for -1e6 on each state. State bounds are soft."
+                      },
+                      "x_max": {
+                        "anyOf": [
+                          {
+                            "items": {
+                              "type": "number"
+                            },
+                            "type": "array"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "default": null,
+                        "description": "Upper state bounds, length nx, in the plant's state units. Omit for 1e6 on each state. State bounds are soft."
+                      },
+                      "u_min": {
+                        "anyOf": [
+                          {
+                            "items": {
+                              "type": "number"
+                            },
+                            "type": "array"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "default": null,
+                        "description": "Lower input bounds, length nu, in the plant's input units. Omit for -1e6 on each input. Input bounds are hard."
+                      },
+                      "u_max": {
+                        "anyOf": [
+                          {
+                            "items": {
+                              "type": "number"
+                            },
+                            "type": "array"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "default": null,
+                        "description": "Upper input bounds, length nu, in the plant's input units. Omit for 1e6 on each input. Input bounds are hard."
+                      },
+                      "du_min": {
+                        "anyOf": [
+                          {
+                            "items": {
+                              "type": "number"
+                            },
+                            "type": "array"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "default": null,
+                        "description": "Lower slew bounds on delta-u, length nu. Omit for -1e6 on each input. Slew bounds are hard."
+                      },
+                      "du_max": {
+                        "anyOf": [
+                          {
+                            "items": {
+                              "type": "number"
+                            },
+                            "type": "array"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "default": null,
+                        "description": "Upper slew bounds on delta-u, length nu. Omit for 1e6 on each input. Slew bounds are hard."
+                      }
+                    },
+                    "required": [
+                      "A",
+                      "B",
+                      "dt",
+                      "N",
+                      "kind"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "description": "Registered dynamics template plus a validated parameter dictionary.",
+                    "properties": {
+                      "kind": {
+                        "const": "nonlinear",
+                        "default": "nonlinear",
+                        "description": "Plant kind. Must be \"nonlinear\" for a registered template.",
+                        "type": "string"
+                      },
+                      "name": {
+                        "description": "Registered template: double_integrator, thermal_rc_zone, soil_moisture_cascade, or unicycle_kinematics.",
+                        "enum": [
+                          "double_integrator",
+                          "thermal_rc_zone",
+                          "soil_moisture_cascade",
+                          "unicycle_kinematics"
+                        ],
+                        "type": "string"
+                      },
+                      "parameters": {
+                        "additionalProperties": {
+                          "type": "number"
+                        },
+                        "description": "Template knobs, one number per required key. double_integrator and unicycle_kinematics: dt > 0 (seconds). thermal_rc_zone: dt > 0, capacity > 0, time_constant > 0, and ambient. soil_moisture_cascade: dt > 0, capacity > 0, tau_1 > 0, tau_2 > 0, tau_3 > 0, k_12 >= 0, k_23 >= 0. Unknown keys are rejected.",
+                        "type": "object"
+                      },
+                      "N": {
+                        "description": "Prediction horizon in steps. Must be >= 1 and <= 100.",
+                        "maximum": 100,
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      "x_min": {
+                        "anyOf": [
+                          {
+                            "items": {
+                              "type": "number"
+                            },
+                            "type": "array"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "default": null,
+                        "description": "Lower state bounds, length nx, in the plant's state units. Omit for -1e6 on each state. State bounds are soft."
+                      },
+                      "x_max": {
+                        "anyOf": [
+                          {
+                            "items": {
+                              "type": "number"
+                            },
+                            "type": "array"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "default": null,
+                        "description": "Upper state bounds, length nx, in the plant's state units. Omit for 1e6 on each state. State bounds are soft."
+                      },
+                      "u_min": {
+                        "anyOf": [
+                          {
+                            "items": {
+                              "type": "number"
+                            },
+                            "type": "array"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "default": null,
+                        "description": "Lower input bounds, length nu, in the plant's input units. Omit for -1e6 on each input. Input bounds are hard."
+                      },
+                      "u_max": {
+                        "anyOf": [
+                          {
+                            "items": {
+                              "type": "number"
+                            },
+                            "type": "array"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "default": null,
+                        "description": "Upper input bounds, length nu, in the plant's input units. Omit for 1e6 on each input. Input bounds are hard."
+                      },
+                      "du_min": {
+                        "anyOf": [
+                          {
+                            "items": {
+                              "type": "number"
+                            },
+                            "type": "array"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "default": null,
+                        "description": "Lower slew bounds on delta-u, length nu. Omit for -1e6 on each input. Slew bounds are hard."
+                      },
+                      "du_max": {
+                        "anyOf": [
+                          {
+                            "items": {
+                              "type": "number"
+                            },
+                            "type": "array"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "default": null,
+                        "description": "Upper slew bounds on delta-u, length nu. Omit for 1e6 on each input. Slew bounds are hard."
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "parameters",
+                      "N",
+                      "kind"
+                    ],
+                    "type": "object"
+                  }
+                ]
+              },
+              "x0": {
+                "anyOf": [
+                  {
+                    "items": {
+                      "type": "number"
+                    },
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Initial state, length nx. Omit to skip that length check."
+              },
+              "x_ref": {
+                "anyOf": [
+                  {
+                    "items": {
+                      "type": "number"
+                    },
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "State reference, length nx. Omit to skip that length check."
+              },
+              "Q": {
+                "anyOf": [
+                  {
+                    "items": {
+                      "items": {
+                        "type": "number"
+                      },
+                      "type": "array"
+                    },
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Stage state weight, shape nx by nx. Omit to skip the weight check."
+              },
+              "R": {
+                "anyOf": [
+                  {
+                    "items": {
+                      "items": {
+                        "type": "number"
+                      },
+                      "type": "array"
+                    },
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Input weight, shape nu by nu. Omit to skip the weight check."
+              },
+              "Rd": {
+                "anyOf": [
+                  {
+                    "items": {
+                      "items": {
+                        "type": "number"
+                      },
+                      "type": "array"
+                    },
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Slew weight, shape nu by nu. Omit to skip the weight check."
+              },
+              "Qf": {
+                "anyOf": [
+                  {
+                    "items": {
+                      "items": {
+                        "type": "number"
+                      },
+                      "type": "array"
+                    },
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Terminal state weight, shape nx by nx. Omit to skip the weight check."
+              },
+              "d_hat": {
+                "anyOf": [
+                  {
+                    "items": {
+                      "type": "number"
+                    },
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Disturbance estimate, length nd. Omit to skip that length check."
+              }
+            },
+            "required": [
+              "system"
+            ],
+            "type": "object",
+            "description": "Free plant check. No X-API-Key and no x402 charge. Call this before the paid solve_mpc, and before autotune."
+          }
+        },
+        "required": [
+          "request"
+        ],
+        "type": "object",
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "solve_mpc",
+      "description": "Solve a multi-step constrained MPC problem on the server.\n\nUse this when the horizon has soft state bounds, hard input and slew limits,\nand an offset-free disturbance rejection term. Pass the same ``session_id``\non later calls of one closed loop so the shifted primal and dual warm start\nis restored. Omit ``session_id`` for a single stateless solve.\n\nDo not call this for a one-step linear update you can do locally (a matrix\nmultiply, a threshold, or reading a sensor). Those do not need IPOPT.\nCasADi and IPOPT return u0 and the predicted trajectory for robotics,\nenergy storage, and process control. session_id is the warm start.\n\nThis is POST /v1/solve at $0.02. Send header X-API-Key when a $29 pack still\nhas solve credits. With no key, or when those credits are gone, the call is\nHTTP 402 and an agent pays with x402. There is no second payment path.\n\nSet ``reset_warm_start`` or call the ``reset_warm_start`` tool to drop the\nseed for that session. The compiled solver stays. A reset only clears the\nseed stored for the caller who owns it.",
+      "inputSchema": {
+        "properties": {
+          "request": {
+            "additionalProperties": false,
+            "properties": {
+              "system": {
+                "description": "Plant to control. Free validate_problem first, then this paid solve, then autotune if the weights are still unknown.",
+                "oneOf": [
+                  {
+                    "additionalProperties": false,
+                    "description": "Discrete or continuous linear plant.\n\nContinuous ``(A, B, Bd)`` are converted with a matrix exponential / zero-order\nhold at ``dt``. Discrete matrices are used as given. ``Bd`` defaults to ``B``\n(input disturbance) when omitted.",
+                    "properties": {
+                      "kind": {
+                        "const": "linear",
+                        "default": "linear",
+                        "description": "Plant kind. Must be \"linear\" for matrices A and B.",
+                        "type": "string"
+                      },
+                      "time_mode": {
+                        "default": "discrete",
+                        "description": "discrete uses A and B as given. continuous is zero-order-hold discretized at dt. Default discrete.",
+                        "enum": [
+                          "discrete",
+                          "continuous"
+                        ],
+                        "type": "string"
+                      },
+                      "A": {
+                        "description": "State matrix, shape nx by nx, with nx <= 24. Discrete map or continuous xdot, matching time_mode.",
+                        "items": {
+                          "items": {
+                            "type": "number"
+                          },
+                          "type": "array"
+                        },
+                        "type": "array"
+                      },
+                      "B": {
+                        "description": "Input matrix, shape nx by nu, with nu <= 12.",
+                        "items": {
+                          "items": {
+                            "type": "number"
+                          },
+                          "type": "array"
+                        },
+                        "type": "array"
+                      },
+                      "C": {
+                        "anyOf": [
+                          {
+                            "items": {
+                              "items": {
+                                "type": "number"
+                              },
+                              "type": "array"
+                            },
+                            "type": "array"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "default": null,
+                        "description": "Output matrix, shape ny by nx. Omit for identity, which uses the full state."
+                      },
+                      "D": {
+                        "anyOf": [
+                          {
+                            "items": {
+                              "items": {
+                                "type": "number"
+                              },
+                              "type": "array"
+                            },
+                            "type": "array"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "default": null,
+                        "description": "Feedthrough matrix, shape ny by nu. Omit when there is no direct term."
+                      },
+                      "Bd": {
+                        "anyOf": [
+                          {
+                            "items": {
+                              "items": {
+                                "type": "number"
+                              },
+                              "type": "array"
+                            },
+                            "type": "array"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "default": null,
+                        "description": "Disturbance matrix, shape nx by nd, with nd <= 12. Omit to reuse B as an input disturbance."
+                      },
+                      "dt": {
+                        "description": "Sample time. Must be > 0. Continuous plants are zero-order-hold discretized at this step. Use seconds unless A is written in another time unit.",
+                        "exclusiveMinimum": 0,
+                        "type": "number"
+                      },
+                      "N": {
+                        "description": "Prediction horizon in steps. Must be >= 1. Values above 100 are rejected.",
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      "x_min": {
+                        "anyOf": [
+                          {
+                            "items": {
+                              "type": "number"
+                            },
+                            "type": "array"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "default": null,
+                        "description": "Lower state bounds, length nx, in the plant's state units. Omit for -1e6 on each state. State bounds are soft."
+                      },
+                      "x_max": {
+                        "anyOf": [
+                          {
+                            "items": {
+                              "type": "number"
+                            },
+                            "type": "array"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "default": null,
+                        "description": "Upper state bounds, length nx, in the plant's state units. Omit for 1e6 on each state. State bounds are soft."
+                      },
+                      "u_min": {
+                        "anyOf": [
+                          {
+                            "items": {
+                              "type": "number"
+                            },
+                            "type": "array"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "default": null,
+                        "description": "Lower input bounds, length nu, in the plant's input units. Omit for -1e6 on each input. Input bounds are hard."
+                      },
+                      "u_max": {
+                        "anyOf": [
+                          {
+                            "items": {
+                              "type": "number"
+                            },
+                            "type": "array"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "default": null,
+                        "description": "Upper input bounds, length nu, in the plant's input units. Omit for 1e6 on each input. Input bounds are hard."
+                      },
+                      "du_min": {
+                        "anyOf": [
+                          {
+                            "items": {
+                              "type": "number"
+                            },
+                            "type": "array"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "default": null,
+                        "description": "Lower slew bounds on delta-u, length nu. Omit for -1e6 on each input. Slew bounds are hard."
+                      },
+                      "du_max": {
+                        "anyOf": [
+                          {
+                            "items": {
+                              "type": "number"
+                            },
+                            "type": "array"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "default": null,
+                        "description": "Upper slew bounds on delta-u, length nu. Omit for 1e6 on each input. Slew bounds are hard."
+                      }
+                    },
+                    "required": [
+                      "A",
+                      "B",
+                      "dt",
+                      "N",
+                      "kind"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "description": "Registered dynamics template plus a validated parameter dictionary.",
+                    "properties": {
+                      "kind": {
+                        "const": "nonlinear",
+                        "default": "nonlinear",
+                        "description": "Plant kind. Must be \"nonlinear\" for a registered template.",
+                        "type": "string"
+                      },
+                      "name": {
+                        "description": "Registered template: double_integrator, thermal_rc_zone, soil_moisture_cascade, or unicycle_kinematics.",
+                        "enum": [
+                          "double_integrator",
+                          "thermal_rc_zone",
+                          "soil_moisture_cascade",
+                          "unicycle_kinematics"
+                        ],
+                        "type": "string"
+                      },
+                      "parameters": {
+                        "additionalProperties": {
+                          "type": "number"
+                        },
+                        "description": "Template knobs, one number per required key. double_integrator and unicycle_kinematics: dt > 0 (seconds). thermal_rc_zone: dt > 0, capacity > 0, time_constant > 0, and ambient. soil_moisture_cascade: dt > 0, capacity > 0, tau_1 > 0, tau_2 > 0, tau_3 > 0, k_12 >= 0, k_23 >= 0. Unknown keys are rejected.",
+                        "type": "object"
+                      },
+                      "N": {
+                        "description": "Prediction horizon in steps. Must be >= 1 and <= 100.",
+                        "maximum": 100,
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      "x_min": {
+                        "anyOf": [
+                          {
+                            "items": {
+                              "type": "number"
+                            },
+                            "type": "array"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "default": null,
+                        "description": "Lower state bounds, length nx, in the plant's state units. Omit for -1e6 on each state. State bounds are soft."
+                      },
+                      "x_max": {
+                        "anyOf": [
+                          {
+                            "items": {
+                              "type": "number"
+                            },
+                            "type": "array"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "default": null,
+                        "description": "Upper state bounds, length nx, in the plant's state units. Omit for 1e6 on each state. State bounds are soft."
+                      },
+                      "u_min": {
+                        "anyOf": [
+                          {
+                            "items": {
+                              "type": "number"
+                            },
+                            "type": "array"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "default": null,
+                        "description": "Lower input bounds, length nu, in the plant's input units. Omit for -1e6 on each input. Input bounds are hard."
+                      },
+                      "u_max": {
+                        "anyOf": [
+                          {
+                            "items": {
+                              "type": "number"
+                            },
+                            "type": "array"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "default": null,
+                        "description": "Upper input bounds, length nu, in the plant's input units. Omit for 1e6 on each input. Input bounds are hard."
+                      },
+                      "du_min": {
+                        "anyOf": [
+                          {
+                            "items": {
+                              "type": "number"
+                            },
+                            "type": "array"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "default": null,
+                        "description": "Lower slew bounds on delta-u, length nu. Omit for -1e6 on each input. Slew bounds are hard."
+                      },
+                      "du_max": {
+                        "anyOf": [
+                          {
+                            "items": {
+                              "type": "number"
+                            },
+                            "type": "array"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "default": null,
+                        "description": "Upper slew bounds on delta-u, length nu. Omit for 1e6 on each input. Slew bounds are hard."
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "parameters",
+                      "N",
+                      "kind"
+                    ],
+                    "type": "object"
+                  }
+                ]
+              },
+              "x0": {
+                "description": "Initial state, length nx, at most 24 entries, in the plant's state units.",
+                "items": {
+                  "type": "number"
+                },
+                "maxItems": 24,
+                "type": "array"
+              },
+              "x_ref": {
+                "description": "Constant state reference, length nx, at most 24 entries. Ignored for the trajectory when X_ref is set.",
+                "items": {
+                  "type": "number"
+                },
+                "maxItems": 24,
+                "type": "array"
+              },
+              "Q": {
+                "description": "Stage state weight, shape nx by nx.",
+                "items": {
+                  "items": {
+                    "type": "number"
+                  },
+                  "type": "array"
+                },
+                "type": "array"
+              },
+              "R": {
+                "description": "Input weight, shape nu by nu.",
+                "items": {
+                  "items": {
+                    "type": "number"
+                  },
+                  "type": "array"
+                },
+                "type": "array"
+              },
+              "Rd": {
+                "description": "Slew weight on delta-u, shape nu by nu.",
+                "items": {
+                  "items": {
+                    "type": "number"
+                  },
+                  "type": "array"
+                },
+                "type": "array"
+              },
+              "Qf": {
+                "description": "Terminal state weight, shape nx by nx.",
+                "items": {
+                  "items": {
+                    "type": "number"
+                  },
+                  "type": "array"
+                },
+                "type": "array"
+              },
+              "d_hat": {
+                "anyOf": [
+                  {
+                    "items": {
+                      "type": "number"
+                    },
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Constant disturbance estimate, length nd. Omit for zeros."
+              },
+              "u_prev": {
+                "anyOf": [
+                  {
+                    "items": {
+                      "type": "number"
+                    },
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Previous applied input, length nu, used by the slew penalty. Omit for zeros."
+              },
+              "X_ref": {
+                "anyOf": [
+                  {
+                    "items": {
+                      "items": {
+                        "type": "number"
+                      },
+                      "type": "array"
+                    },
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "State reference over the horizon, shape (N+1) by nx. Omit to hold x_ref."
+              },
+              "U_ref": {
+                "anyOf": [
+                  {
+                    "items": {
+                      "items": {
+                        "type": "number"
+                      },
+                      "type": "array"
+                    },
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Input reference over the horizon, shape N by nu. Omit for the equilibrium input."
+              },
+              "d_forecast": {
+                "anyOf": [
+                  {
+                    "items": {
+                      "items": {
+                        "type": "number"
+                      },
+                      "type": "array"
+                    },
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Disturbance forecast, shape N by nd. Omit for a zero forecast."
+              },
+              "slack_l1": {
+                "anyOf": [
+                  {
+                    "minimum": 0,
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "L1 penalty on soft state-bound slack. Must be >= 0. Omit for the solver default 1000."
+              },
+              "slack_l2": {
+                "anyOf": [
+                  {
+                    "minimum": 0,
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "L2 penalty on soft state-bound slack. Must be >= 0. Omit for the solver default 100."
+              },
+              "session_id": {
+                "anyOf": [
+                  {
+                    "maxLength": 128,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Reuse this id across solve_mpc calls so the shifted primal and dual warm start stays with this closed loop. Omit it for a stateless solve. Max length 128. The seed is stored for this caller only."
+              },
+              "reset_warm_start": {
+                "default": false,
+                "description": "Drop this session_id's warm-start seed before the solve. Default false. The compiled solver stays.",
+                "type": "boolean"
+              },
+              "timeout_s": {
+                "default": 2,
+                "description": "IPOPT wall-clock budget in seconds. Default 2, must be > 0 and <= 5.",
+                "exclusiveMinimum": 0,
+                "maximum": 5,
+                "type": "number"
+              },
+              "max_iter": {
+                "default": 200,
+                "description": "IPOPT iteration cap. Default 200, must be >= 1 and <= 500.",
+                "maximum": 500,
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "system",
+              "x0",
+              "x_ref",
+              "Q",
+              "R",
+              "Rd",
+              "Qf"
+            ],
+            "type": "object",
+            "description": "Paid constrained solve at $0.02. Send X-API-Key while the pack has solve credits, or pay HTTP 402 with x402 on Base USDC. Validate free first. Autotune is the later step when the weights are unknown."
+          }
+        },
+        "required": [
+          "request"
+        ],
+        "type": "object",
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "reset_warm_start",
+      "description": "Clear one session's shifted primal and dual.\n\nNext ``solve_mpc`` / ``POST /v1/solve`` with this ``session_id`` is cold.\nThe compiled solver stays. Stateless calls omit ``session_id`` and already\nclear warm-start memory, so they do not use this tool.",
+      "inputSchema": {
+        "properties": {
+          "session_id": {
+            "description": "Session id whose warm-start seed to drop. Required, and at most 128 characters. Free: it does not spend a credit. The compiled solver stays. The next solve_mpc with this id is a cold start. Clearing an unknown id changes nothing.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "session_id"
+        ],
+        "type": "object",
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "start_autotune_job",
+      "description": "Queue an Optuna search for Q, R, Rd, and Qf. Then poll ``get_autotune_job``.\n\nThe tuner needs a model, either matrices ``A`` and ``B`` or one registered\ntemplate. There is no entry for a custom nonlinear equation besides those\ntemplates. Obstacle and path-frame navigation stayed in Apex_nav.\n\nCall this when the weights are unknown and you can afford a closed-loop\nstudy with plant mismatch. Optuna tunes Q, R, Rd, and Qf and reports\novershoot and settling time. It is an alternative to manual PID or\nhand-tuned MPC. The reply is a ``job_id``. When payment\nenforcement is on it also includes a ``job_token`` for ``get_autotune_job``.\nIt does not contain the weights. Poll until ``status`` is ``complete`` or\n``failed``. The finished result's ``Q``, ``R``, ``Rd``, and ``Qf`` are the\nphysical weights. ``normalized_Q`` and its siblings are the unitless search box.\n\nPayment settles when the job is accepted onto the queue, not when the study\nfinishes. This is POST /v1/autotune at $1.50. Send header X-API-Key when a\n$29 pack still has an autotune credit. With no key, or when those credits\nare gone, the call is HTTP 402 and an agent pays with x402. A full queue is HTTP 429 and is not charged. The study itself stops\nat ``timeout_seconds``. A process restart marks leftover ``running`` rows\n``failed`` with ``interrupted_by_restart`` instead of deleting a paid job.",
+      "inputSchema": {
+        "properties": {
+          "request": {
+            "additionalProperties": false,
+            "properties": {
+              "system": {
+                "description": "Plant for the study. Free validate_problem first. This request is the paid autotune step after a solve, when the quadratic weights are still unknown.",
+                "oneOf": [
+                  {
+                    "additionalProperties": false,
+                    "description": "Discrete or continuous linear plant.\n\nContinuous ``(A, B, Bd)`` are converted with a matrix exponential / zero-order\nhold at ``dt``. Discrete matrices are used as given. ``Bd`` defaults to ``B``\n(input disturbance) when omitted.",
+                    "properties": {
+                      "kind": {
+                        "const": "linear",
+                        "default": "linear",
+                        "description": "Plant kind. Must be \"linear\" for matrices A and B.",
+                        "type": "string"
+                      },
+                      "time_mode": {
+                        "default": "discrete",
+                        "description": "discrete uses A and B as given. continuous is zero-order-hold discretized at dt. Default discrete.",
+                        "enum": [
+                          "discrete",
+                          "continuous"
+                        ],
+                        "type": "string"
+                      },
+                      "A": {
+                        "description": "State matrix, shape nx by nx, with nx <= 24. Discrete map or continuous xdot, matching time_mode.",
+                        "items": {
+                          "items": {
+                            "type": "number"
+                          },
+                          "type": "array"
+                        },
+                        "type": "array"
+                      },
+                      "B": {
+                        "description": "Input matrix, shape nx by nu, with nu <= 12.",
+                        "items": {
+                          "items": {
+                            "type": "number"
+                          },
+                          "type": "array"
+                        },
+                        "type": "array"
+                      },
+                      "C": {
+                        "anyOf": [
+                          {
+                            "items": {
+                              "items": {
+                                "type": "number"
+                              },
+                              "type": "array"
+                            },
+                            "type": "array"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "default": null,
+                        "description": "Output matrix, shape ny by nx. Omit for identity, which uses the full state."
+                      },
+                      "D": {
+                        "anyOf": [
+                          {
+                            "items": {
+                              "items": {
+                                "type": "number"
+                              },
+                              "type": "array"
+                            },
+                            "type": "array"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "default": null,
+                        "description": "Feedthrough matrix, shape ny by nu. Omit when there is no direct term."
+                      },
+                      "Bd": {
+                        "anyOf": [
+                          {
+                            "items": {
+                              "items": {
+                                "type": "number"
+                              },
+                              "type": "array"
+                            },
+                            "type": "array"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "default": null,
+                        "description": "Disturbance matrix, shape nx by nd, with nd <= 12. Omit to reuse B as an input disturbance."
+                      },
+                      "dt": {
+                        "description": "Sample time. Must be > 0. Continuous plants are zero-order-hold discretized at this step. Use seconds unless A is written in another time unit.",
+                        "exclusiveMinimum": 0,
+                        "type": "number"
+                      },
+                      "N": {
+                        "description": "Prediction horizon in steps. Must be >= 1. Values above 100 are rejected.",
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      "x_min": {
+                        "anyOf": [
+                          {
+                            "items": {
+                              "type": "number"
+                            },
+                            "type": "array"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "default": null,
+                        "description": "Lower state bounds, length nx, in the plant's state units. Omit for -1e6 on each state. State bounds are soft."
+                      },
+                      "x_max": {
+                        "anyOf": [
+                          {
+                            "items": {
+                              "type": "number"
+                            },
+                            "type": "array"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "default": null,
+                        "description": "Upper state bounds, length nx, in the plant's state units. Omit for 1e6 on each state. State bounds are soft."
+                      },
+                      "u_min": {
+                        "anyOf": [
+                          {
+                            "items": {
+                              "type": "number"
+                            },
+                            "type": "array"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "default": null,
+                        "description": "Lower input bounds, length nu, in the plant's input units. Omit for -1e6 on each input. Input bounds are hard."
+                      },
+                      "u_max": {
+                        "anyOf": [
+                          {
+                            "items": {
+                              "type": "number"
+                            },
+                            "type": "array"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "default": null,
+                        "description": "Upper input bounds, length nu, in the plant's input units. Omit for 1e6 on each input. Input bounds are hard."
+                      },
+                      "du_min": {
+                        "anyOf": [
+                          {
+                            "items": {
+                              "type": "number"
+                            },
+                            "type": "array"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "default": null,
+                        "description": "Lower slew bounds on delta-u, length nu. Omit for -1e6 on each input. Slew bounds are hard."
+                      },
+                      "du_max": {
+                        "anyOf": [
+                          {
+                            "items": {
+                              "type": "number"
+                            },
+                            "type": "array"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "default": null,
+                        "description": "Upper slew bounds on delta-u, length nu. Omit for 1e6 on each input. Slew bounds are hard."
+                      }
+                    },
+                    "required": [
+                      "A",
+                      "B",
+                      "dt",
+                      "N",
+                      "kind"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "description": "Registered dynamics template plus a validated parameter dictionary.",
+                    "properties": {
+                      "kind": {
+                        "const": "nonlinear",
+                        "default": "nonlinear",
+                        "description": "Plant kind. Must be \"nonlinear\" for a registered template.",
+                        "type": "string"
+                      },
+                      "name": {
+                        "description": "Registered template: double_integrator, thermal_rc_zone, soil_moisture_cascade, or unicycle_kinematics.",
+                        "enum": [
+                          "double_integrator",
+                          "thermal_rc_zone",
+                          "soil_moisture_cascade",
+                          "unicycle_kinematics"
+                        ],
+                        "type": "string"
+                      },
+                      "parameters": {
+                        "additionalProperties": {
+                          "type": "number"
+                        },
+                        "description": "Template knobs, one number per required key. double_integrator and unicycle_kinematics: dt > 0 (seconds). thermal_rc_zone: dt > 0, capacity > 0, time_constant > 0, and ambient. soil_moisture_cascade: dt > 0, capacity > 0, tau_1 > 0, tau_2 > 0, tau_3 > 0, k_12 >= 0, k_23 >= 0. Unknown keys are rejected.",
+                        "type": "object"
+                      },
+                      "N": {
+                        "description": "Prediction horizon in steps. Must be >= 1 and <= 100.",
+                        "maximum": 100,
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      "x_min": {
+                        "anyOf": [
+                          {
+                            "items": {
+                              "type": "number"
+                            },
+                            "type": "array"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "default": null,
+                        "description": "Lower state bounds, length nx, in the plant's state units. Omit for -1e6 on each state. State bounds are soft."
+                      },
+                      "x_max": {
+                        "anyOf": [
+                          {
+                            "items": {
+                              "type": "number"
+                            },
+                            "type": "array"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "default": null,
+                        "description": "Upper state bounds, length nx, in the plant's state units. Omit for 1e6 on each state. State bounds are soft."
+                      },
+                      "u_min": {
+                        "anyOf": [
+                          {
+                            "items": {
+                              "type": "number"
+                            },
+                            "type": "array"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "default": null,
+                        "description": "Lower input bounds, length nu, in the plant's input units. Omit for -1e6 on each input. Input bounds are hard."
+                      },
+                      "u_max": {
+                        "anyOf": [
+                          {
+                            "items": {
+                              "type": "number"
+                            },
+                            "type": "array"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "default": null,
+                        "description": "Upper input bounds, length nu, in the plant's input units. Omit for 1e6 on each input. Input bounds are hard."
+                      },
+                      "du_min": {
+                        "anyOf": [
+                          {
+                            "items": {
+                              "type": "number"
+                            },
+                            "type": "array"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "default": null,
+                        "description": "Lower slew bounds on delta-u, length nu. Omit for -1e6 on each input. Slew bounds are hard."
+                      },
+                      "du_max": {
+                        "anyOf": [
+                          {
+                            "items": {
+                              "type": "number"
+                            },
+                            "type": "array"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "default": null,
+                        "description": "Upper slew bounds on delta-u, length nu. Omit for 1e6 on each input. Slew bounds are hard."
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "parameters",
+                      "N",
+                      "kind"
+                    ],
+                    "type": "object"
+                  }
+                ]
+              },
+              "scenario": {
+                "additionalProperties": false,
+                "description": "Closed-loop rollout the tuner scores, including mismatch and noise.",
+                "properties": {
+                  "x0": {
+                    "description": "Initial state for the rollout, length nx, in the plant's state units.",
+                    "items": {
+                      "type": "number"
+                    },
+                    "type": "array"
+                  },
+                  "step_reference": {
+                    "description": "Step state reference held for the rollout, length nx.",
+                    "items": {
+                      "type": "number"
+                    },
+                    "type": "array"
+                  },
+                  "plant_model_mismatch_pct": {
+                    "default": 0,
+                    "description": "Plant-model mismatch in percent. The plant is scaled by 1 + pct/100. Default 0.",
+                    "type": "number"
+                  },
+                  "sensor_noise_std": {
+                    "default": 0,
+                    "description": "Sensor noise standard deviation, in the plant's state units. Default 0, must be >= 0.",
+                    "minimum": 0,
+                    "type": "number"
+                  },
+                  "step_disturbance": {
+                    "anyOf": [
+                      {
+                        "items": {
+                          "type": "number"
+                        },
+                        "type": "array"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "description": "Constant disturbance applied from disturbance_onset_step, length nd. Omit for none."
+                  },
+                  "disturbance_onset_step": {
+                    "default": 0,
+                    "description": "Closed-loop step index when step_disturbance turns on. Default 0, must be >= 0.",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "n_steps": {
+                    "default": 40,
+                    "description": "Closed-loop steps in the scored rollout. Default 40, must be >= 1 and <= 200.",
+                    "maximum": 200,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "seed": {
+                    "default": 0,
+                    "description": "Seed for the sensor noise. Default 0.",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "x0",
+                  "step_reference"
+                ],
+                "type": "object"
+              },
+              "kpi": {
+                "additionalProperties": false,
+                "properties": {
+                  "target_max_overshoot_pct": {
+                    "description": "Overshoot target in percent. Must be >= 0.",
+                    "minimum": 0,
+                    "type": "number"
+                  },
+                  "settling_time_weight": {
+                    "description": "Weight on settling time in the score. Must be >= 0.",
+                    "minimum": 0,
+                    "type": "number"
+                  },
+                  "control_effort_weight": {
+                    "description": "Weight on control effort in the score. Must be >= 0.",
+                    "minimum": 0,
+                    "type": "number"
+                  },
+                  "slew_penalty_weight": {
+                    "description": "Weight on input slew in the score. Must be >= 0.",
+                    "minimum": 0,
+                    "type": "number"
+                  },
+                  "max_optuna_trials": {
+                    "description": "Optuna trials in the study. Must be >= 1 and <= 40.",
+                    "maximum": 40,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "timeout_seconds": {
+                    "description": "Study wall-clock limit in seconds. Must be > 0 and <= 120. The study stops at this budget.",
+                    "exclusiveMinimum": 0,
+                    "maximum": 120,
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "target_max_overshoot_pct",
+                  "settling_time_weight",
+                  "control_effort_weight",
+                  "slew_penalty_weight",
+                  "max_optuna_trials",
+                  "timeout_seconds"
+                ],
+                "type": "object",
+                "description": "Scorecard weights and the Optuna trial and time budget."
+              }
+            },
+            "required": [
+              "system",
+              "scenario",
+              "kpi"
+            ],
+            "type": "object",
+            "description": "Paid Optuna study at $1.50. Send X-API-Key while the pack has an autotune credit, or pay HTTP 402 with x402 on Base USDC. Validate the plant free first, then solve, then this job when Q, R, Rd, and Qf are unknown. Each call starts a new job. Poll get_autotune_job with the returned job_id."
+          }
+        },
+        "required": [
+          "request"
+        ],
+        "type": "object",
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_autotune_job",
+      "description": "Read one autotune job started by ``start_autotune_job``.\n\n``status`` is ``running``, ``complete``, or ``failed``. On ``complete``,\n``result`` holds the Pareto-best weights, overshoot, settling time, RMSE,\nand solve time. Poll again while it is ``running``. When payment enforcement\nis on, pass the ``job_token`` from the start call or the ``X-Job-Token``\nheader. A failed job reports ``autotune_failed``.",
+      "inputSchema": {
+        "properties": {
+          "job_id": {
+            "description": "Job id returned by start_autotune_job.",
+            "type": "string"
+          },
+          "job_token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Token returned with the job when payment enforcement is on. Omit it when the X-Job-Token header carries the same token. This poll is free and does not spend a credit."
+          }
+        },
+        "required": [
+          "job_id"
+        ],
+        "type": "object",
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "autotune_root_zone_irrigation",
+      "description": "Tune valve weights for the three-layer root-zone irrigation template.\n\nSame payment as autotune_template: X-API-Key spends 2 autotune credits, and\na missing key or an empty pack is HTTP 402 for x402.",
+      "inputSchema": {
+        "properties": {
+          "max_trials": {
+            "default": 20,
+            "description": "Optuna trials for the root-zone irrigation plant. Default 20. Values below 1 are raised to 1. Paid at $2.00: X-API-Key spends 2 autotune credits, or HTTP 402 is x402 Base USDC. Each call starts a new study.",
+            "type": "integer"
+          }
+        },
+        "type": "object",
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "autotune_battery_peak_shaving",
+      "description": "Tune charge power weights for the battery peak-shaving template.\n\nSame payment as autotune_template: X-API-Key spends 2 autotune credits, and\na missing key or an empty pack is HTTP 402 for x402.",
+      "inputSchema": {
+        "properties": {
+          "max_trials": {
+            "default": 20,
+            "description": "Optuna trials for the battery peak-shaving plant. Default 20. Values below 1 are raised to 1. Paid at $2.00: X-API-Key spends 2 autotune credits, or HTTP 402 is x402 Base USDC. Each call starts a new study.",
+            "type": "integer"
+          }
+        },
+        "type": "object",
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "autotune_embedded_controller_with_c_codegen",
+      "description": "Tune a linear plant and write a zero-heap C99 bundle.\n\nThe reply's ``codegen`` object lists ``mpc_bundle.h`` and ``mpc_bundle.c``\nplus ``usage_example_c`` and ``controller_kind``. A linear plant is a\ncondensed QP (``linear_qp``). A nonlinear plant, including differential\ndrive, is a linearized real-time iteration (``linearized_rti``): Jacobians\nat the current state, then projected-gradient steps. That is not a full\nnonlinear SQP. Compile with\n``gcc -O3 -std=c99 -Wall -Wextra -fPIC -shared -lm``. Each control step is\n``mpc_compute_u0`` then, after the plant measurement, ``mpc_observer_update``.\nNeither function allocates on the heap. ``MPC_NX``, ``MPC_NU``, ``MPC_ND``,\nand ``MPC_HORIZON`` in the header are the array sizes.\n\nSame payment as autotune_template: X-API-Key spends 2 autotune credits, and\na missing key or an empty pack is HTTP 402 for x402.",
+      "inputSchema": {
+        "properties": {
+          "max_trials": {
+            "default": 1,
+            "description": "Optuna trials before the C99 bundle is written. Default 1. Values below 1 are raised to 1. Paid at $2.00: X-API-Key spends 2 autotune credits, or HTTP 402 is x402 Base USDC. Each call starts a new study and writes a new bundle.",
+            "type": "integer"
+          }
+        },
+        "type": "object",
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "autotune_template",
+      "description": "Tune differential_drive, battery_peak_shaving, or root_zone_irrigation.\n\nThis is POST /v1/templates/autotune at $2.00. The name is differential_drive,\nbattery_peak_shaving, or root_zone_irrigation. The reply returns tuned\nQ, R, Rd, and Qf. Send name and max_trials.\nSend header X-API-Key when a $29 pack still has autotune credits. One call\nspends 2 of those credits. With no key, or when the credits are gone, the\ncall is HTTP 402 and an agent pays with x402. The reply returns the tuned\nweights for that template. Payment uses the same gate as the HTTP route.",
+      "inputSchema": {
+        "properties": {
+          "request": {
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "description": "Built-in plant: root_zone_irrigation, battery_peak_shaving, or differential_drive.",
+                "enum": [
+                  "root_zone_irrigation",
+                  "battery_peak_shaving",
+                  "differential_drive"
+                ],
+                "type": "string"
+              },
+              "max_trials": {
+                "default": 20,
+                "description": "Optuna trials for that plant. Default 20, must be >= 1 and <= 30.",
+                "maximum": 30,
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "name"
+            ],
+            "type": "object",
+            "description": "Paid template tune at $2.00 for differential_drive, battery_peak_shaving, or root_zone_irrigation. Send X-API-Key (spends 2 autotune credits) or pay HTTP 402 with x402 on Base USDC. Validate a custom plant free first; these three names are built in. Each call starts a new study."
+          }
+        },
+        "required": [
+          "request"
+        ],
+        "type": "object",
+        "additionalProperties": false
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "com.autotunempc/autotunempc",
+    "version": "1.0.1",
+    "remoteUrl": "https://api.autotunempc.com/mcp",
+    "publishedAt": "2026-11-21T15:45:21.694078Z",
+    "fetchedAt": "2026-11-22T12:49:37.224Z",
+    "toolsSha256": "b8d53fbdfb6330d4e3b83634254aa3d19425ee145c164c53ce3bff617c0a7d87"
+  }
+}

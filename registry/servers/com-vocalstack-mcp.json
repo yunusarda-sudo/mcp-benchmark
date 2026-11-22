@@ -1,0 +1,652 @@
+{
+  "$schema": "../schema.json",
+  "name": "com.vocalstack/mcp",
+  "title": "VocalStack",
+  "category": "Social, Media & Knowledge",
+  "description": "Transcribe and translate audio, video and live streams; run live broadcasts in any language.",
+  "repository": "https://github.com/vocalstack/mcp",
+  "tools": [
+    {
+      "name": "create_transcription",
+      "description": "Start transcribing a finished recording, from a public link or a file sent inline; returns a transcriptionId at once, before any text.\nUse: audio or video that has ended (a file, podcast episode, YouTube video or public post). A stream playing now: start_broadcast. The result: get_transcription with waitS, no polling needed.\nArguments: exactly one source: url, or fileBase64 with filename (over 10 MiB: host the file and give url). startS and endS clip both what is transcribed and what is billed. spokenLanguage helps short or noisy audio; speakerLabels is fixed once created, while summary and shareLink can also be turned on later with update_transcription.\nBehaviour: VocalStack's servers download the link once, as a visitor who is not signed in; nothing is posted to or changed on the source site.\nList price: $0.20 an hour of audio, billed per second transcribed; Pay as you go bills at least 5 minutes per transcription. Each call is a new, billed transcription unless it repeats an idempotencyKey; a refused call costs nothing; summary and shareLink are free.\nNew transcriptions an hour per account: 10 on Pay as you go, 100 on Premium.\nTranscriptions running at once per account: 5 on Pay as you go, 50 on Premium; more wait their turn instead of failing.\nReturns: transcriptionId, state (queued, fetching, transcribing, then done, failed or stopped), progress, shareUrl when shareLink is true, replayed true for a repeated key.\nAPI: POST /v1/transcriptions, documented at https://api.vocalstack.com/docs.\nErrors: invalid_options (neither or both of url and fileBase64, not a public http(s) link, bad base64, too large), invalid_audio (empty file), idempotency_key_reused, insufficient_credit (with topUpUrl), quota_exceeded, terms_acceptance_required (with acceptUrl: the person opens it and accepts the Terms once, then you call again), rate_limited (with retryAfterS). A source that cannot be read ends in state failed, with error.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "endS": {
+            "description": "Transcribe only up to this second (default: the end), at least 0.5 s after startS.",
+            "examples": [
+              600
+            ],
+            "type": "number"
+          },
+          "fileBase64": {
+            "contentEncoding": "base64",
+            "description": "The whole file in standard base64 (a data: URL prefix and line breaks are accepted), at most 10 MiB decoded; for a larger file give url instead. mp3, m4a, wav, mp4, webm and other common formats; the format is read from the file. Needs filename.",
+            "type": "string"
+          },
+          "filename": {
+            "description": "With fileBase64 only: the file's name with its extension, also the default display name.",
+            "examples": [
+              "meeting.m4a"
+            ],
+            "maxLength": 255,
+            "type": "string"
+          },
+          "idempotencyKey": {
+            "description": "Any unique string of visible ASCII. Retrying with the same key and the same arguments within 24 h returns the first result (with replayed true) and nothing is created or billed twice; the same key with other arguments is refused.",
+            "examples": [
+              "meeting-2026-11-19"
+            ],
+            "maxLength": 255,
+            "type": "string"
+          },
+          "mimeType": {
+            "description": "With fileBase64 only, optional: the file's media type when known.",
+            "examples": [
+              "audio/mpeg",
+              "video/mp4"
+            ],
+            "type": "string"
+          },
+          "name": {
+            "description": "Display name shown in lists and on the share page. Defaults to the file name or the link.",
+            "examples": [
+              "Weekly team call"
+            ],
+            "maxLength": 200,
+            "type": "string"
+          },
+          "shareLink": {
+            "default": false,
+            "description": "Make a public link anyone can open to read the transcript without signing in (shareUrl in the result). Off: it stays private to this account.",
+            "type": "boolean"
+          },
+          "speakerLabels": {
+            "default": "auto",
+            "description": "auto labels lines once a second speaker is heard, on labels every line, off none. Recordings under a minute are never labelled.",
+            "enum": [
+              "auto",
+              "on",
+              "off"
+            ],
+            "type": "string"
+          },
+          "spokenLanguage": {
+            "description": "Code of the language spoken, e.g. en, ro, es. Omit to detect it (recordings that switch language are handled too); set it for better accuracy on short or noisy audio.",
+            "examples": [
+              "en",
+              "es"
+            ],
+            "type": "string"
+          },
+          "startS": {
+            "description": "Transcribe only from this second (default: the start). Only the part transcribed is billed: startS 90 and endS 600 bill 8.5 minutes.",
+            "examples": [
+              90
+            ],
+            "minimum": 0,
+            "type": "number"
+          },
+          "summary": {
+            "default": false,
+            "description": "Also write a title and summary when it is done, at no extra cost (get_transcription with format summary reads it). Never for recordings under a minute.",
+            "type": "boolean"
+          },
+          "url": {
+            "description": "Public http(s) link to the recording: an audio or video file, a YouTube video, or a public post on Twitch, Facebook, Instagram, Vimeo, Dailymotion, TikTok, X, SoundCloud, Kick, Mixcloud, Bandcamp, LinkedIn, TED, Internet Archive, Streamable, Odysee, Niconico, VK, BitChute, Wistia, Vidyard, Kaltura, JW Player, Pinterest, Bluesky, Google Drive, Dropbox, Spreaker, iHeartRadio, Audioboom, CNN or Loom. It must open without signing in and must not be a live stream. Give either url or fileBase64, not both.",
+            "examples": [
+              "https://www.youtube.com/watch?v=jNQXAC9IVRw",
+              "https://example.com/episode-12.mp3"
+            ],
+            "format": "uri",
+            "maxLength": 2048,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      }
+    },
+    {
+      "name": "get_transcription",
+      "description": "Read or export one transcription: its status and text with timestamps and speakers, its title and summary, or the whole transcript as an SRT, WebVTT or Markdown file; as spoken or translated, at once or after waiting for it to finish.\nUse: after create_transcription (waitS saves polling), or any time during a live transcription for the text so far. An overview: format summary. Subtitles or a document to save: format srt, vtt or markdown. Finding a passage in many transcriptions: search_transcriptions.\nBehaviour: free. A wait ends as soon as the work does, and sends progress notifications when the client gives a progress token. lang needs a finished transcription; the first call in a new language can take up to a minute on a long one, later pages are quick. Page with offset = nextOffset.\nReturns: status (state, progress, error when failed, shareUrl when it has a public link: made with shareLink in create_transcription or update_transcription), timedOut when waitS was set, then segmentCount, partial while text is still coming, text or segments, nextOffset when more remain, and lang and translated with lang. format summary returns summary instead: state ready with title and summary (and lang when translated), pending while it is written or the transcription runs, none when none was asked for (update_transcription with summary true writes one), not_requested under a minute, unavailable when it failed. format srt, vtt or markdown returns file (fileName, contentType, content: the whole file as text, partial while it runs) instead of text. A wait that runs out with lang set returns the status only.\nErrors: not_found; invalid_state for lang before it is finished; invalid_options for an unsupported lang or includeWords with lang; rate_limited (with retryAfterS) when waitS is set and 4 waits are already open for this key (8 for the account), or past 600 calls a minute per API key.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "format": {
+            "default": "text",
+            "description": "text: one string, a line per segment as \"[mm:ss] Speaker 1: words\", for reading and quoting; segments: timed lines (start, end, text, speakerNumber, speakerName), for exact times; summary: the title and summary only, for an overview; srt, vtt or markdown: the whole transcript as a ready file (SubRip or WebVTT subtitles, or a Markdown document), returned as file with fileName, contentType and content, not paged; none: status only (with waitS: wait without reading).",
+            "enum": [
+              "text",
+              "segments",
+              "summary",
+              "srt",
+              "vtt",
+              "markdown",
+              "none"
+            ],
+            "type": "string"
+          },
+          "includeWords": {
+            "default": false,
+            "description": "With format segments and no lang: also each word with its start and end second. It makes the answer several times larger, so ask for a narrow page (e.g. limit 50).",
+            "type": "boolean"
+          },
+          "lang": {
+            "description": "Code of a language to read the whole text (or, with format summary, the summary) in, one of about 100 (e.g. es, de, ja): the transcription must be finished (state done, or a stopped live one). The language already spoken returns the original with translated false. Omit for the original.",
+            "examples": [
+              "es",
+              "ja"
+            ],
+            "type": "string"
+          },
+          "limit": {
+            "default": 500,
+            "description": "Most segments in one call. When more are left the result has nextOffset.",
+            "examples": [
+              200
+            ],
+            "maximum": 2000,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "offset": {
+            "default": 0,
+            "description": "Index of the first segment to return (0, the start, by default). To page, pass the nextOffset the previous call returned.",
+            "examples": [
+              500
+            ],
+            "minimum": 0,
+            "type": "integer"
+          },
+          "transcriptionId": {
+            "description": "A transcriptionId from create_transcription, list_transcriptions, search_transcriptions or start_broadcast.",
+            "examples": [
+              "0190f0e0-7c1a-7d3e-9b2a-5f4e3d2c1b0a"
+            ],
+            "format": "uuid",
+            "type": "string"
+          },
+          "waitS": {
+            "default": 0,
+            "description": "Seconds to wait for a file or link transcription to finish before answering, 0 to 60 (0, the default: answer at once). Returns as soon as it ends; timedOut true means it is still running, so call again. Keep it under your client's call timeout. A live transcription never waits.",
+            "examples": [
+              50
+            ],
+            "maximum": 60,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "transcriptionId"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "list_transcriptions",
+      "description": "List this account's transcriptions, newest first, a page at a time: files, links and live ones, including those broadcasts recorded.\nUse: to find a transcriptionId by when it was made or see what exists. Which tool: list_transcriptions browses by date; search_transcriptions finds what was said; get_transcription reads one whose id you have. Broadcasts: list_broadcasts.\nBehaviour: free. Ordered by creation time, so pages are stable: transcriptions made or deleted while paging never repeat or shift another out of its page. lifecycle archived lists the trash: deleted transcriptions, restorable for 30 days with update_transcription restore true. A cursor this tool did not give out is refused.\nReturns: transcriptions (transcriptionId, name, createdAt, kind file or live, state, durationS and title when known, broadcastId for a broadcast's), and nextCursor while more remain. None: an empty list.\nErrors: invalid_options for an unknown cursor; rate_limited (with retryAfterS) past 600 calls a minute per API key.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "cursor": {
+            "description": "Omit for the first page (the newest). For the next page, pass the previous call's nextCursor unchanged, with the same lifecycle.",
+            "type": "string"
+          },
+          "lifecycle": {
+            "default": "active",
+            "description": "Which transcriptions: active those in use, archived those in the trash, all both.",
+            "enum": [
+              "active",
+              "archived",
+              "all"
+            ],
+            "type": "string"
+          },
+          "limit": {
+            "default": 20,
+            "description": "Most transcriptions in one page.",
+            "examples": [
+              50
+            ],
+            "maximum": 100,
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      }
+    },
+    {
+      "name": "search_transcriptions",
+      "description": "Find what was said across this account's transcriptions, or in one: the lines with given words or a name (mode words), or the passages that answer a question (mode meaning).\nUse: words when you know what was said; meaning for a question or topic, in any language. Not for browsing by date (list_transcriptions) or reading a whole transcript (get_transcription with its id). Text around a hit: get_transcription with offset. One transcription's overview: get_transcription with format summary.\nArguments: query is phrased differently per mode: a few words or a name for words, a whole question for meaning. transcriptionId narrows either mode to one transcription; lang and limit go with words only, and lang changes only how hits are shown, never which lines match. Examples: {query: \"budget\"}; {query: \"What did they decide about hiring?\", mode: \"meaning\"}; {query: \"Maria\", transcriptionId, lang: \"es\"}.\nBehaviour: free; no paging. words ranks whole words first, then close spellings, then newest, and searches the query's English translation too, and finds a line once it is final, so the last seconds of a live transcription may not show yet. The trash is never searched. meaning returns up to 10 passages, closest first, and covers finished recordings only (they are indexed after they end). Searches by meaning an hour per account: 60 on Pay as you go, no limit on Premium.\nReturns: words: query, queryEn, hits (transcriptionId, name, mediaStart in seconds, speaker, text, score, live, recordedAt, rendered with lang). meaning: query, state (ready, or unavailable or off when it cannot run), passages (transcriptionId, name, mediaStart, mediaEnd, text, similarity 0 to 1, live), searchesLeftThisHour when capped. Cite the transcription and second. No match: an empty list.\nErrors: not_found for an unknown transcriptionId; invalid_options for lang or limit with mode meaning; rate_limited (with retryAfterS) past the hourly searches by meaning.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "lang": {
+            "description": "mode words only, optional language code: each hit also comes back translated into it, as rendered. It never changes what matches.",
+            "examples": [
+              "en",
+              "de"
+            ],
+            "type": "string"
+          },
+          "limit": {
+            "default": 20,
+            "description": "mode words only: most lines to return, best first. There is no next page: narrow the query or set transcriptionId.",
+            "examples": [
+              10
+            ],
+            "maximum": 50,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "mode": {
+            "default": "words",
+            "description": "words: the lines where these words or a close spelling were said (\"presupuesto\" also finds \"budget\"). meaning: the passages closest in meaning, even with none of the words.",
+            "enum": [
+              "words",
+              "meaning"
+            ],
+            "type": "string"
+          },
+          "query": {
+            "description": "mode words: words, a phrase or a name that was said. mode meaning: a question or topic in plain words; a full question works better than one keyword. Any language.",
+            "examples": [
+              "quarterly budget",
+              "What did they decide about hiring?"
+            ],
+            "maxLength": 200,
+            "minLength": 2,
+            "type": "string"
+          },
+          "transcriptionId": {
+            "description": "Search only this transcription (a transcriptionId from list_transcriptions or create_transcription). Omit to search the whole account.",
+            "examples": [
+              "0190f0e0-7c1a-7d3e-9b2a-5f4e3d2c1b0a"
+            ],
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "update_transcription",
+      "description": "Change a transcription: its name, its public share link, its summary, whether spoken translations use the speakers' own cloned voices, or bring it back from the trash.\nUse: renaming, sharing or unsharing, asking for a summary later, switching cloned voices, or restoring one deleted by mistake. Only the fields given change; give at least one. Speaker names: update_speaker. Removing it: delete_transcription.\nArguments: transcriptionId (required). name 1 to 200 characters. shareLink true makes a public read-only link (or keeps the one it has), false turns every public link off. summary true writes a title and summary if it has none (a finished transcription of at least a minute). clonedVoices true needs consent true, recording that everyone speaking agreed to be cloned; false needs no consent. restore true brings a deleted transcription back first, then applies the rest (a deleted broadcast: update_broadcast with restore).\nBehaviour: free; calling again with the same fields changes nothing. A link turned off cannot be turned back on: shareLink true afterwards makes a new address. With cloned voices on, each speaker's translated words are read in that speaker's own voice, never anyone else's; speakers who refused, or without a usable clone, keep a stock voice; lines read after the change use it.\nReturns: transcriptionId, name, shareUrl (null with no public link), summary (state ready, pending, not_requested or unavailable) when asked for, clonedVoices, restored with restore.\nErrors: invalid_options for no field to change, a bad name, summary or restore false, or clonedVoices true without consent; invalid_state for a deleted transcription without restore true, or summary before it is finished; not_found once erased after the restore window; not_found; forbidden for a read-only key.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "clonedVoices": {
+            "description": "true: translations of each speaker's own words are read aloud in that speaker's own cloned voice (needs consent true); false: stock voices.",
+            "type": "boolean"
+          },
+          "consent": {
+            "default": false,
+            "description": "Must be true with clonedVoices true: confirms everyone speaking in it agreed to have their voice cloned. Recorded with your account and the time. Not needed to turn cloned voices off.",
+            "type": "boolean"
+          },
+          "name": {
+            "description": "New display name, shown in lists and on the share page; trimmed, 1 to 200 characters.",
+            "examples": [
+              "Board meeting, 19 November"
+            ],
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
+          "restore": {
+            "description": "true: bring it back from the trash (after delete_transcription, within the restore window) with everything it had; other fields given apply after. false is not accepted.",
+            "examples": [
+              true
+            ],
+            "type": "boolean"
+          },
+          "shareLink": {
+            "description": "true: make a public link anyone can open to read the transcript without signing in (an existing one is kept; shareUrl in the result). false: every public link of it stops working at once.",
+            "type": "boolean"
+          },
+          "summary": {
+            "description": "true: write a title and summary now if it has none (free; the transcription must be finished and at least a minute long). Read it with get_transcription format summary. false is not accepted: a summary is never deleted.",
+            "type": "boolean"
+          },
+          "transcriptionId": {
+            "description": "A transcriptionId from create_transcription, list_transcriptions, search_transcriptions or start_broadcast.",
+            "examples": [
+              "0190f0e0-7c1a-7d3e-9b2a-5f4e3d2c1b0a"
+            ],
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "transcriptionId"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "delete_transcription",
+      "description": "Move a transcription to the trash, with its recordings, transcript, translations and summary; its share links stop working.\nUse: to remove one; undo with update_transcription restore true (list_transcriptions with lifecycle archived lists the trash). Saved speakers stay (delete_speaker). A broadcast itself: delete_broadcast.\nArguments: transcriptionId only: the transcriptionId field returned by create_transcription, list_transcriptions, search_transcriptions or start_broadcast, a 36-character UUID, upper or lower case. Not a name (look it up with search_transcriptions), a broadcastId or a speakerId (not_found), nor the code in a share link (invalid_options: it must be a UUID).\nBehaviour: free; a soft delete kept 30 days, then erased for good. At once its share links answer not found, voices reading its translations stop, and it leaves list_transcriptions and search_transcriptions; restoring brings back the same links. A file still being transcribed is stopped and keeps its text so far, billed only for that; restoring does not resume it. A live one must be stopped first (update_broadcast with onAir false on its broadcast). One already in the trash is left as it is, so a retry is safe. Needs a key or token with the write scope; a read-only one is refused before anything changes. Gives rate_limited (with retryAfterS) past 600 calls a minute per API key.\nReturns: transcriptionId, name, deleted, deletedAt, restorableUntil.\nErrors: invalid_state while recording live or when locked; not_found; forbidden for a read-only key.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "transcriptionId": {
+            "description": "A transcriptionId from list_transcriptions or create_transcription.",
+            "examples": [
+              "0190f0e0-7c1a-7d3e-9b2a-5f4e3d2c1b0a"
+            ],
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "transcriptionId"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "list_speakers",
+      "description": "List the speakers this account has saved: people recognised by name in every new transcription.\nUse: to see who is known, before saving someone (update_speaker with save), or to find a speakerId for update_speaker or delete_speaker. Names inside one transcription come from get_transcription.\nBehaviour: free; no paging.\nReturns: speakers, newest first, each with id, name, gender when known, cloned (their voice was cloned, with consent, to read translations of their own words) and, when cloned, voiceReady. None saved: an empty list.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {},
+        "type": "object"
+      }
+    },
+    {
+      "name": "update_speaker",
+      "description": "Name or save a speaker, with two kinds of target: a person in one transcription (transcriptionId + speaker number: name them instead of \"Speaker N\", and with save true create a saved speaker so later transcriptions recognise them; this is the create-a-speaker tool, there is no separate one), or a saved speaker (speakerId: rename, switch their cloned voice on or off, everywhere they are recognised).\nUse: labelling who spoke here; remembering a person across transcriptions (save true); correcting a saved speaker's name or turning their cloned voice on with their consent. Who is saved: list_speakers. Forgetting someone: delete_speaker.\nArguments: give exactly one target: transcriptionId with speaker (the number in \"Speaker 2\" from get_transcription, not a name or an id) and name, plus save and consent; or speakerId (from list_speakers) with name, clonedVoice or both. A name in a transcription is cut to 80 characters and an empty one undoes it; a saved speaker's, or one with save, is 1 to 60. clonedVoice true needs consent true. Examples: {transcriptionId, speaker: 2, name: \"Maria Lopez\"}; {transcriptionId, speaker: 2, name: \"Maria Lopez\", save: true}; {speakerId, clonedVoice: true, consent: true}.\nBehaviour: free; calling again replaces the name and saves no one twice. In a transcription it applies to that person in every recording of it, and listeners following live see it at once; their speaker number never changes. save keeps their voice fingerprint (and, with consent, clones their voice from their speech here, voiceState training then ready); the person must have spoken, and a live transcription can still be running. clonedVoice true clones a saved speaker from their stored sample if they have no clone yet; false keeps the clone, unused (delete_speaker erases it). Nothing else about the person changes.\nReturns: transcriptionId, speaker, name (null when cleared), and with save speakerId, saved (false when they were already saved), consent, cloned and voiceState; or, with speakerId, speakerId, name, consent, clonedVoice, and voiceState when cloned.\nErrors: invalid_options for both or neither kind of target, nothing to change, a bad name, save or clonedVoice with the wrong target, too little of their speech to save (the message says how much there is), or clonedVoice true without consent; invalid_state for a saved speaker who refused cloning or has no sample; not_found for an unknown transcription, speaker number or speakerId; forbidden for a read-only key.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "clonedVoice": {
+            "description": "With speakerId only: true reads translations of this person's own words in their own cloned voice (needs consent true; cloned from their stored sample if not yet), false back to a stock voice (the clone is kept, unused).",
+            "type": "boolean"
+          },
+          "consent": {
+            "default": false,
+            "description": "true only when this person agreed to have their voice cloned: needed with clonedVoice true, and with save it clones them too, from their own speech in this transcription. Recorded with your account and the time. Never set it without the person's agreement; not needed to turn a cloned voice off.",
+            "type": "boolean"
+          },
+          "name": {
+            "description": "The name to show instead of \"Speaker N\", trimmed: up to 80 characters in one transcription (an empty string clears it back to \"Speaker N\"), 1 to 60 for a saved speaker or with save. Required with transcriptionId.",
+            "examples": [
+              "Maria Lopez",
+              ""
+            ],
+            "maxLength": 80,
+            "type": "string"
+          },
+          "save": {
+            "default": false,
+            "description": "With transcriptionId and speaker only: true also saves this person to the account's saved speakers, so later transcriptions recognise and name them; their own speech here is the sample. A person already saved from this transcription is not saved twice.",
+            "type": "boolean"
+          },
+          "speaker": {
+            "description": "With transcriptionId: the N of \"Speaker N\" in get_transcription's text, or speakerNumber in its segments; it stays the same after naming.",
+            "examples": [
+              2
+            ],
+            "minimum": 1,
+            "type": "integer"
+          },
+          "speakerId": {
+            "description": "Instead of transcriptionId and speaker: a saved speaker's id (id in list_speakers, or speakerId from update_speaker with save), changed everywhere they are recognised.",
+            "examples": [
+              "0190f0e0-7c1a-7d3e-9b2a-5f4e3d2c1b0a"
+            ],
+            "format": "uuid",
+            "type": "string"
+          },
+          "transcriptionId": {
+            "description": "With speaker: the transcription the speaker is in (from create_transcription, list_transcriptions, search_transcriptions or start_broadcast). Leave out with speakerId.",
+            "examples": [
+              "0190f0e0-7c1a-7d3e-9b2a-5f4e3d2c1b0a"
+            ],
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      }
+    },
+    {
+      "name": "delete_speaker",
+      "description": "Delete a saved speaker for good: their name, fingerprint, stored sample and any cloned voice are erased at once and cannot be restored.\nUse: the person should no longer be recognised, or asked for their voice to be removed. A name inside one transcription: update_speaker.\nArguments: speakerId only: the id field from list_speakers, or the speakerId update_speaker returned with save. A speaker number such as 2 (from \"Speaker 2\") or a transcriptionId is wrong here; to unname someone in one transcription, use update_speaker with an empty name instead. Example: {speakerId: \"0190f0e0-7c1a-7d3e-9b2a-5f4e3d2c1b0a\"}.\nBehaviour: free; the erasure is complete before the call returns, with no trash and no undo. Transcripts keep every line they spoke and their speaker numbers; lines that showed the saved name show \"Speaker N\" again. From then on new and running transcriptions no longer recognise them, and translations of their words read aloud use a stock voice instead of their clone. The id is never reused: saving the same person again (update_speaker with save) gives a new speakerId and needs their consent again to clone. A repeat call answers not_found and changes nothing. Gives rate_limited (with retryAfterS) past 600 calls a minute per API key.\nReturns: speakerId, deleted true.\nErrors: not_found for an unknown or already deleted id, or one of another account; forbidden for a read-only key.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "speakerId": {
+            "description": "A saved speaker's id: id in list_speakers, or speakerId from update_speaker with save.",
+            "examples": [
+              "0190f0e0-7c1a-7d3e-9b2a-5f4e3d2c1b0a"
+            ],
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "speakerId"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "list_broadcasts",
+      "description": "List this account's broadcasts with their status. A broadcast is a public link where listeners follow a live transcription in their own language.\nUse: to find a broadcastId, or see which are on air right now. For one broadcast's recorded transcriptions and streams, call get_broadcast with its id; for what was said, get_transcription with a transcriptionId (broadcasts' recordings are also in list_transcriptions).\nArguments: lifecycle only, and it is optional: active (the default) for broadcasts in use, archived for those in the trash (deleted within the restore window, restorable with update_broadcast restore true), all for both. Examples: {} lists the active ones; {lifecycle: \"archived\"} shows what can still be restored.\nBehaviour: free and read-only; most recently updated first, up to 500 per lifecycle in one call, with no paging: with more than 500 in that lifecycle, the 500 most recently updated come back, and an older one is still reachable by id with get_broadcast. rate_limited (with retryAfterS) past 600 calls a minute per API key.\nReturns: broadcasts (broadcastId, name, link, access, onAir, listenersNow, lastRecordedAt once it has recorded, archived for one in the trash; while on air transcriptionId, state, onAirSince). None: an empty list.\nErrors: invalid_options for an unknown lifecycle.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "lifecycle": {
+            "default": "active",
+            "description": "Which broadcasts: active those in use, archived those in the trash, all both.",
+            "enum": [
+              "active",
+              "archived",
+              "all"
+            ],
+            "type": "string"
+          }
+        },
+        "type": "object"
+      }
+    },
+    {
+      "name": "get_broadcast",
+      "description": "Get one broadcast in detail: its status, link and settings, the transcriptions it has recorded, and the streams it has used.\nUse: before a run to check its settings and link, during one to see listeners and the live transcriptionId, after to find what it recorded. All broadcasts: list_broadcasts. The text: get_transcription with a transcriptionId from here.\nArguments: broadcastId only: the broadcastId field from list_broadcasts or start_broadcast, a 36-character UUID, upper or lower case. A broadcast in the trash is returned too (archived true, restorable with update_broadcast restore true). Not a transcriptionId (not_found), and not the short code at the end of the link listeners open (invalid_options: it must be a UUID). Example: {broadcastId: \"0190f0e0-7c1a-7d3e-9b2a-5f4e3d2c1b0a\"}.\nBehaviour: free and read-only; listenersNow is counted at the moment of the call. Gives rate_limited (with retryAfterS) past 600 calls a minute per API key.\nReturns: broadcastId, name, link, access, onAir, listenersNow, lastRecordedAt; while on air transcriptionId, state, onAirSince; transcriptions (up to 20, newest first: transcriptionId, name, recording, lastRecordedAt) and streams (name, url).\nErrors: not_found for an unknown broadcastId (or one erased after the restore window); invalid_options for something that is not a UUID.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "broadcastId": {
+            "description": "The broadcast's id.",
+            "examples": [
+              "0190f0e0-7c1a-7d3e-9b2a-5f4e3d2c1b0a"
+            ],
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "broadcastId"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "start_broadcast",
+      "description": "Start a broadcast: live transcription and translation of a stream playing now, on a public link listeners open in their own language. Also the tool that creates a broadcast (without a stream: set up ahead, off air).\nUse: when the event is live now, or beforehand to get the link to share. A recording that has ended, even a past live stream's file: create_transcription. Reading it while it runs: get_transcription.\nArguments: streamUrl must be live when called; the same streamUrl on the same broadcast reuses its stream. Without streamUrl (and without broadcastId) it only sets up a new broadcast, off air and free: its link can be shared and configured with update_broadcast before the event. broadcastId (from list_broadcasts or get_broadcast) reruns an existing broadcast on its old link, and then name is ignored; without it a new broadcast is made, named name or the stream's host. spokenLanguage is a code like en (omit to detect). spokenTranslations true adds audio of each translation.\nList price: $0.60 an hour while it runs, billed per second; Pay as you go bills at least 5 minutes per transcription. Listeners and translations are free.\nTranscriptions running at once per account: 5 on Pay as you go, 50 on Premium; past that a start is refused with quota_exceeded.\nBehaviour: not idempotent, as annotated: every call with streamUrl starts a new billed run (set up only: free, nothing runs), and without broadcastId makes a new broadcast with a new link. To make a retry safe after a timeout, pass idempotencyKey: the same key and arguments within 24 h return the first run (replayed true) and bill nothing more. VocalStack's servers pull the stream as a visitor who is not signed in; nothing is posted to or changed at the source. Listeners on the link see each line within seconds of it being said, translated into the language they pick, with no account; the text is kept as a transcription. A run lasts until update_broadcast with onAir false or the stream ends, and billing stops at that moment.\nReturns: broadcastId, name, link (anyone who opens it reads, or with spokenTranslations also hears, the stream in their language), transcriptionId, state; set up only: broadcastId, name, link, onAir false.\nErrors: invalid_state (with link) when already on air, invalid_options for a non-http(s) address or broadcastId without streamUrl, insufficient_credit (with topUpUrl), quota_exceeded, terms_acceptance_required (with acceptUrl for the person to accept the Terms once), not_found for an unknown broadcastId, forbidden for a key without the write and recordings:publish scopes.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "broadcastId": {
+            "description": "Optional: run it on this existing broadcast (from list_broadcasts), so its listeners' link stays the same. Omit to make a new broadcast with a new link.",
+            "examples": [
+              "0190f0e0-7c1a-7d3e-9b2a-5f4e3d2c1b0a"
+            ],
+            "format": "uuid",
+            "type": "string"
+          },
+          "idempotencyKey": {
+            "description": "Any unique string of visible ASCII. Retrying with the same key and the same arguments within 24 h returns the first result (with replayed true) and nothing is started twice; the same key with other arguments is refused.",
+            "examples": [
+              "meeting-2026-11-19"
+            ],
+            "maxLength": 255,
+            "type": "string"
+          },
+          "name": {
+            "description": "Name of a new broadcast, shown to listeners. Defaults to the stream's host. Ignored with broadcastId.",
+            "examples": [
+              "Sunday service"
+            ],
+            "maxLength": 200,
+            "type": "string"
+          },
+          "spokenLanguage": {
+            "description": "Code of the language spoken, e.g. en, es. Omit to detect it.",
+            "examples": [
+              "en"
+            ],
+            "type": "string"
+          },
+          "spokenTranslations": {
+            "default": false,
+            "description": "Also read each translation aloud, so listeners can hear it in their language as well as read it. Listening stays free.",
+            "type": "boolean"
+          },
+          "streamUrl": {
+            "description": "http(s) address of a stream playing now: a YouTube live, an internet radio station, an HLS (.m3u8) or Icecast stream. Omit it (and broadcastId) to only set up a new broadcast and its link ahead of the event, off air and unbilled. A recording that has ended goes to create_transcription instead.",
+            "examples": [
+              "https://www.youtube.com/watch?v=jfKfPfyJRdk",
+              "https://stream.example.org/radio.m3u8"
+            ],
+            "format": "uri",
+            "maxLength": 2048,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      }
+    },
+    {
+      "name": "update_broadcast",
+      "description": "Change a broadcast: end its live run (onAir false), or its settings: its name, who can listen (public, or private behind a listener code VocalStack makes), the language spoken, and whether translations are read aloud, in stock or the speakers' own cloned voices; or bring it back from the trash.\nUse: to end the event when it is over (onAir false), or before or between runs to change settings; settings apply from the next start_broadcast, the name and access at once. Only the fields given change; give at least one. Starting a run: start_broadcast; removing the broadcast and its link: delete_broadcast.\nArguments: broadcastId (required); the rest are independent and optional, except that newListenerCode goes only with a private broadcast and clonedVoices only with spokenTranslations on, needing consent true. No code is ever passed in: VocalStack makes it, so it never sits in the model's arguments. restore true brings a deleted broadcast back first, then applies the rest. Examples: {broadcastId, onAir: false} (ends the run); {broadcastId, access: \"private\"} (returns listenerCode); {broadcastId, newListenerCode: true}; {broadcastId, spokenTranslations: true, clonedVoices: true, consent: true}; {broadcastId, restore: true}.\nBehaviour: the link and broadcastId never change; no call here makes a new address (for one: delete_broadcast, then start_broadcast without broadcastId). Changing access or the listener code signs out every current listener at once, even on air: their page asks for the link again (and the code when private), and they miss the lines spoken until they are back; the transcript is kept. Making it public again lets anyone with the link in, with no sign-in. The name shows to listeners at once; language and voice settings never touch a run in progress. Ending a run (onAir false) is free and final for that run: billing stops at that moment, listeners see the broadcast is over, and the transcript is kept (get_transcription reads it and its summary once done); it cannot be resumed, but start_broadcast with this broadcastId and a streamUrl starts a new run on the same link, as a new transcription. Asking again when already off air changes nothing. Not idempotent as a whole, as annotated: newListenerCode true makes a different code on every call (each one signing listeners out again); every other field repeated with the same value changes nothing. Two calls at once: the later one wins, field by field. A read-only key is refused before anything changes. restore works for 30 days after delete_broadcast; after that it is not_found. Gives rate_limited (with retryAfterS) past 600 calls a minute per API key.\nReturns: the broadcast (broadcastId, name, link, access, onAir, listenersNow) with spokenLanguage, spokenTranslations and clonedVoices; with onAir false, stopped: the ended run's status (transcriptionId, name, kind live, state finishing then done, startedAt, endedAt, durationS), null when it was not on air; restored with restore; listenerCode only on the call that made it (going private the first time, or newListenerCode), never again, so pass it on to the listeners then.\nErrors: invalid_options for nothing to change, onAir true, a bad name, newListenerCode on a public broadcast, an unknown language, restore false, or clonedVoices true without consent; invalid_state for a broadcast in the trash without restore true; not_found for an unknown broadcastId; forbidden for a key without the write and recordings:publish scopes.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "access": {
+            "description": "public: anyone with the link can follow it; private: listeners must enter the broadcast's listener code, which VocalStack makes the first time it goes private and returns once as listenerCode.",
+            "enum": [
+              "public",
+              "private"
+            ],
+            "type": "string"
+          },
+          "broadcastId": {
+            "description": "A broadcastId from list_broadcasts or start_broadcast.",
+            "examples": [
+              "0190f0e0-7c1a-7d3e-9b2a-5f4e3d2c1b0a"
+            ],
+            "format": "uuid",
+            "type": "string"
+          },
+          "clonedVoices": {
+            "description": "With spokenTranslations: true reads each speaker's translated words in that speaker's own cloned voice (needs consent true); false: stock voices.",
+            "type": "boolean"
+          },
+          "consent": {
+            "default": false,
+            "description": "Must be true with clonedVoices true: confirms everyone speaking on it agreed to have their voice cloned. Recorded with your account and the time. Not needed to turn cloned voices off.",
+            "type": "boolean"
+          },
+          "name": {
+            "description": "New name shown to listeners; trimmed, 1 to 120 characters.",
+            "examples": [
+              "Sunday service"
+            ],
+            "maxLength": 120,
+            "minLength": 1,
+            "type": "string"
+          },
+          "newListenerCode": {
+            "description": "true: VocalStack makes a new listener code for a private broadcast and returns it once as listenerCode, signing out every current listener (share the new one with them). The old code stops working at once. Not accepted with access public.",
+            "type": "boolean"
+          },
+          "onAir": {
+            "description": "false: end the live run now, which stops its billing; the transcript is kept and the link stays for the next start_broadcast. Already off air: nothing changes. true is not accepted: start_broadcast puts a broadcast on air.",
+            "type": "boolean"
+          },
+          "restore": {
+            "description": "true: bring it back from the trash (after delete_broadcast, within the restore window) with its link, settings and recorded transcriptions; other fields given apply after. false is not accepted.",
+            "examples": [
+              true
+            ],
+            "type": "boolean"
+          },
+          "spokenLanguage": {
+            "description": "Code of the language spoken (e.g. en, es), or auto to detect it. Applies from the next start_broadcast.",
+            "examples": [
+              "en",
+              "auto"
+            ],
+            "type": "string"
+          },
+          "spokenTranslations": {
+            "description": "true: each translation is also read aloud, so listeners can hear it in their language; false: text only. Applies from the next start_broadcast. Listening stays free.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "broadcastId"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "delete_broadcast",
+      "description": "Move a broadcast to the trash: its public link and stream addresses stop working for listeners.\nUse: a broadcast that will not run again. For 30 days update_broadcast with restore true brings it back with the same link (list_broadcasts with lifecycle archived lists the trash); after that the broadcast is erased for good. Ending a live run: update_broadcast with onAir false.\nArguments: broadcastId only, from list_broadcasts or start_broadcast, upper or lower case. A transcriptionId is not_found (delete_transcription removes a recording); the short code in the link is invalid_options. Example: {broadcastId: \"0190f0e0-7c1a-7d3e-9b2a-5f4e3d2c1b0a\"}.\nBehaviour: free, and a soft delete: nothing is erased for 30 days, and one already in the trash is left as it is, so a retry is safe. At once every connected listener is signed out. A broadcast on air is refused: end its run first (update_broadcast with onAir false). The transcriptions it recorded are not deleted: while it is in the trash they leave list_transcriptions and search_transcriptions, get_transcription still reads them by id, and delete_transcription deletes one. Restoring (update_broadcast with restore true) brings back the same link and broadcastId, its settings and its transcriptions; listeners get back in by opening the link again (with the same listener code when private). Gives rate_limited (with retryAfterS) past 600 calls a minute per API key.\nReturns: broadcastId, name, deleted true, deletedAt, restorableUntil.\nErrors: invalid_state while on air; not_found for an unknown broadcastId; invalid_options for something that is not a UUID; forbidden for a read-only key.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "broadcastId": {
+            "description": "A broadcastId from list_broadcasts or start_broadcast, of a broadcast that is not on air.",
+            "examples": [
+              "0190f0e0-7c1a-7d3e-9b2a-5f4e3d2c1b0a"
+            ],
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "broadcastId"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "get_account",
+      "description": "Check the account's credit and usage: the balance left, the plan, whether a new file or live transcription would start now (and what would refuse it), and this period's limits.\nUse: before a long or live transcription, after an insufficient_credit or quota_exceeded error, or to tell the user what they have left. Prices per minute are in create_transcription and start_broadcast; adding credit happens at topUpUrl, in a browser.\nArguments: none.\nBehaviour: free and read-only; nothing is cached, each call reads the account as it is at that moment, including a live run still being billed. Calling it changes nothing and spends nothing. Gives rate_limited (with retryAfterS) past 600 calls a minute per API key.\nReturns: billingEnabled; plan (id, name, kind) or null; balance in US dollars (negative while a plan lets a running transcription continue below zero); canStart and startBlock (no_credit or hourly_limit, null when it starts) for a file; canStartLive and startBlockLive (also concurrency) for a live one; running, concurrentLimit, createdLastHour and createLimit (null means unlimited); period (start, end); monthlyCredit when a plan grants one; usageCap (amount, period, used, resetsAt) when this API key has a spending cap; topUpUrl; for a signed-in person termsAccepted, and while false acceptUrl: a page where they accept the Terms of Service and Privacy Policy themselves, once, before their first transcription.\nErrors: rate_limited (with retryAfterS); forbidden for a token without the read scope.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {},
+        "type": "object"
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "com.vocalstack/mcp",
+    "version": "1.0.14",
+    "remoteUrl": "https://api.vocalstack.com/v1/mcp",
+    "publishedAt": "2026-11-20T21:09:21.77127Z",
+    "fetchedAt": "2026-11-22T12:49:37.224Z",
+    "toolsSha256": "8a96f972080e0e61b837e3fbb4d219e313cbe9746addcda85782c14f2d2c7ca5"
+  }
+}

@@ -1,0 +1,337 @@
+{
+  "$schema": "../schema.json",
+  "name": "com.ai-rete-rag/ai-rete-rag-mcp",
+  "title": "ai·rete·rag",
+  "category": "Vector DBs & AI Search",
+  "description": "Author rules from policy docs, then decide: a Rete engine gives the verdict, an LLM explains why.",
+  "repository": "https://github.com/zaharajabeen13-create/ai-rete-rag-mcp",
+  "tools": [
+    {
+      "name": "decide",
+      "description": "Make a deterministic, auditable decision in a domain.\n\nThe verdict comes from the domain's rule set (Rete engine, never the LLM),\nso it is reproducible and compliant. The explanation is generated from the\ndomain's ingested policy documents.\n\nWithout an API key only the shared demo domains are available, and the\nresponse carries `next_step`: how to get a free key for your own rules.\n\nArgs:\n    domain: Rule-set domain, e.g. \"loan\", \"fraud\", \"clinical\".\n    query: Natural-language question or decision request.\n    facts: Structured facts for working memory, e.g.\n        {\"credit_score\": 710, \"annual_income\": 85000}, keyed by the\n        field names the domain's rules test. Facts read from photos,\n        document scans, voice notes or video belong here too; explicit\n        facts always win over anything extracted server-side.\n    fact_sources: Where each fact in `facts` came from, e.g.\n        {\"monthly_income\": \"payslip.jpg\", \"claim_usd\": \"voice note 1\"}.\n        Stored in the decision's audit record so a reviewer can tell\n        typed facts from ones read off evidence. Facts without a source\n        are recorded as \"request\".\n    as_of: Read the domain's policy documents as of this day, as\n        YYYY-MM-DD (default: today), so a case can be decided under the\n        policy in force on the day it was filed; the rules themselves are\n        always the current ones.\n    unstructured_text: Optional free text (an application, a case note,\n        a voice-note transcript, what a photo or video shows); facts are\n        extracted from it automatically and merged.\n    response_mode: \"verdict_only\" (fastest), \"verdict_with_explanation\",\n        or \"full_audit\" (every rule evaluation + retrieved chunks, available\n        on every plan including the free tier).\n        rule_firings come back in causal order: a rule that matched a fact\n        asserted by an earlier firing appears after it, with the derived\n        facts listed under `asserted_facts`.\n    filter_retrieval_with_rules: Pattern 01 — run the rules first and let a\n        fired rule's `retrieval_scope` action narrow which documents the\n        retrieval searches before it runs.\n    extract_from_retrieval: Pattern 02 — parse the retrieved documents into\n        facts and assert them into working memory, so rules fire on what was\n        actually read (not just the facts you passed).\n\nThe result's `missing_parameters` lists rule inputs that were not\nsupplied but could still change the verdict, most decisive first. When it\nis non-empty the verdict is provisional; when it is empty, more facts\ncannot change the verdict.\n",
+      "inputSchema": {
+        "properties": {
+          "domain": {
+            "title": "Domain",
+            "type": "string"
+          },
+          "query": {
+            "title": "Query",
+            "type": "string"
+          },
+          "facts": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Facts"
+          },
+          "unstructured_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Unstructured Text"
+          },
+          "response_mode": {
+            "default": "verdict_with_explanation",
+            "enum": [
+              "verdict_only",
+              "verdict_with_explanation",
+              "full_audit"
+            ],
+            "title": "Response Mode",
+            "type": "string"
+          },
+          "filter_retrieval_with_rules": {
+            "default": false,
+            "title": "Filter Retrieval With Rules",
+            "type": "boolean"
+          },
+          "extract_from_retrieval": {
+            "default": false,
+            "title": "Extract From Retrieval",
+            "type": "boolean"
+          },
+          "fact_sources": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Fact Sources"
+          },
+          "as_of": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "As Of"
+          }
+        },
+        "required": [
+          "domain",
+          "query"
+        ],
+        "type": "object",
+        "title": "decideArguments"
+      }
+    },
+    {
+      "name": "list_rules",
+      "description": "List the decision rules for one domain (or all domains).\n\nReturns each rule's conditions — either a flat AND list (field / operator /\nvalue) or a `when` condition tree (nested all/any/not) — plus its verdict,\nsalience, and any asserted facts (`action.assert`, the facts a rule\nproduces for other rules to consume). `edges` lists the derived rule→rule\ndependencies: src asserts a fact type that dst's conditions test (forward\nchaining). Each rule may also carry `citation` — the policy sentence it\nencodes — which is what lets a decision be traced back to the source\nclause. Also includes overlap warnings and, through the conditions, the\nfact fields the domain's rules test.\n",
+      "inputSchema": {
+        "properties": {
+          "domain": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Domain"
+          }
+        },
+        "type": "object",
+        "title": "list_rulesArguments"
+      }
+    },
+    {
+      "name": "get_parameters",
+      "description": "List the input parameters a domain's rules decide on — the facts a\ndecision in that domain uses. Derived from your account's own copy of\nthe rules, so it covers your custom domains too.\n\nEach parameter has its `field` name (the key to use in `facts`), `kind`\n(number / boolean / string), the `tests` rules make on it (e.g. >= 720 —\nmatch these units and scales), the `rules` and `verdicts` it can lead to,\nand `max_salience`. Parameters come most decisive first: those feeding\nthe highest-salience rules, which win when several rules fire. Also\nreturns every verdict the domain can reach.\n",
+      "inputSchema": {
+        "properties": {
+          "domain": {
+            "title": "Domain",
+            "type": "string"
+          }
+        },
+        "required": [
+          "domain"
+        ],
+        "type": "object",
+        "title": "get_parametersArguments"
+      }
+    },
+    {
+      "name": "ingest_text",
+      "description": "Add policy/reference text to a domain's knowledge base.\n\nThe text is chunked and embedded; explanations for future decisions in this\ndomain will cite it. Creating a new domain claims it for your account\n(plan limits apply). Ingesting into a built-in demo domain gives your\naccount its own copy of that demo (it counts as one of your domains); the\nshared demo others see is unchanged. On team plans, only the domain admin (the member\nwho created the domain, or the subscription owner) can add documents.\n\nDocuments can be dated. A decision only cites documents in force on its\ndate, so a replaced policy is never quoted for a new decision. To publish a\nnew version, ingest it under a new `source` with `supersedes` naming the old\none: the old document stops applying on the new one's `effective_from`\n(today if not given), and the new one starts that day. A document can be\nsuperseded only once; to replace a successor, supersede the successor.\n\nArgs:\n    domain: Domain to ingest into (existing or new).\n    text: The policy or reference text.\n    source: Optional source name shown in the document list.\n    effective_from: First day this document applies, as YYYY-MM-DD\n        (default: always).\n    effective_until: First day it no longer applies, as YYYY-MM-DD\n        (default: no end).\n    supersedes: Source name of the document this one replaces.\n",
+      "inputSchema": {
+        "properties": {
+          "domain": {
+            "title": "Domain",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Source"
+          },
+          "effective_from": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Effective From"
+          },
+          "effective_until": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Effective Until"
+          },
+          "supersedes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Supersedes"
+          }
+        },
+        "required": [
+          "domain",
+          "text"
+        ],
+        "type": "object",
+        "title": "ingest_textArguments"
+      }
+    },
+    {
+      "name": "list_documents",
+      "description": "List the documents ingested into a domain's knowledge base.",
+      "inputSchema": {
+        "properties": {
+          "domain": {
+            "title": "Domain",
+            "type": "string"
+          }
+        },
+        "required": [
+          "domain"
+        ],
+        "type": "object",
+        "title": "list_documentsArguments"
+      }
+    },
+    {
+      "name": "delete_domain",
+      "description": "Permanently delete your own copy of a domain: its rule set and every\ningested document. This frees its slot in your plan's domain limit.\n\nDecision audit records are kept for the audit trail. A domain created later\nunder the same name starts empty, with a fresh history. The shared demo\ndomains are never affected: deleting `loan` removes only your own copy of it.\n\nArgs:\n    domain: The domain to delete.\n    confirm: Must repeat the domain name exactly; any other value is refused.\n",
+      "inputSchema": {
+        "properties": {
+          "domain": {
+            "title": "Domain",
+            "type": "string"
+          },
+          "confirm": {
+            "title": "Confirm",
+            "type": "string"
+          }
+        },
+        "required": [
+          "domain",
+          "confirm"
+        ],
+        "type": "object",
+        "title": "delete_domainArguments"
+      }
+    },
+    {
+      "name": "get_rule_source",
+      "description": "Fetch a domain's complete rule set as editable YAML, plus whether you may\nedit it. The whole YAML file is returned as one fenced block; show it to the\nuser in full, never just its first lines. For a built-in demo domain you get\nyour own copy's rules once you have edited it, otherwise the shared demo's.\n",
+      "inputSchema": {
+        "properties": {
+          "domain": {
+            "title": "Domain",
+            "type": "string"
+          }
+        },
+        "required": [
+          "domain"
+        ],
+        "type": "object",
+        "title": "get_rule_sourceArguments"
+      }
+    },
+    {
+      "name": "put_rules",
+      "description": "Create or replace a domain's rule set from YAML (self-serve rule authoring).\n\nThe first save to a new domain claims it for your account (plan limits\napply). Saving to a built-in demo domain saves your own copy of it, seeded\nfrom the demo; the shared demo others see is unchanged. Rules are validated before\nsaving — set dry_run=true to validate without persisting. The response\nreports ok/errors, the parsed rules, and any overlap warnings.\n\nYAML format — a list of rules. Flat form (conditions are AND-ed):\n    - name: \"Approve\"\n      salience: 10\n      conditions:\n        - type: loan\n          field: credit_score\n          op: \">=\"\n          value: 700\n      action:\n        verdict: \"APPROVED\"\n        reason: \"Credit score meets threshold\"\n\nTree form — `when:` holds nested all/any/not condition groups, and an\naction may assert derived facts that other rules consume (forward\nchaining; the rule graph derives from these automatically):\n    - name: \"Sepsis Screen\"\n      salience: 30\n      when:\n        all:\n          - {type: clinical, field: temperature_f, op: \">=\", value: 101.5}\n          - any:\n              - {type: clinical, field: wbc_count, op: \">\", value: 12.0}\n              - {type: clinical, field: bands_pct, op: \">\", value: 10}\n      action:\n        verdict: \"URGENT_ALERT\"\n        assert:\n          - {type: sepsis_flag, fields: {severity: high}}\n    - name: \"Escalate\"\n      salience: 40\n      when:\n        all:\n          - {type: sepsis_flag, field: severity, op: \"==\", value: high}\n          - {type: clinical, field: age, op: \">=\", value: 65}\n      action:\n        verdict: \"ADMIT_ICU\"\n\nUse either `conditions:` or `when:` per rule, never both. `not` passes\nwhen the inner condition does not hold (including when the field is\nabsent). Produce/consume cycles between rules are rejected at validation.\nAn action may also carry `retrieval_scope: { <key>: <value> }` to narrow\nwhich documents retrieval searches (Pattern 01).\n\nA rule may also carry `citation:` — the policy sentence it encodes. It is\nstored with the rule and shown beside it in decision audits, so a verdict\ncan be defended with the source language, not just the rule name:\n    - name: \"Decline Late Returns\"\n      salience: 20\n      citation: \"Returns are accepted within 30 days of delivery.\"\n      when:\n        all:\n          - {type: retail, field: days_since_delivery, op: \">\", value: 30}\n      action:\n        verdict: \"DENIED\"\n\nA rule saved without its `citation` has no link from its decisions back\nto the policy clause that justifies it.\n\nArgs:\n    domain: Domain to author (an owned domain, or a new name to claim).\n    rules_yaml: The full rule set as YAML text.\n    dry_run: Validate only, without saving.\n",
+      "inputSchema": {
+        "properties": {
+          "domain": {
+            "title": "Domain",
+            "type": "string"
+          },
+          "rules_yaml": {
+            "title": "Rules Yaml",
+            "type": "string"
+          },
+          "dry_run": {
+            "default": false,
+            "title": "Dry Run",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "domain",
+          "rules_yaml"
+        ],
+        "type": "object",
+        "title": "put_rulesArguments"
+      }
+    },
+    {
+      "name": "import_policy_rules",
+      "description": "Convert a written policy document into DRAFT decision rules (LLM-assisted).\n\nReturns validated draft rules (when/action, including chained asserts where\nthe policy stages its determinations), derived rule→rule edges, and overlap\nwarnings. Each returned rule carries a `citation` field holding the policy\nsentence it encodes (also summarized in the top-level `citations` map).\nCoverage runs the other way too: `uncovered_sentences` lists policy\nsentences no rule's citation points back to (out of\n`policy_sentence_count`), and `unverified_citations` names rules whose\nquote is missing or not found verbatim in the policy. An uncovered\nsentence may need a rule; an unverified one may be a paraphrase that\nmisstates the policy. `background_sentences` is the subset of uncovered\nsentences with no obligation language (definitions, preamble), split by a\nkeyword heuristic.\nNothing is saved: the drafts are returned for review only.\n\nArgs:\n    domain: Domain the rules are drafted for (an owned domain or a new name).\n    policy_text: The policy document text (max ~50k characters).\n",
+      "inputSchema": {
+        "properties": {
+          "domain": {
+            "title": "Domain",
+            "type": "string"
+          },
+          "policy_text": {
+            "title": "Policy Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "domain",
+          "policy_text"
+        ],
+        "type": "object",
+        "title": "import_policy_rulesArguments"
+      }
+    },
+    {
+      "name": "get_usage",
+      "description": "Show this account's decision usage, plan, and remaining monthly quota.",
+      "inputSchema": {
+        "properties": {},
+        "type": "object",
+        "title": "get_usageArguments"
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "com.ai-rete-rag/ai-rete-rag-mcp",
+    "version": "0.12.1",
+    "remoteUrl": "https://ai-rete-rag.com/mcp",
+    "publishedAt": "2026-11-21T18:51:58.244276Z",
+    "fetchedAt": "2026-11-22T12:49:37.224Z",
+    "toolsSha256": "547219ff3702e832c252bf622d4f88cb54f10cdde061b800770915f02419b8f6"
+  }
+}

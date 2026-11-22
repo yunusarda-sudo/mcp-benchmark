@@ -1,0 +1,470 @@
+{
+  "$schema": "../schema.json",
+  "name": "com.ariadnenexus/mcp-server",
+  "title": "Ariadne Nexus Provenance & Underwriting MCP",
+  "category": "Other",
+  "description": "Deterministic SHA-256 collateral checks, optical forensics, and ZK provenance proofs.",
+  "repository": "https://github.com/dotlink-ops/nexus-core",
+  "tools": [
+    {
+      "name": "inspect_manifest_schema",
+      "description": "Returns required ANX-RFC-001 (ZK_PROV_V1) manifest fields for a collateral class and validates an optional candidate manifest object, listing missing keys and attestation readiness. Use when: checking required manifest keys or pre-validating a candidate JSON payload before SHA-256 hashing. Do not use when: validating an existing 64-hex SHA-256 digest (use verify_asset_hash instead), signing a provenance certificate (use generate_zk_provenance_proof instead), or auditing portfolio LTV caps (use verify_underwriting_compliance instead). Behavior: Read-only, stateless, deterministic schema check (p99=28ms; free discovery tier at 60 RPM without billing).",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "collateral_class": {
+            "type": "string",
+            "enum": [
+              "fine_art",
+              "rwa_bullion",
+              "rare_manuscript",
+              "collectible"
+            ],
+            "default": "fine_art",
+            "description": "Specialty collateral category whose ANX-RFC-001 manifest schema is inspected (default: \"fine_art\")."
+          },
+          "manifest_payload": {
+            "type": "object",
+            "description": "Optional candidate collateral manifest JSON object validated for required ANX-RFC-001 keys (asset_id, collateral_class, optical_scan_sha256, custody_event_hashes, appraised_value_cents). Omit to list required fields only."
+          }
+        }
+      }
+    },
+    {
+      "name": "verify_asset_hash",
+      "description": "Validates and normalizes a 64-character hexadecimal SHA-256 collateral manifest digest and derives its deterministic specialty-title registry commitment ID (cmt_*) for fine art, bullion, manuscripts, or collectibles. Use when: confirming manifest SHA-256 digest conformance and commitment binding prior to paid underwriting. Do not use when: checking unhashed JSON manifest fields (use inspect_manifest_schema instead) or verifying a signed ZK_PROV_V1 certificate (use verify_zk_provenance_proof instead). Behavior: Read-only, stateless, deterministic computation (p99=42ms; free discovery tier at 30 RPM without billing).",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "asset_sha256"
+        ],
+        "properties": {
+          "asset_sha256": {
+            "type": "string",
+            "pattern": "^(?:0x)?[a-fA-F0-9]{64}$",
+            "description": "64-character hexadecimal SHA-256 digest of the canonical collateral manifest JSON, with optional 0x prefix (e.g., \"0x9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08\")."
+          },
+          "collateral_class": {
+            "type": "string",
+            "enum": [
+              "fine_art",
+              "rwa_bullion",
+              "rare_manuscript",
+              "collectible"
+            ],
+            "default": "fine_art",
+            "description": "Specialty collateral classification bound into the cmt_* registry commitment ID (default: \"fine_art\")."
+          }
+        }
+      }
+    },
+    {
+      "name": "generate_zk_provenance_proof",
+      "description": "Computes a 0x01-prefixed SHA-256 custodial Merkle root, optical microtopography score (7200-9985 bps), underwriting recommendation, and Ed25519-signed ZK_PROV_V1 zero-PII provenance certificate. Use when: generating a pre-bind title attestation for an asset_id and policy_ref from custodial SHA-256 digests. Do not use when: verifying an existing certificate (use verify_zk_provenance_proof instead) or sizing multi-asset portfolio loans (use batch_underwrite_portfolio instead). Behavior: Read-only attestation (p99=380ms; $2.50 USD / 250 cents via X-API-Key or X-Payment; returns an unbilled 402 quote if unentitled).",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "asset_id",
+          "policy_ref"
+        ],
+        "properties": {
+          "asset_id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_:-]{3,64}$",
+            "minLength": 3,
+            "maxLength": 64,
+            "description": "Unique alphanumeric collateral or vault asset identifier, 3-64 chars allowing underscores, colons, or hyphens (e.g., \"art_vault_basquiat_09\")."
+          },
+          "policy_ref": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_:-]{3,64}$",
+            "minLength": 3,
+            "maxLength": 64,
+            "description": "Underwriting binder or specialty title policy reference ID, 3-64 chars (e.g., \"POL-CHUBB-2026-441\")."
+          },
+          "custody_event_hashes": {
+            "type": "array",
+            "maxItems": 128,
+            "default": [],
+            "items": {
+              "type": "string",
+              "pattern": "^(?:0x)?[a-fA-F0-9]{64}$",
+              "description": "64-character hex SHA-256 digest of a chronological custodial transfer event (zero seller PII)."
+            },
+            "description": "Ordered list of up to 128 SHA-256 hex digests of prior custodial transfers folded into the 0x01 Merkle root; defaults to a genesis leaf if empty."
+          },
+          "optical_scan_sha256": {
+            "type": "string",
+            "pattern": "^(?:0x)?[a-fA-F0-9]{64}$",
+            "description": "Optional 64-character hex SHA-256 digest of the raking-light or XRF optical microtopography scan; derived from asset_id when omitted."
+          }
+        }
+      }
+    },
+    {
+      "name": "verify_zk_provenance_proof",
+      "description": "Verifies an ariadne-zk-ed25519-v1 (ZK_PROV_V1) provenance certificate across Ed25519 signature validity, zero-PII enforcement, signed claim parity, optional pinned oracle key, and optional 0x01 SHA-256 custodial Merkle recomputation. Use when: auditing a certificate from generate_zk_provenance_proof before policy bind or loan closing. Do not use when: generating a new proof (use generate_zk_provenance_proof instead), checking a manifest digest (use verify_asset_hash instead), or auditing portfolio LTV cap compliance (use verify_underwriting_compliance instead). Behavior: Read-only, stateless cryptographic check (p99=18ms; free discovery tier at 60 RPM without billing).",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "zk_attestation_certificate"
+        ],
+        "properties": {
+          "zk_attestation_certificate": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "scheme",
+              "public_statement",
+              "oracle_pubkey_ed25519_b64",
+              "signature_b64",
+              "seller_pii_exposed"
+            ],
+            "description": "Signed ZK_PROV_V1 certificate object emitted by generate_zk_provenance_proof.",
+            "properties": {
+              "scheme": {
+                "type": "string",
+                "description": "Cryptographic scheme identifier (expected \"ariadne-zk-ed25519-v1\")."
+              },
+              "public_statement": {
+                "type": "string",
+                "description": "Pipe-delimited ZK_PROV_V1 signed statement string."
+              },
+              "oracle_pubkey_ed25519_b64": {
+                "type": "string",
+                "description": "Base64-encoded 32-byte raw Ed25519 public key of the issuing oracle."
+              },
+              "signature_b64": {
+                "type": "string",
+                "description": "Base64-encoded 64-byte Ed25519 signature over UTF-8 public_statement."
+              },
+              "issued_at_utc": {
+                "type": "string",
+                "description": "Optional ISO-8601 UTC issuance timestamp on the certificate envelope."
+              },
+              "seller_pii_exposed": {
+                "type": "boolean",
+                "description": "Zero-PII compliance flag asserted on the certificate (must be false)."
+              }
+            }
+          },
+          "asset_id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_:-]{3,64}$",
+            "description": "Optional outer asset_id cross-checked against the signed asset claim."
+          },
+          "policy_ref": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_:-]{3,64}$",
+            "description": "Optional outer policy_ref cross-checked against the signed policy claim."
+          },
+          "optical_forensic_score_bps": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10000,
+            "description": "Optional outer optical score (0-10000 bps) cross-checked against signed optical_bps."
+          },
+          "title_lien_clearance_merkle_root": {
+            "type": "string",
+            "pattern": "^(?:0x)?[a-fA-F0-9]{64}$",
+            "description": "Optional outer 64-hex Merkle root cross-checked against signed merkle_root."
+          },
+          "pinned_oracle_pubkey_b64": {
+            "type": "string",
+            "description": "Optional out-of-band pinned base64 Ed25519 oracle public key enforced during verification."
+          },
+          "custody_event_hashes": {
+            "type": "array",
+            "maxItems": 128,
+            "items": {
+              "type": "string",
+              "pattern": "^(?:0x)?[a-fA-F0-9]{64}$",
+              "description": "64-character hex SHA-256 custodial transfer digest."
+            },
+            "description": "Optional ordered custodial SHA-256 digests used to independently recompute and verify the 0x01-prefixed Merkle root."
+          }
+        }
+      }
+    },
+    {
+      "name": "batch_underwrite_portfolio",
+      "description": "Computes per-asset optical scores (bps), Merton jump-diffusion 99% stressed values, approved advances in integer USD cents, and effective LTV (bps) across 1-100 collateral items. Use when: sizing a fine-art or RWA credit facility from appraised cent values, optical scan digests, custody depth, and horizon days. Do not use when: signing a single-asset proof (use generate_zk_provenance_proof instead) or auditing an underwriting summary against LTV caps (use verify_underwriting_compliance instead). Behavior: Read-only actuarial solver (p99=910ms; $2.50 USD / 250 cents via X-API-Key or X-Payment; unbilled 402 quote if unentitled).",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "portfolio_id",
+          "assets"
+        ],
+        "properties": {
+          "portfolio_id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_:-]{3,64}$",
+            "minLength": 3,
+            "maxLength": 64,
+            "description": "Institutional credit facility or collateral schedule identifier, 3-64 chars (e.g., \"port_fine_art_2026_q4\")."
+          },
+          "target_advance_rate_bps": {
+            "type": "integer",
+            "minimum": 1000,
+            "maximum": 8500,
+            "default": 5000,
+            "description": "Requested gross loan-to-value (LTV) advance rate in integer basis points from 1000 (10.00%) to 8500 (85.00%); defaults to 5000 (50.00%)."
+          },
+          "horizon_days": {
+            "type": "integer",
+            "minimum": 30,
+            "maximum": 1825,
+            "default": 365,
+            "description": "Credit facility tenor and liquidation stress horizon in calendar days from 30 to 1825 (default: 365)."
+          },
+          "assets": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 100,
+            "description": "List of 1 to 100 specialty collateral items to underwrite under Merton jump-diffusion 99% tail stress.",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "asset_id",
+                "appraised_value_cents",
+                "optical_scan_sha256"
+              ],
+              "description": "Single collateral item with integer-cent appraisal and optical scan digest.",
+              "properties": {
+                "asset_id": {
+                  "type": "string",
+                  "pattern": "^[a-zA-Z0-9_:-]{3,64}$",
+                  "description": "Unique collateral item identifier, 3-64 chars (e.g., \"col_item_01\")."
+                },
+                "appraised_value_cents": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 100000000000,
+                  "description": "Independent appraised value in exact integer USD cents from 1 to 100000000000 ($1B max; e.g., 500000000 for $5M)."
+                },
+                "optical_scan_sha256": {
+                  "type": "string",
+                  "pattern": "^(?:0x)?[a-fA-F0-9]{64}$",
+                  "description": "64-character hex SHA-256 digest of the item's optical microtopography scan."
+                },
+                "custody_depth": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 100,
+                  "default": 3,
+                  "description": "Verified custodial transfer chain depth (1-100); depth >= 4 lowers title-defect jump intensity lambda from 0.19 to 0.08 (default: 3)."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "verify_underwriting_compliance",
+      "description": "Audits a portfolio underwriting summary against the ANX-RFC-001 55% (5500 bps) Merton stressed advance cap, classifies optical forensic score thresholds, and returns the active ZK_PROV_V1 Ed25519 oracle public key and SHA-256 fingerprint. Use when: validating credit-committee LTV compliance on a batch_underwrite_portfolio quote or retrieving the oracle public key for pinning in verify_zk_provenance_proof. Do not use when: computing stressed collateral values from raw asset schedules (use batch_underwrite_portfolio instead), verifying an Ed25519 certificate signature (use verify_zk_provenance_proof instead), or checking JSON manifest fields (use inspect_manifest_schema instead). Behavior: Read-only, stateless compliance check (p99=15ms; free discovery tier at 60 RPM without billing).",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "portfolio_id",
+          "total_appraised_value_cents",
+          "total_merton_stressed_value_cents",
+          "proposed_advance_cents"
+        ],
+        "properties": {
+          "portfolio_id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_:-]{3,64}$",
+            "minLength": 3,
+            "maxLength": 64,
+            "description": "Portfolio or credit facility identifier audited for statutory LTV compliance (e.g., \"port_fine_art_2026_q4\")."
+          },
+          "total_appraised_value_cents": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10000000000000,
+            "description": "Aggregate appraised portfolio value in exact integer USD cents (>= 1)."
+          },
+          "total_merton_stressed_value_cents": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10000000000000,
+            "description": "Aggregate Merton 99% tail-stressed liquidation value in integer USD cents returned by batch_underwrite_portfolio."
+          },
+          "proposed_advance_cents": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10000000000000,
+            "description": "Proposed loan advance in exact integer USD cents tested against the ANX-RFC-001 55% (5500 bps) Merton stressed advance ceiling."
+          },
+          "min_optical_forensic_score_bps": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10000,
+            "default": 8500,
+            "description": "Minimum item-level optical forensic score across the portfolio in basis points (0-10000; default: 8500)."
+          }
+        }
+      }
+    },
+    {
+      "name": "enroll_optical_scan",
+      "description": "Enrolls a zero-PII physical surface-BRDF microtopography and 8-band VNIR/SWIR pigment spectral descriptor pair (baseline_descriptor + intake_descriptor) into the append-only Ariadne Nexus optical forensics ledger (ANX-RFC-001). Enforces genesis baseline immutability, verifies optional ariadne-hash-optical SHA-256 commitments, and returns a deterministic basis-point concordance breakdown. Use when: registering a conservation lab or freeport scan before calling generate_zk_provenance_proof or batch_underwrite_portfolio. Do not use when: generating a signed ZK certificate (use generate_zk_provenance_proof instead) or checking manifest schema (use inspect_manifest_schema instead). Behavior: Idempotent append-only write requiring an active X-API-Key at $0.00 meter charge (60 RPM; rejects conflicting genesis baselines with HTTP 409).",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "asset_id",
+          "baseline_descriptor",
+          "intake_descriptor"
+        ],
+        "properties": {
+          "asset_id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_:-]{3,64}$",
+            "description": "Non-PII collateral asset identifier (3-64 alphanumeric/underscore/hyphen/colon chars)."
+          },
+          "baseline_descriptor": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "beckmann_roughness_micro",
+              "fresnel_f0_micro",
+              "anisotropy_ratio_micro",
+              "spectral_reflectance_8band",
+              "craquelure_junction_density_per_cm2_milli",
+              "retouch_uv_anomaly_area_bps"
+            ],
+            "description": "Immutable genesis or initial freeport intake physical optical scan descriptor.",
+            "properties": {
+              "beckmann_roughness_micro": {
+                "type": "integer",
+                "minimum": 10000,
+                "maximum": 950000,
+                "description": "Cook-Torrance/Beckmann RMS microfacet slope roughness in micro-units (10000-950000)."
+              },
+              "fresnel_f0_micro": {
+                "type": "integer",
+                "minimum": 10000,
+                "maximum": 250000,
+                "description": "Normal-incidence Fresnel specular reflectance F0 in micro-units (10000-250000)."
+              },
+              "anisotropy_ratio_micro": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 1000000,
+                "description": "Azimuthal brushwork anisotropy ratio in micro-units (0-1000000)."
+              },
+              "spectral_reflectance_8band": {
+                "type": "array",
+                "minItems": 8,
+                "maxItems": 8,
+                "items": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 100000
+                },
+                "description": "8-band VNIR/SWIR reflectance vector (450nm-1650nm) in integer units (1-100000)."
+              },
+              "craquelure_junction_density_per_cm2_milli": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 500000,
+                "description": "Craquelure network junction density per cm^2 in milli-units (0-500000)."
+              },
+              "retouch_uv_anomaly_area_bps": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 10000,
+                "description": "UV-fluorescence or IR-transmittance modern overpaint area in basis points (0-10000)."
+              }
+            }
+          },
+          "intake_descriptor": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "beckmann_roughness_micro",
+              "fresnel_f0_micro",
+              "anisotropy_ratio_micro",
+              "spectral_reflectance_8band",
+              "craquelure_junction_density_per_cm2_milli",
+              "retouch_uv_anomaly_area_bps"
+            ],
+            "description": "Current conservation lab or freeport inspection optical scan descriptor.",
+            "properties": {
+              "beckmann_roughness_micro": {
+                "type": "integer",
+                "minimum": 10000,
+                "maximum": 950000,
+                "description": "Cook-Torrance/Beckmann RMS microfacet slope roughness in micro-units (10000-950000)."
+              },
+              "fresnel_f0_micro": {
+                "type": "integer",
+                "minimum": 10000,
+                "maximum": 250000,
+                "description": "Normal-incidence Fresnel specular reflectance F0 in micro-units (10000-250000)."
+              },
+              "anisotropy_ratio_micro": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 1000000,
+                "description": "Azimuthal brushwork anisotropy ratio in micro-units (0-1000000)."
+              },
+              "spectral_reflectance_8band": {
+                "type": "array",
+                "minItems": 8,
+                "maxItems": 8,
+                "items": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 100000
+                },
+                "description": "8-band VNIR/SWIR reflectance vector (450nm-1650nm) in integer units (1-100000)."
+              },
+              "craquelure_junction_density_per_cm2_milli": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 500000,
+                "description": "Craquelure network junction density per cm^2 in milli-units (0-500000)."
+              },
+              "retouch_uv_anomaly_area_bps": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 10000,
+                "description": "UV-fluorescence or IR-transmittance modern overpaint area in basis points (0-10000)."
+              }
+            }
+          },
+          "expected_optical_scan_sha256": {
+            "type": "string",
+            "pattern": "^(?:0x)?[a-fA-F0-9]{64}$",
+            "description": "Optional 32-byte SHA-256 hex digest pre-computed locally via ariadne-hash-optical."
+          },
+          "scanner_facility_ref": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "Optional non-PII conservation lab or freeport bay code (e.g. \"GVA-FREEPORT-BAY-04\")."
+          }
+        }
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "com.ariadnenexus/mcp-server",
+    "version": "0.1.8",
+    "remoteUrl": "https://mcp.ariadnenexus.com/mcp",
+    "publishedAt": "2026-11-21T01:16:15.345517Z",
+    "fetchedAt": "2026-11-22T12:49:37.224Z",
+    "toolsSha256": "d614bc1a061d9b70ce0016dd2e63d65986937301d0a37231b847c9daf31f4cba"
+  }
+}
