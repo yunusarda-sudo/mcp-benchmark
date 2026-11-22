@@ -1,16 +1,20 @@
 # MCP Benchmark
 
 [![CI](https://github.com/yunusarda-sudo/mcp-benchmark/actions/workflows/ci.yml/badge.svg)](https://github.com/yunusarda-sudo/mcp-benchmark/actions/workflows/ci.yml)
-[![Ecosystem Servers](https://img.shields.io/badge/MCP_Ecosystem-102_Servers-blueviolet)](fixtures/ecosystem-100.json)
+[![Ecosystem Servers](https://img.shields.io/badge/MCP_Ecosystem-130%2B_Servers-blueviolet)](fixtures/ecosystem-100.json)
+[![Live Web Playground](https://img.shields.io/badge/Live_Playground-GitHub_Pages-emerald)](https://yunusarda-sudo.github.io/mcp-benchmark/)
+[![Automated Sync](https://img.shields.io/badge/Ecosystem_Sync-Weekly_Cron-cyan)](.github/workflows/sync-ecosystem.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 MCP Benchmark is a quantitative quality benchmark, linter, and auto-fixer for **Model Context Protocol (MCP)** tool definitions. It scores tool catalogs using deterministic rules for schema strictness, semantic density, and context token efficiency — working entirely offline without needing an LLM or API keys.
 
+> 🚀 **[Try the Live Web Playground](https://yunusarda-sudo.github.io/mcp-benchmark/)** — Paste any MCP tool JSON, get an instant Google Lighthouse-style scorecard, token cost estimates, and one-click auto-fixes directly in your browser.
+
 ---
 
-## 🌐 Ecosystem Benchmark Corpus (102 Standard MCP Servers)
+## 🌐 Ecosystem Benchmark Corpus (130+ MCP Servers)
 
-MCP Benchmark includes a comprehensive reference corpus of **102 standard MCP servers** spanning developer tools, cloud providers, databases, and APIs.
+MCP Benchmark includes an active reference corpus of **130+ standard and community MCP servers** spanning developer tools, cloud providers, databases, and APIs. A scheduled [GitHub Action](.github/workflows/sync-ecosystem.yml) automatically syncs and scores newly released servers weekly.
 
 Run the ecosystem benchmark across all 102 servers with one command:
 
