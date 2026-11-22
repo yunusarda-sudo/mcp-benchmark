@@ -1,9 +1,9 @@
 # MCP Benchmark
 
 [![CI](https://github.com/yunusarda-sudo/mcp-benchmark/actions/workflows/ci.yml/badge.svg)](https://github.com/yunusarda-sudo/mcp-benchmark/actions/workflows/ci.yml)
-[![Ecosystem Servers](https://img.shields.io/badge/MCP_Ecosystem-130%2B_Servers-blueviolet)](fixtures/ecosystem-100.json)
+[![MCP Registry Servers](https://img.shields.io/badge/MCP_Registry-0_Servers-blueviolet)](registry/servers/)
 [![Live Web Playground](https://img.shields.io/badge/Live_Playground-GitHub_Pages-emerald)](https://yunusarda-sudo.github.io/mcp-benchmark/)
-[![Automated Sync](https://img.shields.io/badge/Ecosystem_Sync-Weekly_Cron-cyan)](.github/workflows/sync-ecosystem.yml)
+[![Registry Sync](https://img.shields.io/badge/Registry_Sync-Weekly_PR-cyan)](.github/workflows/sync-ecosystem.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 MCP Benchmark is a quantitative quality benchmark, linter, and auto-fixer for **Model Context Protocol (MCP)** tool definitions. It scores tool catalogs using deterministic rules for schema strictness, semantic density, and context token efficiency — working entirely offline without needing an LLM or API keys.
@@ -12,189 +12,35 @@ MCP Benchmark is a quantitative quality benchmark, linter, and auto-fixer for **
 
 ---
 
-## 🌐 Ecosystem Benchmark Corpus (130+ MCP Servers)
+## 🌐 MCP Registry Leaderboard
 
-MCP Benchmark includes an active reference corpus of **130+ standard and community MCP servers** spanning developer tools, cloud providers, databases, and APIs. A scheduled [GitHub Action](.github/workflows/sync-ecosystem.yml) automatically syncs and scores newly released servers weekly.
+The leaderboard ranks **real tool definitions** from remote MCP servers listed in the [official MCP Registry](https://registry.modelcontextprotocol.io).
 
-Run the ecosystem benchmark across all 130 servers with one command:
+**Method.** A scheduled [GitHub Action](.github/workflows/sync-ecosystem.yml) pages through the registry API, keeps the latest active version of each server, and selects servers that publish an auth-free `streamable-http` remote over HTTPS. For each one it runs a live `initialize` → `tools/list` handshake and scores whatever the server returns. Servers that need credentials, fail, or return no valid tools are not listed, and no tool definitions are written by hand or generated. Packages (npm, PyPI, Docker) are never downloaded or run. Every entry in [`registry/servers/`](registry/servers/) records its provenance (registry name, version, remote URL, fetch time, and a SHA-256 of the tools). The sync opens a pull request instead of pushing to `main`.
+
+Because only auth-free remote servers can be probed this way, the leaderboard is a sample of the public remote ecosystem, not the whole registry. Many popular servers run locally or need an API key and do not appear here.
+
+<!-- SYNC_INFO_START -->
+<!-- SYNC_INFO_END -->
+
+Benchmark the synced servers locally:
 
 ```bash
 npx --yes github:yunusarda-sudo/mcp-benchmark --ecosystem
-```
-
-Or generate a searchable HTML report:
-
-```bash
 node dist/cli.js --ecosystem --html ecosystem-leaderboard.html
 ```
 
-## 🏆 Official MCP Ecosystem Leaderboard (Rankings)
-
-Deterministic quality benchmarks for **102 standard MCP servers**, evaluated by the **Tool Quality Index (TQI)** across Schema Strictness (40%), Semantic Density (35%), and Context Token Footprint (25%).
+Scores use the **Tool Quality Index (TQI)**: Schema Strictness (40%), Semantic Density (35%), and Context Token Footprint (25%).
 
 > 💡 **Where does your MCP server rank?** Test your catalog locally:
 > ```bash
 > npx --yes github:yunusarda-sudo/mcp-benchmark -f tools.json
 > ```
 
-### Top 25 MCP Servers
+### Rankings
 
-| Rank | MCP Server | Grade | TQI Score | Schema Strictness | Semantic Density | Token Efficiency | Avg Tokens/Tool |
-|:---:|:---|:---:|:---:|:---:|:---:|:---:|:---:|
-| 1 | **BetterStack MCP** | `A+` | **100/100** | 100% | 100% | 100% | 64 tok |
-| 2 | **Shopify Store MCP** | `A+` | **100/100** | 100% | 100% | 100% | 65 tok |
-| 3 | **Git MCP** | `A+` | **96/100** | 90% | 100% | 100% | 72 tok |
-| 4 | **GitLab MCP** | `A+` | **96/100** | 100% | 100% | 85% | 94 tok |
-| 5 | **PostgreSQL MCP** | `A+` | **96/100** | 90% | 100% | 100% | 59 tok |
-| 6 | **SQLite MCP** | `A+` | **96/100** | 90% | 100% | 100% | 74 tok |
-| 7 | **MySQL MCP** | `A+` | **96/100** | 90% | 100% | 100% | 60 tok |
-| 8 | **ClickHouse MCP** | `A+` | **96/100** | 100% | 100% | 85% | 91 tok |
-| 9 | **S3 MinIO MCP** | `A+` | **96/100** | 90% | 100% | 100% | 77 tok |
-| 10 | **Tavily Search MCP** | `A+` | **96/100** | 100% | 100% | 85% | 85 tok |
-| 11 | **Perplexity MCP** | `A+` | **96/100** | 90% | 100% | 100% | 60 tok |
-| 12 | **Notion MCP** | `A+` | **96/100** | 90% | 100% | 100% | 65 tok |
-| 13 | **Obsidian MCP** | `A+` | **96/100** | 90% | 100% | 100% | 62 tok |
-| 14 | **Jira MCP** | `A+` | **96/100** | 90% | 100% | 100% | 67 tok |
-| 15 | **Confluence MCP** | `A+` | **96/100** | 90% | 100% | 100% | 64 tok |
-| 16 | **Trello MCP** | `A+` | **96/100** | 90% | 100% | 100% | 77 tok |
-| 17 | **Asana MCP** | `A+` | **96/100** | 90% | 100% | 100% | 77 tok |
-| 18 | **ClickUp MCP** | `A+` | **96/100** | 90% | 100% | 100% | 70 tok |
-| 19 | **Todoist MCP** | `A+` | **96/100** | 90% | 100% | 100% | 64 tok |
-| 20 | **Telegram MCP** | `A+` | **96/100** | 90% | 100% | 100% | 75 tok |
-| 21 | **Zendesk MCP** | `A+` | **96/100** | 90% | 100% | 100% | 80 tok |
-| 22 | **Intercom MCP** | `A+` | **96/100** | 90% | 100% | 100% | 80 tok |
-| 23 | **PagerDuty MCP** | `A+` | **96/100** | 100% | 100% | 85% | 116 tok |
-| 24 | **Twilio MCP** | `A+` | **96/100** | 90% | 100% | 100% | 77 tok |
-| 25 | **AWS Cloud MCP** | `A+` | **96/100** | 90% | 100% | 100% | 65 tok |
-
-<details>
-<summary><b>👉 Click here to expand and view all 102 MCP Server Rankings (Full Leaderboard)</b></summary>
-<br>
-
-| Rank | MCP Server | Grade | TQI Score | Schema Strictness | Semantic Density | Token Efficiency | Avg Tokens/Tool |
-|:---:|:---|:---:|:---:|:---:|:---:|:---:|:---:|
-| 1 | **BetterStack MCP** | `A+` | **100/100** | 100% | 100% | 100% | 64 tok |
-| 2 | **Shopify Store MCP** | `A+` | **100/100** | 100% | 100% | 100% | 65 tok |
-| 3 | **Git MCP** | `A+` | **96/100** | 90% | 100% | 100% | 72 tok |
-| 4 | **GitLab MCP** | `A+` | **96/100** | 100% | 100% | 85% | 94 tok |
-| 5 | **PostgreSQL MCP** | `A+` | **96/100** | 90% | 100% | 100% | 59 tok |
-| 6 | **SQLite MCP** | `A+` | **96/100** | 90% | 100% | 100% | 74 tok |
-| 7 | **MySQL MCP** | `A+` | **96/100** | 90% | 100% | 100% | 60 tok |
-| 8 | **ClickHouse MCP** | `A+` | **96/100** | 100% | 100% | 85% | 91 tok |
-| 9 | **S3 MinIO MCP** | `A+` | **96/100** | 90% | 100% | 100% | 77 tok |
-| 10 | **Tavily Search MCP** | `A+` | **96/100** | 100% | 100% | 85% | 85 tok |
-| 11 | **Perplexity MCP** | `A+` | **96/100** | 90% | 100% | 100% | 60 tok |
-| 12 | **Notion MCP** | `A+` | **96/100** | 90% | 100% | 100% | 65 tok |
-| 13 | **Obsidian MCP** | `A+` | **96/100** | 90% | 100% | 100% | 62 tok |
-| 14 | **Jira MCP** | `A+` | **96/100** | 90% | 100% | 100% | 67 tok |
-| 15 | **Confluence MCP** | `A+` | **96/100** | 90% | 100% | 100% | 64 tok |
-| 16 | **Trello MCP** | `A+` | **96/100** | 90% | 100% | 100% | 77 tok |
-| 17 | **Asana MCP** | `A+` | **96/100** | 90% | 100% | 100% | 77 tok |
-| 18 | **ClickUp MCP** | `A+` | **96/100** | 90% | 100% | 100% | 70 tok |
-| 19 | **Todoist MCP** | `A+` | **96/100** | 90% | 100% | 100% | 64 tok |
-| 20 | **Telegram MCP** | `A+` | **96/100** | 90% | 100% | 100% | 75 tok |
-| 21 | **Zendesk MCP** | `A+` | **96/100** | 90% | 100% | 100% | 80 tok |
-| 22 | **Intercom MCP** | `A+` | **96/100** | 90% | 100% | 100% | 80 tok |
-| 23 | **PagerDuty MCP** | `A+` | **96/100** | 100% | 100% | 85% | 116 tok |
-| 24 | **Twilio MCP** | `A+` | **96/100** | 90% | 100% | 100% | 77 tok |
-| 25 | **AWS Cloud MCP** | `A+` | **96/100** | 90% | 100% | 100% | 65 tok |
-| 26 | **Azure Cloud MCP** | `A+` | **96/100** | 90% | 100% | 100% | 57 tok |
-| 27 | **Vercel MCP** | `A+` | **96/100** | 90% | 100% | 100% | 63 tok |
-| 28 | **Netlify MCP** | `A+` | **96/100** | 90% | 100% | 100% | 59 tok |
-| 29 | **Railway MCP** | `A+` | **96/100** | 90% | 100% | 100% | 65 tok |
-| 30 | **Render MCP** | `A+` | **96/100** | 90% | 100% | 100% | 61 tok |
-| 31 | **Fly.io MCP** | `A+` | **96/100** | 90% | 100% | 100% | 57 tok |
-| 32 | **DigitalOcean MCP** | `A+` | **96/100** | 90% | 100% | 100% | 58 tok |
-| 33 | **Sentry MCP** | `A+` | **96/100** | 90% | 100% | 100% | 64 tok |
-| 34 | **Grafana MCP** | `A+` | **96/100** | 90% | 100% | 100% | 58 tok |
-| 35 | **Prometheus MCP** | `A+` | **96/100** | 90% | 100% | 100% | 64 tok |
-| 36 | **New Relic MCP** | `A+` | **96/100** | 90% | 100% | 100% | 58 tok |
-| 37 | **Mixpanel MCP** | `A+` | **96/100** | 90% | 100% | 100% | 62 tok |
-| 38 | **Puppeteer MCP** | `A+` | **96/100** | 90% | 100% | 100% | 60 tok |
-| 39 | **Playwright MCP** | `A+` | **96/100** | 90% | 100% | 100% | 63 tok |
-| 40 | **Fetch HTTP MCP** | `A+` | **96/100** | 100% | 100% | 85% | 82 tok |
-| 41 | **Crawl4AI MCP** | `A+` | **96/100** | 90% | 100% | 100% | 65 tok |
-| 42 | **Browserless MCP** | `A+` | **96/100** | 90% | 100% | 100% | 63 tok |
-| 43 | **BrightData MCP** | `A+` | **96/100** | 90% | 100% | 100% | 62 tok |
-| 44 | **Make.com MCP** | `A+` | **96/100** | 90% | 100% | 100% | 64 tok |
-| 45 | **PayPal MCP** | `A+` | **96/100** | 90% | 100% | 100% | 63 tok |
-| 46 | **Square MCP** | `A+` | **96/100** | 90% | 100% | 100% | 63 tok |
-| 47 | **Plaid Banking MCP** | `A+` | **96/100** | 90% | 100% | 100% | 68 tok |
-| 48 | **HubSpot CRM MCP** | `A+` | **96/100** | 90% | 100% | 100% | 63 tok |
-| 49 | **Salesforce MCP** | `A+` | **96/100** | 90% | 100% | 100% | 60 tok |
-| 50 | **QuickBooks MCP** | `A+` | **96/100** | 90% | 100% | 100% | 64 tok |
-| 51 | **Xero Accounting MCP** | `A+` | **96/100** | 90% | 100% | 100% | 60 tok |
-| 52 | **PubMed Bio MCP** | `A+` | **96/100** | 90% | 100% | 100% | 67 tok |
-| 53 | **Spotify Music MCP** | `A+` | **96/100** | 90% | 100% | 100% | 64 tok |
-| 54 | **Reddit MCP** | `A+` | **96/100** | 100% | 100% | 85% | 89 tok |
-| 55 | **Twitter X MCP** | `A+` | **96/100** | 90% | 100% | 100% | 62 tok |
-| 56 | **HackerNews MCP** | `A+` | **96/100** | 90% | 100% | 100% | 62 tok |
-| 57 | **Weather MCP** | `A+` | **96/100** | 90% | 100% | 100% | 72 tok |
-| 58 | **Google Drive MCP** | `A+` | **96/100** | 90% | 100% | 100% | 66 tok |
-| 59 | **Google Calendar MCP** | `A+` | **96/100** | 90% | 100% | 100% | 80 tok |
-| 60 | **Filesystem MCP** | `A+` | **95/100** | 90% | 100% | 95% | 70 tok |
-| 61 | **Docker MCP** | `A+` | **94/100** | 90% | 100% | 93% | 75 tok |
-| 62 | **Redis MCP** | `A+` | **94/100** | 90% | 100% | 93% | 76 tok |
-| 63 | **GitHub MCP** | `A+` | **92/100** | 90% | 100% | 85% | 119 tok |
-| 64 | **VS Code MCP** | `A+` | **92/100** | 90% | 100% | 85% | 96 tok |
-| 65 | **Kubernetes MCP** | `A+` | **92/100** | 90% | 100% | 85% | 86 tok |
-| 66 | **Terraform MCP** | `A+` | **92/100** | 90% | 100% | 85% | 88 tok |
-| 67 | **Ansible MCP** | `A+` | **92/100** | 90% | 100% | 85% | 106 tok |
-| 68 | **Jenkins MCP** | `A+` | **92/100** | 90% | 100% | 85% | 84 tok |
-| 69 | **MongoDB MCP** | `A+` | **92/100** | 90% | 100% | 85% | 102 tok |
-| 70 | **Elasticsearch MCP** | `A+` | **92/100** | 90% | 100% | 85% | 81 tok |
-| 71 | **Snowflake MCP** | `A+` | **92/100** | 90% | 100% | 85% | 81 tok |
-| 72 | **BigQuery MCP** | `A+` | **92/100** | 90% | 100% | 85% | 86 tok |
-| 73 | **Supabase MCP** | `A+` | **92/100** | 90% | 100% | 85% | 88 tok |
-| 74 | **Firebase MCP** | `A+` | **92/100** | 90% | 100% | 85% | 85 tok |
-| 75 | **Pinecone MCP** | `A+` | **92/100** | 90% | 100% | 85% | 91 tok |
-| 76 | **Qdrant MCP** | `A+` | **92/100** | 90% | 100% | 85% | 111 tok |
-| 77 | **Weaviate MCP** | `A+` | **92/100** | 90% | 100% | 85% | 88 tok |
-| 78 | **Chroma MCP** | `A+` | **92/100** | 90% | 100% | 85% | 97 tok |
-| 79 | **Milvus MCP** | `A+` | **92/100** | 90% | 100% | 85% | 93 tok |
-| 80 | **Neo4j Graph MCP** | `A+` | **92/100** | 90% | 100% | 85% | 82 tok |
-| 81 | **Brave Search MCP** | `A+` | **92/100** | 90% | 100% | 85% | 83 tok |
-| 82 | **Exa Neural Search MCP** | `A+` | **92/100** | 90% | 100% | 85% | 83 tok |
-| 83 | **Linear MCP** | `A+` | **92/100** | 90% | 100% | 85% | 102 tok |
-| 84 | **Airtable MCP** | `A+` | **92/100** | 90% | 100% | 85% | 81 tok |
-| 85 | **Slack MCP** | `A+` | **92/100** | 90% | 100% | 85% | 82 tok |
-| 86 | **Discord MCP** | `A+` | **92/100** | 90% | 100% | 85% | 83 tok |
-| 87 | **Microsoft Teams MCP** | `A+` | **92/100** | 90% | 100% | 85% | 99 tok |
-| 88 | **SendGrid MCP** | `A+` | **92/100** | 90% | 100% | 85% | 97 tok |
-| 89 | **Mailchimp MCP** | `A+` | **92/100** | 90% | 100% | 85% | 83 tok |
-| 90 | **Google Cloud MCP** | `A+` | **92/100** | 90% | 100% | 85% | 84 tok |
-| 91 | **Cloudflare MCP** | `A+` | **92/100** | 90% | 100% | 85% | 85 tok |
-| 92 | **Datadog MCP** | `A+` | **92/100** | 90% | 100% | 85% | 103 tok |
-| 93 | **PostHog MCP** | `A+` | **92/100** | 90% | 100% | 85% | 85 tok |
-| 94 | **Segment MCP** | `A+` | **92/100** | 90% | 100% | 85% | 98 tok |
-| 95 | **LaunchDarkly MCP** | `A+` | **92/100** | 90% | 100% | 85% | 99 tok |
-| 96 | **Cheerio MCP** | `A+` | **92/100** | 90% | 100% | 85% | 86 tok |
-| 97 | **Apify MCP** | `A+` | **92/100** | 90% | 100% | 85% | 82 tok |
-| 98 | **n8n Automation MCP** | `A+` | **92/100** | 90% | 100% | 85% | 84 tok |
-| 99 | **Stripe Payments MCP** | `A+` | **92/100** | 90% | 100% | 85% | 95 tok |
-| 100 | **Google Sheets MCP** | `A+` | **92/100** | 90% | 100% | 85% | 118 tok |
-| 101 | **YouTube Transcript MCP** | `A+` | **92/100** | 90% | 100% | 85% | 86 tok |
-| 102 | **ArXiv Research MCP** | `A+` | **92/100** | 90% | 100% | 85% | 84 tok |
-
-</details>
-
----
-
-### Ecosystem Breakdown by Category
-
-| Category | Servers | Representative Servers Included |
-| --- | :---: | --- |
-| **Developer Tools & VCS** | 10 | Filesystem, Git, GitHub, GitLab, VS Code, Docker, Kubernetes, Terraform, Ansible, Jenkins |
-| **Databases & Storage** | 12 | PostgreSQL, SQLite, MySQL, Redis, MongoDB, Elasticsearch, ClickHouse, Snowflake, BigQuery, Supabase, Firebase, S3/MinIO |
-| **Vector DBs & AI Search** | 10 | Pinecone, Qdrant, Weaviate, Chroma, Milvus, Neo4j Graph, Tavily, Brave Search, Perplexity, Exa |
-| **Productivity & Notes** | 10 | Notion, Obsidian, Linear, Jira, Confluence, Trello, Asana, ClickUp, Airtable, Todoist |
-| **Communication & Alerting** | 10 | Slack, Discord, Telegram, Microsoft Teams, Zendesk, Intercom, PagerDuty, Twilio, SendGrid, Mailchimp |
-| **Cloud & Hosting Platforms** | 10 | AWS Cloud, Google Cloud, Azure, Cloudflare, Vercel, Netlify, Railway, Render, Fly.io, DigitalOcean |
-| **Observability & Analytics** | 10 | Sentry, Datadog, Grafana, Prometheus, New Relic, PostHog, Mixpanel, Segment, BetterStack, LaunchDarkly |
-| **Web Scraping & Automation** | 10 | Puppeteer, Playwright, Fetch HTTP, Cheerio, Crawl4AI, Browserless, BrightData, Apify, n8n, Make.com |
-| **Payments, CRM & Finance** | 10 | Stripe, Shopify, PayPal, Square, Plaid Banking, HubSpot CRM, Salesforce, QuickBooks, Xero, Google Sheets |
-| **Social, Media & Knowledge** | 10 | YouTube Transcript, ArXiv, PubMed Bio, Spotify, Reddit, Twitter/X, HackerNews, Weather, Google Drive, Google Calendar |
-| **Total Benchmark Corpus** | **102** | *All catalog definitions available in [`fixtures/ecosystem-100.json`](fixtures/ecosystem-100.json)* |
+<!-- LEADERBOARD_START -->
+<!-- LEADERBOARD_END -->
 
 ---
 
@@ -237,7 +83,7 @@ The sample has **3 tools** and scores **73/100 (B)** under the current rules. Us
 
 | Input | Example |
 | --- | --- |
-| 100+ Ecosystem benchmark corpus | `node dist/cli.js --ecosystem --html report.html` |
+| Servers synced from the MCP Registry | `node dist/cli.js --ecosystem --html report.html` |
 | JSON file | `node dist/cli.js --file examples/sample-mcp-tools.json --json` |
 | Local MCP server over stdio | `node dist/cli.js --cmd "node fixtures/echo-mcp-server.mjs"` |
 | MCP server using the legacy HTTP+SSE transport | `node dist/cli.js --url http://localhost:8000/sse` |
@@ -245,7 +91,7 @@ The sample has **3 tools** and scores **73/100 (B)** under the current rules. Us
 
 A JSON input can be a tool array, an object with a `tools` array, or a complete [MCP `tools/list` JSON-RPC response](https://modelcontextprotocol.io/specification/2025-11-25/server/tools#listing-tools). For a paginated export, combine the tools from all pages into one array. Live inspection follows successive `nextCursor` values for the configured server and only lists tool definitions. The stdio mode starts the supplied executable, so use a command you trust.
 
-`--ecosystem` benchmarks the curated corpus of **102 standard MCP servers** spanning developer tools, databases, vector search, cloud providers, and productivity APIs.
+`--ecosystem` benchmarks the servers in `registry/servers/`, whose tools were fetched live from auth-free remote servers in the MCP Registry (see [MCP Registry Leaderboard](#-mcp-registry-leaderboard)). Pass `--registry-dir <path>` to benchmark another directory of entries.
 
 `--html report.html` saves a standalone interactive report with live tool search and diagnostic filtering. `--sarif report.sarif` exports an OASIS SARIF v2.1.0 report for GitHub Code Scanning. `--badge mcp-badge.svg` generates an SVG quality badge for your repository. `--json` sends only report JSON to stdout, with diagnostics on stderr. Use `--help` for all options.
 
@@ -431,17 +277,19 @@ console.log(report.metrics.overallScore, report.findings);
 
 We want MCP Benchmark to be shaped and driven by the global MCP developer community.
 
-### 🚀 Submit Your MCP Server to the Leaderboard
-Want your MCP server ranked on the official leaderboard and get a quality badge?
-1. Open a PR adding a single JSON file to [`registry/servers/<your-server>.json`](registry/servers/) following [`registry/schema.json`](registry/schema.json).
-2. Or run:
-   ```bash
-   node dist/cli.js --submit my-tools.json \
-     --name "My Server" \
-     --category "Databases & Storage" \
-     --repo "https://github.com/org/my-server"
-   ```
-3. Or submit via the [GitHub Issue Form](https://github.com/yunusarda-sudo/mcp-benchmark/issues/new?template=submit_server.yml).
+### 🚀 Get Your MCP Server on the Leaderboard
+The leaderboard is built from the [official MCP Registry](https://registry.modelcontextprotocol.io). To be listed automatically, [publish your server to the registry](https://github.com/modelcontextprotocol/registry) with an auth-free `streamable-http` remote; the next weekly sync probes it and opens a pull request with its live `tools/list` output.
+
+Servers that cannot be probed (local-only or authenticated) can be added as a manual entry, which the leaderboard marks as "manual entry":
+
+```bash
+node dist/cli.js --submit my-tools.json \
+  --name "My Server" \
+  --category "Databases & Storage" \
+  --repo "https://github.com/org/my-server"
+```
+
+This writes `registry/servers/manual-<slug>.json` with `source: { "type": "manual" }`. Open a PR with that file, or use the [GitHub Issue Form](https://github.com/yunusarda-sudo/mcp-benchmark/issues/new?template=submit_server.yml).
 
 ### 📐 Pluggable Linter & Benchmark Rules
 All linting and scoring rules are modularized under [`src/rules/`](src/rules/).

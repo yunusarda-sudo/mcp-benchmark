@@ -2,56 +2,40 @@
 
 Welcome! We are excited to collaborate with the AI and Model Context Protocol (MCP) community to build the definitive, transparent, and reproducible quality standard for LLM tool interfaces.
 
-Whether you want to **list your MCP server on the Official Leaderboard**, **author a new linter or security check**, or **improve automated fixers**, this guide will help you get started quickly.
+Whether you want to **list your MCP server on the leaderboard**, **author a new linter or security check**, or **improve automated fixers**, this guide will help you get started quickly.
 
 ---
 
-## 🌟 1. Submit Your MCP Server to the Official Leaderboard
+## 🌟 1. Get Your MCP Server on the Leaderboard
 
-We maintain a living leaderboard of 100+ standard and community MCP servers. Listing your server helps users find your tools, verifies schema health, and provides a crisp TQI grade badge for your repository.
+The leaderboard ranks tool definitions fetched live from remote servers in the [official MCP Registry](https://registry.modelcontextprotocol.io). Nothing on it is hand-written or generated.
 
-### Option A: Quick Pull Request (Recommended)
-1. Create a JSON definition for your server in `registry/servers/<slug>.json` conforming to [`registry/schema.json`](registry/schema.json):
-   ```json
-   {
-     "$schema": "../schema.json",
-     "name": "Supabase MCP",
-     "category": "Databases & Storage",
-     "description": "Supabase database and management tools for AI agents.",
-     "repository": "https://github.com/supabase/mcp-server-supabase",
-     "maintainer": "@your-github-username",
-     "tools": [
-       {
-         "name": "query_database",
-         "description": "Execute a parameterized SQL query against the connected project.",
-         "inputSchema": {
-           "type": "object",
-           "required": ["sql"],
-           "properties": {
-             "sql": {
-               "type": "string",
-               "description": "The read-only SELECT query to run."
-             }
-           }
-         }
-       }
-     ]
-   }
-   ```
-2. Run the update script to re-score and refresh the README:
-   ```bash
-   npm run update-leaderboard
-   ```
-3. Open a Pull Request! Our automated GitHub Action will validate your schema, verify your TQI score, and preview your badge.
+### Option A: Publish to the MCP Registry (recommended)
+Publish your server to the [MCP Registry](https://github.com/modelcontextprotocol/registry) with an auth-free `streamable-http` remote over HTTPS. The weekly sync (`npm run sync-registry`, see [`scripts/sync-registry.mjs`](scripts/sync-registry.mjs)) runs `initialize` → `tools/list` against it and opens a pull request that adds `registry/servers/<slug>.json` with a `source` provenance block:
 
-### Option B: Using the CLI
-If you already have your tool definitions exported locally:
+```json
+"source": {
+  "type": "registry",
+  "registry": "registry.modelcontextprotocol.io",
+  "name": "io.github.acme/weather",
+  "version": "1.2.0",
+  "remoteUrl": "https://mcp.acme.example/mcp",
+  "fetchedAt": "2026-11-22T06:00:00.000Z",
+  "toolsSha256": "<sha256 of the tools array>"
+}
+```
+
+Do not edit these files by hand; the next sync overwrites them.
+
+### Option B: Manual entry
+For servers that cannot be probed (local-only or authenticated), export your real `tools/list` output and run:
 ```bash
 node dist/cli.js --submit my-tools.json \
   --name "My Awesome MCP" \
   --category "Productivity & Notes" \
   --repo "https://github.com/my-org/my-awesome-mcp"
 ```
+This writes `registry/servers/manual-<slug>.json` with `"source": { "type": "manual", "submittedAt": "..." }`, conforming to [`registry/schema.json`](registry/schema.json). The leaderboard labels these as manual entries. Open a pull request with the file.
 
 ---
 
