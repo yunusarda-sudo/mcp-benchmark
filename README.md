@@ -18,7 +18,7 @@ The leaderboard ranks **real tool definitions** from remote MCP servers listed i
 
 **Method.** A scheduled [GitHub Action](.github/workflows/sync-ecosystem.yml) pages through the registry API, keeps the latest active version of each server, and selects servers that publish an auth-free `streamable-http` remote over HTTPS. For each one it runs a live `initialize` → `tools/list` handshake and scores whatever the server returns. Servers that need credentials, fail, or return no valid tools are not listed, and no tool definitions are written by hand or generated. Packages (npm, PyPI, Docker) are never downloaded or run. Every entry in [`registry/servers/`](registry/servers/) records its provenance (registry name, version, remote URL, fetch time, and a SHA-256 of the tools). The sync opens a pull request instead of pushing to `main`.
 
-Because only auth-free remote servers can be probed this way, the leaderboard is a sample of the public remote ecosystem, not the whole registry. Many popular servers run locally or need an API key and do not appear here.
+Because only auth-free remote servers can be probed this way, the leaderboard is a sample of the public remote ecosystem, not the whole registry. Many popular servers run locally or need an API key and do not appear here. Each run probes at most 400 candidates (`MAX_PROBES`); the registry has tens of thousands, so the backlog is worked through in name order over successive runs and the current list is a partial, alphabetically skewed subset.
 
 <!-- SYNC_INFO_START -->
 **200 servers · 2293 tools · last sync 2026-11-22.**
