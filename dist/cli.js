@@ -10,12 +10,11 @@ import { fixToolCatalog } from './fixer.js';
 import { generateSarifReport } from './sarif.js';
 import { loadToolsFromConfig } from './configLoader.js';
 import { generateSvgBadge } from './badge.js';
-import { ECOSYSTEM_SERVERS } from './ecosystem.js';
 import { estimateTokenEconomics, formatTokenEconomicsMarkdown } from './costEstimator.js';
 import { formatPrComment } from './prComment.js';
 import { getAllRules } from './rules/index.js';
 import { findLocalMcpConfigs, formatDiscoveryReport } from './wizard.js';
-import { updateReadmeLeaderboard, registerServer } from './registry.js';
+import { updateReadmeLeaderboard, registerServer, loadRegistry, PACKAGE_REGISTRY_DIR } from './registry.js';
 // Split a command line string into executable + args, respecting quotes.
 function splitCommand(input) {
     const tokens = [];
@@ -239,12 +238,13 @@ Options:
   --html [path]          Write a self-contained HTML report to disk (default: mcp-benchmark-report.html)
   --sarif [path]         Write a GitHub Code Scanning SARIF v2.1.0 report (default: mcp-benchmark.sarif)
   --badge [path]         Write a SVG quality badge for READMEs (default: mcp-badge.svg)
-  --ecosystem            Benchmark the full 100+ server MCP ecosystem corpus
+  --ecosystem            Benchmark servers synced from the MCP Registry (live tools/list data)
+  --registry-dir <path>  Registry directory for --ecosystem (default: the bundled registry/servers)
   --cost                 Estimate context window token consumption and financial cost
   --pr-comment [path]    Write a formatted GitHub PR comment markdown summary (default: mcp-pr-comment.md)
   --rules, --list-rules  List all available linter and benchmark quality rules
   --discover             Scan local machine for MCP client configs (Claude, Cursor, VS Code)
-  --submit <path>        Submit an MCP server definition to the official registry
+  --submit <path>        Add a manual MCP server entry to registry/servers (marked as manual)
   --update-leaderboard   Recompute and refresh the README.md Leaderboard from registry
   --name <name>          Custom name when submitting a server (used with --submit)
   --category <category>  Ecosystem category for submission (used with --submit)
@@ -253,7 +253,7 @@ Options:
 
 Examples:
   mcp-benchmark                         Run the bundled examples
-  mcp-benchmark --ecosystem             Benchmark 100+ official and community MCP servers
+  mcp-benchmark --ecosystem             Benchmark remote servers synced from the MCP Registry
   mcp-benchmark -f tools.json         Lint and score your own MCP tool definitions
   mcp-benchmark -f tools.json --cost  Estimate token footprint & API cost per 1k sessions
   mcp-benchmark -f tools.json --fix --write  Auto-clean descriptions and fix schema issues
@@ -308,6 +308,7 @@ function readOptions(args) {
             sarif: { type: 'string' },
             badge: { type: 'string' },
             ecosystem: { type: 'boolean' },
+            'registry-dir': { type: 'string' },
             cost: { type: 'boolean' },
             'pr-comment': { type: 'string' },
             rules: { type: 'boolean' },
@@ -505,9 +506,13 @@ async function run() {
         benchmark(serverName, readToolFile(options.file));
     }
     else if (options.ecosystem) {
-        for (const [serverName, tools] of Object.entries(ECOSYSTEM_SERVERS))
+        const registryDir = options['registry-dir'] ? path.resolve(options['registry-dir']) : PACKAGE_REGISTRY_DIR;
+        const { servers } = loadRegistry(registryDir);
+        if (Object.keys(servers).length === 0)
+            throw new Error(`No registry entries with source provenance found in ${registryDir}.`);
+        for (const [serverName, tools] of Object.entries(servers))
             benchmark(serverName, tools);
-        results.sort((a, b) => b.overallTQI - a.overallTQI);
+        results.sort((a, b) => b.overallTQI - a.overallTQI || a.serverName.localeCompare(b.serverName));
     }
     else {
         for (const [serverName, tools] of Object.entries(DATASETS))

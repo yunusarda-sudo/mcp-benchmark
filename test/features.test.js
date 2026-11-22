@@ -11,7 +11,6 @@ import {
   generateSvgBadge,
   loadToolsFromConfig,
   benchmarkServerTools,
-  ECOSYSTEM_SERVERS,
   estimateTokenEconomics,
   formatTokenEconomicsMarkdown,
   formatPrComment,
@@ -278,22 +277,34 @@ test('cli --badge exports SVG quality badge to file', async () => {
   }
 });
 
-test('ECOSYSTEM_SERVERS corpus contains at least 100 servers and benchmarks cleanly via CLI', async () => {
+test('CLI --ecosystem benchmarks every sourced entry of the given registry directory', async () => {
   const { spawnSync } = await import('node:child_process');
-  const serverNames = Object.keys(ECOSYSTEM_SERVERS);
-  assert.ok(serverNames.length >= 100, `Expected at least 100 ecosystem servers, got ${serverNames.length}`);
-
-  // Test CLI execution with --ecosystem
   const cliPath = path.resolve('dist/cli.js');
-  const result = spawnSync(process.execPath, [cliPath, '--ecosystem', '--json'], {
+
+  const result = spawnSync(process.execPath, [cliPath, '--ecosystem', '--registry-dir', 'fixtures/registry-sample', '--json'], {
     encoding: 'utf8',
     maxBuffer: 10 * 1024 * 1024,
   });
 
   assert.equal(result.status, 0, result.stderr);
   const benchmarkResults = JSON.parse(result.stdout);
-  assert.equal(benchmarkResults.length, serverNames.length);
+  assert.deepEqual(benchmarkResults.map(r => r.serverName).sort(), ['Notes Manual MCP', 'io.example/weather']);
   assert.ok(benchmarkResults.every(r => r.overallTQI >= 0 && r.overallTQI <= 100));
+});
+
+test('CLI --ecosystem fails clearly when the registry directory has no sourced entries', async () => {
+  const { spawnSync } = await import('node:child_process');
+  const emptyDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-empty-registry-'));
+  try {
+    const result = spawnSync(process.execPath, [path.resolve('dist/cli.js'), '--ecosystem', '--registry-dir', emptyDir, '--json'], {
+      encoding: 'utf8',
+    });
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /No registry entries with source provenance/);
+  } finally {
+    fs.rmSync(emptyDir, { recursive: true, force: true });
+  }
 });
 
 test('estimateTokenEconomics computes correct multi-turn projections and costs', () => {
