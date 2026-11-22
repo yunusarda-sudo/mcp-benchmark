@@ -198,6 +198,22 @@ Deterministic quality benchmarks for **102 standard MCP servers**, evaluated by 
 
 ---
 
+## Use it from your AI agent
+
+Install the bundled skill so Claude Code, Cursor, Codex and other agents can audit an MCP server's tools and propose fixes on request:
+
+```bash
+npx skills add yunusarda-sudo/mcp-benchmark
+```
+
+In Claude Code you can install it as a plugin instead:
+
+```text
+/plugin install mcp-benchmark --marketplace yunusarda-sudo/mcp-benchmark
+```
+
+The skill lives in [`skills/mcp-benchmark/SKILL.md`](skills/mcp-benchmark/SKILL.md).
+
 ## Quickstart
 
 Run the bundled examples directly from GitHub with Node.js 18 or newer:
