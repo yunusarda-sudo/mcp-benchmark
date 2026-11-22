@@ -1,0 +1,2761 @@
+{
+  "$schema": "../schema.json",
+  "name": "ai.agenticfabricationnetwork/ufp",
+  "title": "Agentic Fabrication Network (AFN)",
+  "category": "Other",
+  "description": "Turn designs into shipped parts: quote 3D printing, CNC, and decals, then check out.",
+  "tools": [
+    {
+      "name": "get_fabrication_quote",
+      "description": "Get fabrication price and delivery offers for a design file or an existing AFN part number. Supports 3D printing, CNC machining, sheet metal, decals, print, and apparel. If the user just provides a file and asks for a price, omit process so AFN can route it to suitable makers. Provide the design as design_file (an attachment or generated file) or file_url (a public URL). For a reorder, pass the UFP part number as part_number instead of a file; locked parts also require share_key from the owner's share link. A .ufp part container is accepted as a design file, and its saved specification applies unless the user changes it. Some offers carry manufacturability_check: the price is set; the shop is confirming it can make the part as drawn (status \"checking\" for about expected_s seconds, then passed or failed; a status of \"repriced\" means passed — the price shown is the shop's, never say it changed) — present them as real prices; create_checkout on one that is still checking waits for the shop's answer and never orders a price the shop has not confirmed. Pass instant_only true only when the user wants instant prices without any shop being asked (a demo, a quick look): the quote comes back complete at once, every offer carries its instant price with manufacturability_check.status \"unchecked\", and nothing on that quote can be checked or ordered — check_offer answers without asking the shop and create_checkout refuses. Quotes made from it with refine_quote, and re-quotes of its .ufp part file, stay instant-only; to order, quote the same part again without instant_only. Pass lazy true when the user wants to look at prices now and have a shop asked only for the offer they pick: no shop is asked to make the quote, it comes back complete at once, and every offer carries our instant price with manufacturability_check.status \"unchecked\". Unlike instant_only, such a quote CAN be ordered: create_checkout asks the picked offer's shop to confirm it when the user is ready to order. Use check_offer only if the user wants that confirmation before checkout. A shop we have no instant price for has no offer on a lazy quote — say so if the user asks where a shop is, and quote the part again without lazy to ask every shop. Quotes made from it with refine_quote stay lazy. HOW OLD AN ANSWER IS: a shop's answer is shown for 24 hours, to everyone with the same request (the same design bytes with the same everything asked), so a quote of a part someone priced in the last 24 hours comes back complete at once with those answers and no shop is asked again. An offer says when its shop answered (answered_at). Past 15 minutes it reads stale: true — it is shown at that price and the shop confirms it again before anyone pays (check_offer, or checking out, asks that one shop). A shipping option of such an offer carries eta_approximate: true: say \"about N days\" from eta_days and never state its eta_date as a date, because no shop stands behind a date until it confirms again. If a quote carries answers_pending, someone else is asking the shops about this same request right now and these are our instant prices: call reopen_quote with that quote_id after retry_after_s seconds. TO PLACE EXACTLY ONE ORDER WITH NO MISTAKES: (1) on get_fabrication_quote list only that shop in vendors and state the pick in selection — the shop, plus the material, finish and shipping speed wanted; (2) read selection_match on the quote: status \"one\" means exactly one option answers the pick, \"many\" means say more in the pick (color, thickness, quantity), \"none\" means nothing on the quote answers it; (3) call create_checkout with quote_id and selection true — it orders that one option at the picked shipping speed, or refuses and creates nothing (selection_not_unique: the pick is not exactly one option; selection_speed_unavailable: the option does not show the picked speed now — an order never takes another speed in its place). It returns the selected checkout result: a hosted payment link by default, or the saved-card outcome when pay is saved on a keyed connection. An offer whose manufacturability_check reads status \"unchecked\" with reason \"network_restarted\" was being confirmed by its shop when the network restarted, so the answer never came: tell the user, in these words, \"A new version of AFN has been released, please refresh the page\". Nothing is lost — the price stands and the offer can simply be checked again with check_offer. Say it once, when a tool's own text tells you to; the same reason still on an offer on a later read is history, not news.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "instant_only": {
+            "type": "boolean",
+            "description": "true = instant prices only: no shop is asked about the part, now or later on this quote. The quote is complete at once; its offers read \"unchecked\" and cannot be checked or ordered (routing.instant_only is true on the response). Omit for a regular quote — the only kind that can be ordered"
+          },
+          "lazy": {
+            "type": "boolean",
+            "description": "true = our instant prices first, and a shop asked only when the user picks an offer: no shop is asked to make the quote, which is complete at once with every offer \"unchecked\" (routing.lazy is true on the response). Run check_offer on the offer the user picks — that asks its one shop — and create_checkout once the check passes. A shop we have no instant price for has no offer on such a quote. Omit for a regular quote, which asks the shops now"
+          },
+          "process": {
+            "type": "string",
+            "enum": [
+              "fdm_print",
+              "resin_print",
+              "powder_print",
+              "metal_print",
+              "elastomer_print",
+              "cnc",
+              "sheetmetal",
+              "laser_cut",
+              "decal",
+              "print",
+              "apparel"
+            ],
+            "description": "What to fabricate. If the user just drops a file and asks for a price, OMIT this — UFP detects the file type (artwork, mesh — STL/OBJ/PLY/3MF/AMF, BREP — STEP/IGES, DXF) and routes it to every process that can make it; the response's routing.also_possible lists processes UFP can't quote yet"
+          },
+          "part_number": {
+            "type": "string",
+            "description": "UFP part number from a previous paid order (UFP-… or part_…). Reorders: replaces design_file/file_url entirely; any other fields provided override the stored spec"
+          },
+          "share_key": {
+            "type": "string",
+            "description": "Share key for a LOCKED part — the k=… value from the owner's share link (…/part/UFP-…?k=KEY). Required with part_number when the part is locked; omit otherwise"
+          },
+          "design_file": {
+            "type": "object",
+            "properties": {
+              "file_id": {
+                "type": "string"
+              },
+              "download_url": {
+                "type": "string"
+              },
+              "mime_type": {
+                "type": "string"
+              },
+              "file_name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "file_id",
+              "download_url"
+            ],
+            "additionalProperties": false,
+            "description": "The design file itself (user-attached or generated image/STL). ChatGPT supplies {file_id, download_url} automatically when the user attached a file — just bind the attachment here."
+          },
+          "design_data_url": {
+            "type": "string",
+            "pattern": "^data\\:",
+            "description": "Inline design bytes as a data: URL (base64), for MCP clients that cannot pass a file reference"
+          },
+          "file_url": {
+            "type": "string",
+            "description": "Public URL of the design file — only when the design lives at a URL"
+          },
+          "attachment_urls": {
+            "type": "array",
+            "items": {
+              "$ref": "#/properties/file_url"
+            },
+            "maxItems": 10,
+            "description": "Additional files for the SAME part — the PDF drawing next to the STEP, spec sheets, BOMs. Pass everything the user gave you; UFP works out which file is the part and which are supporting documents."
+          },
+          "ship_to_zip": {
+            "type": "string",
+            "pattern": "^\\d{5}(-\\d{4})?$",
+            "description": "Destination US ZIP code, exactly as the user stated it. OMIT if the user has not given one — NEVER guess or invent a ZIP. Without it, prices come back all-in with shipping to an assumed central-US destination, flagged on routing.ship_to"
+          },
+          "quantities": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "exclusiveMinimum": 0
+            },
+            "maxItems": 5,
+            "description": "Quantities the user actually wants — pass [1] or [2] if that's the ask. Vendors with a higher minimum quote AT their minimum and the offer notes it (requested_quantity). Default: 25 for decals, 1 for prints; a part_number reorder defaults to the quantity last purchased"
+          },
+          "material": {
+            "type": "string",
+            "description": "ONLY a material the user actually asked for — NEVER guess or default one (a silent \"pla\" on a bare file drop prunes every maker that does not stock it; OMIT instead and each process quotes across its stocked materials so every maker can bid). fdm_print: pla|petg|asa (free-form — \"abs\", \"polycarbonate\" asks resolve to the closest stocked filament with a substitution note); resin_print: standard|tough|high_temp|high_detail resin (free-form asks resolve to the closest supported resin); powder_print: Powder-bed nylon: nylon_12|nylon_12_smooth|nylon_11|nylon_12_gf|nylon_12_esd|nylon_12_white|nylon_pa2200|nylon_12_sls|tpu (free-form — \"PA12\", \"glass filled\" resolve to the closest stocked powder); elastomer_print: Jetted elastomer: tepu_30a|tepu_50a (free-form — \"TPU\", \"soft rubber\" resolve to the closest stocked durometer); cnc: aluminum_6061|aluminum_7075|stainless_304|titanium|brass|acetal|delrin|abs|nylon_pa6|peek|acrylic (free-form asks resolve to the closest supported stock); sheetmetal: mild_steel|aluminum_5052|stainless_304 (free-form — \"steel\", \"5052\", \"stainless\" resolve; unknown asks get closest-match offers). Omit to compare the defaults; laser_cut: acrylic|plywood|mdf|delrin|uhmw|hdpe|g10|carbon_fiber|mild_steel|aluminum_5052|stainless_304 (free-form — \"plexiglass\", \"birch\" resolve; unknown asks get closest-match offers); decal: vinyl|holographic|transparent|glitter (free-form — \"chrome\" etc. gets closest matches)"
+          },
+          "color": {
+            "type": "string",
+            "description": "ONLY a color the user actually asked for — NEVER pick one for them. fdm_print: Filament color for fdm_print (e.g. black, red); resin_print: Resin color for resin_print (e.g. gray, white, black); powder_print: Powder part color: raw gray/white, or a dye (\"black\", \"dark blue\") — vendor-resolved; elastomer_print: Elastomer part color — VCJ parts ship raw; asks resolve with an honest substitution note; cnc: Colour for cnc: with finish anodized it is the anodize colour, otherwise the stock's own colour (black Delrin, clear acrylic). Colour WORDS only; each maker resolves the shade and says what it landed on; laser_cut: Colour of the flat stock for laser_cut (black, clear, natural…). Colour WORDS only; each maker quotes the materials it stocks in that colour and drops the ones that cannot be it; print: Print color ask (\"full color\", \"black and white\"). Vendors that only price full color note the substitution; apparel: Garment color for apparel (\"black\", \"heather gray\") — vendor-resolved"
+          },
+          "powder_technology": {
+            "type": "string",
+            "description": "Powder process: mjf (HP Multi Jet Fusion) | sls (laser sintering). Omit to let the vendor pick its default lane for the material"
+          },
+          "powder_finish": {
+            "type": "string",
+            "description": "Powder post-processing: as_printed (raw powder surface) | vapor_polished | polished"
+          },
+          "metal_alloy": {
+            "type": "string",
+            "description": "Metal AM alloy: stainless_316l|stainless_17_4ph|titanium_ti64|aluminum_alsi10mg|inconel_718|cobalt_chrome|tool_steel_h13|copper (free-form asks like \"Ti-6Al-4V\" resolve to the closest stocked powder)"
+          },
+          "metal_technology": {
+            "type": "string",
+            "description": "Metal AM process: laser_powder_bed (SLM/DMLS/LPBF)|binder_jet|ebm. Omit to let the vendor pick its default for the alloy"
+          },
+          "metal_finish": {
+            "type": "string",
+            "description": "Metal AM post-processing: as_printed|bead_blast|machined_critical|polished|heat_treated (as_printed keeps support witness marks)"
+          },
+          "elastomer_technology": {
+            "type": "string",
+            "description": "Elastomer process: vapor_cure_jetting (VCJ). Omit to let the vendor pick its default lane for the material"
+          },
+          "elastomer_finish": {
+            "type": "string",
+            "description": "Elastomer post-processing: as_printed (VCJ parts ship raw — the whole lane today)"
+          },
+          "shore_a": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Numeric Shore A durometer ask (10-95, e.g. 40). Resolved to the NEAREST stocked durometer with a substitution note — never a silent swap"
+          },
+          "finish": {
+            "type": "string",
+            "description": "cnc: CNC surface finish: standard|anodized|polished|bead_blasted (default standard); sheetmetal: as_cut (default) | deburred | anodized | powder_coat — anodized is aluminum-only; powder coat protects mild steel for outdoor use"
+          },
+          "thickness_in": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "sheetmetal: Sheet thickness in inches (e.g. 0.063 = 14 ga aluminum). Quoted at the nearest stocked thickness; omit for ~16 ga default; laser_cut: Nominal thickness in inches; quoted at the vendor's nearest stocked thickness. Omit for the material's common stock"
+          },
+          "bend_count": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Number of bends in the design (bend lines must be in the file). Prices CNC bending; omit for flat parts"
+          },
+          "units": {
+            "type": "string",
+            "description": "sheetmetal: DXF drawing units: \"mm\" (default) or \"in\". STEP files carry their own units; laser_cut: DXF drawing units: \"mm\" (default) or \"in\""
+          },
+          "width_in": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Decal width in inches (default 3)"
+          },
+          "height_in": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Decal height in inches (default 3)"
+          },
+          "cut": {
+            "type": "string",
+            "description": "Decal cut style — pass the user's words verbatim (\"triangle\", \"die cut\", \"circle\"). Known: contour|square|oval|kiss_cut; anything else gets closest-match offers with a substitution note. Omit to compare the main options"
+          },
+          "product": {
+            "type": "string",
+            "description": "print: Print product kind: business_cards|flyers|posters. Omit to quote every kind the artwork fits; apparel: apparel: t_shirt|hoodie|long_sleeve|tank_top (free-form — \"tee\", \"crewneck\" resolve to the closest product)"
+          },
+          "size": {
+            "type": "string",
+            "description": "Print size — pass the user's words verbatim (\"letter\", \"24x36\", \"half letter\"). Cards are 3.5x2; flyers 8.5x5.5|8.5x11|11x17; posters 12x18 through 36x48. Unknown sizes get closest-match offers"
+          },
+          "paper": {
+            "type": "string",
+            "description": "Paper stock — free-form (\"matte\", \"glossy\", \"recycled\", \"14pt\"). Resolved to the closest stock the vendor runs"
+          },
+          "sides": {
+            "type": "string",
+            "description": "single|double sided printing (defaults: cards double, flyers/posters single)"
+          },
+          "placement": {
+            "type": "string",
+            "description": "Print placement for apparel: front (default) | back | front_back"
+          },
+          "bends": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 32
+                },
+                "line": {
+                  "type": "object",
+                  "properties": {
+                    "p1": {
+                      "type": "array",
+                      "items": {
+                        "type": "number"
+                      },
+                      "minItems": 3,
+                      "maxItems": 3
+                    },
+                    "p2": {
+                      "$ref": "#/properties/bends/items/properties/line/properties/p1"
+                    }
+                  },
+                  "required": [
+                    "p1",
+                    "p2"
+                  ],
+                  "additionalProperties": false
+                },
+                "angle_deg": {
+                  "type": "number",
+                  "exclusiveMinimum": 0,
+                  "exclusiveMaximum": 180
+                },
+                "direction": {
+                  "type": "string",
+                  "enum": [
+                    "up",
+                    "down"
+                  ]
+                },
+                "radius_mm": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "face_id": {
+                  "type": "integer"
+                },
+                "source": {
+                  "type": "string",
+                  "enum": [
+                    "detected",
+                    "user"
+                  ]
+                }
+              },
+              "required": [
+                "line",
+                "angle_deg",
+                "direction"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 50,
+            "description": "Sheet-metal bend lines, each as TWO POINTS in the part's own mm frame (flat DXF parts use z=0: a bend from (0,12.7) to (76.2,12.7) is p1 [0,12.7,0], p2 [76.2,12.7,0]). angle_deg is the target bend angle (90 = a right-angle flange), direction \"up\"/\"down\" is the fold direction relative to the flat pattern, radius_mm the requested inside radius (omit it — the shop resolves to its tooling and reports what it used). Pass these when the user articulates WHERE the bends go; a bare \"it has 2 bends\" is bend_count, not this."
+          },
+          "tapping": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "hole": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "thread": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 32
+                },
+                "face_id": {
+                  "type": "integer"
+                },
+                "drilled_diameter_mm": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "located_at_mm": {
+                  "type": "object",
+                  "properties": {
+                    "x": {
+                      "type": "number"
+                    },
+                    "y": {
+                      "type": "number"
+                    },
+                    "z": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "x",
+                    "y",
+                    "z"
+                  ],
+                  "additionalProperties": false
+                },
+                "axis": {
+                  "$ref": "#/properties/bends/items/properties/line/properties/p1"
+                },
+                "depth_mm": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                }
+              },
+              "required": [
+                "thread"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 200,
+            "description": "Tapped (threaded) holes for a sheet-metal or CNC-machined part — one record per hole the user wants threads cut into. `thread` is the callout in the user's words (\"M6\", \"M4 x 0.7\", \"1/4-20\") and is all that's required; when known, add the hole's center in the part's own mm frame (located_at_mm), its unit axis, the pre-tap drilled diameter, and depth_mm so the shop taps the right hole. Pass these when the user asks for threaded/tapped holes; shops whose connector can price and order threads on that process price them, and every other shop — on every process, 3D printing and laser cutting included — is left out with the reason rather than pricing the part without its threads. Take the threads off to see prices without them."
+          },
+          "inserts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "hole": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "insert": {
+                  "type": "string",
+                  "enum": [
+                    "nut",
+                    "flush_nut",
+                    "standoff",
+                    "blind_standoff",
+                    "stud"
+                  ]
+                },
+                "thread": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 32
+                },
+                "face_id": {
+                  "type": "integer"
+                },
+                "points": {
+                  "$ref": "#/properties/bends/items/properties/line/properties/p1"
+                },
+                "length_mm": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "drilled_diameter_mm": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "located_at_mm": {
+                  "type": "object",
+                  "properties": {
+                    "x": {
+                      "type": "number"
+                    },
+                    "y": {
+                      "type": "number"
+                    },
+                    "z": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "x",
+                    "y",
+                    "z"
+                  ],
+                  "additionalProperties": false
+                },
+                "axis": {
+                  "$ref": "#/properties/bends/items/properties/line/properties/p1"
+                },
+                "depth_mm": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                }
+              },
+              "required": [
+                "insert",
+                "thread"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 200,
+            "description": "PEM-style hardware inserts pressed into holes of a sheet-metal part — one record per hole. `insert` is the species (nut | flush_nut | standoff | blind_standoff | stud) and `thread` its size (\"M4\", \"1/4-20\"); both are required. When known, add length_mm (standoff/stud post length), the hole's center (located_at_mm, part's own mm frame), its axis, the drilled diameter, and `points` — the signed unit vector the insert's functional side faces (flip = negate). Pass these when the user asks for press-in nuts/standoffs/studs; sheet-metal shops with a hardware service price them, and every other shop — on every process, 3D printing and laser cutting included — is left out with the reason rather than pricing the part without its hardware."
+          },
+          "processes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "maxItems": 8,
+            "description": "Only quote these fabrication processes — a constraint that narrows the auto-routing fan. Friendly terms accepted (\"sheet metal\", \"3d printing\", \"cnc\", \"laser\"); unmappable terms are reported, never an error. Usually OMIT: auto-routing quotes every process that can make the file. Pass it only when the user explicitly limits the process. One exception, for a flat part: a sheet-metal shop that laser-cuts flat stock is still returned under [\"laser\"] — its offer keeps process \"sheetmetal\" and carries also_processes [\"laser_cut\"] (one offer, listed under both; never two)"
+          },
+          "ships_from": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "maxItems": 8,
+            "description": "Only vendors that ship from these countries/regions (\"only US vendors\", \"keep it domestic\") — an INCLUDE list. Friendly terms accepted (\"US\", \"Europe\", \"Germany\", \"China\", \"UK\"); unmappable terms are reported, never an error. Vendors whose origin is unknown or whose network is worldwide (origin not guaranteed) are excluded, each with a note saying why. Usually OMIT: pass it only when the user explicitly limits where vendors ship from"
+          },
+          "vendors": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "maxItems": 32,
+            "description": "Only these specific vendors/makers (\"just quote Slant 3D\") — an INCLUDE list of vendor names as they appear on offers. Friendly names accepted (\"A3D\", \"slant 3d\"); unmatched names are reported, never an error. Usually OMIT: pass it only when the user explicitly names the vendors they want"
+          },
+          "vendors_exclude": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "maxItems": 32,
+            "description": "Shops to leave out (\"anyone but Slant 3D\", \"not A3D or Fictiv\") — shop names as they appear on offers; friendly names accepted (\"A3D\", \"slant 3d\"), and a name that matches no shop is reported, never an error. A shop on this list is never asked and never shown. Works beside vendors: the shops shown are the vendors list (or everyone) minus this list, so a shop named on both is left out. Usually OMIT: pass it only when the user names shops they do not want"
+          },
+          "vendors_exact": {
+            "type": "boolean",
+            "description": "How the names in vendors and vendors_exclude are read. Usually OMIT: a name then reaches every connector of the shop it names (\"SendCutSend\" covers its sheet, laser and CNC connectors), which is what a person means by a shop. Pass true only when the lists hold offer `vendor` slugs copied from this network's own answers and each must mean that one connector: a term that is exactly a connector slug is then that connector alone ([\"sendcutsend\", \"sendcutsend-laser\"] leaves \"sendcutsend-cnc\" out), while any other word still resolves as a name. The answer's constraints_asked.vendors / vendors_exclude are the connectors the lists came to, and listed_vendors names each of them"
+          },
+          "materials": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 48
+            },
+            "maxItems": 24,
+            "description": "The materials the user will accept, when they name SEVERAL or a family rather than one (\"plastic or metal\", \"delrin or PLA\", \"any aluminum\") — each word a family (\"plastic\", \"metal\", \"wood\") or a specific material (\"pla\", \"delrin\", \"aluminum_6061\"). Only options in a listed material are shown; which shops are asked does not change. For ONE specific material use material instead: a stated material rules and this list is set aside (the quote says so). Usually OMIT: pass it only when the user names the materials they accept"
+          },
+          "within_days": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 365,
+            "description": "Arrival within this many calendar days from today (\"within 10 days\", \"in two weeks\" → 14). Counted from the day the quote is READ, so it keeps meaning \"within N days of now\" — the day is the UTC date, the one arrival dates on offers (eta_date) are written in, so compare against those dates rather than a local calendar; an option keeps only the shipping speeds that arrive in time. With deadline as well, the earlier date rules. Use deadline instead when the user names a date"
+          },
+          "selection": {
+            "type": "object",
+            "properties": {
+              "vendor": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              },
+              "process": {
+                "$ref": "#/properties/process"
+              },
+              "spec": {
+                "type": "object",
+                "properties": {
+                  "material": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 48
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "color": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 48
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "finish": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 48
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "thickness_in": {
+                    "anyOf": [
+                      {
+                        "type": "number",
+                        "exclusiveMinimum": 0,
+                        "maximum": 1
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "additionalProperties": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "maxLength": 120
+                    },
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "quantity": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 100000
+              },
+              "shipping_speed": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              },
+              "confirmed": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "vendor"
+            ],
+            "additionalProperties": false,
+            "description": "The pick: the ONE option to order, named by what it is rather than by an offer id (ids change when a quote is priced again). vendor = the shop as it appears on offers (friendly names accepted); spec = the resolved options the option must carry, each optional — material, color, finish, thickness_in (leave one out, or null, and it does not narrow the pick); process and quantity likewise optional; shipping_speed = the word the shipping option itself goes by (\"standard\", \"express\", \"ground\"), omitted = the cheapest speed; confirmed = true once the user has settled on this option (added it to a cart, or is paying) — a pick without it is only the option being looked at, and a cart shared by a link carries a part's pick only when it is confirmed. Storing a pick changes no price and never asks every shop. CHOOSING STARTS THAT ONE SHOP'S CHECK: on a quote you already have, a pick that comes to exactly one option whose shop answered more than 15 minutes ago (or was never asked) has that one shop asked to confirm it, and the answer already says so. Every quote read then carries selection and selection_match { status \"one\" | \"none\" | \"many\", matched, offer_id, shipping_option_id, speed_fallback, confirmed_until, check { state \"running\" | \"fresh\" | \"not_started\", code, retry_after_s }, price_changed }: check \"fresh\" = the shop's answer is under 15 minutes old; \"running\" = that shop is being asked now; \"not_started\" = nobody is being asked and code says why (\"ask_limited\" = the pick is kept and the shop is asked when the user pays; \"quote_expired\" = these answers are over 24 hours old: call reopen_quote, the pick is kept). Usually OMIT: pass it when the user has settled on one option, or to order by create_checkout with selection true"
+          },
+          "deadline": {
+            "type": "string",
+            "description": "Latest acceptable delivery date, ISO YYYY-MM-DD"
+          },
+          "outdoor_rated": {
+            "type": "boolean",
+            "description": "Must survive outdoor exposure"
+          },
+          "submersible": {
+            "type": "boolean",
+            "description": "Must survive submersion in water"
+          },
+          "high_temp": {
+            "type": "boolean",
+            "description": "Must tolerate sustained heat (vendor heat-resistance claim)"
+          },
+          "food_safe": {
+            "type": "boolean",
+            "description": "Must be vendor-certified food safe"
+          },
+          "requirements": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 120
+            },
+            "maxItems": 20,
+            "description": "Verbatim context terms from the user — materials, finishes, certifications, tolerances (\"UV resistant\", \"anodized: red\", \"iso 13485\", \"tolerance: 0.1mm\"). UFP applies what it can and reports what it could not; unresolvable terms are logged for vendor sourcing. Do not interrogate the user to fill this — pass what they said."
+          },
+          "callouts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "value": {
+                  "type": "number"
+                },
+                "unit": {
+                  "type": "string",
+                  "enum": [
+                    "mm",
+                    "in"
+                  ]
+                },
+                "tolerance_mm": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "critical": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "name",
+                "value",
+                "unit"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 50,
+            "description": "Dimensions you read off the user's drawing that matter (\"hole_diameter 6.5mm ±0.1\"). The tightest tolerance prunes vendors that cannot hold it."
+          },
+          "max_budget_usd": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Hard budget cap in USD, all-in"
+          },
+          "min_vendor_stars": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 5,
+            "description": "Only vendors whose displayed review rating is at least this many stars (1-5). Vendors with no reviews yet are excluded — the filter demands demonstrated quality"
+          },
+          "min_vendor_reviews": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "description": "Only vendors with at least this many verified-purchase reviews"
+          },
+          "proven_spec_orders": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "description": "Only vendors with at least N completed orders for this exact process+material — \"a vendor that prints PC reliably\""
+          }
+        },
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "refine_quote",
+      "description": "Narrow an existing quote with new constraints (destination ZIP the user just provided, deadline, outdoor/waterproof/heat/food-safety requirements, budget, vendor reliability, verbatim requirements terms, drawing callouts, a process filter — \"no, I meant in sheet metal\" → processes — a ship-from country filter — \"only US vendors\" → ships_from — or a vendor filter — \"only show A3D Manufacturing\" → vendors) — or CHANGE its spec: material, color, or quantities. Changing material/quantity is a spec change, not a narrowing — pass it via the material/color/quantities args, NOT as a requirements term; the affected lanes re-price with the new spec through warm vendor sessions. For side-by-side comparisons (\"how does carbon steel compare?\"), add a scenario label — labeled refines coexist instead of replacing each other (max 4). \"Organize by\" (\"sort by cheapest\", \"soonest arrival on top\", \"most green first\") is also this tool: sort_by for objective orders, sort_order + sort_label for orders you judged yourself from the previews — presentation only, instant, nothing re-prices. GOING BACK is also this tool: undo_last_step ALONE takes back exactly one refine step (the quote's steps[] names each step, newest first — the network restores the previous stored state exactly); clear removes whole constraints (\"drop the deadline\" → clear [\"deadline\"]); remove_requirements takes back individual requirements terms. Call with ONLY quote_id to re-read the quote (e.g. to pick up preview images that finished rendering). TO PLACE EXACTLY ONE ORDER WITH NO MISTAKES: (1) on get_fabrication_quote list only that shop in vendors and state the pick in selection — the shop, plus the material, finish and shipping speed wanted; (2) read selection_match on the quote: status \"one\" means exactly one option answers the pick, \"many\" means say more in the pick (color, thickness, quantity), \"none\" means nothing on the quote answers it; (3) call create_checkout with quote_id and selection true — it orders that one option at the picked shipping speed, or refuses and creates nothing (selection_not_unique: the pick is not exactly one option; selection_speed_unavailable: the option does not show the picked speed now — an order never takes another speed in its place). It returns the selected checkout result: a hosted payment link by default, or the saved-card outcome when pay is saved on a keyed connection. On a quote you already have, step (1) is this tool: refine_quote with vendors and selection. CHOOSING STARTS THAT SHOP'S CHECK: storing a pick that comes to exactly one option has that ONE shop asked to confirm it when its answer is more than 15 minutes old or was never given — only when the pick is all this call carries, or the pick now comes to a different option than before. The answer's selection_match.check says \"running\", \"fresh\" (nobody needed asking) or \"not_started\" with why. You do not have to wait: call create_checkout with quote_id and selection true next — it waits for that answer.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "quote_id": {
+            "type": "string"
+          },
+          "scenario": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40,
+            "description": "Comparison lane label. A labeled refine sits SIDE BY SIDE with the quote's other offers instead of replacing them: refines with the same label replace that scenario, different labels coexist (max 4 per quote), and a refine WITHOUT a scenario resets the baseline and supersedes every lane. \"How does X compare to Y?\" = one labeled refine per scenario (e.g. scenario \"carbon steel\" + material \"carbon steel\", then scenario \"aluminum\" + material \"aluminum\"). Keep labels short and human, like \"carbon steel\""
+          },
+          "material": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "New material for this part (\"I need it in PLA\" → \"pla\"). A spec change: lanes requote with this material through warm vendor sessions; an explicit material here replaces the quote's material fan-out. Free-form — unstocked asks resolve to the closest stocked material with a substitution note. Do NOT pass material changes as requirements terms. Pass null to REMOVE a previously asked material (\"forget the aluminum ask\") — the ask comes off the record and the process-default material fan returns"
+          },
+          "color": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "New color for this part (spec change — lanes requote). Colour WORDS only ('black', 'green', 'clear'); the network resolves them to each maker's stocked shades, dyes, filaments or coatings — a family word ('blue') brings back EVERY stocked shade of it, and the quote's color_shades_available lists them — never pass a material or a shade you invented. Pass null to REMOVE a previously asked color — back to vendor defaults"
+          },
+          "color_shades": {
+            "anyOf": [
+              {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 48
+                },
+                "maxItems": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Narrow the board to these color SHADES exactly as the quote lists them (color_shades_available / \"Colors on this board\") — instant, nothing re-prices, the same quote id comes back with only those shades; pass null to show every shade again. Never invent a shade name."
+          },
+          "finish": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "New surface finish (\"powder coat\", \"anodized\", \"bead blasted\") — a spec change: finish-capable lanes (sheet metal, CNC, metal print) requote WITH it; 3D-print lanes have no coating step, so they ignore the finish but keep the COLOR. A colored finish ask (\"black powder coat\") should set BOTH finish and color, so every lane lands on the buyer's color. Pass null to REMOVE a previously asked finish"
+          },
+          "thickness_in": {
+            "anyOf": [
+              {
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "maximum": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "New sheet thickness in INCHES (\"make it in 1/8\" → 0.125) — a spec change: sheet lanes requote at the nearest stocked gauge, flagging the substitution when the match isn't close. Pass null to REMOVE a previously asked thickness — back to the material's default gauge"
+          },
+          "bend_count": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 50
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "How many bends this part has, when the user names a COUNT but not where the bends go (\"it has 2 bends\" → 2) — a spec change: sheet-metal lanes requote the part formed with that many bends (0 = cut it flat, on the record). The cheap acknowledgment for a flat design whose bends are not articulated: when a bends list is on the quote (or passed here), the list wins and this count follows it — change articulated bends through bends, not this. An earlier \"cut it flat\" (bends: null) does not pin the count: a later bend_count > 0 re-prices the part formed. Pass null to REMOVE a previously asked bend count — the part prices as if no count was ever stated"
+          },
+          "bends": {
+            "anyOf": [
+              {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 32
+                    },
+                    "line": {
+                      "type": "object",
+                      "properties": {
+                        "p1": {
+                          "type": "array",
+                          "items": {
+                            "type": "number"
+                          },
+                          "minItems": 3,
+                          "maxItems": 3
+                        },
+                        "p2": {
+                          "$ref": "#/properties/bends/anyOf/0/items/properties/line/properties/p1"
+                        }
+                      },
+                      "required": [
+                        "p1",
+                        "p2"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "angle_deg": {
+                      "type": "number",
+                      "exclusiveMinimum": 0,
+                      "exclusiveMaximum": 180
+                    },
+                    "direction": {
+                      "type": "string",
+                      "enum": [
+                        "up",
+                        "down"
+                      ]
+                    },
+                    "radius_mm": {
+                      "type": "number",
+                      "exclusiveMinimum": 0
+                    },
+                    "face_id": {
+                      "type": "integer"
+                    },
+                    "source": {
+                      "type": "string",
+                      "enum": [
+                        "detected",
+                        "user"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "line",
+                    "angle_deg",
+                    "direction"
+                  ],
+                  "additionalProperties": false
+                },
+                "maxItems": 50,
+                "description": "Sheet-metal bend lines, each as TWO POINTS in the part's own mm frame (flat DXF parts use z=0: a bend from (0,12.7) to (76.2,12.7) is p1 [0,12.7,0], p2 [76.2,12.7,0]). angle_deg is the target bend angle (90 = a right-angle flange), direction \"up\"/\"down\" is the fold direction relative to the flat pattern, radius_mm the requested inside radius (omit it — the shop resolves to its tooling and reports what it used). Pass these when the user articulates WHERE the bends go; a bare \"it has 2 bends\" is bend_count, not this."
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "New bend records for this part — a spec change: sheet lanes requote with exactly these bends (the list REPLACES the previous one, never patches it). Same shape as on get_fabrication_quote: each bend is two points in the part's own mm frame (flat DXF parts use z=0) plus angle_deg, direction up|down, and an optional requested radius_mm. Pass null to REMOVE every articulated bend"
+          },
+          "tapping": {
+            "anyOf": [
+              {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "hole": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "thread": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 32
+                    },
+                    "face_id": {
+                      "type": "integer"
+                    },
+                    "drilled_diameter_mm": {
+                      "type": "number",
+                      "exclusiveMinimum": 0
+                    },
+                    "located_at_mm": {
+                      "type": "object",
+                      "properties": {
+                        "x": {
+                          "type": "number"
+                        },
+                        "y": {
+                          "type": "number"
+                        },
+                        "z": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "x",
+                        "y",
+                        "z"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "axis": {
+                      "$ref": "#/properties/bends/anyOf/0/items/properties/line/properties/p1"
+                    },
+                    "depth_mm": {
+                      "type": "number",
+                      "exclusiveMinimum": 0
+                    }
+                  },
+                  "required": [
+                    "thread"
+                  ],
+                  "additionalProperties": false
+                },
+                "maxItems": 200,
+                "description": "Tapped (threaded) holes for a sheet-metal or CNC-machined part — one record per hole the user wants threads cut into. `thread` is the callout in the user's words (\"M6\", \"M4 x 0.7\", \"1/4-20\") and is all that's required; when known, add the hole's center in the part's own mm frame (located_at_mm), its unit axis, the pre-tap drilled diameter, and depth_mm so the shop taps the right hole. Pass these when the user asks for threaded/tapped holes; shops whose connector can price and order threads on that process price them, and every other shop — on every process, 3D printing and laser cutting included — is left out with the reason rather than pricing the part without its threads. Take the threads off to see prices without them."
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "New tapped-hole records for this part — a spec change: sheet lanes requote with exactly these taps (the list REPLACES the previous one, never patches it). Same shape as on get_fabrication_quote: thread callout (\"M6\", \"1/4-20\") required, hole geometry optional. Pass null to REMOVE every tap"
+          },
+          "inserts": {
+            "anyOf": [
+              {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "hole": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "insert": {
+                      "type": "string",
+                      "enum": [
+                        "nut",
+                        "flush_nut",
+                        "standoff",
+                        "blind_standoff",
+                        "stud"
+                      ]
+                    },
+                    "thread": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 32
+                    },
+                    "face_id": {
+                      "type": "integer"
+                    },
+                    "points": {
+                      "$ref": "#/properties/bends/anyOf/0/items/properties/line/properties/p1"
+                    },
+                    "length_mm": {
+                      "type": "number",
+                      "exclusiveMinimum": 0
+                    },
+                    "drilled_diameter_mm": {
+                      "type": "number",
+                      "exclusiveMinimum": 0
+                    },
+                    "located_at_mm": {
+                      "type": "object",
+                      "properties": {
+                        "x": {
+                          "type": "number"
+                        },
+                        "y": {
+                          "type": "number"
+                        },
+                        "z": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "x",
+                        "y",
+                        "z"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "axis": {
+                      "$ref": "#/properties/bends/anyOf/0/items/properties/line/properties/p1"
+                    },
+                    "depth_mm": {
+                      "type": "number",
+                      "exclusiveMinimum": 0
+                    }
+                  },
+                  "required": [
+                    "insert",
+                    "thread"
+                  ],
+                  "additionalProperties": false
+                },
+                "maxItems": 200,
+                "description": "PEM-style hardware inserts pressed into holes of a sheet-metal part — one record per hole. `insert` is the species (nut | flush_nut | standoff | blind_standoff | stud) and `thread` its size (\"M4\", \"1/4-20\"); both are required. When known, add length_mm (standoff/stud post length), the hole's center (located_at_mm, part's own mm frame), its axis, the drilled diameter, and `points` — the signed unit vector the insert's functional side faces (flip = negate). Pass these when the user asks for press-in nuts/standoffs/studs; sheet-metal shops with a hardware service price them, and every other shop — on every process, 3D printing and laser cutting included — is left out with the reason rather than pricing the part without its hardware."
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "New hardware-insert records for this part — a spec change: sheet lanes requote with exactly these inserts (the list REPLACES the previous one, never patches it). Same shape as on get_fabrication_quote: species (nut|flush_nut|standoff|blind_standoff|stud) and thread required, hole geometry optional. Pass null to REMOVE every insert"
+          },
+          "quantities": {
+            "anyOf": [
+              {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0
+                },
+                "maxItems": 5
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "New quantities the user wants (spec change — lanes requote at the new quantity). Same rules as on get_fabrication_quote: pass the real ask, never inflate it. Pass null to REMOVE a previously asked quantity — the quote returns to single-part pricing"
+          },
+          "scale": {
+            "type": "object",
+            "properties": {
+              "x": {
+                "type": "number",
+                "minimum": 0.01,
+                "maximum": 100
+              },
+              "y": {
+                "type": "number",
+                "minimum": 0.01,
+                "maximum": 100
+              },
+              "z": {
+                "type": "number",
+                "minimum": 0.01,
+                "maximum": 100
+              }
+            },
+            "required": [
+              "x",
+              "y",
+              "z"
+            ],
+            "additionalProperties": false,
+            "description": "Rescale the DESIGN ITSELF before re-quoting: per-axis stretch factors over the file's current geometry (\"make it 2x bigger\" = {\"x\":2,\"y\":2,\"z\":2}). Mesh designs are genuinely converted — the child quote prices a rescaled file; STEP/IGES designs keep their original file with the dimensions riding as callouts (pass those too). {1,1,1} is a no-op"
+          },
+          "processes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "maxItems": 8,
+            "description": "Narrow this quote to specific fabrication processes (\"no, I meant in sheet metal\" → [\"sheet metal\"]). A CONSTRAINT, not a new quote: excluded lanes drop while warm vendor sessions survive, and further refines inherit the filter. Friendly terms accepted (\"sheet metal\", \"3d printing\", \"cnc\", \"laser\"); pass [\"any\"] to clear the filter and show every process again. When comparison scenarios are open and the user narrows the process, re-refine EVERY active scenario label with this same arg so all columns prune together. One exception, for a flat part: a sheet-metal shop that laser-cuts flat stock is still returned under [\"laser\"] — its offer keeps process \"sheetmetal\" and carries also_processes [\"laser_cut\"] (one offer, listed under both; never two)"
+          },
+          "ships_from": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "maxItems": 8,
+            "description": "Only vendors that ship from these countries/regions (\"only US vendors\", \"just European shops\", \"keep it domestic\") — an INCLUDE list naming where the user DOES want vendors from. A CONSTRAINT like processes: non-matching vendors drop instantly (nothing re-prices), further refines inherit the filter, and [\"any\"] clears it to show vendors everywhere again. Friendly terms accepted (\"US\", \"Europe\", \"Germany\", \"China\", \"UK\"). Vendors whose origin is unknown or whose network is worldwide (a specific origin cannot be guaranteed) are excluded, each with an honest note. For \"nothing from X\" asks, pass the regions the user does want instead"
+          },
+          "vendors_exclude": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "maxItems": 32,
+            "description": "Shops to leave out (\"anyone but Slant 3D\", \"not A3D or Fictiv\") — shop names as they appear on offers; friendly names accepted (\"A3D\", \"slant 3d\"), and a name that matches no shop is reported, never an error. A shop on this list is never asked and never shown. Works beside vendors: the shops shown are the vendors list (or everyone) minus this list, so a shop named on both is left out. Usually OMIT: pass it only when the user names shops they do not want. On a refine: naming more shops answers at once from what the quote holds (no shop is asked); [\"any\"] or clear [\"vendors_exclude\"] removes the list, and the shops that come back are priced then"
+          },
+          "vendors_exact": {
+            "type": "boolean",
+            "description": "How the names in vendors and vendors_exclude are read. Usually OMIT: a name then reaches every connector of the shop it names (\"SendCutSend\" covers its sheet, laser and CNC connectors), which is what a person means by a shop. Pass true only when the lists hold offer `vendor` slugs copied from this network's own answers and each must mean that one connector: a term that is exactly a connector slug is then that connector alone ([\"sendcutsend\", \"sendcutsend-laser\"] leaves \"sendcutsend-cnc\" out), while any other word still resolves as a name. The answer's constraints_asked.vendors / vendors_exclude are the connectors the lists came to, and listed_vendors names each of them"
+          },
+          "materials": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 48
+            },
+            "maxItems": 24,
+            "description": "The materials the user will accept, when they name SEVERAL or a family rather than one (\"plastic or metal\", \"delrin or PLA\", \"any aluminum\") — each word a family (\"plastic\", \"metal\", \"wood\") or a specific material (\"pla\", \"delrin\", \"aluminum_6061\"). Only options in a listed material are shown; which shops are asked does not change. For ONE specific material use material instead: a stated material rules and this list is set aside (the quote says so). Usually OMIT: pass it only when the user names the materials they accept. On a refine: any list — narrower, wider, or clear [\"materials\"] to remove it — answers at once from what the quote holds (no shop is asked and nothing is priced again)"
+          },
+          "within_days": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 365,
+            "description": "Arrival within this many calendar days from today (\"within 10 days\", \"in two weeks\" → 14). Counted from the day the quote is READ, so it keeps meaning \"within N days of now\" — the day is the UTC date, the one arrival dates on offers (eta_date) are written in, so compare against those dates rather than a local calendar; an option keeps only the shipping speeds that arrive in time. With deadline as well, the earlier date rules. Use deadline instead when the user names a date. On a refine it answers at once from what the quote holds, tighter or looser; clear [\"within_days\"] removes it"
+          },
+          "cart_item_id": {
+            "type": "string",
+            "description": "When the quote being changed is a part in a cart: that part's item_id from the cart. The cart then follows the part to the quote this call answers with, by itself. It changes nothing else about the call"
+          },
+          "selection": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "vendor": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "process": {
+                    "type": "string",
+                    "enum": [
+                      "fdm_print",
+                      "resin_print",
+                      "powder_print",
+                      "metal_print",
+                      "elastomer_print",
+                      "cnc",
+                      "sheetmetal",
+                      "laser_cut",
+                      "decal",
+                      "print",
+                      "apparel"
+                    ]
+                  },
+                  "spec": {
+                    "type": "object",
+                    "properties": {
+                      "material": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 48
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "color": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 48
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "finish": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 48
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "thickness_in": {
+                        "anyOf": [
+                          {
+                            "type": "number",
+                            "exclusiveMinimum": 0,
+                            "maximum": 1
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    },
+                    "additionalProperties": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "maxLength": 120
+                        },
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "quantity": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 100000
+                  },
+                  "shipping_speed": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "confirmed": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "vendor"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The pick: the ONE option to order, named by what it is rather than by an offer id (ids change when a quote is priced again). vendor = the shop as it appears on offers (friendly names accepted); spec = the resolved options the option must carry, each optional — material, color, finish, thickness_in (leave one out, or null, and it does not narrow the pick); process and quantity likewise optional; shipping_speed = the word the shipping option itself goes by (\"standard\", \"express\", \"ground\"), omitted = the cheapest speed; confirmed = true once the user has settled on this option (added it to a cart, or is paying) — a pick without it is only the option being looked at, and a cart shared by a link carries a part's pick only when it is confirmed. Storing a pick changes no price and never asks every shop. CHOOSING STARTS THAT ONE SHOP'S CHECK: on a quote you already have, a pick that comes to exactly one option whose shop answered more than 15 minutes ago (or was never asked) has that one shop asked to confirm it, and the answer already says so. Every quote read then carries selection and selection_match { status \"one\" | \"none\" | \"many\", matched, offer_id, shipping_option_id, speed_fallback, confirmed_until, check { state \"running\" | \"fresh\" | \"not_started\", code, retry_after_s }, price_changed }: check \"fresh\" = the shop's answer is under 15 minutes old; \"running\" = that shop is being asked now; \"not_started\" = nobody is being asked and code says why (\"ask_limited\" = the pick is kept and the shop is asked when the user pays; \"quote_expired\" = these answers are over 24 hours old: call reopen_quote, the pick is kept). Usually OMIT: pass it when the user has settled on one option, or to order by create_checkout with selection true. On refine_quote: an object stores the pick, null clears it, omitted keeps the one the quote has. Sent alone it is stored on the SAME quote at once (the same quote id comes back, nothing re-prices, no shop is asked); sent with other changes it rides onto the new quote"
+          },
+          "vendors": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "maxItems": 32,
+            "description": "Only these specific vendors/makers (\"only show A3D Manufacturing\", \"just Slant 3D and Fictiv\") — an INCLUDE list of vendor names as they appear on offers. A CONSTRAINT like processes: other vendors' offers drop instantly (nothing re-prices), further refines inherit the filter, and [\"any\"] clears it to show every vendor again. Friendly names accepted (\"A3D\", \"slant 3d\"); unmatched names are reported, never an error. Use it only when the user asks to SEE only that vendor; a question about what a vendor offers is answered with get_shop_offerings and leaves the board alone"
+          },
+          "ship_to_zip": {
+            "type": "string",
+            "pattern": "^\\d{5}(-\\d{4})?$",
+            "description": "Destination US ZIP code, exactly as the user stated it — use this when the user provides their ZIP after a quote priced to the assumed central-US destination (routing.ship_to); the refined prices become theirs. NEVER guess or invent a ZIP"
+          },
+          "deadline": {
+            "type": "string",
+            "description": "Latest acceptable delivery date, ISO YYYY-MM-DD"
+          },
+          "outdoor_rated": {
+            "type": "boolean"
+          },
+          "submersible": {
+            "type": "boolean"
+          },
+          "high_temp": {
+            "type": "boolean"
+          },
+          "food_safe": {
+            "type": "boolean"
+          },
+          "requirements": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 120
+            },
+            "maxItems": 20,
+            "description": "Verbatim context terms from the user — materials, finishes, certifications, tolerances (\"UV resistant\", \"anodized: red\", \"iso 13485\", \"tolerance: 0.1mm\"). UFP applies what it can and reports what it could not; unresolvable terms are logged for vendor sourcing. Do not interrogate the user to fill this — pass what they said."
+          },
+          "callouts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "value": {
+                  "type": "number"
+                },
+                "unit": {
+                  "type": "string",
+                  "enum": [
+                    "mm",
+                    "in"
+                  ]
+                },
+                "tolerance_mm": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "critical": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "name",
+                "value",
+                "unit"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 50,
+            "description": "Dimensions you read off the user's drawing that matter (\"hole_diameter 6.5mm ±0.1\"). The tightest tolerance prunes vendors that cannot hold it."
+          },
+          "max_budget_usd": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "min_vendor_stars": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 5,
+            "description": "Only vendors whose displayed review rating is at least this many stars (1-5); vendors with no reviews yet are excluded"
+          },
+          "min_vendor_reviews": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "description": "Only vendors with at least this many verified-purchase reviews"
+          },
+          "proven_spec_orders": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "description": "Only vendors with at least N completed orders for this exact process+material — \"a vendor that prints PC reliably\""
+          },
+          "clear": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "deadline",
+                "budget",
+                "outdoor_rated",
+                "submersible",
+                "high_temp",
+                "food_safe",
+                "reliability",
+                "requirements",
+                "processes",
+                "ships_from",
+                "vendors",
+                "vendors_exclude",
+                "materials",
+                "within_days",
+                "selection"
+              ]
+            },
+            "minItems": 1,
+            "description": "REMOVE constraints entirely (\"drop the deadline\", \"forget the budget\", \"no more food-safe requirement\"): list the constraints to clear and each is removed from the quote — the one deliberate widening besides undo. Clearing a deadline or budget answers instantly from held offers (near-misses convert back); clearing an attribute/reliability/requirements demand re-prices honestly. Same effect as [\"any\"] on the three filter args, extended to every constraint"
+          },
+          "remove_requirements": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 120
+            },
+            "minItems": 1,
+            "maxItems": 20,
+            "description": "Take back INDIVIDUAL requirements terms (\"drop the anodized ask, keep the rest\"): each listed term is removed from the quote's requirements by normalized match, the others stay. Unknown terms are ignored, never an error. Re-stating the requirements list can never drop a term (terms merge as a union) — this is the removal channel"
+          },
+          "undo_last_step": {
+            "type": "boolean",
+            "description": "GO BACK EXACTLY ONE STEP (\"undo that\", \"go back\", \"put it back how it was\"): the network restores the previous quote's stored spec and constraints EXACTLY — never reconstructed from conversation — and re-prices where needed. Send it ALONE (no other args besides quote_id); combining it with changes is rejected. The quote's steps[] names what each undo would take back — steps[0] is the newest. Undo resets the baseline like any unlabeled refine, so open comparison scenarios close. Undoing the original quote is rejected with honest wording — relay it"
+          },
+          "sort_by": {
+            "type": "string",
+            "enum": [
+              "recommended",
+              "price",
+              "unit_price",
+              "total_price",
+              "arrival",
+              "rating"
+            ],
+            "description": "\"Organize by\": re-order the quote's offer cards (\"sort by cheapest\" → \"price\"; \"soonest arrival first\" → \"arrival\"; \"best rated\" → \"rating\"; \"total_price\" = part + cheapest shipping; \"recommended\" restores the default price+speed rank). PURE PRESENTATION — answers instantly on the same quote, never re-prices or drops offers, and the ordering sticks across re-reads, streaming, and later refines until changed"
+          },
+          "sort_direction": {
+            "type": "string",
+            "enum": [
+              "asc",
+              "desc"
+            ],
+            "description": "Flip a sort_by ordering: \"desc\" reverses the key's natural direction (\"most expensive first\" = sort_by \"price\" + \"desc\"). Only meaningful with sort_by"
+          },
+          "sort_order": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 200,
+            "description": "EXPLICIT card order for asks only you can judge (\"sort the most green to the top\"): look at the offers' preview images, decide the order yourself, and pass the offer ids first-on-top. Offers you leave out (including ones that stream in later) land below the listed ones in the default rank. Pass sort_label with it"
+          },
+          "sort_label": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 60,
+            "description": "Short human wording for a sort_order, displayed on the board (\"most green first\") — required with sort_order, since only you know what your order means"
+          },
+          "on_behalf_of": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "description": "Your own opaque name for the person you are acting for (a visitor id; never an email or a name), when you serve many people from one address: each then has their own count of the shop asks their choices start. It changes nothing else. Usually OMIT"
+          }
+        },
+        "required": [
+          "quote_id"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "preview_quote",
+      "description": "INTERNAL client rail — the routing half of refine_quote with NOTHING committed: takes the same arguments as refine_quote and answers how many distinct fabricators (and which process lanes) the network WOULD ask for the refined part, plus the exclusion notes, without creating a child quote, asking any vendor, superseding in-flight work, or logging demand. An expectation, never a promise — lanes can still decline once asked. Never call this to look at prices; it carries none. Use refine_quote to actually re-price.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "quote_id": {
+            "type": "string"
+          },
+          "scenario": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40,
+            "description": "Comparison lane label. A labeled refine sits SIDE BY SIDE with the quote's other offers instead of replacing them: refines with the same label replace that scenario, different labels coexist (max 4 per quote), and a refine WITHOUT a scenario resets the baseline and supersedes every lane. \"How does X compare to Y?\" = one labeled refine per scenario (e.g. scenario \"carbon steel\" + material \"carbon steel\", then scenario \"aluminum\" + material \"aluminum\"). Keep labels short and human, like \"carbon steel\""
+          },
+          "material": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "New material for this part (\"I need it in PLA\" → \"pla\"). A spec change: lanes requote with this material through warm vendor sessions; an explicit material here replaces the quote's material fan-out. Free-form — unstocked asks resolve to the closest stocked material with a substitution note. Do NOT pass material changes as requirements terms. Pass null to REMOVE a previously asked material (\"forget the aluminum ask\") — the ask comes off the record and the process-default material fan returns"
+          },
+          "color": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "New color for this part (spec change — lanes requote). Colour WORDS only ('black', 'green', 'clear'); the network resolves them to each maker's stocked shades, dyes, filaments or coatings — a family word ('blue') brings back EVERY stocked shade of it, and the quote's color_shades_available lists them — never pass a material or a shade you invented. Pass null to REMOVE a previously asked color — back to vendor defaults"
+          },
+          "color_shades": {
+            "anyOf": [
+              {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 48
+                },
+                "maxItems": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Narrow the board to these color SHADES exactly as the quote lists them (color_shades_available / \"Colors on this board\") — instant, nothing re-prices, the same quote id comes back with only those shades; pass null to show every shade again. Never invent a shade name."
+          },
+          "finish": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "New surface finish (\"powder coat\", \"anodized\", \"bead blasted\") — a spec change: finish-capable lanes (sheet metal, CNC, metal print) requote WITH it; 3D-print lanes have no coating step, so they ignore the finish but keep the COLOR. A colored finish ask (\"black powder coat\") should set BOTH finish and color, so every lane lands on the buyer's color. Pass null to REMOVE a previously asked finish"
+          },
+          "thickness_in": {
+            "anyOf": [
+              {
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "maximum": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "New sheet thickness in INCHES (\"make it in 1/8\" → 0.125) — a spec change: sheet lanes requote at the nearest stocked gauge, flagging the substitution when the match isn't close. Pass null to REMOVE a previously asked thickness — back to the material's default gauge"
+          },
+          "bend_count": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 50
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "How many bends this part has, when the user names a COUNT but not where the bends go (\"it has 2 bends\" → 2) — a spec change: sheet-metal lanes requote the part formed with that many bends (0 = cut it flat, on the record). The cheap acknowledgment for a flat design whose bends are not articulated: when a bends list is on the quote (or passed here), the list wins and this count follows it — change articulated bends through bends, not this. An earlier \"cut it flat\" (bends: null) does not pin the count: a later bend_count > 0 re-prices the part formed. Pass null to REMOVE a previously asked bend count — the part prices as if no count was ever stated"
+          },
+          "bends": {
+            "anyOf": [
+              {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 32
+                    },
+                    "line": {
+                      "type": "object",
+                      "properties": {
+                        "p1": {
+                          "type": "array",
+                          "items": {
+                            "type": "number"
+                          },
+                          "minItems": 3,
+                          "maxItems": 3
+                        },
+                        "p2": {
+                          "$ref": "#/properties/bends/anyOf/0/items/properties/line/properties/p1"
+                        }
+                      },
+                      "required": [
+                        "p1",
+                        "p2"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "angle_deg": {
+                      "type": "number",
+                      "exclusiveMinimum": 0,
+                      "exclusiveMaximum": 180
+                    },
+                    "direction": {
+                      "type": "string",
+                      "enum": [
+                        "up",
+                        "down"
+                      ]
+                    },
+                    "radius_mm": {
+                      "type": "number",
+                      "exclusiveMinimum": 0
+                    },
+                    "face_id": {
+                      "type": "integer"
+                    },
+                    "source": {
+                      "type": "string",
+                      "enum": [
+                        "detected",
+                        "user"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "line",
+                    "angle_deg",
+                    "direction"
+                  ],
+                  "additionalProperties": false
+                },
+                "maxItems": 50,
+                "description": "Sheet-metal bend lines, each as TWO POINTS in the part's own mm frame (flat DXF parts use z=0: a bend from (0,12.7) to (76.2,12.7) is p1 [0,12.7,0], p2 [76.2,12.7,0]). angle_deg is the target bend angle (90 = a right-angle flange), direction \"up\"/\"down\" is the fold direction relative to the flat pattern, radius_mm the requested inside radius (omit it — the shop resolves to its tooling and reports what it used). Pass these when the user articulates WHERE the bends go; a bare \"it has 2 bends\" is bend_count, not this."
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "New bend records for this part — a spec change: sheet lanes requote with exactly these bends (the list REPLACES the previous one, never patches it). Same shape as on get_fabrication_quote: each bend is two points in the part's own mm frame (flat DXF parts use z=0) plus angle_deg, direction up|down, and an optional requested radius_mm. Pass null to REMOVE every articulated bend"
+          },
+          "tapping": {
+            "anyOf": [
+              {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "hole": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "thread": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 32
+                    },
+                    "face_id": {
+                      "type": "integer"
+                    },
+                    "drilled_diameter_mm": {
+                      "type": "number",
+                      "exclusiveMinimum": 0
+                    },
+                    "located_at_mm": {
+                      "type": "object",
+                      "properties": {
+                        "x": {
+                          "type": "number"
+                        },
+                        "y": {
+                          "type": "number"
+                        },
+                        "z": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "x",
+                        "y",
+                        "z"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "axis": {
+                      "$ref": "#/properties/bends/anyOf/0/items/properties/line/properties/p1"
+                    },
+                    "depth_mm": {
+                      "type": "number",
+                      "exclusiveMinimum": 0
+                    }
+                  },
+                  "required": [
+                    "thread"
+                  ],
+                  "additionalProperties": false
+                },
+                "maxItems": 200,
+                "description": "Tapped (threaded) holes for a sheet-metal or CNC-machined part — one record per hole the user wants threads cut into. `thread` is the callout in the user's words (\"M6\", \"M4 x 0.7\", \"1/4-20\") and is all that's required; when known, add the hole's center in the part's own mm frame (located_at_mm), its unit axis, the pre-tap drilled diameter, and depth_mm so the shop taps the right hole. Pass these when the user asks for threaded/tapped holes; shops whose connector can price and order threads on that process price them, and every other shop — on every process, 3D printing and laser cutting included — is left out with the reason rather than pricing the part without its threads. Take the threads off to see prices without them."
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "New tapped-hole records for this part — a spec change: sheet lanes requote with exactly these taps (the list REPLACES the previous one, never patches it). Same shape as on get_fabrication_quote: thread callout (\"M6\", \"1/4-20\") required, hole geometry optional. Pass null to REMOVE every tap"
+          },
+          "inserts": {
+            "anyOf": [
+              {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "hole": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "insert": {
+                      "type": "string",
+                      "enum": [
+                        "nut",
+                        "flush_nut",
+                        "standoff",
+                        "blind_standoff",
+                        "stud"
+                      ]
+                    },
+                    "thread": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 32
+                    },
+                    "face_id": {
+                      "type": "integer"
+                    },
+                    "points": {
+                      "$ref": "#/properties/bends/anyOf/0/items/properties/line/properties/p1"
+                    },
+                    "length_mm": {
+                      "type": "number",
+                      "exclusiveMinimum": 0
+                    },
+                    "drilled_diameter_mm": {
+                      "type": "number",
+                      "exclusiveMinimum": 0
+                    },
+                    "located_at_mm": {
+                      "type": "object",
+                      "properties": {
+                        "x": {
+                          "type": "number"
+                        },
+                        "y": {
+                          "type": "number"
+                        },
+                        "z": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "x",
+                        "y",
+                        "z"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "axis": {
+                      "$ref": "#/properties/bends/anyOf/0/items/properties/line/properties/p1"
+                    },
+                    "depth_mm": {
+                      "type": "number",
+                      "exclusiveMinimum": 0
+                    }
+                  },
+                  "required": [
+                    "insert",
+                    "thread"
+                  ],
+                  "additionalProperties": false
+                },
+                "maxItems": 200,
+                "description": "PEM-style hardware inserts pressed into holes of a sheet-metal part — one record per hole. `insert` is the species (nut | flush_nut | standoff | blind_standoff | stud) and `thread` its size (\"M4\", \"1/4-20\"); both are required. When known, add length_mm (standoff/stud post length), the hole's center (located_at_mm, part's own mm frame), its axis, the drilled diameter, and `points` — the signed unit vector the insert's functional side faces (flip = negate). Pass these when the user asks for press-in nuts/standoffs/studs; sheet-metal shops with a hardware service price them, and every other shop — on every process, 3D printing and laser cutting included — is left out with the reason rather than pricing the part without its hardware."
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "New hardware-insert records for this part — a spec change: sheet lanes requote with exactly these inserts (the list REPLACES the previous one, never patches it). Same shape as on get_fabrication_quote: species (nut|flush_nut|standoff|blind_standoff|stud) and thread required, hole geometry optional. Pass null to REMOVE every insert"
+          },
+          "quantities": {
+            "anyOf": [
+              {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0
+                },
+                "maxItems": 5
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "New quantities the user wants (spec change — lanes requote at the new quantity). Same rules as on get_fabrication_quote: pass the real ask, never inflate it. Pass null to REMOVE a previously asked quantity — the quote returns to single-part pricing"
+          },
+          "scale": {
+            "type": "object",
+            "properties": {
+              "x": {
+                "type": "number",
+                "minimum": 0.01,
+                "maximum": 100
+              },
+              "y": {
+                "type": "number",
+                "minimum": 0.01,
+                "maximum": 100
+              },
+              "z": {
+                "type": "number",
+                "minimum": 0.01,
+                "maximum": 100
+              }
+            },
+            "required": [
+              "x",
+              "y",
+              "z"
+            ],
+            "additionalProperties": false,
+            "description": "Rescale the DESIGN ITSELF before re-quoting: per-axis stretch factors over the file's current geometry (\"make it 2x bigger\" = {\"x\":2,\"y\":2,\"z\":2}). Mesh designs are genuinely converted — the child quote prices a rescaled file; STEP/IGES designs keep their original file with the dimensions riding as callouts (pass those too). {1,1,1} is a no-op"
+          },
+          "processes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "maxItems": 8,
+            "description": "Narrow this quote to specific fabrication processes (\"no, I meant in sheet metal\" → [\"sheet metal\"]). A CONSTRAINT, not a new quote: excluded lanes drop while warm vendor sessions survive, and further refines inherit the filter. Friendly terms accepted (\"sheet metal\", \"3d printing\", \"cnc\", \"laser\"); pass [\"any\"] to clear the filter and show every process again. When comparison scenarios are open and the user narrows the process, re-refine EVERY active scenario label with this same arg so all columns prune together. One exception, for a flat part: a sheet-metal shop that laser-cuts flat stock is still returned under [\"laser\"] — its offer keeps process \"sheetmetal\" and carries also_processes [\"laser_cut\"] (one offer, listed under both; never two)"
+          },
+          "ships_from": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "maxItems": 8,
+            "description": "Only vendors that ship from these countries/regions (\"only US vendors\", \"just European shops\", \"keep it domestic\") — an INCLUDE list naming where the user DOES want vendors from. A CONSTRAINT like processes: non-matching vendors drop instantly (nothing re-prices), further refines inherit the filter, and [\"any\"] clears it to show vendors everywhere again. Friendly terms accepted (\"US\", \"Europe\", \"Germany\", \"China\", \"UK\"). Vendors whose origin is unknown or whose network is worldwide (a specific origin cannot be guaranteed) are excluded, each with an honest note. For \"nothing from X\" asks, pass the regions the user does want instead"
+          },
+          "vendors_exclude": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "maxItems": 32,
+            "description": "Shops to leave out (\"anyone but Slant 3D\", \"not A3D or Fictiv\") — shop names as they appear on offers; friendly names accepted (\"A3D\", \"slant 3d\"), and a name that matches no shop is reported, never an error. A shop on this list is never asked and never shown. Works beside vendors: the shops shown are the vendors list (or everyone) minus this list, so a shop named on both is left out. Usually OMIT: pass it only when the user names shops they do not want. On a refine: naming more shops answers at once from what the quote holds (no shop is asked); [\"any\"] or clear [\"vendors_exclude\"] removes the list, and the shops that come back are priced then"
+          },
+          "vendors_exact": {
+            "type": "boolean",
+            "description": "How the names in vendors and vendors_exclude are read. Usually OMIT: a name then reaches every connector of the shop it names (\"SendCutSend\" covers its sheet, laser and CNC connectors), which is what a person means by a shop. Pass true only when the lists hold offer `vendor` slugs copied from this network's own answers and each must mean that one connector: a term that is exactly a connector slug is then that connector alone ([\"sendcutsend\", \"sendcutsend-laser\"] leaves \"sendcutsend-cnc\" out), while any other word still resolves as a name. The answer's constraints_asked.vendors / vendors_exclude are the connectors the lists came to, and listed_vendors names each of them"
+          },
+          "materials": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 48
+            },
+            "maxItems": 24,
+            "description": "The materials the user will accept, when they name SEVERAL or a family rather than one (\"plastic or metal\", \"delrin or PLA\", \"any aluminum\") — each word a family (\"plastic\", \"metal\", \"wood\") or a specific material (\"pla\", \"delrin\", \"aluminum_6061\"). Only options in a listed material are shown; which shops are asked does not change. For ONE specific material use material instead: a stated material rules and this list is set aside (the quote says so). Usually OMIT: pass it only when the user names the materials they accept. On a refine: any list — narrower, wider, or clear [\"materials\"] to remove it — answers at once from what the quote holds (no shop is asked and nothing is priced again)"
+          },
+          "within_days": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 365,
+            "description": "Arrival within this many calendar days from today (\"within 10 days\", \"in two weeks\" → 14). Counted from the day the quote is READ, so it keeps meaning \"within N days of now\" — the day is the UTC date, the one arrival dates on offers (eta_date) are written in, so compare against those dates rather than a local calendar; an option keeps only the shipping speeds that arrive in time. With deadline as well, the earlier date rules. Use deadline instead when the user names a date. On a refine it answers at once from what the quote holds, tighter or looser; clear [\"within_days\"] removes it"
+          },
+          "cart_item_id": {
+            "type": "string",
+            "description": "When the quote being changed is a part in a cart: that part's item_id from the cart. The cart then follows the part to the quote this call answers with, by itself. It changes nothing else about the call"
+          },
+          "selection": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "vendor": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "process": {
+                    "type": "string",
+                    "enum": [
+                      "fdm_print",
+                      "resin_print",
+                      "powder_print",
+                      "metal_print",
+                      "elastomer_print",
+                      "cnc",
+                      "sheetmetal",
+                      "laser_cut",
+                      "decal",
+                      "print",
+                      "apparel"
+                    ]
+                  },
+                  "spec": {
+                    "type": "object",
+                    "properties": {
+                      "material": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 48
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "color": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 48
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "finish": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 48
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "thickness_in": {
+                        "anyOf": [
+                          {
+                            "type": "number",
+                            "exclusiveMinimum": 0,
+                            "maximum": 1
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    },
+                    "additionalProperties": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "maxLength": 120
+                        },
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "quantity": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 100000
+                  },
+                  "shipping_speed": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "confirmed": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "vendor"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The pick: the ONE option to order, named by what it is rather than by an offer id (ids change when a quote is priced again). vendor = the shop as it appears on offers (friendly names accepted); spec = the resolved options the option must carry, each optional — material, color, finish, thickness_in (leave one out, or null, and it does not narrow the pick); process and quantity likewise optional; shipping_speed = the word the shipping option itself goes by (\"standard\", \"express\", \"ground\"), omitted = the cheapest speed; confirmed = true once the user has settled on this option (added it to a cart, or is paying) — a pick without it is only the option being looked at, and a cart shared by a link carries a part's pick only when it is confirmed. Storing a pick changes no price and never asks every shop. CHOOSING STARTS THAT ONE SHOP'S CHECK: on a quote you already have, a pick that comes to exactly one option whose shop answered more than 15 minutes ago (or was never asked) has that one shop asked to confirm it, and the answer already says so. Every quote read then carries selection and selection_match { status \"one\" | \"none\" | \"many\", matched, offer_id, shipping_option_id, speed_fallback, confirmed_until, check { state \"running\" | \"fresh\" | \"not_started\", code, retry_after_s }, price_changed }: check \"fresh\" = the shop's answer is under 15 minutes old; \"running\" = that shop is being asked now; \"not_started\" = nobody is being asked and code says why (\"ask_limited\" = the pick is kept and the shop is asked when the user pays; \"quote_expired\" = these answers are over 24 hours old: call reopen_quote, the pick is kept). Usually OMIT: pass it when the user has settled on one option, or to order by create_checkout with selection true. On refine_quote: an object stores the pick, null clears it, omitted keeps the one the quote has. Sent alone it is stored on the SAME quote at once (the same quote id comes back, nothing re-prices, no shop is asked); sent with other changes it rides onto the new quote"
+          },
+          "vendors": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "maxItems": 32,
+            "description": "Only these specific vendors/makers (\"only show A3D Manufacturing\", \"just Slant 3D and Fictiv\") — an INCLUDE list of vendor names as they appear on offers. A CONSTRAINT like processes: other vendors' offers drop instantly (nothing re-prices), further refines inherit the filter, and [\"any\"] clears it to show every vendor again. Friendly names accepted (\"A3D\", \"slant 3d\"); unmatched names are reported, never an error. Use it only when the user asks to SEE only that vendor; a question about what a vendor offers is answered with get_shop_offerings and leaves the board alone"
+          },
+          "ship_to_zip": {
+            "type": "string",
+            "pattern": "^\\d{5}(-\\d{4})?$",
+            "description": "Destination US ZIP code, exactly as the user stated it — use this when the user provides their ZIP after a quote priced to the assumed central-US destination (routing.ship_to); the refined prices become theirs. NEVER guess or invent a ZIP"
+          },
+          "deadline": {
+            "type": "string",
+            "description": "Latest acceptable delivery date, ISO YYYY-MM-DD"
+          },
+          "outdoor_rated": {
+            "type": "boolean"
+          },
+          "submersible": {
+            "type": "boolean"
+          },
+          "high_temp": {
+            "type": "boolean"
+          },
+          "food_safe": {
+            "type": "boolean"
+          },
+          "requirements": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 120
+            },
+            "maxItems": 20,
+            "description": "Verbatim context terms from the user — materials, finishes, certifications, tolerances (\"UV resistant\", \"anodized: red\", \"iso 13485\", \"tolerance: 0.1mm\"). UFP applies what it can and reports what it could not; unresolvable terms are logged for vendor sourcing. Do not interrogate the user to fill this — pass what they said."
+          },
+          "callouts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "value": {
+                  "type": "number"
+                },
+                "unit": {
+                  "type": "string",
+                  "enum": [
+                    "mm",
+                    "in"
+                  ]
+                },
+                "tolerance_mm": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "critical": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "name",
+                "value",
+                "unit"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 50,
+            "description": "Dimensions you read off the user's drawing that matter (\"hole_diameter 6.5mm ±0.1\"). The tightest tolerance prunes vendors that cannot hold it."
+          },
+          "max_budget_usd": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "min_vendor_stars": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 5,
+            "description": "Only vendors whose displayed review rating is at least this many stars (1-5); vendors with no reviews yet are excluded"
+          },
+          "min_vendor_reviews": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "description": "Only vendors with at least this many verified-purchase reviews"
+          },
+          "proven_spec_orders": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "description": "Only vendors with at least N completed orders for this exact process+material — \"a vendor that prints PC reliably\""
+          },
+          "clear": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "deadline",
+                "budget",
+                "outdoor_rated",
+                "submersible",
+                "high_temp",
+                "food_safe",
+                "reliability",
+                "requirements",
+                "processes",
+                "ships_from",
+                "vendors",
+                "vendors_exclude",
+                "materials",
+                "within_days",
+                "selection"
+              ]
+            },
+            "minItems": 1,
+            "description": "REMOVE constraints entirely (\"drop the deadline\", \"forget the budget\", \"no more food-safe requirement\"): list the constraints to clear and each is removed from the quote — the one deliberate widening besides undo. Clearing a deadline or budget answers instantly from held offers (near-misses convert back); clearing an attribute/reliability/requirements demand re-prices honestly. Same effect as [\"any\"] on the three filter args, extended to every constraint"
+          },
+          "remove_requirements": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 120
+            },
+            "minItems": 1,
+            "maxItems": 20,
+            "description": "Take back INDIVIDUAL requirements terms (\"drop the anodized ask, keep the rest\"): each listed term is removed from the quote's requirements by normalized match, the others stay. Unknown terms are ignored, never an error. Re-stating the requirements list can never drop a term (terms merge as a union) — this is the removal channel"
+          },
+          "undo_last_step": {
+            "type": "boolean",
+            "description": "GO BACK EXACTLY ONE STEP (\"undo that\", \"go back\", \"put it back how it was\"): the network restores the previous quote's stored spec and constraints EXACTLY — never reconstructed from conversation — and re-prices where needed. Send it ALONE (no other args besides quote_id); combining it with changes is rejected. The quote's steps[] names what each undo would take back — steps[0] is the newest. Undo resets the baseline like any unlabeled refine, so open comparison scenarios close. Undoing the original quote is rejected with honest wording — relay it"
+          },
+          "sort_by": {
+            "type": "string",
+            "enum": [
+              "recommended",
+              "price",
+              "unit_price",
+              "total_price",
+              "arrival",
+              "rating"
+            ],
+            "description": "\"Organize by\": re-order the quote's offer cards (\"sort by cheapest\" → \"price\"; \"soonest arrival first\" → \"arrival\"; \"best rated\" → \"rating\"; \"total_price\" = part + cheapest shipping; \"recommended\" restores the default price+speed rank). PURE PRESENTATION — answers instantly on the same quote, never re-prices or drops offers, and the ordering sticks across re-reads, streaming, and later refines until changed"
+          },
+          "sort_direction": {
+            "type": "string",
+            "enum": [
+              "asc",
+              "desc"
+            ],
+            "description": "Flip a sort_by ordering: \"desc\" reverses the key's natural direction (\"most expensive first\" = sort_by \"price\" + \"desc\"). Only meaningful with sort_by"
+          },
+          "sort_order": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "maxItems": 200,
+            "description": "EXPLICIT card order for asks only you can judge (\"sort the most green to the top\"): look at the offers' preview images, decide the order yourself, and pass the offer ids first-on-top. Offers you leave out (including ones that stream in later) land below the listed ones in the default rank. Pass sort_label with it"
+          },
+          "sort_label": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 60,
+            "description": "Short human wording for a sort_order, displayed on the board (\"most green first\") — required with sort_order, since only you know what your order means"
+          },
+          "on_behalf_of": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "description": "Your own opaque name for the person you are acting for (a visitor id; never an email or a name), when you serve many people from one address: each then has their own count of the shop asks their choices start. It changes nothing else. Usually OMIT"
+          }
+        },
+        "required": [
+          "quote_id"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "reopen_quote",
+      "description": "Use when the user comes back to a part priced earlier (a saved quote_id), or when a quote carried answers_pending. A quote's answers are shown for 24 hours. Inside them this returns the same quote and asks nobody (reopened \"same\"). Past them it makes a NEW quote of the same file, configuration, rules and pick — work from the quote_id it returns: with the answers anyone got for this same part and request in the last 24 hours (\"copied\", nobody asked); else by asking the shops once (\"asked\" — the offers fill in like any new quote); else, when someone is asking about it right now, at our instant prices (\"waiting\": call this again after answers_pending.retry_after_s seconds). \"press_needed\" = this quote was itself made by reopening an old one and nothing was picked or changed on it since, so nobody is asked again by itself: pass pressed true only when the user asks for today's prices. A quote of a shared cart, a part already paid for, or instant prices only comes back as it reads. Do not use it to look at a board again. HOW OLD AN ANSWER IS: a shop's answer is shown for 24 hours, to everyone with the same request (the same design bytes with the same everything asked), so a quote of a part someone priced in the last 24 hours comes back complete at once with those answers and no shop is asked again. An offer says when its shop answered (answered_at). Past 15 minutes it reads stale: true — it is shown at that price and the shop confirms it again before anyone pays (check_offer, or checking out, asks that one shop). A shipping option of such an offer carries eta_approximate: true: say \"about N days\" from eta_days and never state its eta_date as a date, because no shop stands behind a date until it confirms again. If a quote carries answers_pending, someone else is asking the shops about this same request right now and these are our instant prices: call reopen_quote with that quote_id after retry_after_s seconds.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "quote_id": {
+            "type": "string",
+            "description": "The quote to reopen"
+          },
+          "pressed": {
+            "type": "boolean",
+            "description": "true = the user asked for today's prices. Needed only after reopened read \"press_needed\""
+          }
+        },
+        "required": [
+          "quote_id"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "poll_quote",
+      "description": "INTERNAL — the offer board calls this to refresh itself while vendors finish pricing. Never call this yourself. The board you were given is already final for its turn; do not reach for refine_quote to look at it again either, that paints a duplicate board. An offer's manufacturability_check (status checking → passed | failed, expected_s; \"repriced\" reads as passed) means the price is set; the shop is confirming it can make the part as drawn; the board renders it.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "quote_id": {
+            "type": "string",
+            "description": "Quote id the board is watching"
+          }
+        },
+        "required": [
+          "quote_id"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "finalize_quote",
+      "description": "ONLY for the case where a quote response came back with an EMPTY board and told you to call this: waits for the vendors to answer (up to ~40s) and returns their offers as a full board. Call with just quote_id, immediately, and say nothing substantive before it. NEVER call it on a response that already listed offers — that board is final, and this would add nothing.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "quote_id": {
+            "type": "string",
+            "description": "Quote id from the still-quoting response"
+          }
+        },
+        "required": [
+          "quote_id"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "create_checkout",
+      "description": "Create checkout for one chosen offer and shipping speed. Hosted payment is the default. Call this after the user chooses the offer and shipping speed. This tool takes NO personal details: never ask for — and never pass — a name, address, email, or phone; the secure payment page collects the shipping address, email, and phone (and billing) itself, even when the user volunteered them in chat. In hosted-payment mode, returns checkout_url — the AFN's order page (what is being made, by which shop, the all-in price) with a Continue to payment button to the secure hosted payment page; give the link to the user. UFP places the vendor order automatically after payment. An offer whose shop still has to confirm it (manufacturability_check.status \"unchecked\", or confirmed more than 15 minutes ago) is confirmed by this call itself, and one whose status is \"checking\" is waited for (the price is set; the shop is confirming it can make the part as drawn) — no separate check_offer call. Pass max_total_cents: the price the user agreed to (the offer's subtotal_cents plus the chosen shipping cost_cents). THE CHECKOUT RULE, enforced by the network for every client: an offer can be ordered only when the shop's own system has accepted this part at this price — its manufacturability check has passed, the price is the shop's own number (price_basis \"vendor_api\"), and no price confirmation is outstanding. That acceptance is good for 15 minutes (the offer's confirmed_until). THE CHECKOUT CONFIRMS WHAT NEEDS CONFIRMING ITSELF: when the option's shop has not confirmed it, or did more than 15 minutes ago, the checkout asks that ONE shop (it joins the ask already running when choosing the option started one) and waits up to wait_s for the answer; when the wait runs out first the answer is offer_not_ready with retry_after_s — send the SAME call again, it joins the ask and nothing is asked twice. THE PAY RULE: when the confirmed total is at or below the amount the user agreed to, checkout uses the selected payment method (hosted payment by default, or the saved card when pay is saved on a keyed connection); a price the shop confirmed HIGHER than the user agreed to stops ONCE (price_went_up, with old_total_cents and new_total_cents) and nothing is created — tell the user both figures, then send the call again (with the new max_total_cents when you sent one); the new price stands for 15 minutes and no shop is asked again. A passed offer whose price_refresh is still \"pending\" is refused the same way (offer_not_ready, with retry_after_s): the shop is still confirming its price — re-read the quote and retry then. An offer whose check failed, whose price_refresh reads \"failed\", or whose fulfillment is \"not_connected\" cannot be ordered at all (offer_check_failed) — offer the user another option or re-quote. Nothing is charged on any refusal. An offer whose shop could not confirm the part — it declined the part, or did not answer within two minutes of being asked — leaves the quote: it is no longer listed in offers, and its id is refused the same way. If an offer you showed earlier is missing when you re-read the quote, tell the user plainly that the shop could not confirm the part, and carry on with the offers that are listed. ORDER BY THE PICK: instead of offer_id + shipping_option_id, pass quote_id with selection true to order the one option the quote's stored pick comes to (the quote's selection_match). It orders only when that reads status \"one\"; with none or several it is refused (selection_not_unique, saying how many matched) and nothing is created — say more in the pick with refine_quote selection, then call again. When the pick names a shipping speed the option does not show right now (selection_match.speed_fallback) it is refused too (selection_speed_unavailable): the cheapest speed is never ordered in its place — store the pick with a speed the option lists. An offer_id or shipping speed the quote's own rules keep off its board (the acceptable-materials list, within_days) is refused the same way: order what the quote lists now. So the whole of it is two calls: refine_quote with the pick (its one shop starts confirming), then create_checkout with quote_id and selection true — the selected checkout result, price_went_up once, or offer_not_ready (call again). The checkout rule above applies to the picked option exactly as to any other. TO PLACE EXACTLY ONE ORDER WITH NO MISTAKES: (1) on get_fabrication_quote list only that shop in vendors and state the pick in selection — the shop, plus the material, finish and shipping speed wanted; (2) read selection_match on the quote: status \"one\" means exactly one option answers the pick, \"many\" means say more in the pick (color, thickness, quantity), \"none\" means nothing on the quote answers it; (3) call create_checkout with quote_id and selection true — it orders that one option at the picked shipping speed, or refuses and creates nothing (selection_not_unique: the pick is not exactly one option; selection_speed_unavailable: the option does not show the picked speed now — an order never takes another speed in its place). It returns the selected checkout result: a hosted payment link by default, or the saved-card outcome when pay is saved on a keyed connection.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "offer_id": {
+            "type": "string",
+            "description": "The offer to order. Required unless selection is true"
+          },
+          "shipping_option_id": {
+            "type": "string",
+            "description": "One of the offer's shipping option ids. Required with offer_id; leave out with selection true"
+          },
+          "quote_id": {
+            "type": "string",
+            "description": "With selection true: the quote whose picked option to order"
+          },
+          "selection": {
+            "type": "boolean",
+            "description": "true = order the quote's stored pick (its selection) instead of naming an offer: pass quote_id and leave offer_id and shipping_option_id out. Orders only when the quote's selection_match reads \"one\"; otherwise it is refused (selection_not_unique) and nothing is created; refused as well (selection_speed_unavailable) when the pick names a shipping speed that option does not show now"
+          },
+          "check": {
+            "type": "boolean",
+            "description": "Default true: when the option has not had its shop's manufacturability check yet (\"unchecked\"), or its shop confirmed it more than 15 minutes ago, this call asks that one shop and waits for its answer (wait_s), then goes on or refuses as the checkout rule says. false = ask nobody: such an option is refused at once (offer_not_ready). Usually OMIT"
+          },
+          "wait_s": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 120,
+            "description": "Seconds this call may wait for the shop (default 45). When it runs out first the answer is offer_not_ready — send the same call again"
+          },
+          "max_total_cents": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "The most the user agreed to pay for this option at this shipping speed, in cents, before any coupon: the subtotal_cents plus the speed's cost_cents you showed them. At or under it the order is made; a higher confirmed price is refused once (price_went_up) and nothing is created. Leave it out and the network compares with the price it last told this quote's reader"
+          },
+          "return_url": {
+            "type": "string",
+            "description": "Exact URL of the page the user is on right now, IF the client application knows it (a web app embedding this tool passes its own page URL). The post-payment page shows a 'Return to <site>' button pointing here. Omit when unknown — never invent one."
+          },
+          "coupon_code": {
+            "type": "string",
+            "description": "Coupon code, only if the user provided one (early-adopter codes from the AFN team). Case-insensitive. The discount appears on the payment page; a 100%-off code makes the total $0 with no card required. Never invent or guess a code."
+          }
+        },
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "create_cart",
+      "description": "Start a cart, for a user who wants several parts and one payment. Pass items to put parts in at once; each is named by quote_id (a quote you already have — its shops are not asked again), or by file_id or file_url (a design that has no quote yet — it gets one ordinary quote, priced exactly as get_fabrication_quote would price it). Returns the cart with its cart_id. HOW A CART WORKS: each part in a cart IS a quote — its material, finish, quantity, rules and its pick (selection) live on that part's quote, and nothing is kept twice. To change a part, call refine_quote on its quote_id and pass cart_item_id: the cart follows the part to the new quote by itself. To pick the option to order for a part, store the pick on its quote (refine_quote selection). The cart_id is the only key to the cart — whoever holds it can read and change it — so give it only to the user it belongs to, and never put it in a link you did not get from the network.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "quote_id": {
+                  "type": "string",
+                  "description": "A quote you already have: the part arrives configured and picked as that quote is, and no shop is asked again"
+                },
+                "file_id": {
+                  "type": "string",
+                  "description": "A design file the network already holds (f_…): it gets one ordinary quote"
+                },
+                "file_url": {
+                  "type": "string",
+                  "description": "A public URL of the design: it is fetched and gets one ordinary quote"
+                },
+                "label": {
+                  "type": "string",
+                  "maxLength": 200,
+                  "description": "The part's name as the user knows it. Default: the file's own name"
+                }
+              },
+              "additionalProperties": false
+            },
+            "maxItems": 24,
+            "description": "Parts to put in the cart now"
+          },
+          "ship_to_zip": {
+            "type": "string",
+            "description": "Destination US ZIP the cart's new parts are priced to, exactly as the user stated it. OMIT if the user has not given one — NEVER guess or invent a ZIP"
+          }
+        },
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "get_cart",
+      "description": "Read a cart: every part with its quote, the rules on it (constraints_asked), its pick (selection) and what the pick comes to — the shop, the price, the shipping speed and the arrival date — plus whether that option can be ordered right now (checkout.state: \"ready\"; \"needs_check\" = the shop has to confirm it first; \"checking\" = the shop is answering, read again shortly; \"not_orderable\" = pick another option; checkout.reason says why in a sentence and checkout.code says it as one word — on a \"needs_check\" part, \"confirmation_lapsed\" or \"never_confirmed\" mean reconfirm true will ask its one shop (and so will checkout_cart, by itself), \"ask_limited\" means the option is chosen and its shop is asked when the user pays, while \"rechecking\" (the part was copied from a shared cart and its shops are still being asked: read the cart again) and \"shop_asks_off\" (the network is not asking shops for this part right now) mean reconfirm true will start nothing for it). now is the network's own clock when the answer was made: work out the time left until checkout.confirmed_until from now, not from your own clock. by_shop groups the picked parts by the shop that makes them with subtotals and shipping, and total_cents is what the picked parts cost together. Parts with nothing picked are listed in unpicked_item_ids and are in no total. A plain read asks no shop. Pass reopen true when the user comes back to a cart: parts older than 24 hours are then asked about again, once, one part at a time (the answer's reopen says \"asked\", \"none_needed\", or \"press_needed\" — the old parts were already asked about again once and nothing was done to the cart since; pass pressed true only when the user asks for today's prices). picked.stale, picked.answered_at, picked.eta_days and picked.eta_approximate read as they do on an offer: when eta_approximate is true say \"about N days\", never the date. HOW LONG A PRICE HOLDS: a shop's confirmation of a picked option is good for 15 minutes. While it stands the part reads \"ready\" and checkout.confirmed_until says until when — tell the user the time they have. After it the part is NOT lost: it keeps its pick and its price and reads \"needs_check\" again. It is confirmed again by its one shop (nobody else is asked) when its option is chosen, and by checkout_cart itself when the user pays; reconfirm true on get_cart starts the same asks ahead of time — read the cart again and \"ready\" means the price stands. checkout.code \"ask_limited\" means the option is chosen and its shop will be asked when the user pays. When a part carries price_changed, the shop's answer moved the price or the arrival (direction \"up\", \"down\", or \"same\" when only the arrival moved) — tell the user the old and the new figure before they pay. checkout_cart stops ONCE by itself when the cart's total came back higher than the user agreed to (price_went_up). A part whose prices passed their 24-hour expiry is given a new quote by the read itself (quoted_anew true, price_source \"instant\"): it shows our instant prices again, its pick is kept, no shop was asked, and its shop confirms the pick when asked. SHIPPING IN A CART: by_shop[].shipping says how each shop's parts ship. mode \"ships_separately\" = each part is its own order with that shop and its own package, and pays its own shipping; mode \"combined\" = the shop takes those parts as ONE order and ships them together. Tell the user which it is, in the words of shipping.reason. Name a shipping saving ONLY when shipping.saved_cents is above zero, and only that amount — never promise or hint at a saving for buying several parts from one shop otherwise. When shipping.code is \"speeds_differ\", the parts of that shop are picked at different shipping speeds; you may tell the user that the shop sends parts together only at one speed, and read the cart again after they change a pick — do not state what it would save before the cart shows it. A SHARED CART: status \"shared\" means the cart came by a link and can only be read and copied. Never change it, pick on its parts' quotes, run check_offer on them or check it out — each of those is refused (cart_shared). Copy it with fork_cart and work on the copy, which is the user's own cart. A COPIED CART: copied true is present on a cart that was copied from a shared one; a cart never says which cart it was copied from. Each part's price_source says whose prices it shows: \"shared\" = recent shop prices that were copied with nobody asked — the prices of the person who shared the cart as they stood when it was copied, or the shops' own answers to this same part and request from the last 24 hours; \"instant\" = our instant prices, because the shared prices could not be copied (they were too old, or still coming in) — no shop has been asked about that part on this quote yet; \"own\" = this cart's own quote of the part, its shops asked. A pick that travelled with the cart but matches no option now reads selection_match.status \"none\": that part is still to choose. The buyer, the address, the email and any coupon never travel with a cart. PARTS OLDER THAN 24 HOURS: a shop's answer is shown for 24 hours. A cart copied with fork_cart inside them asks nobody: every part comes with its answers as they stand. A part whose answers are OLDER than 24 hours shows our instant prices first, and (unless the copy was for_link or recheck false) its shops are then asked about it again, one part at a time. Each such part's recheck says where it stands: \"queued\" = priced, its shops are asked when its turn comes; \"asking\" = its shops are being asked now; \"done\" = the shops' answers are in. A part with no recheck is under 24 hours old and nothing is pending for it. A part's quote_id CHANGES when its turn comes, so read quote_id off get_cart every time and never keep an old one. Until every such part reads done, tell the user the prices and dates may still move, and read the cart again; do not start a second copy to hurry it. A picked part goes first and its picked option is confirmed with its shop as part of it. HOW A CART WORKS: each part in a cart IS a quote — its material, finish, quantity, rules and its pick (selection) live on that part's quote, and nothing is kept twice. To change a part, call refine_quote on its quote_id and pass cart_item_id: the cart follows the part to the new quote by itself. To pick the option to order for a part, store the pick on its quote (refine_quote selection). The cart_id is the only key to the cart — whoever holds it can read and change it — so give it only to the user it belongs to, and never put it in a link you did not get from the network.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "cart_id": {
+            "type": "string",
+            "description": "The cart to read (cart_…)"
+          },
+          "reconfirm": {
+            "type": "boolean",
+            "description": "true = also have each picked part that reads \"needs_check\" confirmed by its one shop (nobody else is asked). The answer comes back at once with those parts \"checking\" — read the cart again for the result. Use it when the user opens the cart to pay; leave it out for a plain look"
+          },
+          "reopen": {
+            "type": "boolean",
+            "description": "true = the user came back to this cart: parts whose answers are older than 24 hours are asked about again, once, one part at a time (answers anyone got for the same part in the last 24 hours are copied first, and then nobody is asked). The only cart read that may ask every shop about a part. Leave it out for a plain look"
+          },
+          "pressed": {
+            "type": "boolean",
+            "description": "With reopen true: true = the user asked for today's prices. Needed only after an answer whose reopen read \"press_needed\""
+          }
+        },
+        "required": [
+          "cart_id"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "add_to_cart",
+      "description": "Put one more part in a cart. Name it ONE way: quote_id (a quote you already have — its shops are not asked again, and the part arrives configured and picked exactly as that quote is), or file_id or file_url (a design that has no quote yet — it gets one ordinary quote, priced exactly as get_fabrication_quote would price it). A cart holds at most 24 parts. Returns the whole cart. HOW A CART WORKS: each part in a cart IS a quote — its material, finish, quantity, rules and its pick (selection) live on that part's quote, and nothing is kept twice. To change a part, call refine_quote on its quote_id and pass cart_item_id: the cart follows the part to the new quote by itself. To pick the option to order for a part, store the pick on its quote (refine_quote selection). The cart_id is the only key to the cart — whoever holds it can read and change it — so give it only to the user it belongs to, and never put it in a link you did not get from the network.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "cart_id": {
+            "type": "string",
+            "description": "The cart to add to (cart_…)"
+          },
+          "quote_id": {
+            "type": "string",
+            "description": "A quote you already have: the part arrives configured and picked as that quote is, and no shop is asked again"
+          },
+          "file_id": {
+            "type": "string",
+            "description": "A design file the network already holds (f_…): it gets one ordinary quote"
+          },
+          "file_url": {
+            "type": "string",
+            "description": "A public URL of the design: it is fetched and gets one ordinary quote"
+          },
+          "label": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "The part's name as the user knows it. Default: the file's own name"
+          }
+        },
+        "required": [
+          "cart_id"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "fork_cart",
+      "description": "Copy a cart: the same parts in the same order, each configured and picked as it was (a copy made for a link keeps a part's pick only when it was stored with confirmed: true). Use it when the user opens a shared cart, so that nothing they change reaches the cart it was copied from; work on the cart_id this returns from then on. By default the copy is a NEW cart; pass into_cart_id (an open cart the user already holds) to add the copied parts to that cart instead — one call, and that cart is the answer. Use it with for_link true when the user wants to share their own cart: the copy is then a shared cart (status \"shared\") that can only be read and copied, and its cart_id is the one to hand out — never hand out the cart_id of the cart the user is working on. Pass item_ids to copy only those parts (one part shared by itself is a cart of one). Each part of the answer says quoted_anew: true when a new quote was made for it, false when the shared quote was copied. WHAT EACH WAY COSTS IN SHOP CONTACT: no shop is asked to make any copy, and the answer comes back at once with every part priced. A for_link copy never contacts a shop, then or later. A copy with recheck false never contacts a shop either — use it when you only want to read what is in a shared cart. Any other copy (the default, for a user who opened a shared cart to act on it) asks nobody when the cart's answers are under 24 hours old: each part comes with its shops' answers as they stand. Only a part whose answers are older than 24 hours is asked about again after the copy answers — its shops, as an ordinary quote of that part would ask them, one part at a time — and if anyone got answers for this same part and request in the last 24 hours those are copied instead with nobody asked. Never copy the same cart twice to refresh it — read the copy you have. LIMITS: copies are limited per caller a minute and a day, and the quotes the re-check will really start count against the caller's quote limit (a part whose shops are already being asked, or are queued to be asked, for another copy of the same request starts none); when you act for a person and say so (on_behalf_of), that person has their own counts of copies and of re-check quotes, a minute and a day; over a limit the answer is rate_limited with the seconds to wait, nothing is made and no shop is asked — wait, do not retry at once. A cart id that matches no cart answers \"unknown cart\" and nothing else. When it is the into_cart_id cart that is not known, the answer is an error with error \"into_cart_unknown\": nothing was copied — copy again without into_cart_id to get a new cart. A SHARED CART: status \"shared\" means the cart came by a link and can only be read and copied. Never change it, pick on its parts' quotes, run check_offer on them or check it out — each of those is refused (cart_shared). Copy it with fork_cart and work on the copy, which is the user's own cart. A COPIED CART: copied true is present on a cart that was copied from a shared one; a cart never says which cart it was copied from. Each part's price_source says whose prices it shows: \"shared\" = recent shop prices that were copied with nobody asked — the prices of the person who shared the cart as they stood when it was copied, or the shops' own answers to this same part and request from the last 24 hours; \"instant\" = our instant prices, because the shared prices could not be copied (they were too old, or still coming in) — no shop has been asked about that part on this quote yet; \"own\" = this cart's own quote of the part, its shops asked. A pick that travelled with the cart but matches no option now reads selection_match.status \"none\": that part is still to choose. The buyer, the address, the email and any coupon never travel with a cart. PARTS OLDER THAN 24 HOURS: a shop's answer is shown for 24 hours. A cart copied with fork_cart inside them asks nobody: every part comes with its answers as they stand. A part whose answers are OLDER than 24 hours shows our instant prices first, and (unless the copy was for_link or recheck false) its shops are then asked about it again, one part at a time. Each such part's recheck says where it stands: \"queued\" = priced, its shops are asked when its turn comes; \"asking\" = its shops are being asked now; \"done\" = the shops' answers are in. A part with no recheck is under 24 hours old and nothing is pending for it. A part's quote_id CHANGES when its turn comes, so read quote_id off get_cart every time and never keep an old one. Until every such part reads done, tell the user the prices and dates may still move, and read the cart again; do not start a second copy to hurry it. A picked part goes first and its picked option is confirmed with its shop as part of it. HOW A CART WORKS: each part in a cart IS a quote — its material, finish, quantity, rules and its pick (selection) live on that part's quote, and nothing is kept twice. To change a part, call refine_quote on its quote_id and pass cart_item_id: the cart follows the part to the new quote by itself. To pick the option to order for a part, store the pick on its quote (refine_quote selection). The cart_id is the only key to the cart — whoever holds it can read and change it — so give it only to the user it belongs to, and never put it in a link you did not get from the network.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "cart_id": {
+            "type": "string",
+            "description": "The shared cart to copy (cart_…)"
+          },
+          "item_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "maxItems": 24,
+            "description": "Copy only these parts — their item_id values from the shared cart. Omit to copy every part"
+          },
+          "for_link": {
+            "type": "boolean",
+            "description": "true = make the copy a shared cart, to hand out in a link: it can be read and copied, never changed or checked out, and it never contacts a shop. A part's pick travels in a link only when it was stored with confirmed: true (the user chose it, not just looked at it); any other pick is left out of the copy. Omit when the user is opening a cart someone shared"
+          },
+          "recheck": {
+            "type": "boolean",
+            "description": "false = contact no shop at all: the copy keeps the prices it was given (use it to read a shared cart). Omit (the default): a part whose answers are under 24 hours old is copied with them and nobody is asked; a part older than that is asked about again after the copy answers, one part at a time. Never true together with for_link"
+          },
+          "into_cart_id": {
+            "type": "string",
+            "description": "An OPEN cart the user already holds (cart_…): the copied parts are added to it, after its own parts, and that cart is returned. Refused, with nothing copied, when the cart would hold more than 24 parts or is shared or ordered. Omit to get a new cart. Never together with for_link"
+          },
+          "on_behalf_of": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "For a client that serves many people from one place: its own opaque id for the person it is acting for (never a name or an email), so that person gets a copy limit of their own. Omit otherwise"
+          }
+        },
+        "required": [
+          "cart_id"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "remove_from_cart",
+      "description": "Take one part out of a cart. The part's quote is untouched and can be put back with add_to_cart. Returns the whole cart. HOW A CART WORKS: each part in a cart IS a quote — its material, finish, quantity, rules and its pick (selection) live on that part's quote, and nothing is kept twice. To change a part, call refine_quote on its quote_id and pass cart_item_id: the cart follows the part to the new quote by itself. To pick the option to order for a part, store the pick on its quote (refine_quote selection). The cart_id is the only key to the cart — whoever holds it can read and change it — so give it only to the user it belongs to, and never put it in a link you did not get from the network.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "cart_id": {
+            "type": "string",
+            "description": "The cart (cart_…)"
+          },
+          "item_id": {
+            "type": "string",
+            "description": "The part to take out — its item_id from the cart"
+          }
+        },
+        "required": [
+          "cart_id",
+          "item_id"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "set_cart_item_quote",
+      "description": "Point a part of a cart at another quote of the same part — for a part that was priced again with get_fabrication_quote. Changing a part with refine_quote needs no call here: pass cart_item_id to refine_quote and the cart follows by itself. Asks no shop. Returns the whole cart. HOW A CART WORKS: each part in a cart IS a quote — its material, finish, quantity, rules and its pick (selection) live on that part's quote, and nothing is kept twice. To change a part, call refine_quote on its quote_id and pass cart_item_id: the cart follows the part to the new quote by itself. To pick the option to order for a part, store the pick on its quote (refine_quote selection). The cart_id is the only key to the cart — whoever holds it can read and change it — so give it only to the user it belongs to, and never put it in a link you did not get from the network.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "item_id": {
+            "type": "string",
+            "description": "The cart part — its item_id from the cart"
+          },
+          "quote_id": {
+            "type": "string",
+            "description": "The quote the part is now"
+          },
+          "cart_id": {
+            "type": "string",
+            "description": "The cart the part is in (cart_…), when you have it"
+          }
+        },
+        "required": [
+          "item_id",
+          "quote_id"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "checkout_cart",
+      "description": "Create one checkout for every selected cart part. Hosted payment uses one link; pay saved uses the card on the AFN key. Each part needs a pick that comes to exactly one option (its selection_match reads \"one\"). A part whose shop still has to confirm it (get_cart shows checkout.state \"needs_check\" or \"checking\") is confirmed by this call itself: its one shop is asked — or the ask already running is joined — and the call waits up to wait_s for the answers; no check_offer and no reconfirm read is needed first. Pass max_total_cents: the cart total_cents the user agreed to. ALL OR NOTHING: if any part cannot be ordered, nothing is created, nothing is charged, and the answer (cart_not_ready) names each such part and why — fix those and call again. Pass only_selected true to leave the parts with nothing picked in the cart and order the rest. In hosted-payment mode, returns checkout_url — one secure payment page for the whole cart; give it to the user to pay. After payment AFN places one order per part with its own shop; each part ships by itself unless by_shop[].shipping.mode in the answer reads \"combined\" for its shop (then that shop takes its parts as one order and ships them together); each order sends its own confirmation email, and get_order_status with the checkout_id shows them all. idempotency_key: make up one unique string for this attempt and send the SAME string only to repeat the very same call — it then returns the same checkout and payment link, never a second set of orders. After ANYTHING changed (the address, the coupon, a part, a pick) make up a NEW string: the old one is refused (idempotency_key_reused), because its payment link is for the cart as it was. A part already paid for by itself is named in the refusal like any other part. When a shop's answer did not come inside wait_s, the cart is refused with that part named (offer_not_ready): send the SAME call again with the SAME idempotency_key (a refused call never uses its key) — it joins the asks already running and nothing is asked twice. When the cart's confirmed total is higher than the user agreed to, the call stops ONCE (price_went_up: old_total_cents, new_total_cents, and items naming the parts that rose) and nothing is created: tell the user, then call again with the new max_total_cents and the same idempotency_key. A coupon applies once, to the cart total. This tool takes NO personal details: never ask for — and never pass — a name, address, email, or phone; the secure payment page collects the shipping address, email, and phone once for the whole cart, even when the user volunteered them in chat. Never ask the user for card details in chat.THE CHECKOUT RULE, enforced by the network for every client: an offer can be ordered only when the shop's own system has accepted this part at this price — its manufacturability check has passed, the price is the shop's own number (price_basis \"vendor_api\"), and no price confirmation is outstanding. That acceptance is good for 15 minutes (the offer's confirmed_until). THE CHECKOUT CONFIRMS WHAT NEEDS CONFIRMING ITSELF: when the option's shop has not confirmed it, or did more than 15 minutes ago, the checkout asks that ONE shop (it joins the ask already running when choosing the option started one) and waits up to wait_s for the answer; when the wait runs out first the answer is offer_not_ready with retry_after_s — send the SAME call again, it joins the ask and nothing is asked twice. THE PAY RULE: when the confirmed total is at or below the amount the user agreed to, checkout uses the selected payment method (hosted payment by default, or the saved card when pay is saved on a keyed connection); a price the shop confirmed HIGHER than the user agreed to stops ONCE (price_went_up, with old_total_cents and new_total_cents) and nothing is created — tell the user both figures, then send the call again (with the new max_total_cents when you sent one); the new price stands for 15 minutes and no shop is asked again. A passed offer whose price_refresh is still \"pending\" is refused the same way (offer_not_ready, with retry_after_s): the shop is still confirming its price — re-read the quote and retry then. An offer whose check failed, whose price_refresh reads \"failed\", or whose fulfillment is \"not_connected\" cannot be ordered at all (offer_check_failed) — offer the user another option or re-quote. Nothing is charged on any refusal. An offer whose shop could not confirm the part — it declined the part, or did not answer within two minutes of being asked — leaves the quote: it is no longer listed in offers, and its id is refused the same way. If an offer you showed earlier is missing when you re-read the quote, tell the user plainly that the shop could not confirm the part, and carry on with the offers that are listed. SHIPPING IN A CART: by_shop[].shipping says how each shop's parts ship. mode \"ships_separately\" = each part is its own order with that shop and its own package, and pays its own shipping; mode \"combined\" = the shop takes those parts as ONE order and ships them together. Tell the user which it is, in the words of shipping.reason. Name a shipping saving ONLY when shipping.saved_cents is above zero, and only that amount — never promise or hint at a saving for buying several parts from one shop otherwise. When shipping.code is \"speeds_differ\", the parts of that shop are picked at different shipping speeds; you may tell the user that the shop sends parts together only at one speed, and read the cart again after they change a pick — do not state what it would save before the cart shows it. HOW A CART WORKS: each part in a cart IS a quote — its material, finish, quantity, rules and its pick (selection) live on that part's quote, and nothing is kept twice. To change a part, call refine_quote on its quote_id and pass cart_item_id: the cart follows the part to the new quote by itself. To pick the option to order for a part, store the pick on its quote (refine_quote selection). The cart_id is the only key to the cart — whoever holds it can read and change it — so give it only to the user it belongs to, and never put it in a link you did not get from the network.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "cart_id": {
+            "type": "string",
+            "description": "The cart to check out (cart_…)"
+          },
+          "idempotency_key": {
+            "type": "string",
+            "minLength": 8,
+            "maxLength": 200,
+            "description": "One unique string for THIS attempt to pay for the cart, made up by you (letters and digits, 8 or more). Send the same string only to repeat the very same call; after any change to the cart or the details, make up a new one"
+          },
+          "only_selected": {
+            "type": "boolean",
+            "description": "true = order the parts that have a pick and leave the rest in the cart. Default: a part with nothing picked refuses the whole cart"
+          },
+          "coupon": {
+            "type": "string",
+            "description": "Coupon code, only if the user provided one. Applied once to the cart total. Never invent or guess a code."
+          },
+          "check": {
+            "type": "boolean",
+            "description": "Default true: each picked part whose shop has to confirm it is confirmed by this call (one shop per part), which waits for the answers (wait_s). false = ask nobody and judge the cart as it stands. Usually OMIT"
+          },
+          "wait_s": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 120,
+            "description": "Seconds this call may wait for the shops (default 45). When it runs out first the cart is refused with the waiting parts named — send the same call again"
+          },
+          "max_total_cents": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "The most the user agreed to pay for the cart, in cents, before any coupon: the cart's total_cents as you showed it. At or under it the checkout is made; a higher confirmed total is refused once (price_went_up) and nothing is created. Leave it out and the network compares with the prices it last told this cart's reader"
+          },
+          "return_url": {
+            "type": "string",
+            "description": "Exact URL of the page the user is on right now, IF the client application knows it. The page after payment shows a 'Return to <site>' button pointing here. Omit when unknown — never invent one."
+          }
+        },
+        "required": [
+          "cart_id",
+          "idempotency_key"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "get_order_status",
+      "description": "Check status, ETA and tracking for a UFP order. Pass a checkout id (co_…, from checkout_cart) in order_id to get every order of that cart checkout at once — each part is its own order with its own shop, status and tracking. The answer carries status_url: a link the user can open or pass on to follow the order with no sign-in; it shows progress only (no price, no address, nothing that can change the order).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "order_id": {
+            "type": "string",
+            "description": "The order (ord_…), or a cart checkout (co_…) to read all of its orders"
+          }
+        },
+        "required": [
+          "order_id"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "reply_to_maker",
+      "description": "Send the user's answer to a question the maker (vendor) asked about a UFP order — get_order_status surfaces an open question when one is waiting. Confirm the answer with the user before sending. The network relays it: the maker sees plain text from the network account with the user's contact details and links stripped, so never include emails, phone numbers, or URLs the answer depends on.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "order_id": {
+            "type": "string",
+            "description": "The UFP order the maker asked about (ord_…)"
+          },
+          "message": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4000,
+            "description": "The user's answer, in their words — it is relayed to the maker"
+          }
+        },
+        "required": [
+          "order_id",
+          "message"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "leave_review",
+      "description": "Record the user's verified-purchase review of how a UFP order turned out. YOUR JOB IS TO STRUCTURE THE FEEDBACK: turn what the user actually said into stars (1-5 overall) and facet scores — \"the cut was sloppy\" -> quality, \"parts arrived 2 days late\" -> timeliness, \"wrong color\" -> accuracy. Keep the optional comment to a short factual summary of their words; never embellish. ALWAYS draft the review (stars, facets, comment) and confirm it with the user BEFORE calling this tool — e.g. \"I'll rate this 2 stars with timeliness 1 because it arrived 2 days late — send it?\". One review per order: submitting again updates the existing review. If you do not have the order id from this conversation, ask the user for it (it is on their receipt email and order page); never guess one.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "order_id": {
+            "type": "string",
+            "description": "The UFP order being reviewed (ord_…), from create_checkout or get_order_status in this conversation, or from the user's receipt email / order page"
+          },
+          "stars": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 5,
+            "description": "Overall rating the user confirmed, 1-5"
+          },
+          "comment": {
+            "type": "string",
+            "maxLength": 2000,
+            "description": "Short factual summary of the user's feedback, in their spirit — optional"
+          },
+          "facets": {
+            "type": "object",
+            "properties": {
+              "quality": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 5,
+                "description": "Build/print/cut quality"
+              },
+              "timeliness": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 5,
+                "description": "Delivery speed vs the quoted ETA"
+              },
+              "accuracy": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 5,
+                "description": "How well the item matched the ordered spec/design"
+              }
+            },
+            "additionalProperties": false,
+            "description": "Score only the facets the user actually spoke to"
+          },
+          "claims": {
+            "type": "object",
+            "properties": {
+              "received_material": {
+                "type": "string",
+                "maxLength": 80,
+                "description": "Material the user says actually ARRIVED, when they complain it differs from the order (\"they sent aluminum\")"
+              },
+              "received_quantity": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "description": "Count the user says actually arrived, when it differs from the order"
+              },
+              "delivery_claim": {
+                "type": "string",
+                "enum": [
+                  "not_delivered",
+                  "late",
+                  "on_time"
+                ],
+                "description": "The user's delivery claim (\"never showed up\" -> not_delivered)"
+              }
+            },
+            "additionalProperties": false,
+            "description": "CHECKABLE claims from the user's feedback — the network stamps each against its own records (the ordered spec, polled tracking + delivery events) and attaches evidence chips to the review. Only pass what the user actually asserted."
+          }
+        },
+        "required": [
+          "order_id",
+          "stars"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "get_material_guide",
+      "description": "Honest, cited material intelligence for material-choice / strength / durability / heat / outdoor questions (\"my PLA part broke, what's stronger?\", \"will this survive outdoors?\"). Returns caveats-FIRST facts: published specs (tensile, heat-deflection, UV/outdoor, chemical) each tagged vendor-cited vs general engineering knowledge, \"stronger/tougher/hotter than X\" ladders (PLA→PETG→ABS/ASA→nylon/PC→metals), and finish/coating options. Call it BEFORE answering such a question, then relay the facts. It supplies FACTS ONLY — comparative specs and vendor-admitted caveats, never a fitness-for-purpose or safety guarantee (that stays your judgment boundary); name express vendor claims \"advertised\", not \"certified\".",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "material": {
+            "type": "string",
+            "description": "A material the user named or you are weighing (\"PLA\", \"6061 aluminum\", \"stainless\") — free-form; a family ask like \"stainless\" returns the whole family"
+          },
+          "process": {
+            "type": "string",
+            "description": "A UFP process to scope to (\"fdm_print\", \"resin_print\", \"cnc\", \"sheetmetal\", \"laser_cut\") — lists the materials that process makes"
+          },
+          "question": {
+            "type": "string",
+            "description": "The user's raw question — mined for intent (stronger/tougher, heat/hot, outdoor/UV) so the right ladder is surfaced"
+          }
+        },
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "get_network_capabilities",
+      "description": "The LIVE catalog of what the fabrication network can do RIGHT NOW — no quote needed. Returns the services ledger (tapping, inserts, welding, bending, finishes… with each shop's own size/material/thickness windows), the network's sheet gauge ladder, the stocked hardware combinations (species x thread) with stocked lengths and shop counts — the most-stocked length is the steering default for an unspecified length — the finish options with their stocked color menus, every colour the network can make a part in (network_catalog.colors: per colour family, how many shops stock a material in it and how many coat in it, with the shades — ask for one by passing the family word as `color` with no finish), the material groups a picker shows (network_catalog.material_groups: Plastics, Metals, Woods, Foams, Rubbers, Composites, Paper cork and fabric… with the stock families live under each and the words that ask for them), and per-process manufacturability rules. This is live state, not a spec sheet: it changes as connectors join, leave, or have capability branches toggled, so call it fresh when the user asks what's possible (materials, gauges, hardware, colors, services) rather than answering from memory. PICKER COUNTS: pass `selection` (what the user has already picked: processes, materials, thickness_in, colors, finishes, finish_colors, vendors, vendors_exclude, each a list where any value will do) and the answer adds network_catalog.facets: for every material group and member, gauge rung, colour family, finish and finish colour the catalog lists, `shops` = how many shops the user can order from today declare they make the whole selection plus that option, and `maybe` = further shops whose catalog is silent on part of it (they might); each count sets that dimension's own picks aside. Only an option with shops 0 AND maybe 0 is impossible with the selection; never read a missing count as zero. facets.shops answers each shop against the selection (yes / no / unknown). The counts come from the shops' declared catalogs, nobody is contacted, and nothing on a quote changes. Without `selection` the answer is the same as before.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "process": {
+            "type": "string",
+            "description": "Advisory scope (\"sheetmetal\") — v1 returns the whole catalog either way; filter what you relay"
+          },
+          "selection": {
+            "type": "object",
+            "properties": {
+              "processes": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "maxLength": 64
+                },
+                "maxItems": 32
+              },
+              "materials": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "maxLength": 64
+                },
+                "maxItems": 64
+              },
+              "thickness_in": {
+                "anyOf": [
+                  {
+                    "type": "number",
+                    "exclusiveMinimum": 0
+                  },
+                  {
+                    "type": "array",
+                    "items": {
+                      "type": "number",
+                      "exclusiveMinimum": 0
+                    },
+                    "maxItems": 32
+                  }
+                ]
+              },
+              "colors": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "maxLength": 48
+                },
+                "maxItems": 32
+              },
+              "finishes": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "maxLength": 48
+                },
+                "maxItems": 16
+              },
+              "finish_colors": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "maxLength": 48
+                },
+                "maxItems": 32
+              },
+              "vendors": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "maxLength": 64
+                },
+                "maxItems": 64
+              },
+              "vendors_exclude": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "maxLength": 64
+                },
+                "maxItems": 64
+              },
+              "vendors_exact": {
+                "type": "boolean"
+              }
+            },
+            "additionalProperties": false,
+            "description": "What is already picked, in a quote's own words, e.g. { \"materials\": [\"acrylic\"], \"colors\": [\"green\"], \"vendors\": [\"SendCutSend\"] }. When present the answer adds network_catalog.facets (shop counts per option for this selection). Add \"vendors_exact\": true only when the shop lists hold offer `vendor` slugs that must each mean that one connector (a name otherwise covers every connector of the shop). Omit it for the plain catalog"
+          }
+        },
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "get_shop_offerings",
+      "description": "What ONE named shop sells right now, read live off the shop's own declared catalog: per process, every stock with its own colours and thicknesses, and every finish with the stocks it goes on and its colours. No quote needed, nobody is contacted, and the user's board does not change. Call it when the user asks what a specific maker offers (\"what colours of acrylic does SendCutSend have?\", \"what else do they do?\"). One shop name covers every process it sells. A stock listed with no colours means the shop does not list colours for it, never that it has none. Never answer such a question from the offers on a quote (they show what was offered for one ask, not everything the shop sells) and never from memory.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "shop": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The shop as the user or the offer cards name it (\"SendCutSend\", \"sendcutsend\")"
+          },
+          "material": {
+            "type": "string",
+            "description": "Narrow the list to one material or family (\"acrylic\", \"mild steel\")"
+          }
+        },
+        "required": [
+          "shop"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "get_shop_gauges",
+      "description": "Every sheet thickness (gauge) ONE named shop stocks right now, per material — read live off the shop's declared catalog, no quote needed. Call it when the user asks what thicknesses/gauges a specific maker carries (\"what thicknesses does SendCutSend have in mild steel?\"). For the whole network's ladder use get_network_capabilities instead. Never answer a gauge question from memory.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "shop": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The shop as the user or the offer cards name it (\"SendCutSend\", \"sendcutsend\")"
+          },
+          "material": {
+            "type": "string",
+            "description": "Advisory: narrow the relayed list to one material (\"mild steel\", \"5052\")"
+          }
+        },
+        "required": [
+          "shop"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "get_price_curve",
+      "description": "How the per-unit price moves with quantity for a quote you already have: for every shop on the board, the item price per unit at each quantity (default 1, 2, 5, 10, 25, 50, 100, 250, 500, 1000; pass up to 16 of your own in 1..10000) from that shop's own pricing with the network's markup included, plus its arrival window — instant, no shop is contacted, nothing changes on the quote. Call it when the user asks what more or fewer pieces would cost (\"what would 50 run me?\", \"any price breaks?\"). The board's quoted price stays the ceiling at the chosen quantity (each option's `live` row); a null cell means that shop's pricing does not cover that quantity — refine_quote with the new quantities gets the real number. Present these as the shops' own pricing, never as an estimate; every order still passes the manufacturability check.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "quote_id": {
+            "type": "string",
+            "description": "The quote whose board to price by quantity"
+          },
+          "quantities": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 10000
+            },
+            "maxItems": 16,
+            "description": "Up to 16 quantities in 1..10000; omit for 1, 2, 5, 10, 25, 50, 100, 250, 500, 1000"
+          }
+        },
+        "required": [
+          "quote_id"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "check_offer",
+      "description": "Ask the shop to confirm one unchecked or checking offer. Use this when the user wants the check result before deciding. create_checkout and checkout_cart ask or join the check themselves for the selected option, so this is not a required pre-check. A passed result is orderable at the shown price for 15 minutes. A repriced result confirms that same shop price; do not say the price changed. A failed result cannot be ordered and the offer is removed from the quote; tell the user and continue with the listed offers. Wait up to wait_s (default 45); pending: true means the shop is still answering, so re-read the quote shortly. Nothing else on the quote changes. On an instant-only quote (routing.instant_only true) no shop is asked; relay that result and quote again without instant_only if the user wants to order. On a lazy quote (routing.lazy true) this call is how a shop is asked at all: it asks this offer's shop, and the offer can be ordered once it passes. A shop's confirmation of an offer is good for 15 minutes: while it stands the offer carries confirmed_until (an ISO time) and can be ordered. After it the offer is NOT failed and NOT removed — it keeps its place and the price the shop last confirmed, and its manufacturability_check reads status \"unchecked\" with reason \"confirmation_lapsed\". CHOOSING STARTS THAT SHOP'S CHECK: when the user settles on an option and you store the pick, that one shop is asked again by itself (the answer's selection_match.check reads \"running\"), and create_checkout and checkout_cart ask it themselves too when it still needs confirming — nobody else is asked, and no separate check_offer call is needed. Pay when it lands: the checkout waits for it. If the shop's price came back higher than the user agreed to, the checkout stops ONCE (price_went_up, with the old and the new figure) and nothing is created: tell the user both figures, then send the same call again. An offer whose manufacturability_check reads status \"unchecked\" with reason \"network_restarted\" was being confirmed by its shop when the network restarted, so the answer never came: tell the user, in these words, \"A new version of AFN has been released, please refresh the page\". Nothing is lost — the price stands and the offer can simply be checked again with check_offer. Say it once, when a tool's own text tells you to; the same reason still on an offer on a later read is history, not news.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "quote_id": {
+            "type": "string",
+            "description": "The quote the offer belongs to"
+          },
+          "offer_id": {
+            "type": "string",
+            "description": "The offer to have the shop confirm"
+          },
+          "wait_s": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 60,
+            "description": "Seconds to wait for the shop (default 45)"
+          }
+        },
+        "required": [
+          "quote_id",
+          "offer_id"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "ai.agenticfabricationnetwork/ufp",
+    "version": "0.1.1",
+    "remoteUrl": "https://agenticfabricationnetwork.ai/mcp",
+    "fetchedAt": "2026-11-22T10:21:23.861Z",
+    "toolsSha256": "247b720cdb193df1d46ccf20452731fecb05bc92125bbf247be1463ce5113585"
+  }
+}
