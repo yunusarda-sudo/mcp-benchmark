@@ -458,7 +458,7 @@ export function classifyFailure(error) {
 // ---------------------------------------------------------------------------
 
 /** Builds the registry/servers/<slug>.json document for a successfully probed server. */
-export function buildServerEntry({ server, remoteUrl, tools, fetchedAt }) {
+export function buildServerEntry({ server, remoteUrl, tools, fetchedAt, publishedAt }) {
   const name = server.name;
   const title = cleanText(server.title, LIMITS.maxTitleLength);
   const description = cleanText(server.description, LIMITS.maxServerDescriptionLength);
@@ -477,6 +477,7 @@ export function buildServerEntry({ server, remoteUrl, tools, fetchedAt }) {
       name,
       version: typeof server.version === 'string' ? server.version.slice(0, 100) : 'unknown',
       remoteUrl,
+      ...(publishedAt ? { publishedAt } : {}),
       fetchedAt,
       toolsSha256: toolsSha256(tools),
     },
@@ -488,27 +489,110 @@ export function isValidRegistryName(name) {
   return typeof name === 'string' && name.length > 0 && name.length <= 200 && /^[A-Za-z0-9][A-Za-z0-9._-]*\/[A-Za-z0-9._-]+$/.test(name);
 }
 
+// Multi-tenant hosting suffixes: each subdomain belongs to a different operator.
+const SHARED_HOST_SUFFIXES = [
+  'workers.dev', 'pages.dev', 'vercel.app', 'netlify.app', 'onrender.com', 'fly.dev', 'herokuapp.com',
+  'railway.app', 'up.railway.app', 'github.io', 'run.app', 'a.run.app', 'azurewebsites.net', 'azurecontainerapps.io',
+  'deno.dev', 'deno.net', 'supabase.co', 'modal.run', 'ngrok.app', 'ngrok-free.app', 'replit.app', 'smithery.ai',
+  'glitch.me', 'web.app', 'firebaseapp.com', 'cloudfunctions.net', 'amazonaws.com', 'on-aws.com', 'lambda-url.us-east-1.on.aws',
+];
+const TWO_LEVEL_TLDS = new Set(['co.uk', 'org.uk', 'ac.uk', 'com.au', 'net.au', 'co.jp', 'co.kr', 'com.br', 'com.cn', 'co.in', 'com.tr', 'co.nz', 'com.mx', 'co.za']);
+
 /**
- * Orders probe candidates for a capped run: known servers whose version or URL
- * changed first, then never-listed servers in name order starting after
- * `resumeAfter` (so successive capped runs rotate through the backlog), then
- * known unchanged servers. `known` maps registry name → existing source block.
+ * Approximates the operator of a remote: the registrable domain of its host
+ * (eTLD+1), treating shared hosting suffixes as public so tenants differ.
  */
-export function orderCandidates(candidates, known, resumeAfter) {
-  const byName = (a, b) => (a.server.name < b.server.name ? -1 : a.server.name > b.server.name ? 1 : 0);
+export function operatorOf(remoteUrl) {
+  let host;
+  try {
+    host = new URL(remoteUrl).hostname.toLowerCase().replace(/\.$/, '');
+  } catch {
+    return 'invalid';
+  }
+  if (net.isIP(host.replace(/^\[|\]$/g, ''))) return host;
+  const labels = host.split('.');
+  const suffix = SHARED_HOST_SUFFIXES.filter(x => host === x || host.endsWith(`.${x}`)).sort((x, y) => y.length - x.length)[0];
+  if (suffix) {
+    const suffixLabels = suffix.split('.').length;
+    return labels.length > suffixLabels ? labels.slice(-(suffixLabels + 1)).join('.') : host;
+  }
+  const keep = TWO_LEVEL_TLDS.has(labels.slice(-2).join('.')) ? 3 : 2;
+  return labels.slice(-keep).join('.');
+}
+
+/** Publish time of a registry item (publishedAt, falling back to updatedAt), or ''. */
+export function publishedAtOf(item) {
+  const meta = officialMeta(item);
+  const value = typeof meta?.publishedAt === 'string' ? meta.publishedAt : typeof meta?.updatedAt === 'string' ? meta.updatedAt : '';
+  return Number.isNaN(Date.parse(value)) ? '' : value;
+}
+
+/** Sort key: newer first, then by name for stable ties. */
+function recencyKey(candidate) {
+  return `${candidate.publishedAt}\u0000${candidate.server.name}`;
+}
+const newestFirst = (a, b) => (recencyKey(a) < recencyKey(b) ? 1 : recencyKey(a) > recencyKey(b) ? -1 : 0);
+
+/**
+ * Orders probe candidates for a capped run, newest first by publishedAt:
+ *   1. known servers whose version or URL changed,
+ *   2. never-listed servers published since the previous run (`lastRun`),
+ *   3. the never-listed backlog older than `backlogCursor` (a recencyKey from
+ *      the previous capped run; candidates between the cursor and lastRun were
+ *      already probed and are skipped),
+ *   4. known unchanged servers.
+ * At most `maxProbesPerOperator` candidates per operator are kept so one
+ * operator cannot use up the probe budget.
+ */
+export function orderCandidates(candidates, { known, lastRun, backlogCursor, maxProbesPerOperator = Infinity }) {
   const changed = [];
-  const fresh = [];
+  const recent = [];
+  const backlog = [];
   const unchanged = [];
   for (const candidate of candidates) {
     const source = known.get(candidate.server.name);
-    if (!source) fresh.push(candidate);
-    else if (source.version !== candidate.server.version || source.remoteUrl !== candidate.remoteUrl) changed.push(candidate);
-    else unchanged.push(candidate);
+    if (source) {
+      const isChanged = source.version !== candidate.server.version || source.remoteUrl !== candidate.remoteUrl;
+      (isChanged ? changed : unchanged).push(candidate);
+    } else if (lastRun && candidate.publishedAt > lastRun) {
+      recent.push(candidate);
+    } else if (!backlogCursor || recencyKey(candidate) < backlogCursor) {
+      backlog.push(candidate);
+    }
   }
-  fresh.sort(byName);
-  const pivot = typeof resumeAfter === 'string' ? fresh.findIndex(c => c.server.name > resumeAfter) : 0;
-  const rotated = pivot > 0 ? [...fresh.slice(pivot), ...fresh.slice(0, pivot)] : fresh;
-  return [...changed.sort(byName), ...rotated, ...unchanged.sort(byName)];
+  const ordered = [changed, recent, backlog, unchanged].flatMap(group => [...group].sort(newestFirst));
+  const perOperator = new Map();
+  return ordered.filter(candidate => {
+    const count = perOperator.get(candidate.operator) ?? 0;
+    if (count >= maxProbesPerOperator) return false;
+    perOperator.set(candidate.operator, count + 1);
+    return true;
+  });
+}
+
+/** The backlog cursor to store after probing `probed` (the oldest backlog key probed). */
+export function nextBacklogCursor(probed, { known, lastRun }) {
+  const backlogKeys = probed
+    .filter(c => !known.has(c.server.name) && !(lastRun && c.publishedAt > lastRun))
+    .map(recencyKey)
+    .sort();
+  return backlogKeys[0];
+}
+
+/**
+ * Returns the registry names to drop so each operator keeps at most `cap`
+ * listed servers (the most recently published are kept).
+ * `entries` is an array of { name, operator, publishedAt }.
+ */
+export function namesOverOperatorCap(entries, cap) {
+  const groups = new Map();
+  for (const entry of entries) groups.set(entry.operator, [...(groups.get(entry.operator) ?? []), entry]);
+  const drop = [];
+  for (const group of groups.values()) {
+    const sorted = [...group].sort((a, b) => newestFirst({ publishedAt: a.publishedAt ?? '', server: { name: a.name } }, { publishedAt: b.publishedAt ?? '', server: { name: b.name } }));
+    drop.push(...sorted.slice(cap).map(e => e.name));
+  }
+  return drop.sort();
 }
 
 /** Runs async fn over items with at most `limit` in flight. */
