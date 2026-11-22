@@ -16,7 +16,7 @@ MCP Benchmark is a quantitative quality benchmark, linter, and auto-fixer for **
 
 MCP Benchmark includes an active reference corpus of **130+ standard and community MCP servers** spanning developer tools, cloud providers, databases, and APIs. A scheduled [GitHub Action](.github/workflows/sync-ecosystem.yml) automatically syncs and scores newly released servers weekly.
 
-Run the ecosystem benchmark across all 102 servers with one command:
+Run the ecosystem benchmark across all 130 servers with one command:
 
 ```bash
 npx --yes github:yunusarda-sudo/mcp-benchmark --ecosystem
