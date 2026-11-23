@@ -1,5 +1,6 @@
 # mcp-benchmark
 
+[![npm](https://img.shields.io/npm/v/mcp-benchmark.svg)](https://www.npmjs.com/package/mcp-benchmark)
 [![CI](https://github.com/yunusarda-sudo/mcp-benchmark/actions/workflows/ci.yml/badge.svg)](https://github.com/yunusarda-sudo/mcp-benchmark/actions/workflows/ci.yml)
 [![MCP Registry Servers](https://img.shields.io/badge/MCP_Registry-854_Servers-blueviolet)](LEADERBOARD.md)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
@@ -9,8 +10,6 @@
 ```bash
 npx mcp-benchmark -f tools.json
 ```
-
-> The npm release of 1.3.0 is pending. Until it is published, run it straight from GitHub: `npx --yes github:yunusarda-sudo/mcp-benchmark -f tools.json`.
 
 A browser playground (paste tools, get a score, no install) and a searchable leaderboard live at **https://yunusarda-sudo.github.io/mcp-benchmark/**.
 
