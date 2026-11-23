@@ -5,7 +5,6 @@ import { parseArgs } from 'node:util';
 import { benchmarkServerTools } from './analyzer.js';
 import { CatalogComparison, compareToolCatalogs } from './compare.js';
 import { generateHtmlReport } from './htmlReport.js';
-import { fetchToolsFromStdioServer, fetchToolsFromSseServer } from './liveClient.js';
 import { fixToolCatalog } from './fixer.js';
 import { generateSarifReport } from './sarif.js';
 import { loadToolsFromConfig } from './configLoader.js';
@@ -501,8 +500,10 @@ async function run() {
   if (options.cmd !== undefined) {
     const [command, ...cmdArgs] = splitCommand(options.cmd);
     if (!command) throw new Error('--cmd requires a non-empty executable name.');
+    const { fetchToolsFromStdioServer } = await import('./liveClient.js');
     benchmark(options.cmd, await fetchToolsFromStdioServer(command, cmdArgs));
   } else if (options.url !== undefined) {
+    const { fetchToolsFromSseServer } = await import('./liveClient.js');
     benchmark(options.url, await fetchToolsFromSseServer(options.url, options.headers));
   } else if (options.config !== undefined) {
     const loaded = await loadToolsFromConfig(options.config);

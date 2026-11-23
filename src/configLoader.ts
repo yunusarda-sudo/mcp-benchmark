@@ -1,6 +1,5 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { fetchToolsFromSseServer, fetchToolsFromStdioServer } from './liveClient.js';
 import { McpConfigFile, McpToolDefinition } from './types.js';
 
 export interface LoadedServerResult {
@@ -40,9 +39,11 @@ export async function loadToolsFromConfig(configPath: string): Promise<LoadedSer
 
     try {
       if (entry.command) {
+        const { fetchToolsFromStdioServer } = await import('./liveClient.js');
         const tools = await fetchToolsFromStdioServer(entry.command, entry.args ?? []);
         results.push({ serverName, tools });
       } else if (entry.url) {
+        const { fetchToolsFromSseServer } = await import('./liveClient.js');
         const tools = await fetchToolsFromSseServer(entry.url, entry.headers);
         results.push({ serverName, tools });
       } else {

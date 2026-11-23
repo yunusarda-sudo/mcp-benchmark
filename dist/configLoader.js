@@ -1,6 +1,5 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { fetchToolsFromSseServer, fetchToolsFromStdioServer } from './liveClient.js';
 /**
  * Loads and audits all MCP servers defined in a client configuration file
  * (e.g., claude_desktop_config.json, mcp.json).
@@ -28,10 +27,12 @@ export async function loadToolsFromConfig(configPath) {
         }
         try {
             if (entry.command) {
+                const { fetchToolsFromStdioServer } = await import('./liveClient.js');
                 const tools = await fetchToolsFromStdioServer(entry.command, entry.args ?? []);
                 results.push({ serverName, tools });
             }
             else if (entry.url) {
+                const { fetchToolsFromSseServer } = await import('./liveClient.js');
                 const tools = await fetchToolsFromSseServer(entry.url, entry.headers);
                 results.push({ serverName, tools });
             }
