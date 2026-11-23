@@ -29,10 +29,13 @@ export function findLocalMcpConfigs(cwd = process.cwd()) {
         if (fs.existsSync(linuxClaude))
             candidates.push({ source: 'Claude Desktop (Linux)', path: linuxClaude });
     }
-    // 3. User home .mcp or .claude
+    // 3. User home .mcp or .claude or Cursor
     const homeMcp = path.join(home, '.mcp.json');
     if (fs.existsSync(homeMcp))
         candidates.push({ source: 'User Home (~/.mcp.json)', path: homeMcp });
+    const homeCursor = path.join(home, '.cursor', 'mcp.json');
+    if (fs.existsSync(homeCursor))
+        candidates.push({ source: 'Cursor Global (~/.cursor/mcp.json)', path: homeCursor });
     const discovered = [];
     for (const cand of candidates) {
         try {

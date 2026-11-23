@@ -1,3 +1,4 @@
+import { getRuleById } from './rules/index.js';
 function severityToSarifLevel(severity) {
     switch (severity) {
         case 'critical':
@@ -19,10 +20,17 @@ export function generateSarifReport(results, sourceUri = 'mcp-tools.json') {
                 continue;
             for (const diag of tool.diagnostics) {
                 if (!rulesMap.has(diag.code)) {
+                    const ruleDef = getRuleById(diag.code);
                     rulesMap.set(diag.code, {
                         id: diag.code,
-                        name: diag.code.replace(/[.-]/g, '_'),
-                        shortDescription: { text: diag.message },
+                        name: (ruleDef?.name || diag.code).replace(/[.-]/g, '_'),
+                        shortDescription: { text: ruleDef?.name || diag.message },
+                        fullDescription: { text: ruleDef?.description || diag.message },
+                        help: {
+                            text: diag.suggestion,
+                            markdown: `**Recommendation:** ${diag.suggestion}`,
+                        },
+                        helpUri: 'https://github.com/yunusarda-sudo/mcp-benchmark#rules',
                     });
                 }
                 sarifResults.push({
@@ -58,7 +66,7 @@ export function generateSarifReport(results, sourceUri = 'mcp-tools.json') {
                 tool: {
                     driver: {
                         name: 'mcp-benchmark',
-                        version: '1.2.0',
+                        version: '1.3.0',
                         informationUri: 'https://github.com/yunusarda-sudo/mcp-benchmark',
                         rules: Array.from(rulesMap.values()),
                     },

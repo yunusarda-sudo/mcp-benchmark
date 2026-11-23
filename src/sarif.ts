@@ -1,4 +1,5 @@
 import { DiagnosticSeverity, ServerBenchmarkResult } from './types.js';
+import { getRuleById } from './rules/index.js';
 
 function severityToSarifLevel(severity: DiagnosticSeverity): 'error' | 'warning' | 'note' {
   switch (severity) {
@@ -17,7 +18,14 @@ export function generateSarifReport(
   results: ServerBenchmarkResult[],
   sourceUri: string = 'mcp-tools.json'
 ): string {
-  const rulesMap = new Map<string, { id: string; name: string; shortDescription: { text: string }; helpUri?: string }>();
+  const rulesMap = new Map<string, {
+    id: string;
+    name: string;
+    shortDescription: { text: string };
+    fullDescription?: { text: string };
+    help?: { text: string; markdown: string };
+    helpUri?: string;
+  }>();
   const sarifResults: Array<{
     ruleId: string;
     level: 'error' | 'warning' | 'note';
@@ -38,10 +46,17 @@ export function generateSarifReport(
       if (!tool.diagnostics) continue;
       for (const diag of tool.diagnostics) {
         if (!rulesMap.has(diag.code)) {
+          const ruleDef = getRuleById(diag.code);
           rulesMap.set(diag.code, {
             id: diag.code,
-            name: diag.code.replace(/[.-]/g, '_'),
-            shortDescription: { text: diag.message },
+            name: (ruleDef?.name || diag.code).replace(/[.-]/g, '_'),
+            shortDescription: { text: ruleDef?.name || diag.message },
+            fullDescription: { text: ruleDef?.description || diag.message },
+            help: {
+              text: diag.suggestion,
+              markdown: `**Recommendation:** ${diag.suggestion}`,
+            },
+            helpUri: 'https://github.com/yunusarda-sudo/mcp-benchmark#rules',
           });
         }
 
@@ -79,7 +94,7 @@ export function generateSarifReport(
         tool: {
           driver: {
             name: 'mcp-benchmark',
-            version: '1.2.0',
+            version: '1.3.0',
             informationUri: 'https://github.com/yunusarda-sudo/mcp-benchmark',
             rules: Array.from(rulesMap.values()),
           },
