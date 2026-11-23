@@ -122,12 +122,12 @@ export function renderLeaderboardFile(rows, syncSummaryMarkdown) {
     '',
     'Ranked by TQI, then token efficiency, then name. **Data** links to the stored entry with its provenance (registry name, version, remote URL, fetch time, SHA-256 of the tools).',
     '',
-    '| # | Server | Grade | TQI | Tools | Strictness | Density | Efficiency | Tokens/tool | Published | Data |',
-    '|---:|:---|:---:|---:|---:|---:|---:|---:|---:|:---|:---:|',
+    '| # | Server | Category | Grade | TQI | Tools | Strictness | Density | Efficiency | Tokens/tool | Published | Data |',
+    '|---:|:---|:---|:---:|---:|---:|---:|---:|---:|---:|:---|:---:|',
   ];
   const body = rows.map(
     (r, i) =>
-      `| ${i + 1} | ${serverCell(r)} | \`${escapeMarkdown(r.grade)}\` | ${Number(r.tqi)} | ${Number(r.toolsCount)} | ${Number(r.strictness)}% | ${Number(r.density)}% | ${Number(r.efficiency)}% | ${Number(r.tokensPerTool)} | ${dateOnly(r.publishedAt)} | ${sourceCell(r, '')} |`
+      `| ${i + 1} | ${serverCell(r)} | ${escapeMarkdown(r.category || 'Other')} | \`${escapeMarkdown(r.grade)}\` | ${Number(r.tqi)} | ${Number(r.toolsCount)} | ${Number(r.strictness)}% | ${Number(r.density)}% | ${Number(r.efficiency)}% | ${Number(r.tokensPerTool)} | ${dateOnly(r.publishedAt)} | ${sourceCell(r, '')} |`
   );
   return `${[...header, ...body].join('\n')}\n`;
 }
