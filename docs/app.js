@@ -105,6 +105,10 @@
       if (prop && (prop.description || prop.title)) describedPropsCount++;
       if (prop && (Array.isArray(prop.enum) || prop.pattern || prop.minimum !== undefined)) enumConstrainedCount++;
 
+      if (prop && typeof prop.required === 'boolean') {
+        report('schema.property-boolean-required', 'warning', `/inputSchema/properties/${key}/required`, `Property "${key}" defines boolean "required: ${prop.required}" instead of being listed in the parent object's "required" array`, 'Move to inputSchema.required array.');
+      }
+
       if (prop && prop.type === 'array' && !prop.items) {
         report('schema.array-without-items', 'warning', `/inputSchema/properties/${key}/items`, `Array parameter "${key}" lacks an "items" schema definition`, 'Specify the type of array items.');
       }
@@ -188,6 +192,13 @@
       if (pattern.regex.test(desc)) {
         report(pattern.code, pattern.severity, '/description', pattern.title, 'Review description and keep only intended tool contract.');
         securityPenalty += pattern.penalty;
+      }
+      for (const key of propKeys) {
+        const prop = properties[key];
+        if (prop && typeof prop.description === 'string' && pattern.regex.test(prop.description)) {
+          report(pattern.code, pattern.severity, `/inputSchema/properties/${key}/description`, `${pattern.title} (in parameter "${key}")`, 'Review parameter description and keep only intended tool contract.');
+          securityPenalty += pattern.penalty;
+        }
       }
     }
 
