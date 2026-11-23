@@ -37,7 +37,7 @@ export const promptInjectionRule: RuleDefinition = {
   name: 'Security and Prompt Injection Hygiene',
   category: 'security',
   defaultSeverity: 'critical',
-  description: 'Detects jailbreak attempts, prompt overrides, secret exfiltration, and stealth directives in tool descriptions.',
+  description: 'Detects jailbreak attempts, prompt overrides, secret exfiltration, and stealth directives in tool and parameter descriptions.',
   suggestion: 'Review the description and keep only the intended tool contract.',
   check(ctx: RuleContext): ToolDiagnostic[] {
     const diagnostics: ToolDiagnostic[] = [];
@@ -52,6 +52,25 @@ export const promptInjectionRule: RuleDefinition = {
         });
       }
     }
+
+    for (const key of ctx.propKeys) {
+      const prop = ctx.properties[key];
+      const propDesc = typeof prop?.description === 'string' ? prop.description : '';
+      if (!propDesc) continue;
+      const propertyPath = key.replace(/~/g, '~0').replace(/\//g, '~1');
+      for (const pattern of PROMPT_INJECTION_PATTERNS) {
+        if (pattern.regex.test(propDesc)) {
+          diagnostics.push({
+            code: pattern.code,
+            severity: pattern.severity,
+            path: `/inputSchema/properties/${propertyPath}/description`,
+            message: `${pattern.title} (in parameter "${key}")`,
+            suggestion: 'Review the parameter description and keep only the intended tool contract.',
+          });
+        }
+      }
+    }
+
     return diagnostics;
   },
 };

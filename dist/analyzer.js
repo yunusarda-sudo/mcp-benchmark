@@ -115,6 +115,12 @@ export function analyzeToolDefinition(tool, options = {}) {
         if (pattern.regex.test(desc)) {
             securityPenalty += pattern.penalty;
         }
+        for (const key of propKeys) {
+            const prop = properties[key];
+            if (prop && typeof prop.description === 'string' && pattern.regex.test(prop.description)) {
+                securityPenalty += pattern.penalty;
+            }
+        }
     }
     // Weighted Tool Quality Index (TQI)
     const rawScore = Math.round(schemaScore * 0.40 +
