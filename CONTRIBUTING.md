@@ -18,7 +18,7 @@ Publish your server to the [MCP Registry](https://github.com/modelcontextprotoco
   "type": "registry",
   "registry": "registry.modelcontextprotocol.io",
   "name": "io.github.acme/weather",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "remoteUrl": "https://mcp.acme.example/mcp",
   "fetchedAt": "2026-11-22T06:00:00.000Z",
   "toolsSha256": "<sha256 of the tools array>"

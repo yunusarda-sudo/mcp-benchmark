@@ -43,7 +43,7 @@ export async function fetchToolsFromStdioServer(
   timeoutMs: number = 20000
 ): Promise<McpToolDefinition[]> {
   const transport = new StdioClientTransport({ command, args });
-  const client = new Client({ name: 'mcp-benchmark', version: '1.2.0' });
+  const client = new Client({ name: 'mcp-benchmark', version: '1.3.0' });
 
   try {
     return await withTimeout(
@@ -72,7 +72,7 @@ export async function fetchToolsFromSseServer(
   const transport = new SSEClientTransport(endpoint, {
     requestInit: headers ? { headers } : undefined,
   });
-  const client = new Client({ name: 'mcp-benchmark', version: '1.2.0' });
+  const client = new Client({ name: 'mcp-benchmark', version: '1.3.0' });
 
   try {
     return await withTimeout(
