@@ -115,7 +115,7 @@ const LEADERBOARD_END = '<!-- LEADERBOARD_END -->';
 export function updateReadmeLeaderboard(options = {}) {
     const readmePath = options.readmePath || path.resolve(process.cwd(), 'README.md');
     if (!fs.existsSync(readmePath)) {
-        return { updated: false, count: 0 };
+        return { updated: false, count: 0, markersFound: false };
     }
     const { metadata } = loadRegistry(options.registryDir);
     const results = benchmarkRegistry(options.registryDir);
@@ -123,7 +123,7 @@ export function updateReadmeLeaderboard(options = {}) {
     const start = content.indexOf(LEADERBOARD_START);
     const end = content.indexOf(LEADERBOARD_END);
     if (start === -1 || end < start) {
-        return { updated: false, count: results.length };
+        return { updated: false, count: results.length, markersFound: false };
     }
     const table = results.length > 0 ? generateLeaderboardMarkdown(results, metadata) : '_No servers with verified tool data yet._\n';
     const before = content.substring(0, start + LEADERBOARD_START.length);
@@ -131,9 +131,9 @@ export function updateReadmeLeaderboard(options = {}) {
     const newContent = `${before}\n\n${table}\n${after}`;
     if (newContent !== content) {
         fs.writeFileSync(readmePath, newContent, 'utf8');
-        return { updated: true, count: results.length };
+        return { updated: true, count: results.length, markersFound: true };
     }
-    return { updated: false, count: results.length };
+    return { updated: false, count: results.length, markersFound: true };
 }
 export function registerServer(entry, registryDir) {
     const dir = registryDir || path.resolve(process.cwd(), 'registry', 'servers');

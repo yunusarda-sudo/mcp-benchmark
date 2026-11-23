@@ -43,5 +43,6 @@ export declare function updateReadmeLeaderboard(options?: {
 }): {
     updated: boolean;
     count: number;
+    markersFound: boolean;
 };
 export declare function registerServer(entry: Omit<RegistryServerEntry, 'source'>, registryDir?: string): string;
