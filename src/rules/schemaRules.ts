@@ -98,6 +98,19 @@ export const propertyDetailsRule: RuleDefinition = {
       if (hasValidPropertyType(prop)) typedCount++;
       if (prop && (prop.description || prop.title)) describedPropsCount++;
 
+      // Boolean required in property definition
+      if (prop && typeof prop.required === 'boolean') {
+        diagnostics.push({
+          code: 'schema.property-boolean-required',
+          severity: 'warning',
+          path: `/inputSchema/properties/${propertyPath}/required`,
+          message: `Property "${key}" defines boolean "required: ${prop.required}" instead of being listed in the parent object's "required" array`,
+          suggestion: prop.required
+            ? `Move "${key}" into inputSchema.required and remove "required: true" from the property.`
+            : `Remove "required: false" from the property (properties are optional by default).`,
+        });
+      }
+
       // Array without items
       if (prop && prop.type === 'array' && !prop.items) {
         diagnostics.push({

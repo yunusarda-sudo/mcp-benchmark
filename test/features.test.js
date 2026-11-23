@@ -94,6 +94,32 @@ test('fixToolDefinition cleans conversational fluff and fixes invalid required a
   assert.ok(changes.some(c => c.action === 'set-root-type'));
 });
 
+test('fixToolDefinition migrates boolean required: true and removes required: false', () => {
+  const toolWithBooleanRequired = {
+    name: 'update_user',
+    description: 'Update user settings',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        userId: { type: 'string', description: 'User ID', required: true },
+        email: { type: 'string', description: 'Email address', required: false },
+        name: { type: 'string', description: 'User name' },
+      },
+    },
+  };
+
+  const report = analyzeToolDefinition(toolWithBooleanRequired);
+  assert.ok(report.diagnostics.some(d => d.code === 'schema.property-boolean-required' && d.path === '/inputSchema/properties/userId/required'));
+  assert.ok(report.diagnostics.some(d => d.code === 'schema.property-boolean-required' && d.path === '/inputSchema/properties/email/required'));
+
+  const { fixedTool, changes } = fixToolDefinition(toolWithBooleanRequired);
+  assert.deepEqual(fixedTool.inputSchema?.required, ['userId']);
+  assert.equal(fixedTool.inputSchema?.properties?.userId?.required, undefined);
+  assert.equal(fixedTool.inputSchema?.properties?.email?.required, undefined);
+  assert.ok(changes.some(c => c.action === 'migrate-boolean-required'));
+  assert.ok(changes.some(c => c.action === 'remove-boolean-required'));
+});
+
 test('generateSarifReport outputs valid SARIF 2.1.0 format with error and warning levels', () => {
   const results = [
     benchmarkServerTools('Sarif Server', [

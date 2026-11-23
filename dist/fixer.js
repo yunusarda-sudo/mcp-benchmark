@@ -49,9 +49,33 @@ export function fixToolDefinition(tool) {
         }
     }
     const props = fixed.inputSchema.properties ?? {};
-    // 2. Fix empty enums and missing array items
+    // 2. Fix empty enums, missing array items, and boolean required properties
     for (const [propName, propVal] of Object.entries(props)) {
         if (propVal && typeof propVal === 'object') {
+            if (typeof propVal.required === 'boolean') {
+                const isReq = propVal.required;
+                delete propVal.required;
+                if (isReq) {
+                    if (!Array.isArray(fixed.inputSchema.required)) {
+                        fixed.inputSchema.required = [];
+                    }
+                    if (!fixed.inputSchema.required.includes(propName)) {
+                        fixed.inputSchema.required.push(propName);
+                    }
+                    changes.push({
+                        toolName,
+                        action: 'migrate-boolean-required',
+                        detail: `Migrated invalid boolean "required: true" on property "${propName}" to inputSchema.required array`,
+                    });
+                }
+                else {
+                    changes.push({
+                        toolName,
+                        action: 'remove-boolean-required',
+                        detail: `Removed invalid boolean "required: false" from property "${propName}"`,
+                    });
+                }
+            }
             if (Array.isArray(propVal.enum) && propVal.enum.length === 0) {
                 delete propVal.enum;
                 changes.push({
