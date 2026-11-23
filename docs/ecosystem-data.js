@@ -10,7 +10,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 100,
   "tokensPerTool": 57,
-  "category": "Developer Tools & VCS",
+  "category": "Developer Tools & DevOps",
   "repository": null,
   "sourceType": "registry",
   "registryName": "io.github.youxiage/qinglian-coupon",
@@ -36,7 +36,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 90,
   "tokensPerTool": 108,
-  "category": "Productivity & Notes",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.kovapi/docs",
@@ -108,7 +108,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 85,
   "tokensPerTool": 118,
-  "category": "Other",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.manhourplan/wallet-doctor",
@@ -205,7 +205,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 85,
   "tokensPerTool": 136,
-  "category": "Developer Tools & VCS",
+  "category": "Developer Tools & DevOps",
   "repository": null,
   "sourceType": "registry",
   "registryName": "io.github.martindochamp/tally-foods",
@@ -236,7 +236,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 85,
   "tokensPerTool": 134,
-  "category": "Web Scraping & Automation",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/SuBai520-QWQ/pagedigest",
   "sourceType": "registry",
   "registryName": "io.github.SuBai520-QWQ/pagedigest",
@@ -262,7 +262,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 83,
   "tokensPerTool": 129,
-  "category": "Other",
+  "category": "Design, UI & 3D Media",
   "repository": "https://github.com/Alshhbaa/alshhbaa-agent-kit",
   "sourceType": "registry",
   "registryName": "com.alshhbaa/server",
@@ -313,7 +313,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 95,
   "tokensPerTool": 81,
-  "category": "Developer Tools & VCS",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/SaqibNaseer404/wiselyarcade",
   "sourceType": "registry",
   "registryName": "io.github.SaqibNaseer404/wiselyarcade",
@@ -364,7 +364,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 95,
   "tokensPerTool": 105,
-  "category": "Productivity & Notes",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "org.duckdns.agentnotes/stash",
@@ -400,7 +400,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 88,
   "tokensPerTool": 124,
-  "category": "Other",
+  "category": "Design, UI & 3D Media",
   "repository": "https://github.com/iamhuman-cheolheelee/daejeon-hankok-mcp",
   "sourceType": "registry",
   "registryName": "com.ferrorium.daejeon/hankok",
@@ -476,7 +476,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 86,
   "tokensPerTool": 116,
-  "category": "Developer Tools & VCS",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/f-tiger/agi-site",
   "sourceType": "registry",
   "registryName": "io.github.f-tiger/bpj-ai-tools",
@@ -2997,7 +2997,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 85,
   "tokensPerTool": 143,
-  "category": "Other",
+  "category": "E-Commerce & Retail",
   "repository": "https://github.com/Alshhbaa/alshhbaa-agent-kit",
   "sourceType": "registry",
   "registryName": "com.alshhbaa.shop/server",
@@ -3074,7 +3074,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 85,
   "tokensPerTool": 121,
-  "category": "Productivity & Notes",
+  "category": "Developer Tools & DevOps",
   "repository": null,
   "sourceType": "registry",
   "registryName": "io.github.schedjoules/calendars",
@@ -3110,7 +3110,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 82,
   "tokensPerTool": 143,
-  "category": "Developer Tools & VCS",
+  "category": "Developer Tools & DevOps",
   "repository": null,
   "sourceType": "registry",
   "registryName": "io.github.lifenplanner/koreawavenews",
@@ -3176,7 +3176,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 81,
   "tokensPerTool": 164,
-  "category": "Other",
+  "category": "Design, UI & 3D Media",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.zhannett/zhannett",
@@ -3247,7 +3247,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 80,
   "tokensPerTool": 141,
-  "category": "Other",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.archlooks/projects",
@@ -3283,7 +3283,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 80,
   "tokensPerTool": 138,
-  "category": "Other",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "io.free3d/models",
@@ -3319,7 +3319,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 80,
   "tokensPerTool": 148,
-  "category": "Developer Tools & VCS",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/yueliao11/mcp-servers",
   "sourceType": "registry",
   "registryName": "tech.filmcraft/video-editing-assistant",
@@ -3355,7 +3355,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 78,
   "tokensPerTool": 145,
-  "category": "Other",
+  "category": "Finance, Crypto & Web3",
   "repository": null,
   "sourceType": "registry",
   "registryName": "pro.aethel/company-interviews",
@@ -3482,7 +3482,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 94,
   "tokensPerTool": 76,
-  "category": "Developer Tools & VCS",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/Jascenn/lingyi-tools-mcp",
   "sourceType": "registry",
   "registryName": "io.github.Jascenn/lingyi-tools-mcp",
@@ -3528,7 +3528,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 93,
   "tokensPerTool": 87,
-  "category": "Developer Tools & VCS",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/MonoVarTon/mecenai",
   "sourceType": "registry",
   "registryName": "io.github.MonoVarTon/mecenai",
@@ -3569,7 +3569,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 91,
   "tokensPerTool": 90,
-  "category": "Other",
+  "category": "E-Commerce & Retail",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.buyexamvouchers/exam-vouchers",
@@ -3732,7 +3732,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 89,
   "tokensPerTool": 112,
-  "category": "Productivity & Notes",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/openmediainc/gotokenme-mini",
   "sourceType": "registry",
   "registryName": "com.gotokenme/gotokenme",
@@ -3819,7 +3819,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 85,
   "tokensPerTool": 122,
-  "category": "Other",
+  "category": "Design, UI & 3D Media",
   "repository": "https://github.com/yueliao11/mcp-servers",
   "sourceType": "registry",
   "registryName": "app.randomcolorgenerator/color-palette",
@@ -3941,7 +3941,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 85,
   "tokensPerTool": 126,
-  "category": "Other",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "markets.pools/arena",
@@ -3992,7 +3992,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 85,
   "tokensPerTool": 126,
-  "category": "Other",
+  "category": "E-Commerce & Retail",
   "repository": "https://github.com/kawal393/apex-tatva-guardian",
   "sourceType": "registry",
   "registryName": "store.apex-tat-va.www/ashwagandha-triphala-brahmi-shilajit-guggulu-rasayana-bhasma-arishta-kvatha-ghrita-dosha-contraindication-toxicology-herbalism-greco-roman-hermetic-kemetic-spagyric",
@@ -4043,7 +4043,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 85,
   "tokensPerTool": 126,
-  "category": "Other",
+  "category": "E-Commerce & Retail",
   "repository": "https://github.com/kawal393/apex-tatva-guardian",
   "sourceType": "registry",
   "registryName": "store.apex-tat-va.www/sleep-anxiety-stress-memory-immunity-digestion-liver-thyroid-respiratory-energy-joint-pain-women-hair-skin-diabetes-herb-safety",
@@ -4094,7 +4094,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 83,
   "tokensPerTool": 126,
-  "category": "Security & Identity",
+  "category": "E-Commerce & Retail",
   "repository": "https://github.com/ecabpro-sudo/cormak-mcp",
   "sourceType": "registry",
   "registryName": "app.cormak/mcp-server",
@@ -4195,7 +4195,7 @@ window.ECOSYSTEM_DATA = [
   "density": 99,
   "efficiency": 83,
   "tokensPerTool": 140,
-  "category": "Productivity & Notes",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/botcraftmarket/boternity-mcp",
   "sourceType": "registry",
   "registryName": "com.boternity/boternity",
@@ -4366,7 +4366,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 83,
   "tokensPerTool": 149,
-  "category": "Other",
+  "category": "E-Commerce & Retail",
   "repository": null,
   "sourceType": "registry",
   "registryName": "io.recall365/recall365",
@@ -4458,7 +4458,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 80,
   "tokensPerTool": 159,
-  "category": "Developer Tools & VCS",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/aminshennan/sudan-atlas",
   "sourceType": "registry",
   "registryName": "io.github.aminshennan/sudan-atlas",
@@ -4509,7 +4509,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 80,
   "tokensPerTool": 118,
-  "category": "Developer Tools & VCS",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/yueliao11/mcp-servers",
   "sourceType": "registry",
   "registryName": "net.claudecodemods/mods-registry",
@@ -4591,7 +4591,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 74,
   "tokensPerTool": 209,
-  "category": "Other",
+  "category": "Finance, Crypto & Web3",
   "repository": null,
   "sourceType": "registry",
   "registryName": "dk.ai-foralle/ai-foralle",
@@ -4642,7 +4642,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 95,
   "tokensPerTool": 63,
-  "category": "Security & Identity",
+  "category": "Design, UI & 3D Media",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.olavital/ola",
@@ -4714,7 +4714,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 94,
   "tokensPerTool": 72,
-  "category": "Developer Tools & VCS",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/tokensafe-dev/tokensafe",
   "sourceType": "registry",
   "registryName": "dev.tokensafe/tokensafe",
@@ -4800,7 +4800,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 93,
   "tokensPerTool": 82,
-  "category": "Productivity & Notes",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "ai.agentapihub/douyin-xiaohongshu-rednote-social-scraper-mcp",
@@ -4841,7 +4841,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 93,
   "tokensPerTool": 82,
-  "category": "Web Scraping & Automation",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "ai.agentapihub/facebook-meta-google-tiktok-ads-library-api-mcp",
@@ -4882,7 +4882,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 93,
   "tokensPerTool": 82,
-  "category": "Web Scraping & Automation",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "ai.agentapihub/threads-instagram-truthsocial-linkedin-posts-mcp",
@@ -4964,7 +4964,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 91,
   "tokensPerTool": 97,
-  "category": "Payments, CRM & Finance",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/Duffey234/api-key-safety-mcp",
   "sourceType": "registry",
   "registryName": "io.github.Duffey234/api-key-safety-mcp",
@@ -5010,7 +5010,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 91,
   "tokensPerTool": 90,
-  "category": "Developer Tools & VCS",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/pinguxx/Elementum",
   "sourceType": "registry",
   "registryName": "io.github.pinguxx/elementum",
@@ -5081,7 +5081,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 89,
   "tokensPerTool": 97,
-  "category": "Payments, CRM & Finance",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "dev.pages.coinvet/coinvet",
@@ -5137,7 +5137,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 88,
   "tokensPerTool": 104,
-  "category": "Other",
+  "category": "Healthcare & Wellness",
   "repository": "https://github.com/BeakDo/defi-customs-mcp-hub",
   "sourceType": "registry",
   "registryName": "dev.workers.b2bintel-edge.sec-biotech-priorart-gateway/mcp-credit-score-uptime-rugpull-registry-mcp",
@@ -5188,7 +5188,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 87,
   "tokensPerTool": 109,
-  "category": "Observability & Analytics",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/erangun/harbifirsat",
   "sourceType": "registry",
   "registryName": "io.github.erangun/harbifirsat",
@@ -5244,7 +5244,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 85,
   "tokensPerTool": 130,
-  "category": "Other",
+  "category": "Healthcare & Wellness",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.draihub/mcp",
@@ -5341,7 +5341,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 85,
   "tokensPerTool": 125,
-  "category": "Other",
+  "category": "Jobs, Career & Learning",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.jobseveryhour/jobs",
@@ -5372,7 +5372,7 @@ window.ECOSYSTEM_DATA = [
   "density": 98,
   "efficiency": 85,
   "tokensPerTool": 132,
-  "category": "Developer Tools & VCS",
+  "category": "Other",
   "repository": "https://github.com/lazynextai/Autonomous-AI-Company-OS",
   "sourceType": "registry",
   "registryName": "com.lazynext/ai-slop-checker",
@@ -5428,7 +5428,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 85,
   "tokensPerTool": 136,
-  "category": "Cloud & Hosting Platforms",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/moveinfra/eu-cloud-mcp",
   "sourceType": "registry",
   "registryName": "io.github.moveinfra/eu-cloud-mcp",
@@ -5469,7 +5469,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 85,
   "tokensPerTool": 121,
-  "category": "Developer Tools & VCS",
+  "category": "Developer Tools & DevOps",
   "repository": null,
   "sourceType": "registry",
   "registryName": "io.github.omicshealth2025-ship-it/omics-health",
@@ -5525,7 +5525,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 85,
   "tokensPerTool": 111,
-  "category": "Productivity & Notes",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/paradedb/website",
   "sourceType": "registry",
   "registryName": "io.github.paradedb/mcp",
@@ -5566,7 +5566,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 85,
   "tokensPerTool": 127,
-  "category": "Developer Tools & VCS",
+  "category": "Developer Tools & DevOps",
   "repository": null,
   "sourceType": "registry",
   "registryName": "io.github.VAAS-X/flowgate",
@@ -5638,7 +5638,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 85,
   "tokensPerTool": 112,
-  "category": "Developer Tools & VCS",
+  "category": "Travel, Maps & Navigation",
   "repository": "https://github.com/rickymoorhouse/blog",
   "sourceType": "registry",
   "registryName": "uk.rickymoorhouse/blog",
@@ -5674,7 +5674,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 84,
   "tokensPerTool": 133,
-  "category": "Developer Tools & VCS",
+  "category": "Developer Tools & DevOps",
   "repository": null,
   "sourceType": "registry",
   "registryName": "io.github.LAOSP9/gitpicker",
@@ -5765,7 +5765,7 @@ window.ECOSYSTEM_DATA = [
   "density": 98,
   "efficiency": 83,
   "tokensPerTool": 132,
-  "category": "Developer Tools & VCS",
+  "category": "Finance, Crypto & Web3",
   "repository": null,
   "sourceType": "registry",
   "registryName": "dev.workers.racketeer.racketeer-botapi/pretrade",
@@ -5846,7 +5846,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 82,
   "tokensPerTool": 134,
-  "category": "Developer Tools & VCS",
+  "category": "Developer Tools & DevOps",
   "repository": null,
   "sourceType": "registry",
   "registryName": "io.github.jamessvn/registry-pages",
@@ -5958,7 +5958,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 81,
   "tokensPerTool": 141,
-  "category": "Developer Tools & VCS",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/buildngrowsv/pubroot-website",
   "sourceType": "registry",
   "registryName": "io.github.buildngrowsv/pubroot",
@@ -6024,7 +6024,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 79,
   "tokensPerTool": 163,
-  "category": "Databases & Storage",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "app.nubbo/nubbo",
@@ -6195,7 +6195,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 79,
   "tokensPerTool": 187,
-  "category": "Developer Tools & VCS",
+  "category": "Developer Tools & DevOps",
   "repository": null,
   "sourceType": "registry",
   "registryName": "io.github.fcroiseaux/presitracker2027",
@@ -6302,7 +6302,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 78,
   "tokensPerTool": 141,
-  "category": "Developer Tools & VCS",
+  "category": "Other",
   "repository": null,
   "sourceType": "registry",
   "registryName": "org.openship/software-alternatives",
@@ -6389,7 +6389,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 76,
   "tokensPerTool": 183,
-  "category": "Developer Tools & VCS",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/borsty2103/viventii-mcp",
   "sourceType": "registry",
   "registryName": "io.github.borsty2103/viventii-mcp",
@@ -6490,7 +6490,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 75,
   "tokensPerTool": 166,
-  "category": "Payments, CRM & Finance",
+  "category": "Finance, Crypto & Web3",
   "repository": null,
   "sourceType": "registry",
   "registryName": "dev.fly.tallyforge-quant-signals/quant-signals",
@@ -6633,7 +6633,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 73,
   "tokensPerTool": 194,
-  "category": "Other",
+  "category": "Finance, Crypto & Web3",
   "repository": null,
   "sourceType": "registry",
   "registryName": "trade.xprimeflow/mcp",
@@ -6704,7 +6704,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 70,
   "tokensPerTool": 223,
-  "category": "Other",
+  "category": "Jobs, Career & Learning",
   "repository": null,
   "sourceType": "registry",
   "registryName": "app.sstracker/sstracker",
@@ -6833,7 +6833,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 70,
   "tokensPerTool": 247,
-  "category": "Developer Tools & VCS",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/ho11-bit/donvi108-agent-skills",
   "sourceType": "registry",
   "registryName": "io.github.ho11-bit/donvi108-research",
@@ -6859,7 +6859,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 70,
   "tokensPerTool": 174,
-  "category": "Payments, CRM & Finance",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/jhonnysabino/moedux-agent-tools",
   "sourceType": "registry",
   "registryName": "io.github.jhonnysabino/moedux",
@@ -6890,7 +6890,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 70,
   "tokensPerTool": 217,
-  "category": "Other",
+  "category": "Travel, Maps & Navigation",
   "repository": null,
   "sourceType": "registry",
   "registryName": "io.swellwise/forecast",
@@ -6926,7 +6926,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 69,
   "tokensPerTool": 229,
-  "category": "Developer Tools & VCS",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/f-tiger/agi-site",
   "sourceType": "registry",
   "registryName": "io.github.f-tiger/hvac-btu-heat-klimaanlage",
@@ -9447,7 +9447,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 96,
   "tokensPerTool": 60,
-  "category": "Developer Tools & VCS",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/Kongus/site",
   "sourceType": "registry",
   "registryName": "io.github.Kongus/site",
@@ -9503,7 +9503,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 95,
   "tokensPerTool": 59,
-  "category": "Communication & Alerting",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "site.chatgpt.niftycucumber8.agentnet-amsewada/agentnet",
@@ -9539,7 +9539,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 93,
   "tokensPerTool": 99,
-  "category": "Communication & Alerting",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.freedomagentmail/mail",
@@ -9590,7 +9590,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 93,
   "tokensPerTool": 80,
-  "category": "Payments, CRM & Finance",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/makar-aibot/mnogo-deneg-x402",
   "sourceType": "registry",
   "registryName": "io.github.makar-aibot/mnogo-deneg",
@@ -9911,7 +9911,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 93,
   "tokensPerTool": 95,
-  "category": "Cloud & Hosting Platforms",
+  "category": "Design, UI & 3D Media",
   "repository": "https://github.com/yueliao11/mcp-servers",
   "sourceType": "registry",
   "registryName": "net.getartcraft/rust-creative-suite",
@@ -9942,7 +9942,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 91,
   "tokensPerTool": 88,
-  "category": "Other",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.agentloopr/website",
@@ -9988,7 +9988,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 91,
   "tokensPerTool": 105,
-  "category": "Other",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "xyz.400860/agent-world",
@@ -10069,7 +10069,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 90,
   "tokensPerTool": 115,
-  "category": "Other",
+  "category": "E-Commerce & Retail",
   "repository": null,
   "sourceType": "registry",
   "registryName": "eu.volotel/booking",
@@ -10105,7 +10105,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 90,
   "tokensPerTool": 87,
-  "category": "Developer Tools & VCS",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/LarynaB/arcanumfleet-mcp-server",
   "sourceType": "registry",
   "registryName": "io.github.LarynaB/arcanumfleet-mcp-server",
@@ -10191,7 +10191,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 89,
   "tokensPerTool": 136,
-  "category": "Other",
+  "category": "Design, UI & 3D Media",
   "repository": "https://github.com/Malay146/uibrik-mcp",
   "sourceType": "registry",
   "registryName": "com.uibrik/components",
@@ -10232,7 +10232,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 89,
   "tokensPerTool": 110,
-  "category": "Social, Media & Knowledge",
+  "category": "Design, UI & 3D Media",
   "repository": "https://github.com/evanatpizzarobot/vr-org-mcp",
   "sourceType": "registry",
   "registryName": "org.vr/vr-mcp",
@@ -10308,7 +10308,7 @@ window.ECOSYSTEM_DATA = [
   "density": 98,
   "efficiency": 88,
   "tokensPerTool": 103,
-  "category": "Observability & Analytics",
+  "category": "E-Commerce & Retail",
   "repository": "https://github.com/rwkaspar/dealmonitor",
   "sourceType": "registry",
   "registryName": "app.dealmonitor/dealmonitor",
@@ -10359,7 +10359,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 88,
   "tokensPerTool": 121,
-  "category": "Other",
+  "category": "Security & Identity",
   "repository": "https://github.com/seo-seo/scamnav-site",
   "sourceType": "registry",
   "registryName": "com.scamnav/scamnav",
@@ -10405,7 +10405,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 87,
   "tokensPerTool": 113,
-  "category": "Other",
+  "category": "Jobs, Career & Learning",
   "repository": null,
   "sourceType": "registry",
   "registryName": "co.brightkey/education-data",
@@ -10466,7 +10466,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 87,
   "tokensPerTool": 120,
-  "category": "Other",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "dev.pages.utilvet/utilvet",
@@ -10572,7 +10572,7 @@ window.ECOSYSTEM_DATA = [
   "density": 99,
   "efficiency": 86,
   "tokensPerTool": 119,
-  "category": "Other",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/jimbob1414/promptmentions-mcp",
   "sourceType": "registry",
   "registryName": "com.promptmentions/promptmentions",
@@ -10715,7 +10715,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 85,
   "tokensPerTool": 153,
-  "category": "Other",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.manhourplan/agent-ready-scan",
@@ -10741,7 +10741,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 85,
   "tokensPerTool": 131,
-  "category": "Cloud & Hosting Platforms",
+  "category": "Web Scraping & Automation",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.selfhostrecipes/selfhost-recipes",
@@ -10853,7 +10853,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 85,
   "tokensPerTool": 111,
-  "category": "Security & Identity",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "dev.pages.domainvet/domainvet",
@@ -10945,7 +10945,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 85,
   "tokensPerTool": 110,
-  "category": "Developer Tools & VCS",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/oooooasis-fds/tsx-data",
   "sourceType": "registry",
   "registryName": "io.github.oooooasis-fds/tsx-data",
@@ -10991,7 +10991,7 @@ window.ECOSYSTEM_DATA = [
   "density": 99,
   "efficiency": 85,
   "tokensPerTool": 123,
-  "category": "Payments, CRM & Finance",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "io.rmassistanthub/assistant-hub",
@@ -11082,7 +11082,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 85,
   "tokensPerTool": 155,
-  "category": "Other",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/hplant6/poste-restante",
   "sourceType": "registry",
   "registryName": "me.itshenry/poste-restante",
@@ -11144,7 +11144,7 @@ window.ECOSYSTEM_DATA = [
   "density": 98,
   "efficiency": 84,
   "tokensPerTool": 157,
-  "category": "Other",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "dev.agentclassifieds/board",
@@ -11195,7 +11195,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 84,
   "tokensPerTool": 142,
-  "category": "Security & Identity",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/lookproof/x402-examples",
   "sourceType": "registry",
   "registryName": "io.github.lookproof/lookproof-mcp",
@@ -11326,7 +11326,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 83,
   "tokensPerTool": 144,
-  "category": "Other",
+  "category": "E-Commerce & Retail",
   "repository": null,
   "sourceType": "registry",
   "registryName": "ai.carfinity/marketplace",
@@ -11382,7 +11382,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 83,
   "tokensPerTool": 137,
-  "category": "Vector DBs & AI Search",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/florianmousseau/pokeragile",
   "sourceType": "registry",
   "registryName": "io.github.florianmousseau/pokeragile",
@@ -11438,7 +11438,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 83,
   "tokensPerTool": 149,
-  "category": "Payments, CRM & Finance",
+  "category": "Developer Tools & DevOps",
   "repository": null,
   "sourceType": "registry",
   "registryName": "io.github.tradinglookup/data",
@@ -11499,7 +11499,7 @@ window.ECOSYSTEM_DATA = [
   "density": 98,
   "efficiency": 82,
   "tokensPerTool": 148,
-  "category": "Payments, CRM & Finance",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.supercyclehq/supercycle",
@@ -11615,7 +11615,7 @@ window.ECOSYSTEM_DATA = [
   "density": 99,
   "efficiency": 82,
   "tokensPerTool": 141,
-  "category": "Social, Media & Knowledge",
+  "category": "Design, UI & 3D Media",
   "repository": null,
   "sourceType": "registry",
   "registryName": "io.lexu/mcp",
@@ -11711,7 +11711,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 81,
   "tokensPerTool": 147,
-  "category": "Communication & Alerting",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/SakkoulasGiannis/addsynapse-rooms",
   "sourceType": "registry",
   "registryName": "com.addsynapse/rooms",
@@ -11752,7 +11752,7 @@ window.ECOSYSTEM_DATA = [
   "density": 99,
   "efficiency": 81,
   "tokensPerTool": 153,
-  "category": "Communication & Alerting",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/dubdubdubco/weav-mcp-server",
   "sourceType": "registry",
   "registryName": "com.weav/mcp",
@@ -12013,7 +12013,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 80,
   "tokensPerTool": 125,
-  "category": "Other",
+  "category": "Design, UI & 3D Media",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.ikangai/vibe-support",
@@ -12064,7 +12064,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 79,
   "tokensPerTool": 154,
-  "category": "Payments, CRM & Finance",
+  "category": "Finance, Crypto & Web3",
   "repository": "https://github.com/clime-alertviz/eurokyb-mcp",
   "sourceType": "registry",
   "registryName": "com.alertviz/eurokyb-mcp",
@@ -12156,7 +12156,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 79,
   "tokensPerTool": 152,
-  "category": "Other",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "dev.workers.veritas-silicea.veritas-silicea-shop/art",
@@ -12202,7 +12202,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 79,
   "tokensPerTool": 146,
-  "category": "Social, Media & Knowledge",
+  "category": "Design, UI & 3D Media",
   "repository": null,
   "sourceType": "registry",
   "registryName": "io.ingilizce/vocabulary-video-tutor",
@@ -12248,7 +12248,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 78,
   "tokensPerTool": 195,
-  "category": "Web Scraping & Automation",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/Sharekite/sharekite-plugin",
   "sourceType": "registry",
   "registryName": "app.sharekite/sharekite",
@@ -12299,7 +12299,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 78,
   "tokensPerTool": 187,
-  "category": "Developer Tools & VCS",
+  "category": "Developer Tools & DevOps",
   "repository": null,
   "sourceType": "registry",
   "registryName": "io.github.burmanharry/climatch",
@@ -12411,7 +12411,7 @@ window.ECOSYSTEM_DATA = [
   "density": 99,
   "efficiency": 76,
   "tokensPerTool": 206,
-  "category": "Developer Tools & VCS",
+  "category": "Developer Tools & DevOps",
   "repository": null,
   "sourceType": "registry",
   "registryName": "io.github.kargom-ai/kargom",
@@ -12482,7 +12482,7 @@ window.ECOSYSTEM_DATA = [
   "density": 95,
   "efficiency": 75,
   "tokensPerTool": 207,
-  "category": "Payments, CRM & Finance",
+  "category": "Finance, Crypto & Web3",
   "repository": "https://github.com/RWA-ID/x402fi",
   "sourceType": "registry",
   "registryName": "dev.x402fi/x402fi",
@@ -12518,7 +12518,7 @@ window.ECOSYSTEM_DATA = [
   "density": 98,
   "efficiency": 74,
   "tokensPerTool": 209,
-  "category": "Web Scraping & Automation",
+  "category": "E-Commerce & Retail",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.jwatte/site",
@@ -12574,7 +12574,7 @@ window.ECOSYSTEM_DATA = [
   "density": 96,
   "efficiency": 74,
   "tokensPerTool": 213,
-  "category": "Developer Tools & VCS",
+  "category": "E-Commerce & Retail",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.pakeesim/esim",
@@ -12701,7 +12701,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 73,
   "tokensPerTool": 174,
-  "category": "Payments, CRM & Finance",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/Red-Center-Studio/agent-tollbooth-402",
   "sourceType": "registry",
   "registryName": "io.github.Red-Center-Studio/agent-tollbooth-402",
@@ -12762,7 +12762,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 73,
   "tokensPerTool": 193,
-  "category": "Web Scraping & Automation",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/steadyscrape/seo-data-mcp",
   "sourceType": "registry",
   "registryName": "io.github.steadyscrape/seo-data-mcp",
@@ -12909,7 +12909,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 69,
   "tokensPerTool": 215,
-  "category": "Other",
+  "category": "E-Commerce & Retail",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.irmcon/services",
@@ -12960,7 +12960,7 @@ window.ECOSYSTEM_DATA = [
   "density": 98,
   "efficiency": 69,
   "tokensPerTool": 232,
-  "category": "Developer Tools & VCS",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "dev.herofold/herofold",
@@ -13011,7 +13011,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 68,
   "tokensPerTool": 199,
-  "category": "Other",
+  "category": "Security & Identity",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.gmbsync/gmbsync-mcp",
@@ -13108,7 +13108,7 @@ window.ECOSYSTEM_DATA = [
   "density": 99,
   "efficiency": 67,
   "tokensPerTool": 287,
-  "category": "Developer Tools & VCS",
+  "category": "Other",
   "repository": "https://github.com/m190/usefulapi-mcp",
   "sourceType": "registry",
   "registryName": "io.usefulapi/whatconverts",
@@ -13204,7 +13204,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 97,
   "tokensPerTool": 67,
-  "category": "Other",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "cfd.neytom.ai/mcp",
@@ -13250,7 +13250,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 94,
   "tokensPerTool": 79,
-  "category": "Other",
+  "category": "Finance, Crypto & Web3",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.centralonet/con",
@@ -13296,7 +13296,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 94,
   "tokensPerTool": 85,
-  "category": "Developer Tools & VCS",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/makar-aibot/money-reactor-mcp",
   "sourceType": "registry",
   "registryName": "io.github.makar-aibot/money-reactor",
@@ -13492,7 +13492,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 93,
   "tokensPerTool": 86,
-  "category": "Other",
+  "category": "E-Commerce & Retail",
   "repository": null,
   "sourceType": "registry",
   "registryName": "app.lacartelera/cartelera",
@@ -13543,7 +13543,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 93,
   "tokensPerTool": 73,
-  "category": "Other",
+  "category": "Healthcare & Wellness",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.camilafonseca/psychotherapy",
@@ -13594,7 +13594,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 93,
   "tokensPerTool": 93,
-  "category": "Other",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/HalberdLLC/dank-meme-sounds",
   "sourceType": "registry",
   "registryName": "com.dankmachine/dank-meme-sounds",
@@ -13655,7 +13655,7 @@ window.ECOSYSTEM_DATA = [
   "density": 96,
   "efficiency": 93,
   "tokensPerTool": 83,
-  "category": "Cloud & Hosting Platforms",
+  "category": "Developer Tools & DevOps",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.noderings/mcp",
@@ -13982,7 +13982,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 90,
   "tokensPerTool": 100,
-  "category": "Developer Tools & VCS",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.aicapitalindex/data",
@@ -14018,7 +14018,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 89,
   "tokensPerTool": 106,
-  "category": "Other",
+  "category": "Finance, Crypto & Web3",
   "repository": "https://github.com/zsevic/kartic-mcp",
   "sourceType": "registry",
   "registryName": "app.kartic/digital-loyalty-stamp-cards",
@@ -14263,7 +14263,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 85,
   "tokensPerTool": 115,
-  "category": "Security & Identity",
+  "category": "Developer Tools & DevOps",
   "repository": null,
   "sourceType": "registry",
   "registryName": "io.forthroute/returns",
@@ -14309,7 +14309,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 85,
   "tokensPerTool": 113,
-  "category": "Developer Tools & VCS",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/oooooasis-fds/factor-data",
   "sourceType": "registry",
   "registryName": "io.github.oooooasis-fds/factor-data",
@@ -14340,7 +14340,7 @@ window.ECOSYSTEM_DATA = [
   "density": 97,
   "efficiency": 85,
   "tokensPerTool": 125,
-  "category": "Developer Tools & VCS",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/SverrirValgeirsson/rustyplan",
   "sourceType": "registry",
   "registryName": "io.github.SverrirValgeirsson/rustyplan",
@@ -14396,7 +14396,7 @@ window.ECOSYSTEM_DATA = [
   "density": 98,
   "efficiency": 84,
   "tokensPerTool": 299,
-  "category": "Other",
+  "category": "Travel, Maps & Navigation",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.mapleminute/mapleminute",
@@ -14462,7 +14462,7 @@ window.ECOSYSTEM_DATA = [
   "density": 98,
   "efficiency": 84,
   "tokensPerTool": 136,
-  "category": "Other",
+  "category": "Finance, Crypto & Web3",
   "repository": null,
   "sourceType": "registry",
   "registryName": "net.swaptitan/swaptitan",
@@ -14603,7 +14603,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 83,
   "tokensPerTool": 143,
-  "category": "Other",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.kraneapp/krane",
@@ -14659,7 +14659,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 83,
   "tokensPerTool": 142,
-  "category": "Payments, CRM & Finance",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.microversesystems/market-data",
@@ -14766,7 +14766,7 @@ window.ECOSYSTEM_DATA = [
   "density": 98,
   "efficiency": 81,
   "tokensPerTool": 168,
-  "category": "Cloud & Hosting Platforms",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/shipstatic/mcp",
   "sourceType": "registry",
   "registryName": "com.shipstatic/mcp",
@@ -14862,7 +14862,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 81,
   "tokensPerTool": 140,
-  "category": "Other",
+  "category": "E-Commerce & Retail",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.thebuilderssupply/catalog",
@@ -14979,7 +14979,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 81,
   "tokensPerTool": 158,
-  "category": "Developer Tools & VCS",
+  "category": "Finance, Crypto & Web3",
   "repository": "https://github.com/BeakDo/defi-customs-mcp-hub",
   "sourceType": "registry",
   "registryName": "dev.workers.b2bintel-edge.defi-route-intel/hyperliquid-polymarket-builder-code-perp-mcp",
@@ -15070,7 +15070,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 81,
   "tokensPerTool": 158,
-  "category": "Communication & Alerting",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/BeakDo/defi-customs-mcp-hub",
   "sourceType": "registry",
   "registryName": "dev.workers.b2bintel-edge.defi-route-intel/mcp-apps-interactive-defi-checkout-ui-mcp",
@@ -15161,7 +15161,7 @@ window.ECOSYSTEM_DATA = [
   "density": 97,
   "efficiency": 81,
   "tokensPerTool": 140,
-  "category": "Payments, CRM & Finance",
+  "category": "Finance, Crypto & Web3",
   "repository": "https://gitlab.com/louisvld/valeur-intrinseque",
   "sourceType": "registry",
   "registryName": "fr.valeur-intrinseque/valeur-intrinseque",
@@ -15232,7 +15232,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 81,
   "tokensPerTool": 132,
-  "category": "Web Scraping & Automation",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "io.tiktokapi/tiktok-scraper-video-downloader-api-mcp",
@@ -15358,7 +15358,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 81,
   "tokensPerTool": 137,
-  "category": "Productivity & Notes",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "me.itshenry/palimpsest",
@@ -15399,7 +15399,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 80,
   "tokensPerTool": 150,
-  "category": "Other",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.allmcpservers/directory",
@@ -15440,7 +15440,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 80,
   "tokensPerTool": 137,
-  "category": "Payments, CRM & Finance",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.gtxagent/gtxagent-mcp",
@@ -15531,7 +15531,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 80,
   "tokensPerTool": 164,
-  "category": "Developer Tools & VCS",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/CLNS-KR/CLNS-KR",
   "sourceType": "registry",
   "registryName": "io.github.CLNS-KR/clns",
@@ -15627,7 +15627,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 80,
   "tokensPerTool": 151,
-  "category": "Web Scraping & Automation",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/greatscottatl/x402-cluster",
   "sourceType": "registry",
   "registryName": "io.github.greatscottatl/x402-cluster",
@@ -15678,7 +15678,7 @@ window.ECOSYSTEM_DATA = [
   "density": 98,
   "efficiency": 79,
   "tokensPerTool": 158,
-  "category": "Other",
+  "category": "E-Commerce & Retail",
   "repository": null,
   "sourceType": "registry",
   "registryName": "al.host/mcp",
@@ -15734,7 +15734,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 79,
   "tokensPerTool": 157,
-  "category": "Other",
+  "category": "E-Commerce & Retail",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.macproof/macproof",
@@ -15795,7 +15795,7 @@ window.ECOSYSTEM_DATA = [
   "density": 96,
   "efficiency": 78,
   "tokensPerTool": 196,
-  "category": "Other",
+  "category": "Design, UI & 3D Media",
   "repository": null,
   "sourceType": "registry",
   "registryName": "co.humanome/humanome",
@@ -16057,7 +16057,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 78,
   "tokensPerTool": 170,
-  "category": "Other",
+  "category": "Design, UI & 3D Media",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.perpmetric/perpmetric",
@@ -16113,7 +16113,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 78,
   "tokensPerTool": 152,
-  "category": "Other",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.ryracer/arena",
@@ -16209,7 +16209,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 78,
   "tokensPerTool": 167,
-  "category": "Developer Tools & VCS",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "io.github.Aadeshjain25/synapse",
@@ -16265,7 +16265,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 78,
   "tokensPerTool": 181,
-  "category": "Productivity & Notes",
+  "category": "Developer Tools & DevOps",
   "repository": null,
   "sourceType": "registry",
   "registryName": "io.serverdex/serverdex",
@@ -16301,7 +16301,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 78,
   "tokensPerTool": 173,
-  "category": "Other",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "org.theowf/forum",
@@ -16402,7 +16402,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 77,
   "tokensPerTool": 210,
-  "category": "Security & Identity",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/harrybuild/healthstylz-mcp",
   "sourceType": "registry",
   "registryName": "io.github.harrybuild/healthstylz-mcp",
@@ -16514,7 +16514,7 @@ window.ECOSYSTEM_DATA = [
   "density": 97,
   "efficiency": 76,
   "tokensPerTool": 172,
-  "category": "Developer Tools & VCS",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/CodePhantom-1/kultranz-mcp",
   "sourceType": "registry",
   "registryName": "io.github.CodePhantom-1/kultranz-mcp",
@@ -16560,7 +16560,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 76,
   "tokensPerTool": 194,
-  "category": "Payments, CRM & Finance",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "io.github.ivaavimusic/singularity",
@@ -16986,7 +16986,7 @@ window.ECOSYSTEM_DATA = [
   "density": 97,
   "efficiency": 76,
   "tokensPerTool": 158,
-  "category": "Developer Tools & VCS",
+  "category": "E-Commerce & Retail",
   "repository": "https://github.com/linkin931/cashbackpro-mcp",
   "sourceType": "registry",
   "registryName": "org.cashbackpro/cashbackpro",
@@ -17032,7 +17032,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 75,
   "tokensPerTool": 174,
-  "category": "Other",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/janehardbot/been-there",
   "sourceType": "registry",
   "registryName": "com.cideolabs.beenthere/been-there",
@@ -17185,7 +17185,7 @@ window.ECOSYSTEM_DATA = [
   "density": 99,
   "efficiency": 75,
   "tokensPerTool": 186,
-  "category": "Web Scraping & Automation",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/Damien829/aipaygen",
   "sourceType": "registry",
   "registryName": "io.github.Damien829/aipaygen",
@@ -17761,7 +17761,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 74,
   "tokensPerTool": 221,
-  "category": "Payments, CRM & Finance",
+  "category": "Finance, Crypto & Web3",
   "repository": null,
   "sourceType": "registry",
   "registryName": "es.legadofinance/legado",
@@ -17822,7 +17822,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 73,
   "tokensPerTool": 238,
-  "category": "Other",
+  "category": "Design, UI & 3D Media",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.padelstayguide/padel-hotels",
@@ -17863,7 +17863,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 73,
   "tokensPerTool": 197,
-  "category": "Other",
+  "category": "Design, UI & 3D Media",
   "repository": null,
   "sourceType": "registry",
   "registryName": "in.shelfxray/shelf-data",
@@ -17909,7 +17909,7 @@ window.ECOSYSTEM_DATA = [
   "density": 98,
   "efficiency": 73,
   "tokensPerTool": 232,
-  "category": "Other",
+  "category": "Communication & Alerting",
   "repository": null,
   "sourceType": "registry",
   "registryName": "io.poacher/poacher",
@@ -18260,7 +18260,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 71,
   "tokensPerTool": 221,
-  "category": "Other",
+  "category": "Social, Media & Knowledge",
   "repository": "https://github.com/spendcanary/mcp-free-tools",
   "sourceType": "registry",
   "registryName": "com.spendcanary/free-tools",
@@ -18326,7 +18326,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 71,
   "tokensPerTool": 214,
-  "category": "Developer Tools & VCS",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/Faheel101/ielts-mastery",
   "sourceType": "registry",
   "registryName": "io.github.Faheel101/ieltsera-mcp",
@@ -18504,7 +18504,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 70,
   "tokensPerTool": 165,
-  "category": "Developer Tools & VCS",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/benmcalillycreative/x402-trust-board",
   "sourceType": "registry",
   "registryName": "io.github.benmcalillycreative/settle-watch",
@@ -18596,7 +18596,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 69,
   "tokensPerTool": 225,
-  "category": "Developer Tools & VCS",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/cross-stitched/mcp",
   "sourceType": "registry",
   "registryName": "io.github.cross-stitched/cross-stitch-pattern-maker",
@@ -18637,7 +18637,7 @@ window.ECOSYSTEM_DATA = [
   "density": 99,
   "efficiency": 69,
   "tokensPerTool": 278,
-  "category": "Developer Tools & VCS",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/smithdavedesign/botchelor",
   "sourceType": "registry",
   "registryName": "io.github.smithdavedesign/botchelor",
@@ -19344,7 +19344,7 @@ window.ECOSYSTEM_DATA = [
   "density": 96,
   "efficiency": 68,
   "tokensPerTool": 266,
-  "category": "Developer Tools & VCS",
+  "category": "Developer Tools & DevOps",
   "repository": null,
   "sourceType": "registry",
   "registryName": "io.github.dooolmang/kkuldogu-korea-payroll",
@@ -19710,7 +19710,7 @@ window.ECOSYSTEM_DATA = [
   "density": 98,
   "efficiency": 66,
   "tokensPerTool": 229,
-  "category": "Other",
+  "category": "E-Commerce & Retail",
   "repository": null,
   "sourceType": "registry",
   "registryName": "fr.magicprices/mcp",
@@ -19801,7 +19801,7 @@ window.ECOSYSTEM_DATA = [
   "density": 98,
   "efficiency": 66,
   "tokensPerTool": 229,
-  "category": "Other",
+  "category": "E-Commerce & Retail",
   "repository": null,
   "sourceType": "registry",
   "registryName": "it.magicprices/mcp",
@@ -19892,7 +19892,7 @@ window.ECOSYSTEM_DATA = [
   "density": 98,
   "efficiency": 66,
   "tokensPerTool": 228,
-  "category": "Other",
+  "category": "E-Commerce & Retail",
   "repository": null,
   "sourceType": "registry",
   "registryName": "uk.co.magicprices/mcp",
@@ -19983,7 +19983,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 65,
   "tokensPerTool": 306,
-  "category": "Other",
+  "category": "E-Commerce & Retail",
   "repository": null,
   "sourceType": "registry",
   "registryName": "net.dalvivo/catalogue",
@@ -20039,7 +20039,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 60,
   "tokensPerTool": 289,
-  "category": "Social, Media & Knowledge",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.moatpost/the-moat",
@@ -20080,7 +20080,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 96,
   "tokensPerTool": 66,
-  "category": "Other",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/mattdowell/cards4play-mcp",
   "sourceType": "registry",
   "registryName": "com.cards4play/cards4play",
@@ -20151,7 +20151,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 94,
   "tokensPerTool": 80,
-  "category": "Other",
+  "category": "Design, UI & 3D Media",
   "repository": "https://github.com/weiwosuoai/newkitchenai-mcp",
   "sourceType": "registry",
   "registryName": "com.newkitchenai/kitchen-design",
@@ -20197,7 +20197,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 93,
   "tokensPerTool": 97,
-  "category": "Other",
+  "category": "Healthcare & Wellness",
   "repository": null,
   "sourceType": "registry",
   "registryName": "app.snowbelly/nutrition",
@@ -20238,7 +20238,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 93,
   "tokensPerTool": 95,
-  "category": "Other",
+  "category": "Design, UI & 3D Media",
   "repository": null,
   "sourceType": "registry",
   "registryName": "cl.bettizlegal/guides",
@@ -20279,7 +20279,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 93,
   "tokensPerTool": 87,
-  "category": "Other",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "cl.gilroymotor/agent-door",
@@ -20320,7 +20320,7 @@ window.ECOSYSTEM_DATA = [
   "density": 93,
   "efficiency": 93,
   "tokensPerTool": 117,
-  "category": "Payments, CRM & Finance",
+  "category": "Finance, Crypto & Web3",
   "repository": "https://github.com/pancake-pixels/barakah-halal-mcp",
   "sourceType": "registry",
   "registryName": "com.barakahprofits.app/halal-screen",
@@ -20351,7 +20351,7 @@ window.ECOSYSTEM_DATA = [
   "density": 99,
   "efficiency": 92,
   "tokensPerTool": 90,
-  "category": "Payments, CRM & Finance",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.halowerk/energy-research-hub",
@@ -20517,7 +20517,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 91,
   "tokensPerTool": 89,
-  "category": "Developer Tools & VCS",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/cantorfi/cantorfi-mcp",
   "sourceType": "registry",
   "registryName": "io.github.cantorfi/cantorfi-mcp",
@@ -20588,7 +20588,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 90,
   "tokensPerTool": 102,
-  "category": "Communication & Alerting",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "dev.rcptr.waystation/waystation",
@@ -20624,7 +20624,7 @@ window.ECOSYSTEM_DATA = [
   "density": 97,
   "efficiency": 87,
   "tokensPerTool": 114,
-  "category": "Developer Tools & VCS",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "io.github.McCoyLab87/skillshop",
@@ -20690,7 +20690,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 85,
   "tokensPerTool": 116,
-  "category": "Payments, CRM & Finance",
+  "category": "Finance, Crypto & Web3",
   "repository": "https://github.com/NodajiFi-Tokenomy/NodajiFi-Ecosystem",
   "sourceType": "registry",
   "registryName": "com.globalpiggy/onzip",
@@ -20721,7 +20721,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 85,
   "tokensPerTool": 125,
-  "category": "Observability & Analytics",
+  "category": "Healthcare & Wellness",
   "repository": "https://github.com/cmhenry79/merlonix-mcp",
   "sourceType": "registry",
   "registryName": "com.merlonix/monitoring",
@@ -20822,7 +20822,7 @@ window.ECOSYSTEM_DATA = [
   "density": 96,
   "efficiency": 85,
   "tokensPerTool": 117,
-  "category": "Productivity & Notes",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "tools.magne/catalog",
@@ -20863,7 +20863,7 @@ window.ECOSYSTEM_DATA = [
   "density": 98,
   "efficiency": 84,
   "tokensPerTool": 141,
-  "category": "Payments, CRM & Finance",
+  "category": "Finance, Crypto & Web3",
   "repository": null,
   "sourceType": "registry",
   "registryName": "app.tidetrade/tidetrade",
@@ -20914,7 +20914,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 84,
   "tokensPerTool": 122,
-  "category": "Other",
+  "category": "Security & Identity",
   "repository": null,
   "sourceType": "registry",
   "registryName": "dev.pages.linkvet/linkvet",
@@ -20990,7 +20990,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 82,
   "tokensPerTool": 136,
-  "category": "Other",
+  "category": "Travel, Maps & Navigation",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.localspottrip/trip-planner",
@@ -21056,7 +21056,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 82,
   "tokensPerTool": 146,
-  "category": "Observability & Analytics",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/notformal/adsbeast-plugins",
   "sourceType": "registry",
   "registryName": "io.github.notformal/adsbeast",
@@ -21997,7 +21997,7 @@ window.ECOSYSTEM_DATA = [
   "density": 99,
   "efficiency": 82,
   "tokensPerTool": 141,
-  "category": "Developer Tools & VCS",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/nonsynthetic/apex-edge-tools",
   "sourceType": "registry",
   "registryName": "net.nonsynthetic/apex-edge",
@@ -22103,7 +22103,7 @@ window.ECOSYSTEM_DATA = [
   "density": 98,
   "efficiency": 81,
   "tokensPerTool": 124,
-  "category": "Web Scraping & Automation",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/fetchtranscript/mcp-server",
   "sourceType": "registry",
   "registryName": "com.fetchtranscript/fetchtranscript",
@@ -22164,7 +22164,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 81,
   "tokensPerTool": 214,
-  "category": "Web Scraping & Automation",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/atomsai/pyai-platform-backend",
   "sourceType": "registry",
   "registryName": "io.github.atomsai/pyai",
@@ -22480,7 +22480,7 @@ window.ECOSYSTEM_DATA = [
   "density": 94,
   "efficiency": 81,
   "tokensPerTool": 149,
-  "category": "Developer Tools & VCS",
+  "category": "Developer Tools & DevOps",
   "repository": null,
   "sourceType": "registry",
   "registryName": "io.github.zsraduly77/defi-flow-price-gap",
@@ -22648,7 +22648,7 @@ window.ECOSYSTEM_DATA = [
   "density": 95,
   "efficiency": 80,
   "tokensPerTool": 155,
-  "category": "Developer Tools & VCS",
+  "category": "Other",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.plainerror/plainerror",
@@ -22684,7 +22684,7 @@ window.ECOSYSTEM_DATA = [
   "density": 98,
   "efficiency": 80,
   "tokensPerTool": 131,
-  "category": "Security & Identity",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/kshitij9896/cybersafe-mcp",
   "sourceType": "registry",
   "registryName": "io.github.kshitij9896/cybersafe-mcp",
@@ -22735,7 +22735,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 80,
   "tokensPerTool": 171,
-  "category": "Developer Tools & VCS",
+  "category": "Other",
   "repository": null,
   "sourceType": "registry",
   "registryName": "io.rentcast/api",
@@ -22776,7 +22776,7 @@ window.ECOSYSTEM_DATA = [
   "density": 98,
   "efficiency": 79,
   "tokensPerTool": 172,
-  "category": "Other",
+  "category": "Design, UI & 3D Media",
   "repository": null,
   "sourceType": "registry",
   "registryName": "academy.jasonlau/classes",
@@ -22827,7 +22827,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 79,
   "tokensPerTool": 274,
-  "category": "Other",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "ai.atomindustries/agent-channel",
@@ -22883,7 +22883,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 79,
   "tokensPerTool": 274,
-  "category": "Other",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "ai.atomtechnologies/agent-channel",
@@ -22939,7 +22939,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 79,
   "tokensPerTool": 273,
-  "category": "Other",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.atombackends/agent-channel",
@@ -22995,7 +22995,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 79,
   "tokensPerTool": 273,
-  "category": "Other",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.atompanama/agent-channel",
@@ -23051,7 +23051,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 79,
   "tokensPerTool": 272,
-  "category": "Cloud & Hosting Platforms",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.atomxii/agent-channel",
@@ -23094,427 +23094,6 @@ window.ECOSYSTEM_DATA = [
     "name": "send_inquiry",
     "tokens": 586,
     "score": 88
-   }
-  ]
- },
- {
-  "name": "com.bugotter/mcp",
-  "title": "BugOtter",
-  "slug": "com-bugotter-mcp",
-  "grade": "A+",
-  "tqi": 90,
-  "strictness": 88,
-  "density": 100,
-  "efficiency": 79,
-  "tokensPerTool": 178,
-  "category": "Observability & Analytics",
-  "repository": null,
-  "sourceType": "registry",
-  "registryName": "com.bugotter/mcp",
-  "version": "0.4.0",
-  "fetchedAt": "2026-11-22T12:49:37.224Z",
-  "publishedAt": "2026-11-22T03:19:25.034621Z",
-  "toolsCount": 80,
-  "tools": [
-   {
-    "name": "get_overview",
-    "tokens": 89,
-    "score": 88
-   },
-   {
-    "name": "get_settings",
-    "tokens": 105,
-    "score": 88
-   },
-   {
-    "name": "get_connections",
-    "tokens": 92,
-    "score": 88
-   },
-   {
-    "name": "get_status_page",
-    "tokens": 147,
-    "score": 92
-   },
-   {
-    "name": "get_digest_preview",
-    "tokens": 100,
-    "score": 88
-   },
-   {
-    "name": "get_release_health",
-    "tokens": 196,
-    "score": 90
-   },
-   {
-    "name": "get_revenue_activity",
-    "tokens": 150,
-    "score": 92
-   },
-   {
-    "name": "list_vercel_projects",
-    "tokens": 117,
-    "score": 92
-   },
-   {
-    "name": "needs_attention",
-    "tokens": 152,
-    "score": 92
-   },
-   {
-    "name": "list_apps",
-    "tokens": 144,
-    "score": 92
-   },
-   {
-    "name": "list_groups",
-    "tokens": 110,
-    "score": 88
-   },
-   {
-    "name": "find_app",
-    "tokens": 116,
-    "score": 92
-   },
-   {
-    "name": "get_app_overview",
-    "tokens": 135,
-    "score": 92
-   },
-   {
-    "name": "list_issues",
-    "tokens": 195,
-    "score": 89
-   },
-   {
-    "name": "get_issue",
-    "tokens": 130,
-    "score": 88
-   },
-   {
-    "name": "get_revenue",
-    "tokens": 225,
-    "score": 90
-   },
-   {
-    "name": "get_analytics",
-    "tokens": 646,
-    "score": 80
-   },
-   {
-    "name": "get_deployments",
-    "tokens": 133,
-    "score": 92
-   },
-   {
-    "name": "get_customers",
-    "tokens": 198,
-    "score": 90
-   },
-   {
-    "name": "get_deploy_check",
-    "tokens": 193,
-    "score": 86
-   },
-   {
-    "name": "run_health_check",
-    "tokens": 138,
-    "score": 92
-   },
-   {
-    "name": "get_search_performance",
-    "tokens": 145,
-    "score": 96
-   },
-   {
-    "name": "verify_fix",
-    "tokens": 129,
-    "score": 88
-   },
-   {
-    "name": "add_note",
-    "tokens": 215,
-    "score": 89
-   },
-   {
-    "name": "resolve_issue",
-    "tokens": 178,
-    "score": 87
-   },
-   {
-    "name": "list_products",
-    "tokens": 101,
-    "score": 88
-   },
-   {
-    "name": "link_product",
-    "tokens": 137,
-    "score": 82
-   },
-   {
-    "name": "list_errors",
-    "tokens": 297,
-    "score": 89
-   },
-   {
-    "name": "get_error",
-    "tokens": 128,
-    "score": 96
-   },
-   {
-    "name": "get_incident",
-    "tokens": 163,
-    "score": 89
-   },
-   {
-    "name": "get_portfolio",
-    "tokens": 79,
-    "score": 92
-   },
-   {
-    "name": "get_setup_status",
-    "tokens": 199,
-    "score": 89
-   },
-   {
-    "name": "post_status_update",
-    "tokens": 151,
-    "score": 92
-   },
-   {
-    "name": "snooze_issue",
-    "tokens": 118,
-    "score": 88
-   },
-   {
-    "name": "add_chart_note",
-    "tokens": 150,
-    "score": 89
-   },
-   {
-    "name": "get_uptime",
-    "tokens": 150,
-    "score": 92
-   },
-   {
-    "name": "get_visitors",
-    "tokens": 243,
-    "score": 91
-   },
-   {
-    "name": "get_alerts",
-    "tokens": 182,
-    "score": 90
-   },
-   {
-    "name": "get_account",
-    "tokens": 99,
-    "score": 88
-   },
-   {
-    "name": "get_wins",
-    "tokens": 120,
-    "score": 88
-   },
-   {
-    "name": "list_chart_notes",
-    "tokens": 131,
-    "score": 92
-   },
-   {
-    "name": "add_app",
-    "tokens": 160,
-    "score": 92
-   },
-   {
-    "name": "set_app_sleeping",
-    "tokens": 127,
-    "score": 88
-   },
-   {
-    "name": "update_app",
-    "tokens": 204,
-    "score": 89
-   },
-   {
-    "name": "set_uptime_rule",
-    "tokens": 267,
-    "score": 93
-   },
-   {
-    "name": "set_slow_alert",
-    "tokens": 215,
-    "score": 83
-   },
-   {
-    "name": "set_error_alert",
-    "tokens": 294,
-    "score": 89
-   },
-   {
-    "name": "add_check",
-    "tokens": 501,
-    "score": 88
-   },
-   {
-    "name": "update_check",
-    "tokens": 531,
-    "score": 81
-   },
-   {
-    "name": "delete_check",
-    "tokens": 133,
-    "score": 92
-   },
-   {
-    "name": "add_heartbeat",
-    "tokens": 264,
-    "score": 93
-   },
-   {
-    "name": "update_heartbeat_schedule",
-    "tokens": 238,
-    "score": 91
-   },
-   {
-    "name": "delete_heartbeat",
-    "tokens": 135,
-    "score": 92
-   },
-   {
-    "name": "schedule_maintenance",
-    "tokens": 216,
-    "score": 89
-   },
-   {
-    "name": "cancel_maintenance",
-    "tokens": 125,
-    "score": 92
-   },
-   {
-    "name": "ignore_issue",
-    "tokens": 118,
-    "score": 96
-   },
-   {
-    "name": "unignore_issue",
-    "tokens": 94,
-    "score": 96
-   },
-   {
-    "name": "unsnooze_issue",
-    "tokens": 96,
-    "score": 96
-   },
-   {
-    "name": "mute_app_alerts",
-    "tokens": 129,
-    "score": 88
-   },
-   {
-    "name": "set_app_group",
-    "tokens": 186,
-    "score": 89
-   },
-   {
-    "name": "save_funnel",
-    "tokens": 167,
-    "score": 86
-   },
-   {
-    "name": "delete_funnel",
-    "tokens": 72,
-    "score": 92
-   },
-   {
-    "name": "delete_chart_note",
-    "tokens": 78,
-    "score": 92
-   },
-   {
-    "name": "add_cost",
-    "tokens": 213,
-    "score": 89
-   },
-   {
-    "name": "remove_cost",
-    "tokens": 70,
-    "score": 92
-   },
-   {
-    "name": "set_mrr_goal",
-    "tokens": 125,
-    "score": 92
-   },
-   {
-    "name": "clear_mrr_goal",
-    "tokens": 54,
-    "score": 92
-   },
-   {
-    "name": "set_module",
-    "tokens": 118,
-    "score": 88
-   },
-   {
-    "name": "set_analytics_section",
-    "tokens": 155,
-    "score": 91
-   },
-   {
-    "name": "skip_setup_step",
-    "tokens": 127,
-    "score": 88
-   },
-   {
-    "name": "sync_revenue",
-    "tokens": 109,
-    "score": 88
-   },
-   {
-    "name": "sync_search_console",
-    "tokens": 129,
-    "score": 92
-   },
-   {
-    "name": "import_vercel_projects",
-    "tokens": 144,
-    "score": 84
-   },
-   {
-    "name": "get_agent_activity",
-    "tokens": 93,
-    "score": 88
-   },
-   {
-    "name": "list_flow_checks",
-    "tokens": 151,
-    "score": 92
-   },
-   {
-    "name": "get_flow_runs",
-    "tokens": 172,
-    "score": 90
-   },
-   {
-    "name": "add_flow_check",
-    "tokens": 652,
-    "score": 83
-   },
-   {
-    "name": "update_flow_check",
-    "tokens": 616,
-    "score": 83
-   },
-   {
-    "name": "run_flow_check",
-    "tokens": 180,
-    "score": 93
-   },
-   {
-    "name": "remove_flow_check",
-    "tokens": 136,
-    "score": 96
    }
   ]
  },
@@ -23579,7 +23158,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 79,
   "tokensPerTool": 274,
-  "category": "Developer Tools & VCS",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.schutzecapital/agent-channel",
@@ -23635,7 +23214,7 @@ window.ECOSYSTEM_DATA = [
   "density": 97,
   "efficiency": 79,
   "tokensPerTool": 142,
-  "category": "Developer Tools & VCS",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/Akshat-Srivastava-PS/AgentPulse",
   "sourceType": "registry",
   "registryName": "io.github.Akshat-Srivastava-PS/agentpulse",
@@ -23722,7 +23301,7 @@ window.ECOSYSTEM_DATA = [
   "density": 98,
   "efficiency": 78,
   "tokensPerTool": 188,
-  "category": "Payments, CRM & Finance",
+  "category": "Finance, Crypto & Web3",
   "repository": "https://github.com/EleqanT/einvoicechecker-mcp",
   "sourceType": "registry",
   "registryName": "com.einvoicechecker/einvoice",
@@ -23829,7 +23408,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 78,
   "tokensPerTool": 163,
-  "category": "Other",
+  "category": "Design, UI & 3D Media",
   "repository": null,
   "sourceType": "registry",
   "registryName": "dev.workers.svenco.tidyquid/tidyquid",
@@ -23880,7 +23459,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 78,
   "tokensPerTool": 157,
-  "category": "Payments, CRM & Finance",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/ballostark-wq/bifrost-kfinance-mcp",
   "sourceType": "registry",
   "registryName": "io.github.ballostark-wq/bifrost-kfinance-mcp",
@@ -23982,7 +23561,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 75,
   "tokensPerTool": 173,
-  "category": "Vector DBs & AI Search",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/storkai/stork-mcp",
   "sourceType": "registry",
   "registryName": "ai.stork/core",
@@ -24033,7 +23612,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 75,
   "tokensPerTool": 144,
-  "category": "Other",
+  "category": "Design, UI & 3D Media",
   "repository": "https://github.com/yueliao11/mcp-servers",
   "sourceType": "registry",
   "registryName": "ca.dentalcostfinder/canada-dental",
@@ -24069,7 +23648,7 @@ window.ECOSYSTEM_DATA = [
   "density": 97,
   "efficiency": 75,
   "tokensPerTool": 196,
-  "category": "Social, Media & Knowledge",
+  "category": "E-Commerce & Retail",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.gracieta/gracieta",
@@ -24115,7 +23694,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 75,
   "tokensPerTool": 186,
-  "category": "Payments, CRM & Finance",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/MikeyPetrillo/Agent402",
   "sourceType": "registry",
   "registryName": "io.github.MikeyPetrillo/agent402",
@@ -24216,7 +23795,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 74,
   "tokensPerTool": 226,
-  "category": "Other",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.4fillment/fulfillment",
@@ -24583,7 +24162,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 74,
   "tokensPerTool": 176,
-  "category": "Payments, CRM & Finance",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/defcron/agent-evidence-utility",
   "sourceType": "registry",
   "registryName": "io.github.defcron/agent-evidence-utility",
@@ -24665,7 +24244,7 @@ window.ECOSYSTEM_DATA = [
   "density": 96,
   "efficiency": 73,
   "tokensPerTool": 187,
-  "category": "Developer Tools & VCS",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/pjtribot-blip/ref-crescendo",
   "sourceType": "registry",
   "registryName": "io.github.pjtribot-blip/phono-crescendo",
@@ -24706,7 +24285,7 @@ window.ECOSYSTEM_DATA = [
   "density": 96,
   "efficiency": 72,
   "tokensPerTool": 196,
-  "category": "Payments, CRM & Finance",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/StoaDex/Stoa",
   "sourceType": "registry",
   "registryName": "io.github.StoaDex/stoa",
@@ -24812,7 +24391,7 @@ window.ECOSYSTEM_DATA = [
   "density": 97,
   "efficiency": 72,
   "tokensPerTool": 221,
-  "category": "Other",
+  "category": "Finance, Crypto & Web3",
   "repository": "https://github.com/tereno-xyz/tereno-mcp",
   "sourceType": "registry",
   "registryName": "xyz.tereno/tereno",
@@ -25045,7 +24624,7 @@ window.ECOSYSTEM_DATA = [
   "density": 93,
   "efficiency": 70,
   "tokensPerTool": 245,
-  "category": "Other",
+  "category": "Communication & Alerting",
   "repository": null,
   "sourceType": "registry",
   "registryName": "ca.sitesy/transit",
@@ -25086,7 +24665,7 @@ window.ECOSYSTEM_DATA = [
   "density": 97,
   "efficiency": 70,
   "tokensPerTool": 220,
-  "category": "Other",
+  "category": "E-Commerce & Retail",
   "repository": "https://github.com/antanarr/helpfulmods-nextjs-paid-access",
   "sourceType": "registry",
   "registryName": "com.helpfulmods/catalog",
@@ -25132,7 +24711,7 @@ window.ECOSYSTEM_DATA = [
   "density": 98,
   "efficiency": 70,
   "tokensPerTool": 283,
-  "category": "Other",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/lomiafrica/agent-flights-mcp",
   "sourceType": "registry",
   "registryName": "flights.lowest/agent-flights",
@@ -25193,7 +24772,7 @@ window.ECOSYSTEM_DATA = [
   "density": 99,
   "efficiency": 70,
   "tokensPerTool": 238,
-  "category": "Developer Tools & VCS",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/alexar76/aimarket-hub",
   "sourceType": "registry",
   "registryName": "io.github.alexar76/aimarket-hub",
@@ -25279,7 +24858,7 @@ window.ECOSYSTEM_DATA = [
   "density": 96,
   "efficiency": 69,
   "tokensPerTool": 221,
-  "category": "Other",
+  "category": "Travel, Maps & Navigation",
   "repository": "https://github.com/alexzavialov/travel-art-mcp",
   "sourceType": "registry",
   "registryName": "art.travel/mcp",
@@ -25340,7 +24919,7 @@ window.ECOSYSTEM_DATA = [
   "density": 97,
   "efficiency": 69,
   "tokensPerTool": 250,
-  "category": "Developer Tools & VCS",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/iadnanmukhtar/hadithdb",
   "sourceType": "registry",
   "registryName": "io.github.iadnanmukhtar/hadithdb",
@@ -25517,7 +25096,7 @@ window.ECOSYSTEM_DATA = [
   "density": 99,
   "efficiency": 67,
   "tokensPerTool": 242,
-  "category": "Security & Identity",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/bobcar0/systemores-plugin",
   "sourceType": "registry",
   "registryName": "io.github.bobcar0/systemores-plugin",
@@ -25598,7 +25177,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 66,
   "tokensPerTool": 281,
-  "category": "Other",
+  "category": "Design, UI & 3D Media",
   "repository": "https://github.com/LeifDai/MACKORN-hydraulic-cone-crusher",
   "sourceType": "registry",
   "registryName": "cn.mackorn/mackorn-cone-crusher",
@@ -25825,7 +25404,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 65,
   "tokensPerTool": 294,
-  "category": "Cloud & Hosting Platforms",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "sh.while/while",
@@ -26071,7 +25650,7 @@ window.ECOSYSTEM_DATA = [
   "density": 96,
   "efficiency": 64,
   "tokensPerTool": 418,
-  "category": "Other",
+  "category": "Design, UI & 3D Media",
   "repository": null,
   "sourceType": "registry",
   "registryName": "co.ibda/ibda",
@@ -26112,7 +25691,7 @@ window.ECOSYSTEM_DATA = [
   "density": 97,
   "efficiency": 64,
   "tokensPerTool": 291,
-  "category": "Developer Tools & VCS",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/droptrack/droptrack-ai-integrations",
   "sourceType": "registry",
   "registryName": "io.github.droptrack/droptrack",
@@ -26158,7 +25737,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 64,
   "tokensPerTool": 267,
-  "category": "Other",
+  "category": "Finance, Crypto & Web3",
   "repository": "https://github.com/Cybercentry/cybercentry-app",
   "sourceType": "registry",
   "registryName": "uk.co.cybercentry/b20-verification",
@@ -26250,7 +25829,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 98,
   "tokensPerTool": 66,
-  "category": "Other",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.lvlltd/skill-market",
@@ -26486,7 +26065,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 91,
   "tokensPerTool": 112,
-  "category": "Developer Tools & VCS",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/allooloo/rco-records",
   "sourceType": "registry",
   "registryName": "io.github.allooloo/rco-records",
@@ -26532,7 +26111,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 90,
   "tokensPerTool": 145,
-  "category": "Developer Tools & VCS",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/agustinnb/abcontents-mcp",
   "sourceType": "registry",
   "registryName": "io.github.agustinnb/abcontents",
@@ -26588,7 +26167,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 89,
   "tokensPerTool": 143,
-  "category": "Other",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.volt48/agent-door",
@@ -26629,7 +26208,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 89,
   "tokensPerTool": 100,
-  "category": "Cloud & Hosting Platforms",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/dislop-ai/dislop",
   "sourceType": "registry",
   "registryName": "io.github.dislop-ai/dislop",
@@ -26685,7 +26264,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 88,
   "tokensPerTool": 108,
-  "category": "Developer Tools & VCS",
+  "category": "Design, UI & 3D Media",
   "repository": "https://github.com/andaja/gentleface-icons",
   "sourceType": "registry",
   "registryName": "com.gentleface/icons",
@@ -26731,7 +26310,7 @@ window.ECOSYSTEM_DATA = [
   "density": 98,
   "efficiency": 88,
   "tokensPerTool": 103,
-  "category": "Security & Identity",
+  "category": "E-Commerce & Retail",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.hokuhost/domains",
@@ -27104,7 +26683,7 @@ window.ECOSYSTEM_DATA = [
   "density": 99,
   "efficiency": 86,
   "tokensPerTool": 125,
-  "category": "Vector DBs & AI Search",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/ReARCLabs/clawifi-mcp",
   "sourceType": "registry",
   "registryName": "io.github.atakanelik34/clawifi-mcp",
@@ -27200,7 +26779,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 85,
   "tokensPerTool": 132,
-  "category": "Social, Media & Knowledge",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "app.avatalks/avatalks",
@@ -27383,7 +26962,7 @@ window.ECOSYSTEM_DATA = [
   "density": 95,
   "efficiency": 85,
   "tokensPerTool": 129,
-  "category": "Developer Tools & VCS",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/allooloo/cm-kg",
   "sourceType": "registry",
   "registryName": "io.github.allooloo/getauditor",
@@ -27419,7 +26998,7 @@ window.ECOSYSTEM_DATA = [
   "density": 95,
   "efficiency": 85,
   "tokensPerTool": 145,
-  "category": "Developer Tools & VCS",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/allooloo/cm-kg",
   "sourceType": "registry",
   "registryName": "io.github.allooloo/getfilings",
@@ -27455,7 +27034,7 @@ window.ECOSYSTEM_DATA = [
   "density": 95,
   "efficiency": 85,
   "tokensPerTool": 133,
-  "category": "Developer Tools & VCS",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/allooloo/cm-kg",
   "sourceType": "registry",
   "registryName": "io.github.allooloo/getticker",
@@ -27491,7 +27070,7 @@ window.ECOSYSTEM_DATA = [
   "density": 98,
   "efficiency": 85,
   "tokensPerTool": 122,
-  "category": "Payments, CRM & Finance",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/Shicodiez/crypto-regime-mcp",
   "sourceType": "registry",
   "registryName": "io.github.Shicodiez/crypto-regime-mcp",
@@ -27572,7 +27151,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 85,
   "tokensPerTool": 158,
-  "category": "Other",
+  "category": "Jobs, Career & Learning",
   "repository": null,
   "sourceType": "registry",
   "registryName": "xyz.resumevsjob/batch",
@@ -27644,7 +27223,7 @@ window.ECOSYSTEM_DATA = [
   "density": 98,
   "efficiency": 83,
   "tokensPerTool": 123,
-  "category": "Web Scraping & Automation",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/notformal/tsoden-ai-plugins",
   "sourceType": "registry",
   "registryName": "ai.tsoden.serp/ai-visibility-audit",
@@ -27695,7 +27274,7 @@ window.ECOSYSTEM_DATA = [
   "density": 96,
   "efficiency": 82,
   "tokensPerTool": 150,
-  "category": "Cloud & Hosting Platforms",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/moncef00327-cloud/quantum-aether",
   "sourceType": "registry",
   "registryName": "io.github.moncef00327-cloud/quantum-aether",
@@ -27766,7 +27345,7 @@ window.ECOSYSTEM_DATA = [
   "density": 99,
   "efficiency": 81,
   "tokensPerTool": 150,
-  "category": "Security & Identity",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "cn.tandiu/data",
@@ -27872,7 +27451,7 @@ window.ECOSYSTEM_DATA = [
   "density": 96,
   "efficiency": 81,
   "tokensPerTool": 149,
-  "category": "Other",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.partanswers/filter-lookup",
@@ -27913,7 +27492,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 81,
   "tokensPerTool": 130,
-  "category": "Other",
+  "category": "Jobs, Career & Learning",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.texcontractor/texcontractor",
@@ -27954,7 +27533,7 @@ window.ECOSYSTEM_DATA = [
   "density": 98,
   "efficiency": 81,
   "tokensPerTool": 135,
-  "category": "Other",
+  "category": "Databases & Storage",
   "repository": "https://github.com/manra399/patchlabs",
   "sourceType": "registry",
   "registryName": "dev.patchlabs/patchlabs",
@@ -28010,7 +27589,7 @@ window.ECOSYSTEM_DATA = [
   "density": 97,
   "efficiency": 81,
   "tokensPerTool": 151,
-  "category": "Other",
+  "category": "E-Commerce & Retail",
   "repository": null,
   "sourceType": "registry",
   "registryName": "ru.cpo-dv/catalog",
@@ -28056,7 +27635,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 80,
   "tokensPerTool": 150,
-  "category": "Vector DBs & AI Search",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/chancewalker165-dot/ransack-server",
   "sourceType": "registry",
   "registryName": "io.github.chancewalker165-dot/ransack",
@@ -28112,7 +27691,7 @@ window.ECOSYSTEM_DATA = [
   "density": 95,
   "efficiency": 80,
   "tokensPerTool": 156,
-  "category": "Developer Tools & VCS",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/yeick010/italycheck",
   "sourceType": "registry",
   "registryName": "io.github.yeick010/italycheck",
@@ -28148,7 +27727,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 80,
   "tokensPerTool": 150,
-  "category": "Payments, CRM & Finance",
+  "category": "Finance, Crypto & Web3",
   "repository": "https://github.com/stevyhacker/bizstats-mcp",
   "sourceType": "registry",
   "registryName": "me.bizstats/mcp",
@@ -28219,7 +27798,7 @@ window.ECOSYSTEM_DATA = [
   "density": 99,
   "efficiency": 80,
   "tokensPerTool": 164,
-  "category": "Other",
+  "category": "Healthcare & Wellness",
   "repository": null,
   "sourceType": "registry",
   "registryName": "to.stomp/editor",
@@ -28321,6 +27900,427 @@ window.ECOSYSTEM_DATA = [
   ]
  },
  {
+  "name": "com.bugotter/mcp",
+  "title": "BugOtter",
+  "slug": "com-bugotter-mcp",
+  "grade": "A",
+  "tqi": 89,
+  "strictness": 88,
+  "density": 100,
+  "efficiency": 79,
+  "tokensPerTool": 178,
+  "category": "AI, LLMs & Agents",
+  "repository": null,
+  "sourceType": "registry",
+  "registryName": "com.bugotter/mcp",
+  "version": "0.4.0",
+  "fetchedAt": "2026-11-22T12:49:37.224Z",
+  "publishedAt": "2026-11-22T03:19:25.034621Z",
+  "toolsCount": 80,
+  "tools": [
+   {
+    "name": "get_overview",
+    "tokens": 89,
+    "score": 88
+   },
+   {
+    "name": "get_settings",
+    "tokens": 105,
+    "score": 88
+   },
+   {
+    "name": "get_connections",
+    "tokens": 92,
+    "score": 88
+   },
+   {
+    "name": "get_status_page",
+    "tokens": 147,
+    "score": 92
+   },
+   {
+    "name": "get_digest_preview",
+    "tokens": 100,
+    "score": 88
+   },
+   {
+    "name": "get_release_health",
+    "tokens": 196,
+    "score": 90
+   },
+   {
+    "name": "get_revenue_activity",
+    "tokens": 150,
+    "score": 92
+   },
+   {
+    "name": "list_vercel_projects",
+    "tokens": 117,
+    "score": 92
+   },
+   {
+    "name": "needs_attention",
+    "tokens": 152,
+    "score": 92
+   },
+   {
+    "name": "list_apps",
+    "tokens": 144,
+    "score": 92
+   },
+   {
+    "name": "list_groups",
+    "tokens": 110,
+    "score": 88
+   },
+   {
+    "name": "find_app",
+    "tokens": 116,
+    "score": 92
+   },
+   {
+    "name": "get_app_overview",
+    "tokens": 135,
+    "score": 92
+   },
+   {
+    "name": "list_issues",
+    "tokens": 195,
+    "score": 89
+   },
+   {
+    "name": "get_issue",
+    "tokens": 130,
+    "score": 88
+   },
+   {
+    "name": "get_revenue",
+    "tokens": 225,
+    "score": 90
+   },
+   {
+    "name": "get_analytics",
+    "tokens": 646,
+    "score": 80
+   },
+   {
+    "name": "get_deployments",
+    "tokens": 133,
+    "score": 92
+   },
+   {
+    "name": "get_customers",
+    "tokens": 198,
+    "score": 90
+   },
+   {
+    "name": "get_deploy_check",
+    "tokens": 193,
+    "score": 86
+   },
+   {
+    "name": "run_health_check",
+    "tokens": 138,
+    "score": 92
+   },
+   {
+    "name": "get_search_performance",
+    "tokens": 145,
+    "score": 96
+   },
+   {
+    "name": "verify_fix",
+    "tokens": 129,
+    "score": 88
+   },
+   {
+    "name": "add_note",
+    "tokens": 215,
+    "score": 89
+   },
+   {
+    "name": "resolve_issue",
+    "tokens": 178,
+    "score": 87
+   },
+   {
+    "name": "list_products",
+    "tokens": 101,
+    "score": 88
+   },
+   {
+    "name": "link_product",
+    "tokens": 137,
+    "score": 82
+   },
+   {
+    "name": "list_errors",
+    "tokens": 297,
+    "score": 89
+   },
+   {
+    "name": "get_error",
+    "tokens": 128,
+    "score": 96
+   },
+   {
+    "name": "get_incident",
+    "tokens": 163,
+    "score": 89
+   },
+   {
+    "name": "get_portfolio",
+    "tokens": 79,
+    "score": 92
+   },
+   {
+    "name": "get_setup_status",
+    "tokens": 199,
+    "score": 44
+   },
+   {
+    "name": "post_status_update",
+    "tokens": 151,
+    "score": 92
+   },
+   {
+    "name": "snooze_issue",
+    "tokens": 118,
+    "score": 88
+   },
+   {
+    "name": "add_chart_note",
+    "tokens": 150,
+    "score": 89
+   },
+   {
+    "name": "get_uptime",
+    "tokens": 150,
+    "score": 92
+   },
+   {
+    "name": "get_visitors",
+    "tokens": 243,
+    "score": 91
+   },
+   {
+    "name": "get_alerts",
+    "tokens": 182,
+    "score": 90
+   },
+   {
+    "name": "get_account",
+    "tokens": 99,
+    "score": 88
+   },
+   {
+    "name": "get_wins",
+    "tokens": 120,
+    "score": 88
+   },
+   {
+    "name": "list_chart_notes",
+    "tokens": 131,
+    "score": 92
+   },
+   {
+    "name": "add_app",
+    "tokens": 160,
+    "score": 92
+   },
+   {
+    "name": "set_app_sleeping",
+    "tokens": 127,
+    "score": 88
+   },
+   {
+    "name": "update_app",
+    "tokens": 204,
+    "score": 89
+   },
+   {
+    "name": "set_uptime_rule",
+    "tokens": 267,
+    "score": 93
+   },
+   {
+    "name": "set_slow_alert",
+    "tokens": 215,
+    "score": 83
+   },
+   {
+    "name": "set_error_alert",
+    "tokens": 294,
+    "score": 89
+   },
+   {
+    "name": "add_check",
+    "tokens": 501,
+    "score": 88
+   },
+   {
+    "name": "update_check",
+    "tokens": 531,
+    "score": 81
+   },
+   {
+    "name": "delete_check",
+    "tokens": 133,
+    "score": 92
+   },
+   {
+    "name": "add_heartbeat",
+    "tokens": 264,
+    "score": 93
+   },
+   {
+    "name": "update_heartbeat_schedule",
+    "tokens": 238,
+    "score": 91
+   },
+   {
+    "name": "delete_heartbeat",
+    "tokens": 135,
+    "score": 92
+   },
+   {
+    "name": "schedule_maintenance",
+    "tokens": 216,
+    "score": 89
+   },
+   {
+    "name": "cancel_maintenance",
+    "tokens": 125,
+    "score": 92
+   },
+   {
+    "name": "ignore_issue",
+    "tokens": 118,
+    "score": 96
+   },
+   {
+    "name": "unignore_issue",
+    "tokens": 94,
+    "score": 96
+   },
+   {
+    "name": "unsnooze_issue",
+    "tokens": 96,
+    "score": 96
+   },
+   {
+    "name": "mute_app_alerts",
+    "tokens": 129,
+    "score": 88
+   },
+   {
+    "name": "set_app_group",
+    "tokens": 186,
+    "score": 89
+   },
+   {
+    "name": "save_funnel",
+    "tokens": 167,
+    "score": 86
+   },
+   {
+    "name": "delete_funnel",
+    "tokens": 72,
+    "score": 92
+   },
+   {
+    "name": "delete_chart_note",
+    "tokens": 78,
+    "score": 92
+   },
+   {
+    "name": "add_cost",
+    "tokens": 213,
+    "score": 89
+   },
+   {
+    "name": "remove_cost",
+    "tokens": 70,
+    "score": 92
+   },
+   {
+    "name": "set_mrr_goal",
+    "tokens": 125,
+    "score": 92
+   },
+   {
+    "name": "clear_mrr_goal",
+    "tokens": 54,
+    "score": 92
+   },
+   {
+    "name": "set_module",
+    "tokens": 118,
+    "score": 88
+   },
+   {
+    "name": "set_analytics_section",
+    "tokens": 155,
+    "score": 91
+   },
+   {
+    "name": "skip_setup_step",
+    "tokens": 127,
+    "score": 88
+   },
+   {
+    "name": "sync_revenue",
+    "tokens": 109,
+    "score": 88
+   },
+   {
+    "name": "sync_search_console",
+    "tokens": 129,
+    "score": 92
+   },
+   {
+    "name": "import_vercel_projects",
+    "tokens": 144,
+    "score": 84
+   },
+   {
+    "name": "get_agent_activity",
+    "tokens": 93,
+    "score": 88
+   },
+   {
+    "name": "list_flow_checks",
+    "tokens": 151,
+    "score": 92
+   },
+   {
+    "name": "get_flow_runs",
+    "tokens": 172,
+    "score": 90
+   },
+   {
+    "name": "add_flow_check",
+    "tokens": 652,
+    "score": 83
+   },
+   {
+    "name": "update_flow_check",
+    "tokens": 616,
+    "score": 83
+   },
+   {
+    "name": "run_flow_check",
+    "tokens": 180,
+    "score": 93
+   },
+   {
+    "name": "remove_flow_check",
+    "tokens": 136,
+    "score": 96
+   }
+  ]
+ },
+ {
   "name": "com.engicor/agent-door",
   "title": "ENGICOR — wholesale used engines",
   "slug": "com-engicor-agent-door",
@@ -28330,7 +28330,7 @@ window.ECOSYSTEM_DATA = [
   "density": 98,
   "efficiency": 79,
   "tokensPerTool": 188,
-  "category": "Payments, CRM & Finance",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.engicor/agent-door",
@@ -28381,7 +28381,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 78,
   "tokensPerTool": 178,
-  "category": "Other",
+  "category": "E-Commerce & Retail",
   "repository": null,
   "sourceType": "registry",
   "registryName": "cab.any/malta-transfers",
@@ -28427,7 +28427,7 @@ window.ECOSYSTEM_DATA = [
   "density": 97,
   "efficiency": 78,
   "tokensPerTool": 166,
-  "category": "Other",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "dev.streampresence/receipts-verifier",
@@ -28503,7 +28503,7 @@ window.ECOSYSTEM_DATA = [
   "density": 94,
   "efficiency": 78,
   "tokensPerTool": 184,
-  "category": "Payments, CRM & Finance",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "eu.moneymagician/mcp",
@@ -28589,7 +28589,7 @@ window.ECOSYSTEM_DATA = [
   "density": 98,
   "efficiency": 78,
   "tokensPerTool": 157,
-  "category": "Developer Tools & VCS",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/node-opcua/node-opcua-modeler-mcp-server",
   "sourceType": "registry",
   "registryName": "io.github.node-opcua/node-opcua-modeler-mcp-server",
@@ -28756,7 +28756,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 77,
   "tokensPerTool": 182,
-  "category": "Productivity & Notes",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.toolsandskillsratedreviewedandrankedbyaiagents/agentreview",
@@ -28857,7 +28857,7 @@ window.ECOSYSTEM_DATA = [
   "density": 99,
   "efficiency": 77,
   "tokensPerTool": 174,
-  "category": "Developer Tools & VCS",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "io.github.agentready-tools/agentready-tools",
@@ -29024,7 +29024,7 @@ window.ECOSYSTEM_DATA = [
   "density": 98,
   "efficiency": 76,
   "tokensPerTool": 194,
-  "category": "Other",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.ubiquary/shop",
@@ -29080,7 +29080,7 @@ window.ECOSYSTEM_DATA = [
   "density": 95,
   "efficiency": 76,
   "tokensPerTool": 190,
-  "category": "Observability & Analytics",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/ironflowsh/mcp",
   "sourceType": "registry",
   "registryName": "io.github.ironflowsh/hyperliquid",
@@ -29331,7 +29331,7 @@ window.ECOSYSTEM_DATA = [
   "density": 96,
   "efficiency": 76,
   "tokensPerTool": 204,
-  "category": "Other",
+  "category": "Design, UI & 3D Media",
   "repository": null,
   "sourceType": "registry",
   "registryName": "io.privacyboard/vendors",
@@ -29372,7 +29372,7 @@ window.ECOSYSTEM_DATA = [
   "density": 97,
   "efficiency": 75,
   "tokensPerTool": 168,
-  "category": "Other",
+  "category": "E-Commerce & Retail",
   "repository": null,
   "sourceType": "registry",
   "registryName": "ai.ellul/services",
@@ -29418,7 +29418,7 @@ window.ECOSYSTEM_DATA = [
   "density": 98,
   "efficiency": 74,
   "tokensPerTool": 204,
-  "category": "Other",
+  "category": "Travel, Maps & Navigation",
   "repository": null,
   "sourceType": "registry",
   "registryName": "ai.modulos/demo-booking",
@@ -29519,7 +29519,7 @@ window.ECOSYSTEM_DATA = [
   "density": 98,
   "efficiency": 73,
   "tokensPerTool": 216,
-  "category": "Payments, CRM & Finance",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.avanciq/connector",
@@ -29570,7 +29570,7 @@ window.ECOSYSTEM_DATA = [
   "density": 99,
   "efficiency": 73,
   "tokensPerTool": 265,
-  "category": "Other",
+  "category": "Jobs, Career & Learning",
   "repository": "https://github.com/getmattered/getmattered-mcp",
   "sourceType": "registry",
   "registryName": "com.getmattered/getmattered",
@@ -29727,7 +29727,7 @@ window.ECOSYSTEM_DATA = [
    {
     "name": "getmattered_update_automatic_apply_settings",
     "tokens": 296,
-    "score": 68
+    "score": 43
    },
    {
     "name": "getmattered_get_application_profile",
@@ -29796,7 +29796,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 73,
   "tokensPerTool": 174,
-  "category": "Communication & Alerting",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "nl.svv-schatzoekers/public-selling-agent",
@@ -29963,7 +29963,7 @@ window.ECOSYSTEM_DATA = [
   "density": 94,
   "efficiency": 72,
   "tokensPerTool": 201,
-  "category": "Social, Media & Knowledge",
+  "category": "E-Commerce & Retail",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.peptul/peptul",
@@ -30009,7 +30009,7 @@ window.ECOSYSTEM_DATA = [
   "density": 91,
   "efficiency": 72,
   "tokensPerTool": 219,
-  "category": "Social, Media & Knowledge",
+  "category": "Observability & Analytics",
   "repository": null,
   "sourceType": "registry",
   "registryName": "world.aprs/aprs-world",
@@ -30126,7 +30126,7 @@ window.ECOSYSTEM_DATA = [
   "density": 96,
   "efficiency": 71,
   "tokensPerTool": 224,
-  "category": "Productivity & Notes",
+  "category": "Finance, Crypto & Web3",
   "repository": "https://github.com/MethodicDev/candor",
   "sourceType": "registry",
   "registryName": "com.themethodic/candor",
@@ -30248,7 +30248,7 @@ window.ECOSYSTEM_DATA = [
   "density": 99,
   "efficiency": 71,
   "tokensPerTool": 243,
-  "category": "Payments, CRM & Finance",
+  "category": "Finance, Crypto & Web3",
   "repository": null,
   "sourceType": "registry",
   "registryName": "space.finquest/finquest",
@@ -30424,7 +30424,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 70,
   "tokensPerTool": 207,
-  "category": "Communication & Alerting",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/brunopompeo1/brazil-ai-fiscal-apis-x402",
   "sourceType": "registry",
   "registryName": "io.github.brunopompeo1/agent-email-x402",
@@ -30455,7 +30455,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 70,
   "tokensPerTool": 176,
-  "category": "Developer Tools & VCS",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/brunopompeo1/brazil-ai-fiscal-apis-x402",
   "sourceType": "registry",
   "registryName": "io.github.brunopompeo1/agent-guard-x402",
@@ -30481,7 +30481,7 @@ window.ECOSYSTEM_DATA = [
   "density": 96,
   "efficiency": 69,
   "tokensPerTool": 215,
-  "category": "Other",
+  "category": "E-Commerce & Retail",
   "repository": null,
   "sourceType": "registry",
   "registryName": "in.productgrowth/productgrowth",
@@ -30542,7 +30542,7 @@ window.ECOSYSTEM_DATA = [
   "density": 96,
   "efficiency": 65,
   "tokensPerTool": 288,
-  "category": "Other",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "ai.last-price/pricing",
@@ -30674,7 +30674,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 64,
   "tokensPerTool": 294,
-  "category": "Other",
+  "category": "Developer Tools & DevOps",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.clicndone.pdf/pdf-tools",
@@ -30780,7 +30780,7 @@ window.ECOSYSTEM_DATA = [
   "density": 98,
   "efficiency": 64,
   "tokensPerTool": 277,
-  "category": "Communication & Alerting",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "dev.workers.impaktdev.actor-api-proxy/impakt-data-tools",
@@ -30973,7 +30973,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 55,
   "tokensPerTool": 316,
-  "category": "Web Scraping & Automation",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/steadyscrape/jobs-data-mcp",
   "sourceType": "registry",
   "registryName": "io.github.steadyscrape/jobs-data-mcp",
@@ -31080,7 +31080,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 100,
   "tokensPerTool": 53,
-  "category": "Communication & Alerting",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/StonSolo1/orions-agora",
   "sourceType": "registry",
   "registryName": "io.github.StonSolo1/orions-agora",
@@ -31147,7 +31147,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 95,
   "tokensPerTool": 71,
-  "category": "Productivity & Notes",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "wiki.darkforest/field-test",
@@ -31183,7 +31183,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 93,
   "tokensPerTool": 91,
-  "category": "Other",
+  "category": "Design, UI & 3D Media",
   "repository": null,
   "sourceType": "registry",
   "registryName": "cc.map-maker/map-maker",
@@ -31259,7 +31259,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 91,
   "tokensPerTool": 122,
-  "category": "Payments, CRM & Finance",
+  "category": "Finance, Crypto & Web3",
   "repository": null,
   "sourceType": "registry",
   "registryName": "de.taufnaus/shop",
@@ -31320,7 +31320,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 91,
   "tokensPerTool": 87,
-  "category": "Developer Tools & VCS",
+  "category": "Developer Tools & DevOps",
   "repository": null,
   "sourceType": "registry",
   "registryName": "io.github.lurnake/folkscale",
@@ -31376,7 +31376,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 90,
   "tokensPerTool": 79,
-  "category": "Productivity & Notes",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/TMCHALK/sftunes",
   "sourceType": "registry",
   "registryName": "io.github.TMCHALK/sftunes",
@@ -31412,7 +31412,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 88,
   "tokensPerTool": 99,
-  "category": "Payments, CRM & Finance",
+  "category": "Finance, Crypto & Web3",
   "repository": "https://github.com/velinxs/hyperperps-heatmap-plugin",
   "sourceType": "registry",
   "registryName": "app.hyperperps/liquidation-heatmap",
@@ -31458,7 +31458,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 87,
   "tokensPerTool": 117,
-  "category": "Other",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "ai.opsrev.roofing-ai/mcp",
@@ -31820,157 +31820,6 @@ window.ECOSYSTEM_DATA = [
   ]
  },
  {
-  "name": "com.actuato/actuator",
-  "title": "Actuator",
-  "slug": "com-actuato-actuator",
-  "grade": "A",
-  "tqi": 88,
-  "strictness": 80,
-  "density": 100,
-  "efficiency": 86,
-  "tokensPerTool": 134,
-  "category": "Other",
-  "repository": null,
-  "sourceType": "registry",
-  "registryName": "com.actuato/actuator",
-  "version": "0.1.1",
-  "fetchedAt": "2026-11-22T12:49:37.224Z",
-  "publishedAt": "2026-11-20T18:38:17.312242Z",
-  "toolsCount": 26,
-  "tools": [
-   {
-    "name": "whoami",
-    "tokens": 40,
-    "score": 92
-   },
-   {
-    "name": "search_categories",
-    "tokens": 104,
-    "score": 92
-   },
-   {
-    "name": "estimate_price",
-    "tokens": 129,
-    "score": 87
-   },
-   {
-    "name": "upload_photo",
-    "tokens": 125,
-    "score": 88
-   },
-   {
-    "name": "check_coverage",
-    "tokens": 127,
-    "score": 84
-   },
-   {
-    "name": "create_job_draft",
-    "tokens": 943,
-    "score": 76
-   },
-   {
-    "name": "publish_job",
-    "tokens": 83,
-    "score": 88
-   },
-   {
-    "name": "get_job",
-    "tokens": 73,
-    "score": 92
-   },
-   {
-    "name": "list_my_jobs",
-    "tokens": 53,
-    "score": 88
-   },
-   {
-    "name": "list_past_workers",
-    "tokens": 90,
-    "score": 88
-   },
-   {
-    "name": "open_job_to_everyone",
-    "tokens": 87,
-    "score": 88
-   },
-   {
-    "name": "cancel_job",
-    "tokens": 98,
-    "score": 88
-   },
-   {
-    "name": "list_applicants",
-    "tokens": 100,
-    "score": 88
-   },
-   {
-    "name": "get_worker",
-    "tokens": 83,
-    "score": 88
-   },
-   {
-    "name": "shortlist_applicant",
-    "tokens": 75,
-    "score": 92
-   },
-   {
-    "name": "decline_applicant",
-    "tokens": 78,
-    "score": 92
-   },
-   {
-    "name": "hire",
-    "tokens": 210,
-    "score": 85
-   },
-   {
-    "name": "fund_contract",
-    "tokens": 122,
-    "score": 88
-   },
-   {
-    "name": "get_contract",
-    "tokens": 133,
-    "score": 88
-   },
-   {
-    "name": "approve_completion",
-    "tokens": 83,
-    "score": 88
-   },
-   {
-    "name": "request_rework",
-    "tokens": 86,
-    "score": 88
-   },
-   {
-    "name": "open_dispute",
-    "tokens": 160,
-    "score": 88
-   },
-   {
-    "name": "message_worker",
-    "tokens": 111,
-    "score": 88
-   },
-   {
-    "name": "read_messages",
-    "tokens": 84,
-    "score": 88
-   },
-   {
-    "name": "wait_for_event",
-    "tokens": 129,
-    "score": 91
-   },
-   {
-    "name": "check_approval",
-    "tokens": 72,
-    "score": 92
-   }
-  ]
- },
- {
   "name": "ai.opencurrent/actions-latest",
   "title": "GitHub Actions Version Check",
   "slug": "ai-opencurrent-actions-latest",
@@ -31980,7 +31829,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 85,
   "tokensPerTool": 87,
-  "category": "Developer Tools & VCS",
+  "category": "Developer Tools & DevOps",
   "repository": null,
   "sourceType": "registry",
   "registryName": "ai.opencurrent/actions-latest",
@@ -32098,7 +31947,7 @@ window.ECOSYSTEM_DATA = [
   "density": 96,
   "efficiency": 85,
   "tokensPerTool": 129,
-  "category": "Developer Tools & VCS",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/hristovdimitri2-hub/kristo-intelligence-6",
   "sourceType": "registry",
   "registryName": "io.github.hristovdimitri2-hub/kristo-intelligence",
@@ -32154,7 +32003,7 @@ window.ECOSYSTEM_DATA = [
   "density": 91,
   "efficiency": 85,
   "tokensPerTool": 136,
-  "category": "Developer Tools & VCS",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/rmartins1451/losbeto",
   "sourceType": "registry",
   "registryName": "io.github.rmartins1451/losbeto",
@@ -32200,7 +32049,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 85,
   "tokensPerTool": 158,
-  "category": "Communication & Alerting",
+  "category": "Developer Tools & DevOps",
   "repository": null,
   "sourceType": "registry",
   "registryName": "io.github.ryuamarines/email-extractor",
@@ -32226,7 +32075,7 @@ window.ECOSYSTEM_DATA = [
   "density": 97,
   "efficiency": 81,
   "tokensPerTool": 169,
-  "category": "Communication & Alerting",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "site.chatgpt.honewa-6908.honewa-quality/quality",
@@ -32272,7 +32121,7 @@ window.ECOSYSTEM_DATA = [
   "density": 93,
   "efficiency": 81,
   "tokensPerTool": 172,
-  "category": "Developer Tools & VCS",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "work.agentexchange/bazaar",
@@ -32404,7 +32253,7 @@ window.ECOSYSTEM_DATA = [
   "density": 97,
   "efficiency": 79,
   "tokensPerTool": 173,
-  "category": "Payments, CRM & Finance",
+  "category": "E-Commerce & Retail",
   "repository": "https://github.com/gaufire/demopage-plugins",
   "sourceType": "registry",
   "registryName": "io.demopage/demopage",
@@ -32480,7 +32329,7 @@ window.ECOSYSTEM_DATA = [
   "density": 94,
   "efficiency": 79,
   "tokensPerTool": 157,
-  "category": "Developer Tools & VCS",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/allooloo/cm-kg",
   "sourceType": "registry",
   "registryName": "io.github.allooloo/gettargetmarket",
@@ -32572,7 +32421,7 @@ window.ECOSYSTEM_DATA = [
   "density": 95,
   "efficiency": 78,
   "tokensPerTool": 171,
-  "category": "Social, Media & Knowledge",
+  "category": "Design, UI & 3D Media",
   "repository": null,
   "sourceType": "registry",
   "registryName": "in.forevervow/forevervow",
@@ -32608,7 +32457,7 @@ window.ECOSYSTEM_DATA = [
   "density": 97,
   "efficiency": 78,
   "tokensPerTool": 166,
-  "category": "Developer Tools & VCS",
+  "category": "Travel, Maps & Navigation",
   "repository": null,
   "sourceType": "registry",
   "registryName": "io.forlab/geo",
@@ -32760,7 +32609,7 @@ window.ECOSYSTEM_DATA = [
   "density": 99,
   "efficiency": 76,
   "tokensPerTool": 165,
-  "category": "Developer Tools & VCS",
+  "category": "Other",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.thebet365api/server",
@@ -32846,7 +32695,7 @@ window.ECOSYSTEM_DATA = [
   "density": 93,
   "efficiency": 75,
   "tokensPerTool": 197,
-  "category": "Other",
+  "category": "Design, UI & 3D Media",
   "repository": "https://github.com/jagduvi1/Cellarion",
   "sourceType": "registry",
   "registryName": "app.cellarion/wine-registry",
@@ -32988,7 +32837,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 75,
   "tokensPerTool": 204,
-  "category": "Communication & Alerting",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "dev.workers.michigkchatgpt.agent-action-review/agent-action-review",
@@ -33034,7 +32883,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 75,
   "tokensPerTool": 158,
-  "category": "Developer Tools & VCS",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/MartinSwiss/a11y-probe-mcp",
   "sourceType": "registry",
   "registryName": "io.github.MartinSwiss/a11y-probe-mcp",
@@ -33261,7 +33110,7 @@ window.ECOSYSTEM_DATA = [
   "density": 98,
   "efficiency": 74,
   "tokensPerTool": 200,
-  "category": "Payments, CRM & Finance",
+  "category": "Finance, Crypto & Web3",
   "repository": null,
   "sourceType": "registry",
   "registryName": "finance.spectra/mcp",
@@ -33312,7 +33161,7 @@ window.ECOSYSTEM_DATA = [
   "density": 98,
   "efficiency": 74,
   "tokensPerTool": 217,
-  "category": "Productivity & Notes",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "io.github.aakashbharadwaj15/agent-water-cooler",
@@ -33409,7 +33258,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 73,
   "tokensPerTool": 223,
-  "category": "Other",
+  "category": "Design, UI & 3D Media",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.paint-by-number/paint-by-numbers",
@@ -33445,7 +33294,7 @@ window.ECOSYSTEM_DATA = [
   "density": 98,
   "efficiency": 73,
   "tokensPerTool": 219,
-  "category": "Developer Tools & VCS",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/manganate006/openlmnp",
   "sourceType": "registry",
   "registryName": "io.github.manganate006/openlmnp",
@@ -33706,7 +33555,7 @@ window.ECOSYSTEM_DATA = [
   "density": 97,
   "efficiency": 73,
   "tokensPerTool": 182,
-  "category": "Developer Tools & VCS",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/stillmarcus24/stillos-notary-mcp",
   "sourceType": "registry",
   "registryName": "io.github.stillmarcus24/stillos-notary-mcp",
@@ -33854,7 +33703,7 @@ window.ECOSYSTEM_DATA = [
   "density": 95,
   "efficiency": 72,
   "tokensPerTool": 207,
-  "category": "Productivity & Notes",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/amcharts/amcharts5-mcp",
   "sourceType": "registry",
   "registryName": "io.github.amcharts/amcharts5",
@@ -33935,7 +33784,7 @@ window.ECOSYSTEM_DATA = [
   "density": 97,
   "efficiency": 71,
   "tokensPerTool": 283,
-  "category": "Other",
+  "category": "Design, UI & 3D Media",
   "repository": null,
   "sourceType": "registry",
   "registryName": "ca.tripfinder/tours",
@@ -34001,7 +33850,7 @@ window.ECOSYSTEM_DATA = [
   "density": 95,
   "efficiency": 71,
   "tokensPerTool": 243,
-  "category": "Communication & Alerting",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/MikhailSagalaev/openradar",
   "sourceType": "registry",
   "registryName": "io.github.MikhailSagalaev/openradar",
@@ -34067,7 +33916,7 @@ window.ECOSYSTEM_DATA = [
   "density": 91,
   "efficiency": 71,
   "tokensPerTool": 222,
-  "category": "Other",
+  "category": "E-Commerce & Retail",
   "repository": null,
   "sourceType": "registry",
   "registryName": "org.getopenhealth/openhealth",
@@ -34163,7 +34012,7 @@ window.ECOSYSTEM_DATA = [
   "density": 94,
   "efficiency": 71,
   "tokensPerTool": 491,
-  "category": "Other",
+  "category": "Jobs, Career & Learning",
   "repository": "https://github.com/JoboAI/jobo-mcp",
   "sourceType": "registry",
   "registryName": "world.jobo/job-search",
@@ -34219,7 +34068,7 @@ window.ECOSYSTEM_DATA = [
   "density": 94,
   "efficiency": 69,
   "tokensPerTool": 246,
-  "category": "Communication & Alerting",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/besidka/besidka",
   "sourceType": "registry",
   "registryName": "com.besidka/mcp",
@@ -34616,7 +34465,7 @@ window.ECOSYSTEM_DATA = [
   "density": 99,
   "efficiency": 69,
   "tokensPerTool": 506,
-  "category": "Developer Tools & VCS",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "io.github.jeffforderer/barbaro",
@@ -34692,7 +34541,7 @@ window.ECOSYSTEM_DATA = [
   "density": 96,
   "efficiency": 69,
   "tokensPerTool": 255,
-  "category": "Other",
+  "category": "Finance, Crypto & Web3",
   "repository": null,
   "sourceType": "registry",
   "registryName": "net.blazarforce/blazar-polygon",
@@ -34913,7 +34762,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 69,
   "tokensPerTool": 312,
-  "category": "Social, Media & Knowledge",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "org.capstract/capstract",
@@ -35034,7 +34883,7 @@ window.ECOSYSTEM_DATA = [
   "density": 95,
   "efficiency": 68,
   "tokensPerTool": 236,
-  "category": "Developer Tools & VCS",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/ranaji10/aigorithmic-butterfly-effect",
   "sourceType": "registry",
   "registryName": "io.github.ranaji10/aigorithmic-butterfly-effect",
@@ -35085,7 +34934,7 @@ window.ECOSYSTEM_DATA = [
   "density": 98,
   "efficiency": 68,
   "tokensPerTool": 220,
-  "category": "Other",
+  "category": "E-Commerce & Retail",
   "repository": null,
   "sourceType": "registry",
   "registryName": "uk.co.dustyspizza.mcp/dustys-pizza",
@@ -35136,7 +34985,7 @@ window.ECOSYSTEM_DATA = [
   "density": 94,
   "efficiency": 67,
   "tokensPerTool": 283,
-  "category": "Web Scraping & Automation",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/Free-LLC/emergent-mcp",
   "sourceType": "registry",
   "registryName": "ai.emergenttechnologies/emergent",
@@ -35197,7 +35046,7 @@ window.ECOSYSTEM_DATA = [
   "density": 96,
   "efficiency": 67,
   "tokensPerTool": 282,
-  "category": "Other",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.cobaltcapture/cobalt",
@@ -35303,7 +35152,7 @@ window.ECOSYSTEM_DATA = [
   "density": 94,
   "efficiency": 67,
   "tokensPerTool": 283,
-  "category": "Other",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/Free-LLC/emergent-mcp",
   "sourceType": "registry",
   "registryName": "is.emergent/emergent",
@@ -35364,7 +35213,7 @@ window.ECOSYSTEM_DATA = [
   "density": 94,
   "efficiency": 66,
   "tokensPerTool": 372,
-  "category": "Other",
+  "category": "Jobs, Career & Learning",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.birjob/jobs",
@@ -35460,7 +35309,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 66,
   "tokensPerTool": 320,
-  "category": "Other",
+  "category": "Design, UI & 3D Media",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.pc-cn/industrial-sourcing",
@@ -35506,7 +35355,7 @@ window.ECOSYSTEM_DATA = [
   "density": 96,
   "efficiency": 65,
   "tokensPerTool": 318,
-  "category": "Developer Tools & VCS",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/chrisryugj/korean-law-mcp",
   "sourceType": "registry",
   "registryName": "io.github.chrisryugj/korean-law-mcp",
@@ -35577,7 +35426,7 @@ window.ECOSYSTEM_DATA = [
   "density": 96,
   "efficiency": 64,
   "tokensPerTool": 298,
-  "category": "Other",
+  "category": "Design, UI & 3D Media",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.membrowse/membrowse",
@@ -35638,7 +35487,7 @@ window.ECOSYSTEM_DATA = [
   "density": 99,
   "efficiency": 64,
   "tokensPerTool": 282,
-  "category": "Databases & Storage",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/agentexec448c/agent-exec",
   "sourceType": "registry",
   "registryName": "io.github.agentexec448c/agent-exec",
@@ -35900,7 +35749,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 62,
   "tokensPerTool": 280,
-  "category": "Payments, CRM & Finance",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/Saneth98/smart-ocr-proxy",
   "sourceType": "registry",
   "registryName": "io.github.Saneth98/smart-ocr-pdf-invoice-receipt-json",
@@ -35936,7 +35785,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 62,
   "tokensPerTool": 280,
-  "category": "Payments, CRM & Finance",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/Saneth98/smart-ocr-proxy",
   "sourceType": "registry",
   "registryName": "io.github.Saneth98/smartocr",
@@ -36063,7 +35912,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 61,
   "tokensPerTool": 333,
-  "category": "Security & Identity",
+  "category": "Developer Tools & DevOps",
   "repository": null,
   "sourceType": "registry",
   "registryName": "dev.tinplate/edge-apis",
@@ -36164,7 +36013,7 @@ window.ECOSYSTEM_DATA = [
   "density": 93,
   "efficiency": 60,
   "tokensPerTool": 357,
-  "category": "Other",
+  "category": "Productivity & Notes",
   "repository": null,
   "sourceType": "registry",
   "registryName": "app.mathapex/worksheets",
@@ -36195,7 +36044,7 @@ window.ECOSYSTEM_DATA = [
   "density": 93,
   "efficiency": 60,
   "tokensPerTool": 341,
-  "category": "Other",
+  "category": "Finance, Crypto & Web3",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.overlayastro/together",
@@ -36226,7 +36075,7 @@ window.ECOSYSTEM_DATA = [
   "density": 96,
   "efficiency": 60,
   "tokensPerTool": 334,
-  "category": "Other",
+  "category": "Travel, Maps & Navigation",
   "repository": "https://github.com/mikelovatt/tubroom-mcp",
   "sourceType": "registry",
   "registryName": "com.tubroom/tubroom",
@@ -36267,7 +36116,7 @@ window.ECOSYSTEM_DATA = [
   "density": 94,
   "efficiency": 58,
   "tokensPerTool": 349,
-  "category": "Other",
+  "category": "Jobs, Career & Learning",
   "repository": null,
   "sourceType": "registry",
   "registryName": "ai.dincat/dincat",
@@ -36313,7 +36162,7 @@ window.ECOSYSTEM_DATA = [
   "density": 98,
   "efficiency": 53,
   "tokensPerTool": 372,
-  "category": "Other",
+  "category": "E-Commerce & Retail",
   "repository": "https://github.com/bekroz/basko-ai",
   "sourceType": "registry",
   "registryName": "app.basko/basko",
@@ -36364,7 +36213,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 50,
   "tokensPerTool": 376,
-  "category": "Other",
+  "category": "Healthcare & Wellness",
   "repository": null,
   "sourceType": "registry",
   "registryName": "app.proactiveparent/guidance",
@@ -36395,7 +36244,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 50,
   "tokensPerTool": 324,
-  "category": "Other",
+  "category": "Finance, Crypto & Web3",
   "repository": null,
   "sourceType": "registry",
   "registryName": "uk.co.verifera/job-search",
@@ -36421,7 +36270,7 @@ window.ECOSYSTEM_DATA = [
   "density": 98,
   "efficiency": 90,
   "tokensPerTool": 102,
-  "category": "Social, Media & Knowledge",
+  "category": "E-Commerce & Retail",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.enochxii/the-password",
@@ -36502,7 +36351,7 @@ window.ECOSYSTEM_DATA = [
   "density": 96,
   "efficiency": 90,
   "tokensPerTool": 160,
-  "category": "Other",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/usehomemade/homemade",
   "sourceType": "registry",
   "registryName": "dev.homemade/homemade",
@@ -36713,7 +36562,7 @@ window.ECOSYSTEM_DATA = [
   "density": 96,
   "efficiency": 87,
   "tokensPerTool": 119,
-  "category": "Developer Tools & VCS",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/allooloo/cm-kg",
   "sourceType": "registry",
   "registryName": "io.github.allooloo/getorderability",
@@ -36760,6 +36609,157 @@ window.ECOSYSTEM_DATA = [
   ]
  },
  {
+  "name": "com.actuato/actuator",
+  "title": "Actuator",
+  "slug": "com-actuato-actuator",
+  "grade": "A",
+  "tqi": 87,
+  "strictness": 80,
+  "density": 100,
+  "efficiency": 86,
+  "tokensPerTool": 134,
+  "category": "Design, UI & 3D Media",
+  "repository": null,
+  "sourceType": "registry",
+  "registryName": "com.actuato/actuator",
+  "version": "0.1.1",
+  "fetchedAt": "2026-11-22T12:49:37.224Z",
+  "publishedAt": "2026-11-20T18:38:17.312242Z",
+  "toolsCount": 26,
+  "tools": [
+   {
+    "name": "whoami",
+    "tokens": 40,
+    "score": 92
+   },
+   {
+    "name": "search_categories",
+    "tokens": 104,
+    "score": 92
+   },
+   {
+    "name": "estimate_price",
+    "tokens": 129,
+    "score": 87
+   },
+   {
+    "name": "upload_photo",
+    "tokens": 125,
+    "score": 88
+   },
+   {
+    "name": "check_coverage",
+    "tokens": 127,
+    "score": 84
+   },
+   {
+    "name": "create_job_draft",
+    "tokens": 943,
+    "score": 51
+   },
+   {
+    "name": "publish_job",
+    "tokens": 83,
+    "score": 88
+   },
+   {
+    "name": "get_job",
+    "tokens": 73,
+    "score": 92
+   },
+   {
+    "name": "list_my_jobs",
+    "tokens": 53,
+    "score": 88
+   },
+   {
+    "name": "list_past_workers",
+    "tokens": 90,
+    "score": 88
+   },
+   {
+    "name": "open_job_to_everyone",
+    "tokens": 87,
+    "score": 88
+   },
+   {
+    "name": "cancel_job",
+    "tokens": 98,
+    "score": 88
+   },
+   {
+    "name": "list_applicants",
+    "tokens": 100,
+    "score": 88
+   },
+   {
+    "name": "get_worker",
+    "tokens": 83,
+    "score": 88
+   },
+   {
+    "name": "shortlist_applicant",
+    "tokens": 75,
+    "score": 92
+   },
+   {
+    "name": "decline_applicant",
+    "tokens": 78,
+    "score": 92
+   },
+   {
+    "name": "hire",
+    "tokens": 210,
+    "score": 85
+   },
+   {
+    "name": "fund_contract",
+    "tokens": 122,
+    "score": 88
+   },
+   {
+    "name": "get_contract",
+    "tokens": 133,
+    "score": 88
+   },
+   {
+    "name": "approve_completion",
+    "tokens": 83,
+    "score": 88
+   },
+   {
+    "name": "request_rework",
+    "tokens": 86,
+    "score": 88
+   },
+   {
+    "name": "open_dispute",
+    "tokens": 160,
+    "score": 88
+   },
+   {
+    "name": "message_worker",
+    "tokens": 111,
+    "score": 88
+   },
+   {
+    "name": "read_messages",
+    "tokens": 84,
+    "score": 88
+   },
+   {
+    "name": "wait_for_event",
+    "tokens": 129,
+    "score": 91
+   },
+   {
+    "name": "check_approval",
+    "tokens": 72,
+    "score": 92
+   }
+  ]
+ },
+ {
   "name": "com.workflowfieldwork/workflow-fieldwork",
   "title": "Workflow Fieldwork",
   "slug": "com-workflowfieldwork-workflow-fieldwork",
@@ -36769,7 +36769,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 85,
   "tokensPerTool": 113,
-  "category": "Other",
+  "category": "E-Commerce & Retail",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.workflowfieldwork/workflow-fieldwork",
@@ -36805,7 +36805,7 @@ window.ECOSYSTEM_DATA = [
   "density": 91,
   "efficiency": 85,
   "tokensPerTool": 156,
-  "category": "Developer Tools & VCS",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/rayhyman333-blip/cynthia-mcp-server",
   "sourceType": "registry",
   "registryName": "io.github.rayhyman333-blip/cynthia",
@@ -36851,7 +36851,7 @@ window.ECOSYSTEM_DATA = [
   "density": 97,
   "efficiency": 84,
   "tokensPerTool": 137,
-  "category": "Other",
+  "category": "Design, UI & 3D Media",
   "repository": null,
   "sourceType": "registry",
   "registryName": "org.mssid.mishkat/lectures",
@@ -36937,7 +36937,7 @@ window.ECOSYSTEM_DATA = [
   "density": 98,
   "efficiency": 83,
   "tokensPerTool": 152,
-  "category": "Other",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "bot.qed/register",
@@ -37225,7 +37225,7 @@ window.ECOSYSTEM_DATA = [
   "density": 95,
   "efficiency": 80,
   "tokensPerTool": 188,
-  "category": "Developer Tools & VCS",
+  "category": "Other",
   "repository": "https://github.com/opensubtitles/guessit-js",
   "sourceType": "registry",
   "registryName": "com.opensubtitles/guessit-js",
@@ -37261,7 +37261,7 @@ window.ECOSYSTEM_DATA = [
   "density": 96,
   "efficiency": 80,
   "tokensPerTool": 144,
-  "category": "Developer Tools & VCS",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/allooloo/cm-kg",
   "sourceType": "registry",
   "registryName": "io.github.allooloo/getasof",
@@ -37302,7 +37302,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 80,
   "tokensPerTool": 132,
-  "category": "Communication & Alerting",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/burmanharry/rootmention-mcp",
   "sourceType": "registry",
   "registryName": "io.github.burmanharry/rootmention",
@@ -37338,7 +37338,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 79,
   "tokensPerTool": 175,
-  "category": "Other",
+  "category": "Jobs, Career & Learning",
   "repository": null,
   "sourceType": "registry",
   "registryName": "ai.navad/jobs",
@@ -38361,7 +38361,7 @@ window.ECOSYSTEM_DATA = [
   "density": 90,
   "efficiency": 79,
   "tokensPerTool": 179,
-  "category": "Payments, CRM & Finance",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/swaphunt/x402-examples",
   "sourceType": "registry",
   "registryName": "io.github.swaphunt/swaphunt-mcp",
@@ -38412,7 +38412,7 @@ window.ECOSYSTEM_DATA = [
   "density": 89,
   "efficiency": 78,
   "tokensPerTool": 166,
-  "category": "Developer Tools & VCS",
+  "category": "Other",
   "repository": null,
   "sourceType": "registry",
   "registryName": "io.at01.api/lookup",
@@ -38453,7 +38453,7 @@ window.ECOSYSTEM_DATA = [
   "density": 95,
   "efficiency": 78,
   "tokensPerTool": 157,
-  "category": "Developer Tools & VCS",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/allooloo/cm-kg",
   "sourceType": "registry",
   "registryName": "io.github.allooloo/getresearch",
@@ -38489,7 +38489,7 @@ window.ECOSYSTEM_DATA = [
   "density": 94,
   "efficiency": 78,
   "tokensPerTool": 157,
-  "category": "Communication & Alerting",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/llm-9-to-5/nightshift-x402-worker",
   "sourceType": "registry",
   "registryName": "io.github.llm-9-to-5/nightshift-agent-tools",
@@ -38570,7 +38570,7 @@ window.ECOSYSTEM_DATA = [
   "density": 95,
   "efficiency": 77,
   "tokensPerTool": 186,
-  "category": "Other",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "ai.erc8126scan/agent-verification",
@@ -38651,7 +38651,7 @@ window.ECOSYSTEM_DATA = [
   "density": 95,
   "efficiency": 77,
   "tokensPerTool": 186,
-  "category": "Other",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "ai.erc8126scan/erc8126-scan",
@@ -38873,7 +38873,7 @@ window.ECOSYSTEM_DATA = [
   "density": 96,
   "efficiency": 76,
   "tokensPerTool": 235,
-  "category": "Payments, CRM & Finance",
+  "category": "Finance, Crypto & Web3",
   "repository": null,
   "sourceType": "registry",
   "registryName": "app.pitbi/pitbi",
@@ -39185,7 +39185,7 @@ window.ECOSYSTEM_DATA = [
   "density": 91,
   "efficiency": 76,
   "tokensPerTool": 211,
-  "category": "Payments, CRM & Finance",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "dev.workers.agent-arena-base.lumen-peg/research-desk",
@@ -39312,7 +39312,7 @@ window.ECOSYSTEM_DATA = [
   "density": 94,
   "efficiency": 75,
   "tokensPerTool": 221,
-  "category": "Security & Identity",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "dev.workers.agent-arena-base.ravi-ci-guard/ci-guard",
@@ -39368,7 +39368,7 @@ window.ECOSYSTEM_DATA = [
   "density": 94,
   "efficiency": 75,
   "tokensPerTool": 263,
-  "category": "Developer Tools & VCS",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/CLNS-KR/FRNC",
   "sourceType": "registry",
   "registryName": "io.github.CLNS-KR/frnc",
@@ -39424,7 +39424,7 @@ window.ECOSYSTEM_DATA = [
   "density": 95,
   "efficiency": 75,
   "tokensPerTool": 352,
-  "category": "Developer Tools & VCS",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/gamealia/gamealia-mcp",
   "sourceType": "registry",
   "registryName": "io.github.gamealia/gamealia-mcp",
@@ -39577,7 +39577,7 @@ window.ECOSYSTEM_DATA = [
   "density": 93,
   "efficiency": 75,
   "tokensPerTool": 210,
-  "category": "Other",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "uk.stillrelevant/still-relevant",
@@ -39664,7 +39664,7 @@ window.ECOSYSTEM_DATA = [
   "density": 93,
   "efficiency": 73,
   "tokensPerTool": 220,
-  "category": "Communication & Alerting",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "app.agenturo/agenturo",
@@ -39715,7 +39715,7 @@ window.ECOSYSTEM_DATA = [
   "density": 94,
   "efficiency": 73,
   "tokensPerTool": 201,
-  "category": "Communication & Alerting",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "app.killbounce.data/tools",
@@ -40028,7 +40028,7 @@ window.ECOSYSTEM_DATA = [
   "density": 94,
   "efficiency": 72,
   "tokensPerTool": 218,
-  "category": "Vector DBs & AI Search",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "au.com.souldriver/karp",
@@ -40065,402 +40065,6 @@ window.ECOSYSTEM_DATA = [
   ]
  },
  {
-  "name": "io.github.dreamworkhq/dreamwork",
-  "title": "Dreamwork",
-  "slug": "io-github-dreamworkhq-dreamwork",
-  "grade": "A",
-  "tqi": 87,
-  "strictness": 87,
-  "density": 97,
-  "efficiency": 72,
-  "tokensPerTool": 255,
-  "category": "Developer Tools & VCS",
-  "repository": "https://github.com/dreamworkhq/mcp",
-  "sourceType": "registry",
-  "registryName": "io.github.dreamworkhq/dreamwork",
-  "version": "1.11.0",
-  "fetchedAt": "2026-11-22T12:49:37.224Z",
-  "publishedAt": "2026-11-20T20:50:46.912946Z",
-  "toolsCount": 75,
-  "tools": [
-   {
-    "name": "list_matches",
-    "tokens": 900,
-    "score": 76
-   },
-   {
-    "name": "get_job",
-    "tokens": 245,
-    "score": 83
-   },
-   {
-    "name": "save_job",
-    "tokens": 116,
-    "score": 92
-   },
-   {
-    "name": "dismiss_match",
-    "tokens": 217,
-    "score": 83
-   },
-   {
-    "name": "restore_match",
-    "tokens": 143,
-    "score": 92
-   },
-   {
-    "name": "list_dismissed_matches",
-    "tokens": 169,
-    "score": 93
-   },
-   {
-    "name": "get_pipeline",
-    "tokens": 192,
-    "score": 79
-   },
-   {
-    "name": "move_pipeline",
-    "tokens": 193,
-    "score": 89
-   },
-   {
-    "name": "mark_applied_offsite",
-    "tokens": 519,
-    "score": 78
-   },
-   {
-    "name": "import_job",
-    "tokens": 123,
-    "score": 92
-   },
-   {
-    "name": "cancel_apply",
-    "tokens": 93,
-    "score": 84
-   },
-   {
-    "name": "get_application_questions",
-    "tokens": 128,
-    "score": 84
-   },
-   {
-    "name": "answer_application_questions",
-    "tokens": 430,
-    "score": 73
-   },
-   {
-    "name": "dismiss_application_questions",
-    "tokens": 110,
-    "score": 84
-   },
-   {
-    "name": "generate_pack",
-    "tokens": 186,
-    "score": 89
-   },
-   {
-    "name": "prepare_applications",
-    "tokens": 205,
-    "score": 89
-   },
-   {
-    "name": "get_pack_status",
-    "tokens": 174,
-    "score": 89
-   },
-   {
-    "name": "edit_cover_letter",
-    "tokens": 391,
-    "score": 78
-   },
-   {
-    "name": "edit_resume",
-    "tokens": 394,
-    "score": 76
-   },
-   {
-    "name": "format_resume",
-    "tokens": 342,
-    "score": 86
-   },
-   {
-    "name": "edit_answer",
-    "tokens": 141,
-    "score": 84
-   },
-   {
-    "name": "strengthen_application",
-    "tokens": 219,
-    "score": 86
-   },
-   {
-    "name": "restore_material",
-    "tokens": 270,
-    "score": 91
-   },
-   {
-    "name": "get_application_documents",
-    "tokens": 136,
-    "score": 84
-   },
-   {
-    "name": "replace_application_document",
-    "tokens": 347,
-    "score": 77
-   },
-   {
-    "name": "get_preferences",
-    "tokens": 119,
-    "score": 88
-   },
-   {
-    "name": "update_preferences",
-    "tokens": 1682,
-    "score": 65
-   },
-   {
-    "name": "get_application_readiness",
-    "tokens": 116,
-    "score": 88
-   },
-   {
-    "name": "save_application_answers",
-    "tokens": 1438,
-    "score": 73
-   },
-   {
-    "name": "parse_preferences_text",
-    "tokens": 118,
-    "score": 92
-   },
-   {
-    "name": "get_career_record",
-    "tokens": 156,
-    "score": 92
-   },
-   {
-    "name": "remember_hypothesis",
-    "tokens": 133,
-    "score": 92
-   },
-   {
-    "name": "confirm_hypothesis",
-    "tokens": 115,
-    "score": 84
-   },
-   {
-    "name": "forget_hypothesis",
-    "tokens": 92,
-    "score": 84
-   },
-   {
-    "name": "get_resume_download_link",
-    "tokens": 125,
-    "score": 88
-   },
-   {
-    "name": "get_resume_work_history",
-    "tokens": 133,
-    "score": 88
-   },
-   {
-    "name": "get_communication_preferences",
-    "tokens": 116,
-    "score": 88
-   },
-   {
-    "name": "update_communication_preferences",
-    "tokens": 193,
-    "score": 87
-   },
-   {
-    "name": "get_autopilot_settings",
-    "tokens": 97,
-    "score": 88
-   },
-   {
-    "name": "update_autopilot_settings",
-    "tokens": 290,
-    "score": 78
-   },
-   {
-    "name": "get_autopilot_status",
-    "tokens": 204,
-    "score": 79
-   },
-   {
-    "name": "set_autopilot",
-    "tokens": 259,
-    "score": 83
-   },
-   {
-    "name": "get_application_status",
-    "tokens": 249,
-    "score": 83
-   },
-   {
-    "name": "get_inbox",
-    "tokens": 293,
-    "score": 86
-   },
-   {
-    "name": "get_unread_reminders",
-    "tokens": 91,
-    "score": 88
-   },
-   {
-    "name": "mark_messages_read",
-    "tokens": 156,
-    "score": 92
-   },
-   {
-    "name": "get_usage",
-    "tokens": 71,
-    "score": 92
-   },
-   {
-    "name": "get_task",
-    "tokens": 99,
-    "score": 84
-   },
-   {
-    "name": "list_tasks",
-    "tokens": 132,
-    "score": 88
-   },
-   {
-    "name": "undo_last",
-    "tokens": 112,
-    "score": 92
-   },
-   {
-    "name": "get_updates_since",
-    "tokens": 295,
-    "score": 87
-   },
-   {
-    "name": "apply",
-    "tokens": 281,
-    "score": 90
-   },
-   {
-    "name": "reply_to_recruiter",
-    "tokens": 267,
-    "score": 86
-   },
-   {
-    "name": "start_checkout",
-    "tokens": 327,
-    "score": 88
-   },
-   {
-    "name": "get_platform_context",
-    "tokens": 71,
-    "score": 92
-   },
-   {
-    "name": "add_jobs",
-    "tokens": 271,
-    "score": 93
-   },
-   {
-    "name": "get_application_materials",
-    "tokens": 219,
-    "score": 87
-   },
-   {
-    "name": "update_application_materials",
-    "tokens": 332,
-    "score": 88
-   },
-   {
-    "name": "reopen_application_materials",
-    "tokens": 165,
-    "score": 93
-   },
-   {
-    "name": "generate_resume",
-    "tokens": 163,
-    "score": 93
-   },
-   {
-    "name": "get_generated_resumes",
-    "tokens": 142,
-    "score": 96
-   },
-   {
-    "name": "add_contact",
-    "tokens": 169,
-    "score": 93
-   },
-   {
-    "name": "list_contacts",
-    "tokens": 74,
-    "score": 96
-   },
-   {
-    "name": "generate_outreach",
-    "tokens": 196,
-    "score": 93
-   },
-   {
-    "name": "get_profile",
-    "tokens": 89,
-    "score": 88
-   },
-   {
-    "name": "update_profile",
-    "tokens": 367,
-    "score": 88
-   },
-   {
-    "name": "upload_resume",
-    "tokens": 243,
-    "score": 93
-   },
-   {
-    "name": "get_stats",
-    "tokens": 56,
-    "score": 92
-   },
-   {
-    "name": "list_interviews",
-    "tokens": 69,
-    "score": 92
-   },
-   {
-    "name": "browse_listings",
-    "tokens": 1193,
-    "score": 77
-   },
-   {
-    "name": "get_market_pulse",
-    "tokens": 173,
-    "score": 79
-   },
-   {
-    "name": "get_top_hiring_companies",
-    "tokens": 309,
-    "score": 88
-   },
-   {
-    "name": "get_upgrade_link",
-    "tokens": 206,
-    "score": 93
-   },
-   {
-    "name": "submit_feedback",
-    "tokens": 330,
-    "score": 88
-   },
-   {
-    "name": "get_listing",
-    "tokens": 142,
-    "score": 96
-   }
-  ]
- },
- {
   "name": "io.github.MotionMenu/motion-menu",
   "title": "Motion Menu Director",
   "slug": "io-github-motionmenu-motion-menu",
@@ -40470,7 +40074,7 @@ window.ECOSYSTEM_DATA = [
   "density": 94,
   "efficiency": 72,
   "tokensPerTool": 219,
-  "category": "Developer Tools & VCS",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "io.github.MotionMenu/motion-menu",
@@ -40566,7 +40170,7 @@ window.ECOSYSTEM_DATA = [
   "density": 96,
   "efficiency": 72,
   "tokensPerTool": 212,
-  "category": "Other",
+  "category": "E-Commerce & Retail",
   "repository": null,
   "sourceType": "registry",
   "registryName": "me.borders/borders",
@@ -40622,7 +40226,7 @@ window.ECOSYSTEM_DATA = [
   "density": 91,
   "efficiency": 72,
   "tokensPerTool": 261,
-  "category": "Other",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "page.copybook/copybook",
@@ -40668,7 +40272,7 @@ window.ECOSYSTEM_DATA = [
   "density": 92,
   "efficiency": 71,
   "tokensPerTool": 264,
-  "category": "Other",
+  "category": "E-Commerce & Retail",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.zola/zola",
@@ -40970,7 +40574,7 @@ window.ECOSYSTEM_DATA = [
   "density": 94,
   "efficiency": 71,
   "tokensPerTool": 228,
-  "category": "Other",
+  "category": "E-Commerce & Retail",
   "repository": null,
   "sourceType": "registry",
   "registryName": "io.shipfolio/shipfolio",
@@ -41550,7 +41154,7 @@ window.ECOSYSTEM_DATA = [
   "density": 96,
   "efficiency": 70,
   "tokensPerTool": 229,
-  "category": "Payments, CRM & Finance",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/iPAYX-Technologies/mcp-fx-audit",
   "sourceType": "registry",
   "registryName": "io.github.iPAYX-Technologies/mcp-fx-audit",
@@ -41591,7 +41195,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 70,
   "tokensPerTool": 172,
-  "category": "Developer Tools & VCS",
+  "category": "Developer Tools & DevOps",
   "repository": null,
   "sourceType": "registry",
   "registryName": "io.github.ryuamarines/app-store-version",
@@ -41617,7 +41221,7 @@ window.ECOSYSTEM_DATA = [
   "density": 97,
   "efficiency": 70,
   "tokensPerTool": 248,
-  "category": "Other",
+  "category": "E-Commerce & Retail",
   "repository": null,
   "sourceType": "registry",
   "registryName": "ru.tachka/shop",
@@ -41688,7 +41292,7 @@ window.ECOSYSTEM_DATA = [
   "density": 85,
   "efficiency": 70,
   "tokensPerTool": 256,
-  "category": "Other",
+  "category": "Design, UI & 3D Media",
   "repository": "https://github.com/SisocoOne/sisoco-one-mcp",
   "sourceType": "registry",
   "registryName": "uk.co.sisoco/uk-company-insolvency-check",
@@ -41765,7 +41369,7 @@ window.ECOSYSTEM_DATA = [
   "density": 96,
   "efficiency": 69,
   "tokensPerTool": 280,
-  "category": "Other",
+  "category": "E-Commerce & Retail",
   "repository": null,
   "sourceType": "registry",
   "registryName": "ch.clear-ice/clear-ice",
@@ -41821,7 +41425,7 @@ window.ECOSYSTEM_DATA = [
   "density": 93,
   "efficiency": 69,
   "tokensPerTool": 207,
-  "category": "Developer Tools & VCS",
+  "category": "Developer Tools & DevOps",
   "repository": null,
   "sourceType": "registry",
   "registryName": "io.github.ateodor1/pechim",
@@ -41862,7 +41466,7 @@ window.ECOSYSTEM_DATA = [
   "density": 99,
   "efficiency": 69,
   "tokensPerTool": 257,
-  "category": "Cloud & Hosting Platforms",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/juansalvatella/secret-santa",
   "sourceType": "registry",
   "registryName": "name.secretsanta/secret-santa",
@@ -41943,7 +41547,7 @@ window.ECOSYSTEM_DATA = [
   "density": 97,
   "efficiency": 68,
   "tokensPerTool": 605,
-  "category": "Communication & Alerting",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/data-x-api/dataxapi-mcp",
   "sourceType": "registry",
   "registryName": "com.dataxapi/mcp",
@@ -41989,7 +41593,7 @@ window.ECOSYSTEM_DATA = [
   "density": 91,
   "efficiency": 68,
   "tokensPerTool": 283,
-  "category": "Payments, CRM & Finance",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/Nicklim123/switchboard-finance-mcp",
   "sourceType": "registry",
   "registryName": "io.github.Nicklim123/switchboard-finance",
@@ -42035,7 +41639,7 @@ window.ECOSYSTEM_DATA = [
   "density": 97,
   "efficiency": 67,
   "tokensPerTool": 246,
-  "category": "Developer Tools & VCS",
+  "category": "Other",
   "repository": "https://github.com/kayceepeece/managebetcodes-mcp",
   "sourceType": "registry",
   "registryName": "app.managebetcodes/managebetcodes-mcp",
@@ -42136,7 +41740,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 67,
   "tokensPerTool": 285,
-  "category": "Payments, CRM & Finance",
+  "category": "Finance, Crypto & Web3",
   "repository": null,
   "sourceType": "registry",
   "registryName": "io.forthcast/inventory",
@@ -42309,7 +41913,7 @@ window.ECOSYSTEM_DATA = [
   "density": 98,
   "efficiency": 65,
   "tokensPerTool": 358,
-  "category": "Developer Tools & VCS",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/CLNS-KR/GRNT",
   "sourceType": "registry",
   "registryName": "io.github.CLNS-KR/grnt",
@@ -42375,7 +41979,7 @@ window.ECOSYSTEM_DATA = [
   "density": 99,
   "efficiency": 65,
   "tokensPerTool": 269,
-  "category": "Payments, CRM & Finance",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/tunguyen1993/antigravity-x402-mcp-gateway",
   "sourceType": "registry",
   "registryName": "io.github.tunguyen1993/antigravity-x402-mcp-gateway",
@@ -42506,7 +42110,7 @@ window.ECOSYSTEM_DATA = [
   "density": 93,
   "efficiency": 64,
   "tokensPerTool": 305,
-  "category": "Payments, CRM & Finance",
+  "category": "Finance, Crypto & Web3",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.thebonusstack/bonuses",
@@ -42618,7 +42222,7 @@ window.ECOSYSTEM_DATA = [
   "density": 89,
   "efficiency": 64,
   "tokensPerTool": 452,
-  "category": "Cloud & Hosting Platforms",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/gridhopai/gpu-price-index-mcp",
   "sourceType": "registry",
   "registryName": "io.github.gridhopai/gpu-price-index",
@@ -42659,7 +42263,7 @@ window.ECOSYSTEM_DATA = [
   "density": 96,
   "efficiency": 63,
   "tokensPerTool": 395,
-  "category": "Developer Tools & VCS",
+  "category": "E-Commerce & Retail",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.keeb-finder/keebfinder",
@@ -42700,7 +42304,7 @@ window.ECOSYSTEM_DATA = [
   "density": 98,
   "efficiency": 63,
   "tokensPerTool": 253,
-  "category": "Other",
+  "category": "Design, UI & 3D Media",
   "repository": null,
   "sourceType": "registry",
   "registryName": "garden.lexicon/lexicon-garden",
@@ -42751,7 +42355,7 @@ window.ECOSYSTEM_DATA = [
   "density": 93,
   "efficiency": 63,
   "tokensPerTool": 302,
-  "category": "Developer Tools & VCS",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/cyanheads/reference-data-mcp-server.git",
   "sourceType": "registry",
   "registryName": "io.github.cyanheads/reference-data-mcp-server",
@@ -42827,7 +42431,7 @@ window.ECOSYSTEM_DATA = [
   "density": 98,
   "efficiency": 63,
   "tokensPerTool": 280,
-  "category": "Developer Tools & VCS",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/notformal/adsbeast-plugins",
   "sourceType": "registry",
   "registryName": "io.github.notformal/ad-spec-guard",
@@ -42893,7 +42497,7 @@ window.ECOSYSTEM_DATA = [
   "density": 94,
   "efficiency": 61,
   "tokensPerTool": 345,
-  "category": "Developer Tools & VCS",
+  "category": "Developer Tools & DevOps",
   "repository": null,
   "sourceType": "registry",
   "registryName": "io.github.alinaszaputko-psych/alina-online-booking",
@@ -42939,7 +42543,7 @@ window.ECOSYSTEM_DATA = [
   "density": 96,
   "efficiency": 60,
   "tokensPerTool": 336,
-  "category": "Social, Media & Knowledge",
+  "category": "Design, UI & 3D Media",
   "repository": null,
   "sourceType": "registry",
   "registryName": "ai.userintuition/research",
@@ -43355,7 +42959,7 @@ window.ECOSYSTEM_DATA = [
   "density": 99,
   "efficiency": 60,
   "tokensPerTool": 373,
-  "category": "Communication & Alerting",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "dev.agentsupply/agentsupply",
@@ -43511,7 +43115,7 @@ window.ECOSYSTEM_DATA = [
   "density": 99,
   "efficiency": 59,
   "tokensPerTool": 354,
-  "category": "Developer Tools & VCS",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/kochetkov-ma/brewpage-openapi",
   "sourceType": "registry",
   "registryName": "io.github.kochetkov-ma/brewpage-mcp",
@@ -43597,7 +43201,7 @@ window.ECOSYSTEM_DATA = [
   "density": 93,
   "efficiency": 59,
   "tokensPerTool": 330,
-  "category": "Other",
+  "category": "E-Commerce & Retail",
   "repository": null,
   "sourceType": "registry",
   "registryName": "lt.pricebee/pricebee",
@@ -43648,7 +43252,7 @@ window.ECOSYSTEM_DATA = [
   "density": 97,
   "efficiency": 57,
   "tokensPerTool": 442,
-  "category": "Developer Tools & VCS",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/stophydotdev/stophy.git",
   "sourceType": "registry",
   "registryName": "io.github.stophydotdev/mcp",
@@ -43780,7 +43384,7 @@ window.ECOSYSTEM_DATA = [
   "density": 98,
   "efficiency": 50,
   "tokensPerTool": 529,
-  "category": "Other",
+  "category": "E-Commerce & Retail",
   "repository": null,
   "sourceType": "registry",
   "registryName": "org.specsource/specsource",
@@ -43836,7 +43440,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 93,
   "tokensPerTool": 92,
-  "category": "Other",
+  "category": "Finance, Crypto & Web3",
   "repository": null,
   "sourceType": "registry",
   "registryName": "app.railway.up.chainguard-studio-production/chainguard-shield",
@@ -43907,7 +43511,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 93,
   "tokensPerTool": 97,
-  "category": "Other",
+  "category": "Finance, Crypto & Web3",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.soqver/so4ag",
@@ -43948,7 +43552,7 @@ window.ECOSYSTEM_DATA = [
   "density": 97,
   "efficiency": 87,
   "tokensPerTool": 148,
-  "category": "Other",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.silkvin/agent-door",
@@ -43994,7 +43598,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 85,
   "tokensPerTool": 125,
-  "category": "Web Scraping & Automation",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/domondi1/inferrail",
   "sourceType": "registry",
   "registryName": "io.github.domondi1/inferrail-web-read",
@@ -44020,7 +43624,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 84,
   "tokensPerTool": 146,
-  "category": "Other",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.qadiva/agent-door",
@@ -44061,7 +43665,7 @@ window.ECOSYSTEM_DATA = [
   "density": 97,
   "efficiency": 83,
   "tokensPerTool": 153,
-  "category": "Other",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.scriptmasterlabs/hive402",
@@ -44167,7 +43771,7 @@ window.ECOSYSTEM_DATA = [
   "density": 98,
   "efficiency": 83,
   "tokensPerTool": 149,
-  "category": "Social, Media & Knowledge",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "io.agtmart/agent-commerce",
@@ -44233,7 +43837,7 @@ window.ECOSYSTEM_DATA = [
   "density": 94,
   "efficiency": 83,
   "tokensPerTool": 142,
-  "category": "Payments, CRM & Finance",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/allooloo/cm-kg",
   "sourceType": "registry",
   "registryName": "io.github.allooloo/cm-kg",
@@ -44294,7 +43898,7 @@ window.ECOSYSTEM_DATA = [
   "density": 98,
   "efficiency": 80,
   "tokensPerTool": 139,
-  "category": "Other",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "net.diofis/babelii-support",
@@ -44345,7 +43949,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 79,
   "tokensPerTool": 135,
-  "category": "Cloud & Hosting Platforms",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/raydeoliveira/spatial-mcp-worker",
   "sourceType": "registry",
   "registryName": "io.github.raydeoliveira/spatial-mcp-worker",
@@ -44391,7 +43995,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 78,
   "tokensPerTool": 175,
-  "category": "Payments, CRM & Finance",
+  "category": "Finance, Crypto & Web3",
   "repository": "https://github.com/rightcard/rightcard-mcp",
   "sourceType": "registry",
   "registryName": "ai.rightcard/mcp",
@@ -44437,7 +44041,7 @@ window.ECOSYSTEM_DATA = [
   "density": 93,
   "efficiency": 78,
   "tokensPerTool": 167,
-  "category": "Payments, CRM & Finance",
+  "category": "Finance, Crypto & Web3",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.provyan/provyan",
@@ -44523,7 +44127,7 @@ window.ECOSYSTEM_DATA = [
   "density": 96,
   "efficiency": 77,
   "tokensPerTool": 169,
-  "category": "Payments, CRM & Finance",
+  "category": "Finance, Crypto & Web3",
   "repository": null,
   "sourceType": "registry",
   "registryName": "jp.vsinger-moment/vsinger-moment",
@@ -44624,7 +44228,7 @@ window.ECOSYSTEM_DATA = [
   "density": 99,
   "efficiency": 75,
   "tokensPerTool": 191,
-  "category": "Communication & Alerting",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/BukeLy/peerbox",
   "sourceType": "registry",
   "registryName": "io.github.BukeLy/peerbox",
@@ -44720,7 +44324,7 @@ window.ECOSYSTEM_DATA = [
   "density": 99,
   "efficiency": 74,
   "tokensPerTool": 308,
-  "category": "Web Scraping & Automation",
+  "category": "E-Commerce & Retail",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.comidoc/comidoc",
@@ -44796,7 +44400,7 @@ window.ECOSYSTEM_DATA = [
   "density": 96,
   "efficiency": 74,
   "tokensPerTool": 206,
-  "category": "Cloud & Hosting Platforms",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/fuzzzy-bot/fuzzzy-law",
   "sourceType": "registry",
   "registryName": "com.fuzzzycore.law/georgian-law",
@@ -44993,7 +44597,7 @@ window.ECOSYSTEM_DATA = [
   "density": 94,
   "efficiency": 72,
   "tokensPerTool": 197,
-  "category": "Other",
+  "category": "Travel, Maps & Navigation",
   "repository": null,
   "sourceType": "registry",
   "registryName": "app.supersurf/supersurf",
@@ -45295,7 +44899,7 @@ window.ECOSYSTEM_DATA = [
   "density": 98,
   "efficiency": 71,
   "tokensPerTool": 262,
-  "category": "Security & Identity",
+  "category": "Design, UI & 3D Media",
   "repository": null,
   "sourceType": "registry",
   "registryName": "ai.dotsy/mcp",
@@ -45522,7 +45126,7 @@ window.ECOSYSTEM_DATA = [
    {
     "name": "update_collection",
     "tokens": 291,
-    "score": 84
+    "score": 59
    },
    {
     "name": "new_post_template",
@@ -45916,7 +45520,7 @@ window.ECOSYSTEM_DATA = [
   "density": 89,
   "efficiency": 71,
   "tokensPerTool": 213,
-  "category": "Developer Tools & VCS",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/Nutshell2000/agent-data-tools",
   "sourceType": "registry",
   "registryName": "io.github.Nutshell2000/agent-data-tools-utilities",
@@ -46518,7 +46122,7 @@ window.ECOSYSTEM_DATA = [
   "density": 93,
   "efficiency": 70,
   "tokensPerTool": 267,
-  "category": "Other",
+  "category": "Databases & Storage",
   "repository": "https://github.com/lode-hq/lode-mcp",
   "sourceType": "registry",
   "registryName": "io.trylode/lode",
@@ -46672,137 +46276,6 @@ window.ECOSYSTEM_DATA = [
   ]
  },
  {
-  "name": "com.layerhop/mcp",
-  "title": "LayerHop",
-  "slug": "com-layerhop-mcp",
-  "grade": "A",
-  "tqi": 86,
-  "strictness": 98,
-  "density": 95,
-  "efficiency": 69,
-  "tokensPerTool": 266,
-  "category": "Other",
-  "repository": "https://github.com/layerhop/layerhop-js",
-  "sourceType": "registry",
-  "registryName": "com.layerhop/mcp",
-  "version": "0.9.0",
-  "fetchedAt": "2026-11-22T12:49:37.224Z",
-  "publishedAt": "2026-11-22T10:08:55.124295Z",
-  "toolsCount": 22,
-  "tools": [
-   {
-    "name": "list_chains",
-    "tokens": 70,
-    "score": 92
-   },
-   {
-    "name": "list_tokens",
-    "tokens": 138,
-    "score": 92
-   },
-   {
-    "name": "get_quote",
-    "tokens": 793,
-    "score": 77
-   },
-   {
-    "name": "build_transaction",
-    "tokens": 211,
-    "score": 87
-   },
-   {
-    "name": "simulate_transaction",
-    "tokens": 192,
-    "score": 87
-   },
-   {
-    "name": "report_submitted",
-    "tokens": 186,
-    "score": 93
-   },
-   {
-    "name": "get_order_status",
-    "tokens": 191,
-    "score": 93
-   },
-   {
-    "name": "list_orders",
-    "tokens": 214,
-    "score": 93
-   },
-   {
-    "name": "get_swap_link",
-    "tokens": 466,
-    "score": 88
-   },
-   {
-    "name": "lookup_token",
-    "tokens": 211,
-    "score": 89
-   },
-   {
-    "name": "get_token_risk",
-    "tokens": 266,
-    "score": 83
-   },
-   {
-    "name": "list_limit_orders",
-    "tokens": 225,
-    "score": 93
-   },
-   {
-    "name": "get_limit_order",
-    "tokens": 96,
-    "score": 96
-   },
-   {
-    "name": "create_limit_order",
-    "tokens": 545,
-    "score": 82
-   },
-   {
-    "name": "submit_limit_order",
-    "tokens": 220,
-    "score": 93
-   },
-   {
-    "name": "cancel_limit_order",
-    "tokens": 165,
-    "score": 93
-   },
-   {
-    "name": "create_deposit_address",
-    "tokens": 746,
-    "score": 32
-   },
-   {
-    "name": "list_deposit_addresses",
-    "tokens": 192,
-    "score": 93
-   },
-   {
-    "name": "get_deposit_address",
-    "tokens": 208,
-    "score": 42
-   },
-   {
-    "name": "refresh_deposit_address",
-    "tokens": 133,
-    "score": 96
-   },
-   {
-    "name": "disable_deposit_address",
-    "tokens": 137,
-    "score": 96
-   },
-   {
-    "name": "simulate_deposit",
-    "tokens": 239,
-    "score": 93
-   }
-  ]
- },
- {
   "name": "io.github.abasmartinc/apiempresas",
   "title": "SpainCompanyAPI: Spanish company data",
   "slug": "io-github-abasmartinc-apiempresas",
@@ -46812,7 +46285,7 @@ window.ECOSYSTEM_DATA = [
   "density": 89,
   "efficiency": 69,
   "tokensPerTool": 214,
-  "category": "Payments, CRM & Finance",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/abasmartinc/apiempresas-mcp",
   "sourceType": "registry",
   "registryName": "io.github.abasmartinc/apiempresas",
@@ -46853,7 +46326,7 @@ window.ECOSYSTEM_DATA = [
   "density": 96,
   "efficiency": 69,
   "tokensPerTool": 335,
-  "category": "Developer Tools & VCS",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/Voidborn-Industries/mindupload-sdk-python",
   "sourceType": "registry",
   "registryName": "io.github.Voidborn-Industries/mindupload",
@@ -46914,7 +46387,7 @@ window.ECOSYSTEM_DATA = [
   "density": 92,
   "efficiency": 68,
   "tokensPerTool": 262,
-  "category": "Social, Media & Knowledge",
+  "category": "Design, UI & 3D Media",
   "repository": "https://github.com/charmotion/charmotion-mcp",
   "sourceType": "registry",
   "registryName": "app.charmotion/charmotion",
@@ -47015,7 +46488,7 @@ window.ECOSYSTEM_DATA = [
   "density": 95,
   "efficiency": 68,
   "tokensPerTool": 254,
-  "category": "Other",
+  "category": "E-Commerce & Retail",
   "repository": "https://github.com/NodajiFi-Tokenomy/NodajiFi-Ecosystem",
   "sourceType": "registry",
   "registryName": "com.nodajimarket/catalog",
@@ -47066,7 +46539,7 @@ window.ECOSYSTEM_DATA = [
   "density": 93,
   "efficiency": 67,
   "tokensPerTool": 261,
-  "category": "Vector DBs & AI Search",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/aisenseapi/aisense-free-public-rest-apis",
   "sourceType": "registry",
   "registryName": "com.aisenseapi/free-public-tools",
@@ -47568,7 +47041,7 @@ window.ECOSYSTEM_DATA = [
   "density": 86,
   "efficiency": 67,
   "tokensPerTool": 270,
-  "category": "Payments, CRM & Finance",
+  "category": "Finance, Crypto & Web3",
   "repository": null,
   "sourceType": "registry",
   "registryName": "dev.workers.x402-bazaar-rank-worker.x402-bazaar-rank/evm-wallet-onchain",
@@ -47649,7 +47122,7 @@ window.ECOSYSTEM_DATA = [
   "density": 96,
   "efficiency": 67,
   "tokensPerTool": 275,
-  "category": "Observability & Analytics",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/web3alert/mcp",
   "sourceType": "registry",
   "registryName": "io.web3alert/agent",
@@ -47720,7 +47193,7 @@ window.ECOSYSTEM_DATA = [
   "density": 91,
   "efficiency": 66,
   "tokensPerTool": 285,
-  "category": "Other",
+  "category": "Design, UI & 3D Media",
   "repository": "https://github.com/airdropfi/betterkids",
   "sourceType": "registry",
   "registryName": "app.betterkid/betterkids-parent-guide",
@@ -47781,7 +47254,7 @@ window.ECOSYSTEM_DATA = [
   "density": 93,
   "efficiency": 66,
   "tokensPerTool": 273,
-  "category": "Other",
+  "category": "Travel, Maps & Navigation",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.direct-hotels/directory",
@@ -47832,7 +47305,7 @@ window.ECOSYSTEM_DATA = [
   "density": 92,
   "efficiency": 66,
   "tokensPerTool": 258,
-  "category": "Other",
+  "category": "Design, UI & 3D Media",
   "repository": null,
   "sourceType": "registry",
   "registryName": "fr.comontel/forfaits",
@@ -47943,7 +47416,7 @@ window.ECOSYSTEM_DATA = [
   "density": 93,
   "efficiency": 66,
   "tokensPerTool": 272,
-  "category": "Web Scraping & Automation",
+  "category": "Developer Tools & DevOps",
   "repository": null,
   "sourceType": "registry",
   "registryName": "io.standoutmcp/standout",
@@ -48124,7 +47597,7 @@ window.ECOSYSTEM_DATA = [
   "density": 90,
   "efficiency": 63,
   "tokensPerTool": 292,
-  "category": "Other",
+  "category": "Design, UI & 3D Media",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.featurelibrary/parts",
@@ -48200,7 +47673,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 63,
   "tokensPerTool": 382,
-  "category": "Developer Tools & VCS",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/theguysaccount/mcp-catalog",
   "sourceType": "registry",
   "registryName": "io.github.theguysaccount/creditable",
@@ -48246,7 +47719,7 @@ window.ECOSYSTEM_DATA = [
   "density": 93,
   "efficiency": 63,
   "tokensPerTool": 272,
-  "category": "Other",
+  "category": "Security & Identity",
   "repository": null,
   "sourceType": "registry",
   "registryName": "net.isitdns/isitdns",
@@ -48338,7 +47811,7 @@ window.ECOSYSTEM_DATA = [
   "density": 91,
   "efficiency": 59,
   "tokensPerTool": 328,
-  "category": "Developer Tools & VCS",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/yuli3/api-oiyo",
   "sourceType": "registry",
   "registryName": "io.github.yuli3/oiyo-world",
@@ -49094,7 +48567,7 @@ window.ECOSYSTEM_DATA = [
   "density": 94,
   "efficiency": 58,
   "tokensPerTool": 370,
-  "category": "Developer Tools & VCS",
+  "category": "Other",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.trystarrynightops/sanctions-tariff-lookup",
@@ -49150,7 +48623,7 @@ window.ECOSYSTEM_DATA = [
   "density": 91,
   "efficiency": 56,
   "tokensPerTool": 374,
-  "category": "Productivity & Notes",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/yuli3/api-oiyo",
   "sourceType": "registry",
   "registryName": "io.github.yuli3/oiyo-calculations",
@@ -50536,7 +50009,7 @@ window.ECOSYSTEM_DATA = [
   "density": 94,
   "efficiency": 56,
   "tokensPerTool": 384,
-  "category": "Developer Tools & VCS",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/yuli3/api-oiyo",
   "sourceType": "registry",
   "registryName": "io.github.yuli3/oiyo-welfare",
@@ -50677,7 +50150,7 @@ window.ECOSYSTEM_DATA = [
   "density": 93,
   "efficiency": 55,
   "tokensPerTool": 404,
-  "category": "Communication & Alerting",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/swswordholy-tech/AgentsChat",
   "sourceType": "registry",
   "registryName": "io.github.swswordholy-tech/agentschat-mcp",
@@ -50823,7 +50296,7 @@ window.ECOSYSTEM_DATA = [
   "density": 97,
   "efficiency": 88,
   "tokensPerTool": 114,
-  "category": "Payments, CRM & Finance",
+  "category": "Developer Tools & DevOps",
   "repository": null,
   "sourceType": "registry",
   "registryName": "io.github.semcycle/actbook",
@@ -52139,7 +51612,7 @@ window.ECOSYSTEM_DATA = [
   "density": 90,
   "efficiency": 80,
   "tokensPerTool": 185,
-  "category": "Developer Tools & VCS",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/MissPris2023/ancestral-whispers-now",
   "sourceType": "registry",
   "registryName": "io.github.MissPris2023/ifadiscovery",
@@ -52342,7 +51815,7 @@ window.ECOSYSTEM_DATA = [
   "density": 96,
   "efficiency": 76,
   "tokensPerTool": 179,
-  "category": "Payments, CRM & Finance",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "capital.aindex/aindex",
@@ -52718,7 +52191,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 75,
   "tokensPerTool": 211,
-  "category": "Other",
+  "category": "E-Commerce & Retail",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.dzbuild/dzship",
@@ -52830,7 +52303,7 @@ window.ECOSYSTEM_DATA = [
   "density": 93,
   "efficiency": 74,
   "tokensPerTool": 210,
-  "category": "Communication & Alerting",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.getagentdepot/agent-provider-depot",
@@ -52871,7 +52344,7 @@ window.ECOSYSTEM_DATA = [
   "density": 91,
   "efficiency": 74,
   "tokensPerTool": 220,
-  "category": "Developer Tools & VCS",
+  "category": "E-Commerce & Retail",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.storetechscan/storetechscan",
@@ -52927,7 +52400,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 73,
   "tokensPerTool": 181,
-  "category": "Developer Tools & VCS",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/f-tiger/agi-site",
   "sourceType": "registry",
   "registryName": "io.github.f-tiger/tds-home-tools",
@@ -55448,7 +54921,7 @@ window.ECOSYSTEM_DATA = [
   "density": 94,
   "efficiency": 72,
   "tokensPerTool": 218,
-  "category": "Developer Tools & VCS",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/mergesafe-ai/mergesafe-mcp",
   "sourceType": "registry",
   "registryName": "ai.mergesafe/mergesafe",
@@ -55549,7 +55022,7 @@ window.ECOSYSTEM_DATA = [
   "density": 90,
   "efficiency": 72,
   "tokensPerTool": 227,
-  "category": "Other",
+  "category": "Finance, Crypto & Web3",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.diastella/diastella",
@@ -55600,7 +55073,7 @@ window.ECOSYSTEM_DATA = [
   "density": 94,
   "efficiency": 72,
   "tokensPerTool": 220,
-  "category": "Payments, CRM & Finance",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.tetheredtrust/builders",
@@ -55681,7 +55154,7 @@ window.ECOSYSTEM_DATA = [
   "density": 96,
   "efficiency": 71,
   "tokensPerTool": 276,
-  "category": "Developer Tools & VCS",
+  "category": "Developer Tools & DevOps",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.notacompany/newsletter",
@@ -55808,7 +55281,7 @@ window.ECOSYSTEM_DATA = [
   "density": 85,
   "efficiency": 70,
   "tokensPerTool": 213,
-  "category": "Other",
+  "category": "Design, UI & 3D Media",
   "repository": null,
   "sourceType": "registry",
   "registryName": "dev.somebodybuildthis/ideas",
@@ -55839,7 +55312,7 @@ window.ECOSYSTEM_DATA = [
   "density": 88,
   "efficiency": 70,
   "tokensPerTool": 263,
-  "category": "Developer Tools & VCS",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/ChanMeng666/archlang",
   "sourceType": "registry",
   "registryName": "io.github.ChanMeng666/archlang-mcp",
@@ -55925,7 +55398,7 @@ window.ECOSYSTEM_DATA = [
   "density": 91,
   "efficiency": 70,
   "tokensPerTool": 205,
-  "category": "Developer Tools & VCS",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/HMAKT99/ScBee",
   "sourceType": "registry",
   "registryName": "io.github.HMAKT99/scbee-mcp",
@@ -56022,7 +55495,7 @@ window.ECOSYSTEM_DATA = [
   "density": 87,
   "efficiency": 69,
   "tokensPerTool": 208,
-  "category": "Productivity & Notes",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/nifrajs/nifra",
   "sourceType": "registry",
   "registryName": "io.github.nifrajs/nifra-docs",
@@ -56078,7 +55551,7 @@ window.ECOSYSTEM_DATA = [
   "density": 91,
   "efficiency": 68,
   "tokensPerTool": 308,
-  "category": "Communication & Alerting",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/dahoai/anaella-agent-plugin",
   "sourceType": "registry",
   "registryName": "com.anaella/mcp",
@@ -56134,7 +55607,7 @@ window.ECOSYSTEM_DATA = [
   "density": 89,
   "efficiency": 67,
   "tokensPerTool": 252,
-  "category": "Other",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "app.gridleak/mcp",
@@ -56215,7 +55688,7 @@ window.ECOSYSTEM_DATA = [
   "density": 89,
   "efficiency": 67,
   "tokensPerTool": 313,
-  "category": "Other",
+  "category": "E-Commerce & Retail",
   "repository": null,
   "sourceType": "registry",
   "registryName": "net.mireforma/mireforma",
@@ -56276,7 +55749,7 @@ window.ECOSYSTEM_DATA = [
   "density": 90,
   "efficiency": 66,
   "tokensPerTool": 265,
-  "category": "Developer Tools & VCS",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/XGamesFun/solana-kit",
   "sourceType": "registry",
   "registryName": "io.github.XGamesFun/solana-kit",
@@ -56352,7 +55825,7 @@ window.ECOSYSTEM_DATA = [
   "density": 87,
   "efficiency": 64,
   "tokensPerTool": 263,
-  "category": "Developer Tools & VCS",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/mgantlett/nomos",
   "sourceType": "registry",
   "registryName": "ca.sophialabs/nomos",
@@ -56489,7 +55962,7 @@ window.ECOSYSTEM_DATA = [
   "density": 90,
   "efficiency": 64,
   "tokensPerTool": 310,
-  "category": "Payments, CRM & Finance",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "dev.workers.agent-arena-base.safe-send-check/safe-send-check",
@@ -56565,7 +56038,7 @@ window.ECOSYSTEM_DATA = [
   "density": 87,
   "efficiency": 64,
   "tokensPerTool": 263,
-  "category": "Developer Tools & VCS",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/mgantlett/nomos",
   "sourceType": "registry",
   "registryName": "io.github.mgantlett/nomos",
@@ -56723,7 +56196,7 @@ window.ECOSYSTEM_DATA = [
   "density": 94,
   "efficiency": 63,
   "tokensPerTool": 277,
-  "category": "Developer Tools & VCS",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "io.github.anthonywlicausi/agentic-ai",
@@ -56784,7 +56257,7 @@ window.ECOSYSTEM_DATA = [
   "density": 94,
   "efficiency": 63,
   "tokensPerTool": 295,
-  "category": "Cloud & Hosting Platforms",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/roomi-fields/osc-bridge",
   "sourceType": "registry",
   "registryName": "io.github.roomi-fields/osc-bridge",
@@ -56950,7 +56423,7 @@ window.ECOSYSTEM_DATA = [
   "density": 90,
   "efficiency": 62,
   "tokensPerTool": 301,
-  "category": "Web Scraping & Automation",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/jrpool/kilotest",
   "sourceType": "registry",
   "registryName": "io.github.jrpool/kilotest",
@@ -57031,7 +56504,7 @@ window.ECOSYSTEM_DATA = [
   "density": 87,
   "efficiency": 62,
   "tokensPerTool": 304,
-  "category": "Other",
+  "category": "E-Commerce & Retail",
   "repository": "https://github.com/finwire-pl/api",
   "sourceType": "registry",
   "registryName": "pl.finwire/data",
@@ -57562,7 +57035,7 @@ window.ECOSYSTEM_DATA = [
   "density": 94,
   "efficiency": 61,
   "tokensPerTool": 1002,
-  "category": "Other",
+  "category": "Design, UI & 3D Media",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.tryplayloop/playloop",
@@ -57623,7 +57096,7 @@ window.ECOSYSTEM_DATA = [
   "density": 97,
   "efficiency": 61,
   "tokensPerTool": 385,
-  "category": "Productivity & Notes",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/mingyan9989/kaucim-public-mcp",
   "sourceType": "registry",
   "registryName": "io.github.mingyan9989/kaucim-public-mcp",
@@ -57694,7 +57167,7 @@ window.ECOSYSTEM_DATA = [
   "density": 85,
   "efficiency": 60,
   "tokensPerTool": 324,
-  "category": "Web Scraping & Automation",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "dev.blvkware/cordon",
@@ -57806,7 +57279,7 @@ window.ECOSYSTEM_DATA = [
   "density": 92,
   "efficiency": 54,
   "tokensPerTool": 428,
-  "category": "Payments, CRM & Finance",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/AlgoVaultLabs/crypto-quant-signal-mcp",
   "sourceType": "registry",
   "registryName": "io.github.AlgoVaultFi/crypto-quant-signal-mcp",
@@ -57882,7 +57355,7 @@ window.ECOSYSTEM_DATA = [
   "density": 91,
   "efficiency": 53,
   "tokensPerTool": 477,
-  "category": "Payments, CRM & Finance",
+  "category": "Finance, Crypto & Web3",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.growthbusinessfinance/mcp",
@@ -57938,7 +57411,7 @@ window.ECOSYSTEM_DATA = [
   "density": 90,
   "efficiency": 53,
   "tokensPerTool": 338,
-  "category": "Other",
+  "category": "E-Commerce & Retail",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.profblu.argento/argento",
@@ -57989,7 +57462,7 @@ window.ECOSYSTEM_DATA = [
   "density": 94,
   "efficiency": 53,
   "tokensPerTool": 560,
-  "category": "Security & Identity",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/clipform/mcp-server",
   "sourceType": "registry",
   "registryName": "io.github.Clipform/mcp-server",
@@ -58111,7 +57584,7 @@ window.ECOSYSTEM_DATA = [
    {
     "name": "clipform_render_composition",
     "tokens": 1710,
-    "score": 77
+    "score": 52
    },
    {
     "name": "clipform_search_music",
@@ -58175,7 +57648,7 @@ window.ECOSYSTEM_DATA = [
   "density": 92,
   "efficiency": 52,
   "tokensPerTool": 390,
-  "category": "Other",
+  "category": "E-Commerce & Retail",
   "repository": null,
   "sourceType": "registry",
   "registryName": "io.meteoro.www/minerals",
@@ -58241,7 +57714,7 @@ window.ECOSYSTEM_DATA = [
   "density": 93,
   "efficiency": 50,
   "tokensPerTool": 505,
-  "category": "Payments, CRM & Finance",
+  "category": "Finance, Crypto & Web3",
   "repository": "https://github.com/iszgroup/shiwake-ai-mcp",
   "sourceType": "registry",
   "registryName": "ai.shiwake/mcp",
@@ -58307,7 +57780,7 @@ window.ECOSYSTEM_DATA = [
   "density": 93,
   "efficiency": 50,
   "tokensPerTool": 403,
-  "category": "Other",
+  "category": "E-Commerce & Retail",
   "repository": "https://github.com/photo-sweat-shop/photosweat-mcp",
   "sourceType": "registry",
   "registryName": "shop.photosweat/remove-background",
@@ -58338,7 +57811,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 85,
   "tokensPerTool": 104,
-  "category": "Web Scraping & Automation",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "ai.opencurrent/robots-ai-check",
@@ -58369,7 +57842,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 85,
   "tokensPerTool": 130,
-  "category": "Developer Tools & VCS",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "io.github.phasebro/phase",
@@ -58425,7 +57898,7 @@ window.ECOSYSTEM_DATA = [
   "density": 95,
   "efficiency": 80,
   "tokensPerTool": 160,
-  "category": "Other",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "ai.whatagentswant/wall",
@@ -58532,7 +58005,7 @@ window.ECOSYSTEM_DATA = [
   "density": 93,
   "efficiency": 77,
   "tokensPerTool": 184,
-  "category": "Databases & Storage",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "io.github.PascalSun/agenticgeomate",
@@ -59013,7 +58486,7 @@ window.ECOSYSTEM_DATA = [
   "density": 95,
   "efficiency": 77,
   "tokensPerTool": 185,
-  "category": "Payments, CRM & Finance",
+  "category": "Finance, Crypto & Web3",
   "repository": null,
   "sourceType": "registry",
   "registryName": "pro.sebbi/governance",
@@ -59134,7 +58607,7 @@ window.ECOSYSTEM_DATA = [
   "density": 97,
   "efficiency": 76,
   "tokensPerTool": 183,
-  "category": "Other",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.moqway/wholesale",
@@ -59367,7 +58840,7 @@ window.ECOSYSTEM_DATA = [
   "density": 99,
   "efficiency": 73,
   "tokensPerTool": 216,
-  "category": "Developer Tools & VCS",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/AKzar1el/god-prompt-mcp",
   "sourceType": "registry",
   "registryName": "io.github.AKzar1el/god-prompt-mcp",
@@ -59498,7 +58971,7 @@ window.ECOSYSTEM_DATA = [
   "density": 87,
   "efficiency": 72,
   "tokensPerTool": 226,
-  "category": "Payments, CRM & Finance",
+  "category": "Finance, Crypto & Web3",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.meetkatalis/katalis",
@@ -59614,7 +59087,7 @@ window.ECOSYSTEM_DATA = [
   "density": 93,
   "efficiency": 71,
   "tokensPerTool": 231,
-  "category": "Observability & Analytics",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/aiseewhy/check-action",
   "sourceType": "registry",
   "registryName": "com.aiseewhy/aiseewhy",
@@ -59786,7 +59259,7 @@ window.ECOSYSTEM_DATA = [
   "density": 93,
   "efficiency": 70,
   "tokensPerTool": 218,
-  "category": "Security & Identity",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/mrpkk/attest",
   "sourceType": "registry",
   "registryName": "io.github.mrpkk/attest",
@@ -59817,7 +59290,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 70,
   "tokensPerTool": 180,
-  "category": "Developer Tools & VCS",
+  "category": "Developer Tools & DevOps",
   "repository": null,
   "sourceType": "registry",
   "registryName": "io.github.ryuamarines/url-normalizer",
@@ -59843,7 +59316,7 @@ window.ECOSYSTEM_DATA = [
   "density": 97,
   "efficiency": 70,
   "tokensPerTool": 292,
-  "category": "Developer Tools & VCS",
+  "category": "Developer Tools & DevOps",
   "repository": null,
   "sourceType": "registry",
   "registryName": "io.github.Vutik/remont",
@@ -60014,7 +59487,7 @@ window.ECOSYSTEM_DATA = [
   "density": 89,
   "efficiency": 69,
   "tokensPerTool": 243,
-  "category": "Developer Tools & VCS",
+  "category": "Other",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.theskillharbor/skill-harbor",
@@ -60070,7 +59543,7 @@ window.ECOSYSTEM_DATA = [
   "density": 94,
   "efficiency": 69,
   "tokensPerTool": 245,
-  "category": "Developer Tools & VCS",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/uniwire-dev/uniwire",
   "sourceType": "registry",
   "registryName": "io.github.uniwire-dev/uniwire",
@@ -60161,7 +59634,7 @@ window.ECOSYSTEM_DATA = [
   "density": 91,
   "efficiency": 68,
   "tokensPerTool": 235,
-  "category": "Other",
+  "category": "Travel, Maps & Navigation",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.cycle-platform/cycle-verify",
@@ -60267,7 +59740,7 @@ window.ECOSYSTEM_DATA = [
   "density": 87,
   "efficiency": 68,
   "tokensPerTool": 257,
-  "category": "Security & Identity",
+  "category": "Travel, Maps & Navigation",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.nicolassitter/research",
@@ -60328,7 +59801,7 @@ window.ECOSYSTEM_DATA = [
   "density": 90,
   "efficiency": 66,
   "tokensPerTool": 240,
-  "category": "Developer Tools & VCS",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/boriskendev/brainstorm-ai",
   "sourceType": "registry",
   "registryName": "io.github.boriskendev/stormap",
@@ -60449,7 +59922,7 @@ window.ECOSYSTEM_DATA = [
   "density": 92,
   "efficiency": 64,
   "tokensPerTool": 289,
-  "category": "Other",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.tetheredtrust/tethered-trust",
@@ -60585,7 +60058,7 @@ window.ECOSYSTEM_DATA = [
   "density": 97,
   "efficiency": 62,
   "tokensPerTool": 365,
-  "category": "Developer Tools & VCS",
+  "category": "Other",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.odilelabs/gate",
@@ -60727,7 +60200,7 @@ window.ECOSYSTEM_DATA = [
   "density": 98,
   "efficiency": 60,
   "tokensPerTool": 471,
-  "category": "Other",
+  "category": "E-Commerce & Retail",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.dieanalysten/adressshop",
@@ -60834,7 +60307,7 @@ window.ECOSYSTEM_DATA = [
   "density": 97,
   "efficiency": 59,
   "tokensPerTool": 367,
-  "category": "Developer Tools & VCS",
+  "category": "Developer Tools & DevOps",
   "repository": null,
   "sourceType": "registry",
   "registryName": "io.github.MikolajSapek/dojazdomat",
@@ -60905,7 +60378,7 @@ window.ECOSYSTEM_DATA = [
   "density": 88,
   "efficiency": 59,
   "tokensPerTool": 312,
-  "category": "Other",
+  "category": "Design, UI & 3D Media",
   "repository": null,
   "sourceType": "registry",
   "registryName": "online.golfdata/golf-clubs",
@@ -60956,7 +60429,7 @@ window.ECOSYSTEM_DATA = [
   "density": 91,
   "efficiency": 58,
   "tokensPerTool": 350,
-  "category": "Other",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/zeshutmax/demand-gen",
   "sourceType": "registry",
   "registryName": "com.marketinque/launch-plan",
@@ -61057,7 +60530,7 @@ window.ECOSYSTEM_DATA = [
   "density": 90,
   "efficiency": 58,
   "tokensPerTool": 401,
-  "category": "Cloud & Hosting Platforms",
+  "category": "Other",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.satsdns/satsdns",
@@ -61228,7 +60701,7 @@ window.ECOSYSTEM_DATA = [
   "density": 91,
   "efficiency": 58,
   "tokensPerTool": 425,
-  "category": "Other",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/Mineralsdev/minerals",
   "sourceType": "registry",
   "registryName": "dev.minerals/minerals",
@@ -61274,7 +60747,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 57,
   "tokensPerTool": 338,
-  "category": "Other",
+  "category": "Design, UI & 3D Media",
   "repository": "https://github.com/tobhol-lab/ansvra-mcp",
   "sourceType": "registry",
   "registryName": "com.ansvra/mcp",
@@ -61396,7 +60869,7 @@ window.ECOSYSTEM_DATA = [
   "density": 94,
   "efficiency": 57,
   "tokensPerTool": 741,
-  "category": "Developer Tools & VCS",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/AKzar1el/mcp-web-validator",
   "sourceType": "registry",
   "registryName": "io.github.AKzar1el/mcp-web-validator",
@@ -61552,7 +61025,7 @@ window.ECOSYSTEM_DATA = [
   "density": 95,
   "efficiency": 57,
   "tokensPerTool": 478,
-  "category": "Developer Tools & VCS",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/ulasarslan6262-ui/swarm-market",
   "sourceType": "registry",
   "registryName": "io.github.ulasarslan6262-ui/speedbot",
@@ -61688,7 +61161,7 @@ window.ECOSYSTEM_DATA = [
   "density": 90,
   "efficiency": 56,
   "tokensPerTool": 710,
-  "category": "Other",
+  "category": "Design, UI & 3D Media",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.structomat/steel",
@@ -61890,7 +61363,7 @@ window.ECOSYSTEM_DATA = [
   "density": 90,
   "efficiency": 50,
   "tokensPerTool": 359,
-  "category": "Developer Tools & VCS",
+  "category": "Jobs, Career & Learning",
   "repository": "https://github.com/Fiery-Tools/serpgrab-mcp",
   "sourceType": "registry",
   "registryName": "com.serpgrab/google-search",
@@ -61926,7 +61399,7 @@ window.ECOSYSTEM_DATA = [
   "density": 91,
   "efficiency": 50,
   "tokensPerTool": 437,
-  "category": "Web Scraping & Automation",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/cyanheads/stackexchange-mcp-server",
   "sourceType": "registry",
   "registryName": "io.github.cyanheads/stackexchange-mcp-server",
@@ -61972,7 +61445,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 50,
   "tokensPerTool": 405,
-  "category": "Developer Tools & VCS",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/lavondev/chart-output-mcp",
   "sourceType": "registry",
   "registryName": "io.github.lavondev/chart-output-mcp",
@@ -61998,7 +61471,7 @@ window.ECOSYSTEM_DATA = [
   "density": 98,
   "efficiency": 83,
   "tokensPerTool": 152,
-  "category": "Web Scraping & Automation",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.manhourplan/pagemd",
@@ -62049,7 +61522,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 81,
   "tokensPerTool": 140,
-  "category": "Other",
+  "category": "Jobs, Career & Learning",
   "repository": null,
   "sourceType": "registry",
   "registryName": "ai.schoolwise/schoolwise",
@@ -62090,7 +61563,7 @@ window.ECOSYSTEM_DATA = [
   "density": 86,
   "efficiency": 80,
   "tokensPerTool": 183,
-  "category": "Other",
+  "category": "Travel, Maps & Navigation",
   "repository": null,
   "sourceType": "registry",
   "registryName": "ai.councilof/gspc-free",
@@ -62356,7 +61829,7 @@ window.ECOSYSTEM_DATA = [
   "density": 90,
   "efficiency": 80,
   "tokensPerTool": 146,
-  "category": "Developer Tools & VCS",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/vvvvking/novai-prices-mcp",
   "sourceType": "registry",
   "registryName": "com.aiapi-pro/novai-prices",
@@ -62392,7 +61865,7 @@ window.ECOSYSTEM_DATA = [
   "density": 97,
   "efficiency": 79,
   "tokensPerTool": 162,
-  "category": "Other",
+  "category": "Healthcare & Wellness",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.digitalbusinessportal/usac-funding",
@@ -62438,7 +61911,7 @@ window.ECOSYSTEM_DATA = [
   "density": 99,
   "efficiency": 77,
   "tokensPerTool": 190,
-  "category": "Other",
+  "category": "Jobs, Career & Learning",
   "repository": "https://github.com/yardstickinc/yardstick-mcp",
   "sourceType": "registry",
   "registryName": "team.yardstick/yardstick",
@@ -63839,7 +63312,7 @@ window.ECOSYSTEM_DATA = [
   "density": 86,
   "efficiency": 76,
   "tokensPerTool": 222,
-  "category": "Other",
+  "category": "Security & Identity",
   "repository": null,
   "sourceType": "registry",
   "registryName": "ai.councilof/gspc",
@@ -64130,7 +63603,7 @@ window.ECOSYSTEM_DATA = [
   "density": 91,
   "efficiency": 74,
   "tokensPerTool": 193,
-  "category": "Security & Identity",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "org.omenz.www/agent-tools",
@@ -64727,6 +64200,402 @@ window.ECOSYSTEM_DATA = [
   ]
  },
  {
+  "name": "io.github.dreamworkhq/dreamwork",
+  "title": "Dreamwork",
+  "slug": "io-github-dreamworkhq-dreamwork",
+  "grade": "A",
+  "tqi": 83,
+  "strictness": 87,
+  "density": 97,
+  "efficiency": 72,
+  "tokensPerTool": 255,
+  "category": "AI, LLMs & Agents",
+  "repository": "https://github.com/dreamworkhq/mcp",
+  "sourceType": "registry",
+  "registryName": "io.github.dreamworkhq/dreamwork",
+  "version": "1.11.0",
+  "fetchedAt": "2026-11-22T12:49:37.224Z",
+  "publishedAt": "2026-11-20T20:50:46.912946Z",
+  "toolsCount": 75,
+  "tools": [
+   {
+    "name": "list_matches",
+    "tokens": 900,
+    "score": 76
+   },
+   {
+    "name": "get_job",
+    "tokens": 245,
+    "score": 83
+   },
+   {
+    "name": "save_job",
+    "tokens": 116,
+    "score": 92
+   },
+   {
+    "name": "dismiss_match",
+    "tokens": 217,
+    "score": 83
+   },
+   {
+    "name": "restore_match",
+    "tokens": 143,
+    "score": 92
+   },
+   {
+    "name": "list_dismissed_matches",
+    "tokens": 169,
+    "score": 93
+   },
+   {
+    "name": "get_pipeline",
+    "tokens": 192,
+    "score": 79
+   },
+   {
+    "name": "move_pipeline",
+    "tokens": 193,
+    "score": 89
+   },
+   {
+    "name": "mark_applied_offsite",
+    "tokens": 519,
+    "score": 78
+   },
+   {
+    "name": "import_job",
+    "tokens": 123,
+    "score": 92
+   },
+   {
+    "name": "cancel_apply",
+    "tokens": 93,
+    "score": 84
+   },
+   {
+    "name": "get_application_questions",
+    "tokens": 128,
+    "score": 84
+   },
+   {
+    "name": "answer_application_questions",
+    "tokens": 430,
+    "score": 28
+   },
+   {
+    "name": "dismiss_application_questions",
+    "tokens": 110,
+    "score": 84
+   },
+   {
+    "name": "generate_pack",
+    "tokens": 186,
+    "score": 89
+   },
+   {
+    "name": "prepare_applications",
+    "tokens": 205,
+    "score": 89
+   },
+   {
+    "name": "get_pack_status",
+    "tokens": 174,
+    "score": 89
+   },
+   {
+    "name": "edit_cover_letter",
+    "tokens": 391,
+    "score": 78
+   },
+   {
+    "name": "edit_resume",
+    "tokens": 394,
+    "score": 76
+   },
+   {
+    "name": "format_resume",
+    "tokens": 342,
+    "score": 86
+   },
+   {
+    "name": "edit_answer",
+    "tokens": 141,
+    "score": 84
+   },
+   {
+    "name": "strengthen_application",
+    "tokens": 219,
+    "score": 86
+   },
+   {
+    "name": "restore_material",
+    "tokens": 270,
+    "score": 91
+   },
+   {
+    "name": "get_application_documents",
+    "tokens": 136,
+    "score": 84
+   },
+   {
+    "name": "replace_application_document",
+    "tokens": 347,
+    "score": 77
+   },
+   {
+    "name": "get_preferences",
+    "tokens": 119,
+    "score": 88
+   },
+   {
+    "name": "update_preferences",
+    "tokens": 1682,
+    "score": 65
+   },
+   {
+    "name": "get_application_readiness",
+    "tokens": 116,
+    "score": 88
+   },
+   {
+    "name": "save_application_answers",
+    "tokens": 1438,
+    "score": 73
+   },
+   {
+    "name": "parse_preferences_text",
+    "tokens": 118,
+    "score": 92
+   },
+   {
+    "name": "get_career_record",
+    "tokens": 156,
+    "score": 92
+   },
+   {
+    "name": "remember_hypothesis",
+    "tokens": 133,
+    "score": 92
+   },
+   {
+    "name": "confirm_hypothesis",
+    "tokens": 115,
+    "score": 84
+   },
+   {
+    "name": "forget_hypothesis",
+    "tokens": 92,
+    "score": 84
+   },
+   {
+    "name": "get_resume_download_link",
+    "tokens": 125,
+    "score": 88
+   },
+   {
+    "name": "get_resume_work_history",
+    "tokens": 133,
+    "score": 88
+   },
+   {
+    "name": "get_communication_preferences",
+    "tokens": 116,
+    "score": 88
+   },
+   {
+    "name": "update_communication_preferences",
+    "tokens": 193,
+    "score": 87
+   },
+   {
+    "name": "get_autopilot_settings",
+    "tokens": 97,
+    "score": 88
+   },
+   {
+    "name": "update_autopilot_settings",
+    "tokens": 290,
+    "score": 33
+   },
+   {
+    "name": "get_autopilot_status",
+    "tokens": 204,
+    "score": 79
+   },
+   {
+    "name": "set_autopilot",
+    "tokens": 259,
+    "score": 38
+   },
+   {
+    "name": "get_application_status",
+    "tokens": 249,
+    "score": 83
+   },
+   {
+    "name": "get_inbox",
+    "tokens": 293,
+    "score": 86
+   },
+   {
+    "name": "get_unread_reminders",
+    "tokens": 91,
+    "score": 88
+   },
+   {
+    "name": "mark_messages_read",
+    "tokens": 156,
+    "score": 92
+   },
+   {
+    "name": "get_usage",
+    "tokens": 71,
+    "score": 92
+   },
+   {
+    "name": "get_task",
+    "tokens": 99,
+    "score": 84
+   },
+   {
+    "name": "list_tasks",
+    "tokens": 132,
+    "score": 88
+   },
+   {
+    "name": "undo_last",
+    "tokens": 112,
+    "score": 92
+   },
+   {
+    "name": "get_updates_since",
+    "tokens": 295,
+    "score": 87
+   },
+   {
+    "name": "apply",
+    "tokens": 281,
+    "score": 45
+   },
+   {
+    "name": "reply_to_recruiter",
+    "tokens": 267,
+    "score": 41
+   },
+   {
+    "name": "start_checkout",
+    "tokens": 327,
+    "score": 43
+   },
+   {
+    "name": "get_platform_context",
+    "tokens": 71,
+    "score": 92
+   },
+   {
+    "name": "add_jobs",
+    "tokens": 271,
+    "score": 93
+   },
+   {
+    "name": "get_application_materials",
+    "tokens": 219,
+    "score": 87
+   },
+   {
+    "name": "update_application_materials",
+    "tokens": 332,
+    "score": 88
+   },
+   {
+    "name": "reopen_application_materials",
+    "tokens": 165,
+    "score": 93
+   },
+   {
+    "name": "generate_resume",
+    "tokens": 163,
+    "score": 93
+   },
+   {
+    "name": "get_generated_resumes",
+    "tokens": 142,
+    "score": 96
+   },
+   {
+    "name": "add_contact",
+    "tokens": 169,
+    "score": 93
+   },
+   {
+    "name": "list_contacts",
+    "tokens": 74,
+    "score": 96
+   },
+   {
+    "name": "generate_outreach",
+    "tokens": 196,
+    "score": 93
+   },
+   {
+    "name": "get_profile",
+    "tokens": 89,
+    "score": 88
+   },
+   {
+    "name": "update_profile",
+    "tokens": 367,
+    "score": 88
+   },
+   {
+    "name": "upload_resume",
+    "tokens": 243,
+    "score": 93
+   },
+   {
+    "name": "get_stats",
+    "tokens": 56,
+    "score": 92
+   },
+   {
+    "name": "list_interviews",
+    "tokens": 69,
+    "score": 92
+   },
+   {
+    "name": "browse_listings",
+    "tokens": 1193,
+    "score": 77
+   },
+   {
+    "name": "get_market_pulse",
+    "tokens": 173,
+    "score": 79
+   },
+   {
+    "name": "get_top_hiring_companies",
+    "tokens": 309,
+    "score": 88
+   },
+   {
+    "name": "get_upgrade_link",
+    "tokens": 206,
+    "score": 93
+   },
+   {
+    "name": "submit_feedback",
+    "tokens": 330,
+    "score": 88
+   },
+   {
+    "name": "get_listing",
+    "tokens": 142,
+    "score": 96
+   }
+  ]
+ },
+ {
   "name": "com.pdfcheckup/pdf-checkup",
   "title": "PDF Checkup",
   "slug": "com-pdfcheckup-pdf-checkup",
@@ -64762,7 +64631,7 @@ window.ECOSYSTEM_DATA = [
   "density": 89,
   "efficiency": 70,
   "tokensPerTool": 219,
-  "category": "Web Scraping & Automation",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/bunuzong-sudo/linkproof",
   "sourceType": "registry",
   "registryName": "dev.workers.bsptimber.linkproof/linkproof",
@@ -64894,7 +64763,7 @@ window.ECOSYSTEM_DATA = [
   "density": 85,
   "efficiency": 70,
   "tokensPerTool": 213,
-  "category": "Communication & Alerting",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/zColdWater/mcp-launch-audit",
   "sourceType": "registry",
   "registryName": "io.github.zColdWater/mcp-launch-audit",
@@ -64935,7 +64804,7 @@ window.ECOSYSTEM_DATA = [
   "density": 85,
   "efficiency": 70,
   "tokensPerTool": 178,
-  "category": "Payments, CRM & Finance",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "work.agentexchange/crypto-address-risk",
@@ -64961,7 +64830,7 @@ window.ECOSYSTEM_DATA = [
   "density": 85,
   "efficiency": 70,
   "tokensPerTool": 255,
-  "category": "Other",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "work.agentexchange/smart-money-wallet-activity",
@@ -64987,7 +64856,7 @@ window.ECOSYSTEM_DATA = [
   "density": 93,
   "efficiency": 68,
   "tokensPerTool": 282,
-  "category": "Developer Tools & VCS",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/TGS-checker/tracecheck-mcp",
   "sourceType": "registry",
   "registryName": "io.github.TGS-checker/tracecheck",
@@ -65018,7 +64887,7 @@ window.ECOSYSTEM_DATA = [
   "density": 89,
   "efficiency": 68,
   "tokensPerTool": 774,
-  "category": "Other",
+  "category": "Travel, Maps & Navigation",
   "repository": null,
   "sourceType": "registry",
   "registryName": "net.placeprofile/placeprofile",
@@ -65059,7 +64928,7 @@ window.ECOSYSTEM_DATA = [
   "density": 87,
   "efficiency": 67,
   "tokensPerTool": 241,
-  "category": "Developer Tools & VCS",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "dev.workers.x402-bazaar-rank-worker.x402-bazaar-rank/x402-bazaar-rank",
@@ -65300,7 +65169,7 @@ window.ECOSYSTEM_DATA = [
   "density": 96,
   "efficiency": 66,
   "tokensPerTool": 271,
-  "category": "Developer Tools & VCS",
+  "category": "Developer Tools & DevOps",
   "repository": null,
   "sourceType": "registry",
   "registryName": "io.github.avansledright/gridiron-data",
@@ -65446,7 +65315,7 @@ window.ECOSYSTEM_DATA = [
   "density": 88,
   "efficiency": 66,
   "tokensPerTool": 275,
-  "category": "Other",
+  "category": "E-Commerce & Retail",
   "repository": null,
   "sourceType": "registry",
   "registryName": "me.chippynear/fish-and-chips",
@@ -65497,7 +65366,7 @@ window.ECOSYSTEM_DATA = [
   "density": 89,
   "efficiency": 66,
   "tokensPerTool": 229,
-  "category": "Other",
+  "category": "Travel, Maps & Navigation",
   "repository": null,
   "sourceType": "registry",
   "registryName": "uk.co.transitradar/transitradar",
@@ -65639,7 +65508,7 @@ window.ECOSYSTEM_DATA = [
   "density": 90,
   "efficiency": 64,
   "tokensPerTool": 321,
-  "category": "Communication & Alerting",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "at.aamio/aamio",
@@ -65715,7 +65584,7 @@ window.ECOSYSTEM_DATA = [
   "density": 92,
   "efficiency": 64,
   "tokensPerTool": 385,
-  "category": "Developer Tools & VCS",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/eamwhite1/xrpl-referee",
   "sourceType": "registry",
   "registryName": "io.github.eamwhite1/xrpl-referee",
@@ -65991,7 +65860,7 @@ window.ECOSYSTEM_DATA = [
   "density": 85,
   "efficiency": 64,
   "tokensPerTool": 276,
-  "category": "Productivity & Notes",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/Nutshell2000/agent-data-tools",
   "sourceType": "registry",
   "registryName": "io.github.Nutshell2000/agent-data-tools-web",
@@ -66318,7 +66187,7 @@ window.ECOSYSTEM_DATA = [
   "density": 85,
   "efficiency": 63,
   "tokensPerTool": 278,
-  "category": "Other",
+  "category": "Jobs, Career & Learning",
   "repository": "https://github.com/yueliao11/mcp-servers",
   "sourceType": "registry",
   "registryName": "org.bctrainingnavigator/bc-training",
@@ -67130,7 +66999,7 @@ window.ECOSYSTEM_DATA = [
   "density": 88,
   "efficiency": 62,
   "tokensPerTool": 675,
-  "category": "Other",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "net.placeprofile/evidence",
@@ -67181,7 +67050,7 @@ window.ECOSYSTEM_DATA = [
   "density": 88,
   "efficiency": 62,
   "tokensPerTool": 675,
-  "category": "Other",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "net.placeprofile/venue-atmosphere-verification-bitcoin",
@@ -67232,7 +67101,7 @@ window.ECOSYSTEM_DATA = [
   "density": 90,
   "efficiency": 61,
   "tokensPerTool": 297,
-  "category": "Developer Tools & VCS",
+  "category": "Other",
   "repository": "https://github.com/reevol-ai/mcp",
   "sourceType": "registry",
   "registryName": "com.reevol.source/supplier-search",
@@ -67425,7 +67294,7 @@ window.ECOSYSTEM_DATA = [
   "density": 96,
   "efficiency": 59,
   "tokensPerTool": 706,
-  "category": "Other",
+  "category": "E-Commerce & Retail",
   "repository": null,
   "sourceType": "registry",
   "registryName": "app.web.dealer-direct-mcp/dealer-direct-inventory",
@@ -68040,7 +67909,7 @@ window.ECOSYSTEM_DATA = [
   "density": 92,
   "efficiency": 56,
   "tokensPerTool": 542,
-  "category": "Security & Identity",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/Mvp2o-ai/cuttingfloor",
   "sourceType": "registry",
   "registryName": "io.github.Mvp2o-ai/cuttingfloor",
@@ -68436,7 +68305,7 @@ window.ECOSYSTEM_DATA = [
   "density": 90,
   "efficiency": 56,
   "tokensPerTool": 396,
-  "category": "Developer Tools & VCS",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/spurvik/spurvik",
   "sourceType": "registry",
   "registryName": "io.github.spurvik/spurvik-mcp-server",
@@ -68507,7 +68376,7 @@ window.ECOSYSTEM_DATA = [
   "density": 88,
   "efficiency": 54,
   "tokensPerTool": 396,
-  "category": "Cloud & Hosting Platforms",
+  "category": "Developer Tools & DevOps",
   "repository": null,
   "sourceType": "registry",
   "registryName": "app.lonepair/lonepair",
@@ -68649,7 +68518,7 @@ window.ECOSYSTEM_DATA = [
   "density": 85,
   "efficiency": 54,
   "tokensPerTool": 413,
-  "category": "Other",
+  "category": "Travel, Maps & Navigation",
   "repository": null,
   "sourceType": "registry",
   "registryName": "online.gothere/japan-travel",
@@ -68695,7 +68564,7 @@ window.ECOSYSTEM_DATA = [
   "density": 90,
   "efficiency": 53,
   "tokensPerTool": 542,
-  "category": "Developer Tools & VCS",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "ai.bittuitive.api/bittuitive",
@@ -68856,7 +68725,7 @@ window.ECOSYSTEM_DATA = [
   "density": 88,
   "efficiency": 52,
   "tokensPerTool": 471,
-  "category": "Developer Tools & VCS",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/foxdavidson/property-mortgage-mcp",
   "sourceType": "registry",
   "registryName": "io.github.foxdavidson/property-mortgage-mcp",
@@ -68952,7 +68821,7 @@ window.ECOSYSTEM_DATA = [
   "density": 87,
   "efficiency": 52,
   "tokensPerTool": 517,
-  "category": "Other",
+  "category": "E-Commerce & Retail",
   "repository": null,
   "sourceType": "registry",
   "registryName": "pl.horseback/horseback",
@@ -69054,7 +68923,7 @@ window.ECOSYSTEM_DATA = [
   "density": 90,
   "efficiency": 49,
   "tokensPerTool": 844,
-  "category": "Other",
+  "category": "E-Commerce & Retail",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.dipperfield/dipperfield",
@@ -69130,7 +68999,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 48,
   "tokensPerTool": 715,
-  "category": "Payments, CRM & Finance",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/speeedy10/agent-authority-check",
   "sourceType": "registry",
   "registryName": "pro.foxify/agent-commerce",
@@ -69171,7 +69040,7 @@ window.ECOSYSTEM_DATA = [
   "density": 93,
   "efficiency": 43,
   "tokensPerTool": 556,
-  "category": "Developer Tools & VCS",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/Insightwithhari/rbai-scholar",
   "sourceType": "registry",
   "registryName": "io.github.Insightwithhari/rbai-scholar",
@@ -69248,7 +69117,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 30,
   "tokensPerTool": 946,
-  "category": "Developer Tools & VCS",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/brunopompeo1/brazil-ai-fiscal-apis-x402",
   "sourceType": "registry",
   "registryName": "io.github.brunopompeo1/br-danfse-rtc-x402",
@@ -69330,7 +69199,7 @@ window.ECOSYSTEM_DATA = [
   "density": 95,
   "efficiency": 80,
   "tokensPerTool": 134,
-  "category": "Other",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "tools.valksor/margrave",
@@ -69487,7 +69356,7 @@ window.ECOSYSTEM_DATA = [
   "density": 96,
   "efficiency": 68,
   "tokensPerTool": 270,
-  "category": "Observability & Analytics",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/yschimke/compose-preview-server",
   "sourceType": "registry",
   "registryName": "io.github.yschimke/compose-preview",
@@ -69598,7 +69467,7 @@ window.ECOSYSTEM_DATA = [
   "density": 89,
   "efficiency": 66,
   "tokensPerTool": 334,
-  "category": "Other",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "express.asi/asi-express",
@@ -69674,7 +69543,7 @@ window.ECOSYSTEM_DATA = [
   "density": 87,
   "efficiency": 66,
   "tokensPerTool": 266,
-  "category": "Productivity & Notes",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "io.agentweather/agent-weather",
@@ -70015,7 +69884,7 @@ window.ECOSYSTEM_DATA = [
   "density": 89,
   "efficiency": 65,
   "tokensPerTool": 290,
-  "category": "Developer Tools & VCS",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/quantumdatatechnologies/signal-lab-catalog",
   "sourceType": "registry",
   "registryName": "io.github.QDThead/signal-lab",
@@ -70212,7 +70081,7 @@ window.ECOSYSTEM_DATA = [
   "density": 89,
   "efficiency": 64,
   "tokensPerTool": 332,
-  "category": "Other",
+  "category": "Design, UI & 3D Media",
   "repository": "https://github.com/neild1971-maker/gc-airport-transfers-mcp",
   "sourceType": "registry",
   "registryName": "com.gc-airporttransfers/booking",
@@ -70253,7 +70122,7 @@ window.ECOSYSTEM_DATA = [
   "density": 87,
   "efficiency": 64,
   "tokensPerTool": 294,
-  "category": "Developer Tools & VCS",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/2016judea/ai-buildout-permits",
   "sourceType": "registry",
   "registryName": "io.github.2016judea/ai-buildout-permits",
@@ -70309,7 +70178,7 @@ window.ECOSYSTEM_DATA = [
   "density": 88,
   "efficiency": 62,
   "tokensPerTool": 324,
-  "category": "Developer Tools & VCS",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.criptonlabs/agent-apis",
@@ -70505,7 +70374,7 @@ window.ECOSYSTEM_DATA = [
   "density": 93,
   "efficiency": 62,
   "tokensPerTool": 290,
-  "category": "Other",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "dev.blvkware/hallux",
@@ -70556,7 +70425,7 @@ window.ECOSYSTEM_DATA = [
   "density": 91,
   "efficiency": 62,
   "tokensPerTool": 360,
-  "category": "Productivity & Notes",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "fun.ubi/mcp",
@@ -70702,7 +70571,7 @@ window.ECOSYSTEM_DATA = [
   "density": 89,
   "efficiency": 61,
   "tokensPerTool": 428,
-  "category": "Other",
+  "category": "E-Commerce & Retail",
   "repository": "https://github.com/ComOS-Federation/comos-mcp",
   "sourceType": "registry",
   "registryName": "com.comos-federation/gateway",
@@ -70808,7 +70677,7 @@ window.ECOSYSTEM_DATA = [
   "density": 93,
   "efficiency": 60,
   "tokensPerTool": 392,
-  "category": "Other",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/radres/call-me",
   "sourceType": "registry",
   "registryName": "com.callmemcp/call-me",
@@ -71050,7 +70919,7 @@ window.ECOSYSTEM_DATA = [
   "density": 85,
   "efficiency": 58,
   "tokensPerTool": 344,
-  "category": "Social, Media & Knowledge",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.bilo2026/hub",
@@ -71172,7 +71041,7 @@ window.ECOSYSTEM_DATA = [
   "density": 85,
   "efficiency": 58,
   "tokensPerTool": 408,
-  "category": "Developer Tools & VCS",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/ShieldZCash/shieldz-swap-mcp",
   "sourceType": "registry",
   "registryName": "io.github.ShieldZCash/swap-mcp",
@@ -71254,7 +71123,7 @@ window.ECOSYSTEM_DATA = [
   "density": 85,
   "efficiency": 55,
   "tokensPerTool": 334,
-  "category": "Other",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/BotShelfVampire/botshelf-mcp",
   "sourceType": "registry",
   "registryName": "com.botshelfvampire/botshelf",
@@ -71295,7 +71164,7 @@ window.ECOSYSTEM_DATA = [
   "density": 92,
   "efficiency": 55,
   "tokensPerTool": 441,
-  "category": "Other",
+  "category": "Design, UI & 3D Media",
   "repository": "https://github.com/slepp/azimuth-arena",
   "sourceType": "registry",
   "registryName": "com.clunkyard/clunkyard",
@@ -71371,7 +71240,7 @@ window.ECOSYSTEM_DATA = [
   "density": 89,
   "efficiency": 54,
   "tokensPerTool": 700,
-  "category": "Developer Tools & VCS",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/1145-am/syracuse-mcp-server",
   "sourceType": "registry",
   "registryName": "io.github.1145-am/syracuse-mcp-server",
@@ -71412,7 +71281,7 @@ window.ECOSYSTEM_DATA = [
   "density": 85,
   "efficiency": 53,
   "tokensPerTool": 318,
-  "category": "Social, Media & Knowledge",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/agentsearchhq-coder/agentsearch-mcp",
   "sourceType": "registry",
   "registryName": "com.agentsearchhq/search",
@@ -71463,7 +71332,7 @@ window.ECOSYSTEM_DATA = [
   "density": 90,
   "efficiency": 53,
   "tokensPerTool": 953,
-  "category": "Other",
+  "category": "Travel, Maps & Navigation",
   "repository": "https://github.com/GDACS-droid/miami-black-suv-mcp",
   "sourceType": "registry",
   "registryName": "com.blacksuvmiami/miami-black-suv",
@@ -71499,7 +71368,7 @@ window.ECOSYSTEM_DATA = [
   "density": 86,
   "efficiency": 53,
   "tokensPerTool": 423,
-  "category": "Payments, CRM & Finance",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.cyclixagents/japan-tax-rules",
@@ -71600,7 +71469,7 @@ window.ECOSYSTEM_DATA = [
   "density": 85,
   "efficiency": 53,
   "tokensPerTool": 318,
-  "category": "Vector DBs & AI Search",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/agentsearchhq-coder/agentsearch-mcp",
   "sourceType": "registry",
   "registryName": "io.github.agentsearchhq-coder/agentsearch-mcp",
@@ -71743,32 +71612,6 @@ window.ECOSYSTEM_DATA = [
   ]
  },
  {
-  "name": "ai.achromat/mcp-server",
-  "title": "Achromat Machine Operational Memory",
-  "slug": "ai-achromat-mcp-server",
-  "grade": "A",
-  "tqi": 82,
-  "strictness": 100,
-  "density": 85,
-  "efficiency": 50,
-  "tokensPerTool": 536,
-  "category": "Other",
-  "repository": "https://github.com/achromat-ai/achromat-mcp-server",
-  "sourceType": "registry",
-  "registryName": "ai.achromat/mcp-server",
-  "version": "0.1.7",
-  "fetchedAt": "2026-11-22T12:49:37.224Z",
-  "publishedAt": "2026-11-21T11:02:29.109259Z",
-  "toolsCount": 1,
-  "tools": [
-   {
-    "name": "achromat_recall",
-    "tokens": 536,
-    "score": 82
-   }
-  ]
- },
- {
   "name": "io.github.apolito53/launchcheck-x402",
   "title": "LaunchCheck x402",
   "slug": "io-github-apolito53-launchcheck-x402",
@@ -71778,7 +71621,7 @@ window.ECOSYSTEM_DATA = [
   "density": 85,
   "efficiency": 50,
   "tokensPerTool": 524,
-  "category": "Developer Tools & VCS",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/apolito53/launchcheck-x402",
   "sourceType": "registry",
   "registryName": "io.github.apolito53/launchcheck-x402",
@@ -71902,7 +71745,7 @@ window.ECOSYSTEM_DATA = [
   "density": 92,
   "efficiency": 39,
   "tokensPerTool": 658,
-  "category": "Other",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.betterllama/chile-data",
@@ -71998,7 +71841,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 93,
   "tokensPerTool": 86,
-  "category": "Developer Tools & VCS",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/PlaylistExchange/playlistexchange",
   "sourceType": "registry",
   "registryName": "io.github.PlaylistExchange/playlistexchange",
@@ -72049,7 +71892,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 87,
   "tokensPerTool": 111,
-  "category": "Developer Tools & VCS",
+  "category": "Developer Tools & DevOps",
   "repository": null,
   "sourceType": "registry",
   "registryName": "io.github.allooloo/getissuernews",
@@ -72110,7 +71953,7 @@ window.ECOSYSTEM_DATA = [
   "density": 91,
   "efficiency": 72,
   "tokensPerTool": 262,
-  "category": "Other",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "net.diofis/babelii",
@@ -72181,7 +72024,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 70,
   "tokensPerTool": 197,
-  "category": "Other",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.scriptmasterlabs/swapgate",
@@ -72207,7 +72050,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 70,
   "tokensPerTool": 190,
-  "category": "Other",
+  "category": "Jobs, Career & Learning",
   "repository": null,
   "sourceType": "registry",
   "registryName": "io.sslip.149-56-208-69/pipeline-dag-map",
@@ -72876,7 +72719,7 @@ window.ECOSYSTEM_DATA = [
   "density": 95,
   "efficiency": 67,
   "tokensPerTool": 260,
-  "category": "Productivity & Notes",
+  "category": "Web Scraping & Automation",
   "repository": null,
   "sourceType": "registry",
   "registryName": "fm.fyug/mcp",
@@ -72967,7 +72810,7 @@ window.ECOSYSTEM_DATA = [
   "density": 90,
   "efficiency": 66,
   "tokensPerTool": 339,
-  "category": "Vector DBs & AI Search",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/zaharajabeen13-create/ai-rete-rag-mcp",
   "sourceType": "registry",
   "registryName": "com.ai-rete-rag/ai-rete-rag-mcp",
@@ -73038,7 +72881,7 @@ window.ECOSYSTEM_DATA = [
   "density": 88,
   "efficiency": 61,
   "tokensPerTool": 347,
-  "category": "Other",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "ai.opensouk/agent",
@@ -73189,7 +73032,7 @@ window.ECOSYSTEM_DATA = [
   "density": 85,
   "efficiency": 60,
   "tokensPerTool": 494,
-  "category": "Developer Tools & VCS",
+  "category": "Other",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.halpii/latam-tax-api",
@@ -73240,7 +73083,7 @@ window.ECOSYSTEM_DATA = [
   "density": 85,
   "efficiency": 59,
   "tokensPerTool": 295,
-  "category": "Communication & Alerting",
+  "category": "E-Commerce & Retail",
   "repository": null,
   "sourceType": "registry",
   "registryName": "fr.mitoyens/pesticides",
@@ -73306,7 +73149,7 @@ window.ECOSYSTEM_DATA = [
   "density": 87,
   "efficiency": 58,
   "tokensPerTool": 347,
-  "category": "Other",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/alalanet/alalanet-agent",
   "sourceType": "registry",
   "registryName": "com.alalanet/guard",
@@ -73362,7 +73205,7 @@ window.ECOSYSTEM_DATA = [
   "density": 91,
   "efficiency": 58,
   "tokensPerTool": 376,
-  "category": "Other",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "net.homonia/homonia",
@@ -73588,7 +73431,7 @@ window.ECOSYSTEM_DATA = [
   "density": 87,
   "efficiency": 57,
   "tokensPerTool": 398,
-  "category": "Social, Media & Knowledge",
+  "category": "Design, UI & 3D Media",
   "repository": null,
   "sourceType": "registry",
   "registryName": "org.r3js/r3",
@@ -74009,7 +73852,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 57,
   "tokensPerTool": 327,
-  "category": "Communication & Alerting",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "site.chatgpt.hklilinjie.brief-and-proof-lab/brief-and-proof-ppc-reporting",
@@ -74045,7 +73888,7 @@ window.ECOSYSTEM_DATA = [
   "density": 86,
   "efficiency": 57,
   "tokensPerTool": 381,
-  "category": "Other",
+  "category": "E-Commerce & Retail",
   "repository": null,
   "sourceType": "registry",
   "registryName": "uk.co.getmovely/getmovely",
@@ -74186,7 +74029,7 @@ window.ECOSYSTEM_DATA = [
   "density": 90,
   "efficiency": 55,
   "tokensPerTool": 399,
-  "category": "Other",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "io.agentage/find-mcp",
@@ -74209,1107 +74052,6 @@ window.ECOSYSTEM_DATA = [
     "name": "mcp_categories",
     "tokens": 113,
     "score": 88
-   }
-  ]
- },
- {
-  "name": "io.github.hermoso-ai/hermoso",
-  "title": "Hermoso",
-  "slug": "io-github-hermoso-ai-hermoso",
-  "grade": "A",
-  "tqi": 81,
-  "strictness": 93,
-  "density": 89,
-  "efficiency": 55,
-  "tokensPerTool": 615,
-  "category": "Developer Tools & VCS",
-  "repository": "https://github.com/hermoso-ai/hermoso",
-  "sourceType": "registry",
-  "registryName": "io.github.hermoso-ai/hermoso",
-  "version": "0.1.661",
-  "fetchedAt": "2026-11-22T12:49:37.224Z",
-  "publishedAt": "2026-11-21T18:30:34.265162Z",
-  "toolsCount": 216,
-  "tools": [
-   {
-    "name": "enable_tools",
-    "tokens": 513,
-    "score": 78
-   },
-   {
-    "name": "get_instructions",
-    "tokens": 138,
-    "score": 92
-   },
-   {
-    "name": "find_tools",
-    "tokens": 434,
-    "score": 78
-   },
-   {
-    "name": "call_tool",
-    "tokens": 363,
-    "score": 78
-   },
-   {
-    "name": "post_to_bluesky",
-    "tokens": 1148,
-    "score": 73
-   },
-   {
-    "name": "post_to_telegram",
-    "tokens": 1282,
-    "score": 77
-   },
-   {
-    "name": "list_telegram_chats",
-    "tokens": 299,
-    "score": 83
-   },
-   {
-    "name": "post_to_wordpress",
-    "tokens": 858,
-    "score": 77
-   },
-   {
-    "name": "post_to_shopify_blog",
-    "tokens": 913,
-    "score": 77
-   },
-   {
-    "name": "post_to_webflow",
-    "tokens": 1009,
-    "score": 76
-   },
-   {
-    "name": "post_to_wix",
-    "tokens": 854,
-    "score": 77
-   },
-   {
-    "name": "post_to_discord",
-    "tokens": 1126,
-    "score": 72
-   },
-   {
-    "name": "post_to_slack",
-    "tokens": 755,
-    "score": 72
-   },
-   {
-    "name": "hermoso_capabilities",
-    "tokens": 162,
-    "score": 79
-   },
-   {
-    "name": "hermoso_credits",
-    "tokens": 295,
-    "score": 79
-   },
-   {
-    "name": "buy_credits",
-    "tokens": 496,
-    "score": 33
-   },
-   {
-    "name": "report_bug",
-    "tokens": 260,
-    "score": 87
-   },
-   {
-    "name": "request_feature",
-    "tokens": 202,
-    "score": 89
-   },
-   {
-    "name": "contact_support",
-    "tokens": 171,
-    "score": 89
-   },
-   {
-    "name": "billing_status",
-    "tokens": 243,
-    "score": 79
-   },
-   {
-    "name": "upgrade_plan",
-    "tokens": 305,
-    "score": 82
-   },
-   {
-    "name": "set_auto_reload",
-    "tokens": 270,
-    "score": 87
-   },
-   {
-    "name": "list_brands",
-    "tokens": 145,
-    "score": 83
-   },
-   {
-    "name": "use_brand",
-    "tokens": 227,
-    "score": 83
-   },
-   {
-    "name": "create_brand",
-    "tokens": 252,
-    "score": 83
-   },
-   {
-    "name": "delete_brand",
-    "tokens": 421,
-    "score": 78
-   },
-   {
-    "name": "list_meta_pages",
-    "tokens": 105,
-    "score": 88
-   },
-   {
-    "name": "upload_file",
-    "tokens": 798,
-    "score": 73
-   },
-   {
-    "name": "list_whatsapp_accounts",
-    "tokens": 373,
-    "score": 74
-   },
-   {
-    "name": "post_to_meta",
-    "tokens": 5732,
-    "score": 77
-   },
-   {
-    "name": "schedule_post",
-    "tokens": 9392,
-    "score": 77
-   },
-   {
-    "name": "list_scheduled",
-    "tokens": 425,
-    "score": 78
-   },
-   {
-    "name": "reschedule_post",
-    "tokens": 5881,
-    "score": 77
-   },
-   {
-    "name": "cancel_scheduled",
-    "tokens": 174,
-    "score": 89
-   },
-   {
-    "name": "retry_scheduled",
-    "tokens": 1019,
-    "score": 73
-   },
-   {
-    "name": "instagram_posting_hold",
-    "tokens": 325,
-    "score": 82
-   },
-   {
-    "name": "duplicate_scheduled",
-    "tokens": 978,
-    "score": 77
-   },
-   {
-    "name": "get_post_refill",
-    "tokens": 209,
-    "score": 79
-   },
-   {
-    "name": "set_post_refill",
-    "tokens": 1637,
-    "score": 77
-   },
-   {
-    "name": "run_post_refill",
-    "tokens": 935,
-    "score": 73
-   },
-   {
-    "name": "post_to_linkedin",
-    "tokens": 1438,
-    "score": 77
-   },
-   {
-    "name": "post_to_x",
-    "tokens": 2523,
-    "score": 77
-   },
-   {
-    "name": "post_x_article",
-    "tokens": 941,
-    "score": 77
-   },
-   {
-    "name": "list_pinterest_boards",
-    "tokens": 191,
-    "score": 93
-   },
-   {
-    "name": "post_to_pinterest",
-    "tokens": 1687,
-    "score": 73
-   },
-   {
-    "name": "list_business_locations",
-    "tokens": 223,
-    "score": 79
-   },
-   {
-    "name": "post_to_google_business",
-    "tokens": 789,
-    "score": 77
-   },
-   {
-    "name": "post_to_youtube",
-    "tokens": 1899,
-    "score": 77
-   },
-   {
-    "name": "post_to_tiktok",
-    "tokens": 1899,
-    "score": 77
-   },
-   {
-    "name": "tiktok_post_status",
-    "tokens": 239,
-    "score": 83
-   },
-   {
-    "name": "publish_to_shopify_product",
-    "tokens": 441,
-    "score": 82
-   },
-   {
-    "name": "send_sms",
-    "tokens": 477,
-    "score": 75
-   },
-   {
-    "name": "list_linkedin_pages",
-    "tokens": 154,
-    "score": 83
-   },
-   {
-    "name": "post_to_linkedin_page",
-    "tokens": 2462,
-    "score": 77
-   },
-   {
-    "name": "list_linkedin_lead_forms",
-    "tokens": 196,
-    "score": 89
-   },
-   {
-    "name": "list_linkedin_leads",
-    "tokens": 428,
-    "score": 82
-   },
-   {
-    "name": "get_linkedin_lead",
-    "tokens": 155,
-    "score": 92
-   },
-   {
-    "name": "subscribe_linkedin_leads",
-    "tokens": 333,
-    "score": 82
-   },
-   {
-    "name": "list_linkedin_lead_events",
-    "tokens": 150,
-    "score": 92
-   },
-   {
-    "name": "list_linkedin_lead_subscriptions",
-    "tokens": 171,
-    "score": 89
-   },
-   {
-    "name": "delete_linkedin_lead_subscription",
-    "tokens": 184,
-    "score": 89
-   },
-   {
-    "name": "save_to_drive",
-    "tokens": 271,
-    "score": 83
-   },
-   {
-    "name": "import_from_cloud",
-    "tokens": 467,
-    "score": 57
-   },
-   {
-    "name": "list_drive_files",
-    "tokens": 360,
-    "score": 78
-   },
-   {
-    "name": "get_drive_file",
-    "tokens": 106,
-    "score": 92
-   },
-   {
-    "name": "update_drive_file",
-    "tokens": 216,
-    "score": 89
-   },
-   {
-    "name": "delete_drive_file",
-    "tokens": 151,
-    "score": 92
-   },
-   {
-    "name": "create_drive_folder",
-    "tokens": 184,
-    "score": 83
-   },
-   {
-    "name": "create_sheet",
-    "tokens": 178,
-    "score": 89
-   },
-   {
-    "name": "append_to_sheet",
-    "tokens": 186,
-    "score": 89
-   },
-   {
-    "name": "read_sheet",
-    "tokens": 226,
-    "score": 83
-   },
-   {
-    "name": "export_swipefile_deck",
-    "tokens": 302,
-    "score": 78
-   },
-   {
-    "name": "list_notion_pages",
-    "tokens": 185,
-    "score": 93
-   },
-   {
-    "name": "save_to_notion",
-    "tokens": 348,
-    "score": 78
-   },
-   {
-    "name": "append_to_notion_page",
-    "tokens": 180,
-    "score": 89
-   },
-   {
-    "name": "read_notion_page",
-    "tokens": 97,
-    "score": 92
-   },
-   {
-    "name": "export_schedule_to_notion",
-    "tokens": 257,
-    "score": 89
-   },
-   {
-    "name": "query_notion_database",
-    "tokens": 467,
-    "score": 82
-   },
-   {
-    "name": "update_notion_row",
-    "tokens": 334,
-    "score": 78
-   },
-   {
-    "name": "create_doc",
-    "tokens": 131,
-    "score": 92
-   },
-   {
-    "name": "append_to_doc",
-    "tokens": 328,
-    "score": 78
-   },
-   {
-    "name": "read_doc",
-    "tokens": 282,
-    "score": 83
-   },
-   {
-    "name": "list_sheet_tabs",
-    "tokens": 178,
-    "score": 89
-   },
-   {
-    "name": "update_sheet",
-    "tokens": 550,
-    "score": 82
-   },
-   {
-    "name": "clear_sheet_range",
-    "tokens": 331,
-    "score": 78
-   },
-   {
-    "name": "manage_sheet_tabs",
-    "tokens": 407,
-    "score": 82
-   },
-   {
-    "name": "format_sheet",
-    "tokens": 315,
-    "score": 78
-   },
-   {
-    "name": "update_doc",
-    "tokens": 838,
-    "score": 48
-   },
-   {
-    "name": "save_to_onedrive",
-    "tokens": 214,
-    "score": 89
-   },
-   {
-    "name": "list_onedrive_files",
-    "tokens": 191,
-    "score": 89
-   },
-   {
-    "name": "get_onedrive_file",
-    "tokens": 110,
-    "score": 92
-   },
-   {
-    "name": "update_onedrive_file",
-    "tokens": 147,
-    "score": 92
-   },
-   {
-    "name": "delete_onedrive_file",
-    "tokens": 119,
-    "score": 92
-   },
-   {
-    "name": "share_onedrive_file",
-    "tokens": 407,
-    "score": 82
-   },
-   {
-    "name": "onedrive_file_permissions",
-    "tokens": 261,
-    "score": 87
-   },
-   {
-    "name": "convert_onedrive_file",
-    "tokens": 370,
-    "score": 82
-   },
-   {
-    "name": "create_onedrive_folder",
-    "tokens": 158,
-    "score": 92
-   },
-   {
-    "name": "plan_ad",
-    "tokens": 1915,
-    "score": 77
-   },
-   {
-    "name": "clone_video",
-    "tokens": 683,
-    "score": 73
-   },
-   {
-    "name": "click_to_ad",
-    "tokens": 516,
-    "score": 82
-   },
-   {
-    "name": "generate_image",
-    "tokens": 2068,
-    "score": 77
-   },
-   {
-    "name": "edit_image",
-    "tokens": 930,
-    "score": 76
-   },
-   {
-    "name": "headline_variants",
-    "tokens": 568,
-    "score": 57
-   },
-   {
-    "name": "resize_ad",
-    "tokens": 465,
-    "score": 78
-   },
-   {
-    "name": "localize_ad",
-    "tokens": 474,
-    "score": 53
-   },
-   {
-    "name": "make_thumbnail",
-    "tokens": 2081,
-    "score": 52
-   },
-   {
-    "name": "generate_voice",
-    "tokens": 701,
-    "score": 73
-   },
-   {
-    "name": "generate_music",
-    "tokens": 247,
-    "score": 89
-   },
-   {
-    "name": "generate_text",
-    "tokens": 411,
-    "score": 78
-   },
-   {
-    "name": "render_ad",
-    "tokens": 2983,
-    "score": 77
-   },
-   {
-    "name": "make_template_ad",
-    "tokens": 975,
-    "score": 73
-   },
-   {
-    "name": "make_motion_film",
-    "tokens": 1106,
-    "score": 77
-   },
-   {
-    "name": "finish_video",
-    "tokens": 466,
-    "score": 78
-   },
-   {
-    "name": "post_edit",
-    "tokens": 3108,
-    "score": 73
-   },
-   {
-    "name": "fix_beat",
-    "tokens": 830,
-    "score": 73
-   },
-   {
-    "name": "clip_video",
-    "tokens": 555,
-    "score": 78
-   },
-   {
-    "name": "add_subtitles",
-    "tokens": 874,
-    "score": 77
-   },
-   {
-    "name": "make_explainer",
-    "tokens": 2462,
-    "score": 77
-   },
-   {
-    "name": "resume_job",
-    "tokens": 359,
-    "score": 78
-   },
-   {
-    "name": "make_series",
-    "tokens": 1175,
-    "score": 76
-   },
-   {
-    "name": "make_effect",
-    "tokens": 528,
-    "score": 78
-   },
-   {
-    "name": "product_sizzle",
-    "tokens": 882,
-    "score": 77
-   },
-   {
-    "name": "generate_video",
-    "tokens": 2987,
-    "score": 77
-   },
-   {
-    "name": "generate_avatar",
-    "tokens": 635,
-    "score": 77
-   },
-   {
-    "name": "stitch_video",
-    "tokens": 462,
-    "score": 78
-   },
-   {
-    "name": "get_job",
-    "tokens": 185,
-    "score": 64
-   },
-   {
-    "name": "plan_week",
-    "tokens": 333,
-    "score": 78
-   },
-   {
-    "name": "list_skills",
-    "tokens": 111,
-    "score": 88
-   },
-   {
-    "name": "get_skill",
-    "tokens": 127,
-    "score": 92
-   },
-   {
-    "name": "save_skill",
-    "tokens": 210,
-    "score": 89
-   },
-   {
-    "name": "delete_skill",
-    "tokens": 121,
-    "score": 92
-   },
-   {
-    "name": "list_memory",
-    "tokens": 139,
-    "score": 92
-   },
-   {
-    "name": "remember",
-    "tokens": 244,
-    "score": 83
-   },
-   {
-    "name": "forget",
-    "tokens": 126,
-    "score": 92
-   },
-   {
-    "name": "tidy_memory",
-    "tokens": 221,
-    "score": 83
-   },
-   {
-    "name": "list_swipefile",
-    "tokens": 189,
-    "score": 83
-   },
-   {
-    "name": "save_to_swipefile",
-    "tokens": 493,
-    "score": 78
-   },
-   {
-    "name": "update_saved_creator",
-    "tokens": 241,
-    "score": 93
-   },
-   {
-    "name": "list_playbooks",
-    "tokens": 178,
-    "score": 89
-   },
-   {
-    "name": "save_playbook",
-    "tokens": 458,
-    "score": 78
-   },
-   {
-    "name": "delete_playbook",
-    "tokens": 125,
-    "score": 92
-   },
-   {
-    "name": "list_creators",
-    "tokens": 384,
-    "score": 82
-   },
-   {
-    "name": "save_creator",
-    "tokens": 745,
-    "score": 77
-   },
-   {
-    "name": "delete_creator",
-    "tokens": 164,
-    "score": 89
-   },
-   {
-    "name": "list_elements",
-    "tokens": 103,
-    "score": 96
-   },
-   {
-    "name": "update_brand",
-    "tokens": 872,
-    "score": 77
-   },
-   {
-    "name": "store_get",
-    "tokens": 209,
-    "score": 83
-   },
-   {
-    "name": "get_settings",
-    "tokens": 163,
-    "score": 79
-   },
-   {
-    "name": "update_settings",
-    "tokens": 634,
-    "score": 77
-   },
-   {
-    "name": "list_connectors",
-    "tokens": 210,
-    "score": 79
-   },
-   {
-    "name": "list_connector_accounts",
-    "tokens": 345,
-    "score": 82
-   },
-   {
-    "name": "set_connector_accounts",
-    "tokens": 440,
-    "score": 82
-   },
-   {
-    "name": "disconnect_connector",
-    "tokens": 477,
-    "score": 78
-   },
-   {
-    "name": "connect_connector",
-    "tokens": 851,
-    "score": 73
-   },
-   {
-    "name": "leave_connector",
-    "tokens": 229,
-    "score": 83
-   },
-   {
-    "name": "list_team",
-    "tokens": 59,
-    "score": 92
-   },
-   {
-    "name": "invite_member",
-    "tokens": 157,
-    "score": 96
-   },
-   {
-    "name": "remove_member",
-    "tokens": 255,
-    "score": 83
-   },
-   {
-    "name": "set_role",
-    "tokens": 142,
-    "score": 96
-   },
-   {
-    "name": "list_jobs",
-    "tokens": 63,
-    "score": 92
-   },
-   {
-    "name": "list_errors",
-    "tokens": 357,
-    "score": 82
-   },
-   {
-    "name": "error_detail",
-    "tokens": 125,
-    "score": 92
-   },
-   {
-    "name": "find_competitors",
-    "tokens": 217,
-    "score": 87
-   },
-   {
-    "name": "pull_competitor_ads",
-    "tokens": 417,
-    "score": 84
-   },
-   {
-    "name": "set_competitor_watch",
-    "tokens": 724,
-    "score": 77
-   },
-   {
-    "name": "list_watch_findings",
-    "tokens": 225,
-    "score": 83
-   },
-   {
-    "name": "research_ads",
-    "tokens": 431,
-    "score": 78
-   },
-   {
-    "name": "search_meta_ads",
-    "tokens": 528,
-    "score": 82
-   },
-   {
-    "name": "search_google_ads",
-    "tokens": 323,
-    "score": 82
-   },
-   {
-    "name": "search_linkedin_ads",
-    "tokens": 324,
-    "score": 88
-   },
-   {
-    "name": "find_creators",
-    "tokens": 635,
-    "score": 73
-   },
-   {
-    "name": "search_posts",
-    "tokens": 419,
-    "score": 78
-   },
-   {
-    "name": "search_tiktok",
-    "tokens": 399,
-    "score": 77
-   },
-   {
-    "name": "search_instagram",
-    "tokens": 354,
-    "score": 80
-   },
-   {
-    "name": "search_youtube",
-    "tokens": 304,
-    "score": 84
-   },
-   {
-    "name": "search_reddit",
-    "tokens": 245,
-    "score": 93
-   },
-   {
-    "name": "search_threads",
-    "tokens": 229,
-    "score": 93
-   },
-   {
-    "name": "search_meta_places",
-    "tokens": 491,
-    "score": 82
-   },
-   {
-    "name": "fetch_social_data",
-    "tokens": 370,
-    "score": 78
-   },
-   {
-    "name": "get_brand",
-    "tokens": 160,
-    "score": 87
-   },
-   {
-    "name": "draft_brand",
-    "tokens": 481,
-    "score": 78
-   },
-   {
-    "name": "list_library",
-    "tokens": 242,
-    "score": 85
-   },
-   {
-    "name": "delete_library_item",
-    "tokens": 153,
-    "score": 92
-   },
-   {
-    "name": "fetch_asset",
-    "tokens": 107,
-    "score": 92
-   },
-   {
-    "name": "analyze_video",
-    "tokens": 276,
-    "score": 87
-   },
-   {
-    "name": "find_sound",
-    "tokens": 280,
-    "score": 89
-   },
-   {
-    "name": "make_insert",
-    "tokens": 333,
-    "score": 84
-   },
-   {
-    "name": "score_ad",
-    "tokens": 275,
-    "score": 93
-   },
-   {
-    "name": "check_video",
-    "tokens": 454,
-    "score": 78
-   },
-   {
-    "name": "reframe_video",
-    "tokens": 289,
-    "score": 93
-   },
-   {
-    "name": "repurpose_video",
-    "tokens": 774,
-    "score": 77
-   },
-   {
-    "name": "insert_scene",
-    "tokens": 540,
-    "score": 82
-   },
-   {
-    "name": "upscale_video",
-    "tokens": 389,
-    "score": 82
-   },
-   {
-    "name": "restyle_video",
-    "tokens": 599,
-    "score": 82
-   },
-   {
-    "name": "edit_video",
-    "tokens": 1130,
-    "score": 77
-   },
-   {
-    "name": "multiply_ad",
-    "tokens": 770,
-    "score": 76
-   },
-   {
-    "name": "hook_variants",
-    "tokens": 764,
-    "score": 76
-   },
-   {
-    "name": "dub_video",
-    "tokens": 380,
-    "score": 84
-   },
-   {
-    "name": "change_voice",
-    "tokens": 294,
-    "score": 89
-   },
-   {
-    "name": "recast_motion",
-    "tokens": 989,
-    "score": 77
-   },
-   {
-    "name": "plan_variations",
-    "tokens": 332,
-    "score": 88
-   },
-   {
-    "name": "competitor_teardown",
-    "tokens": 429,
-    "score": 78
-   },
-   {
-    "name": "check_ad_policy",
-    "tokens": 362,
-    "score": 78
-   },
-   {
-    "name": "clone_static",
-    "tokens": 360,
-    "score": 78
-   },
-   {
-    "name": "remix_static",
-    "tokens": 274,
-    "score": 89
-   },
-   {
-    "name": "mine_angles",
-    "tokens": 673,
-    "score": 73
-   },
-   {
-    "name": "list_product_photos",
-    "tokens": 217,
-    "score": 83
-   },
-   {
-    "name": "set_product_image",
-    "tokens": 425,
-    "score": 78
-   },
-   {
-    "name": "fetch_app_screens",
-    "tokens": 357,
-    "score": 78
-   },
-   {
-    "name": "list_meta_posts",
-    "tokens": 592,
-    "score": 82
-   },
-   {
-    "name": "list_published_posts",
-    "tokens": 334,
-    "score": 78
-   },
-   {
-    "name": "list_hooks",
-    "tokens": 438,
-    "score": 82
-   },
-   {
-    "name": "post_performance",
-    "tokens": 466,
-    "score": 82
-   },
-   {
-    "name": "diagnose_posts",
-    "tokens": 524,
-    "score": 78
-   },
-   {
-    "name": "collect_post_metrics",
-    "tokens": 403,
-    "score": 78
-   },
-   {
-    "name": "backfill_posts",
-    "tokens": 464,
-    "score": 82
    }
   ]
  },
@@ -75419,7 +74161,7 @@ window.ECOSYSTEM_DATA = [
   "density": 85,
   "efficiency": 54,
   "tokensPerTool": 355,
-  "category": "Developer Tools & VCS",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/Nutshell2000/agent-data-tools",
   "sourceType": "registry",
   "registryName": "io.github.Nutshell2000/agent-data-tools-voice",
@@ -75490,7 +74232,7 @@ window.ECOSYSTEM_DATA = [
   "density": 85,
   "efficiency": 53,
   "tokensPerTool": 578,
-  "category": "Other",
+  "category": "E-Commerce & Retail",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.ppftec/eubinder",
@@ -75541,7 +74283,7 @@ window.ECOSYSTEM_DATA = [
   "density": 88,
   "efficiency": 53,
   "tokensPerTool": 510,
-  "category": "Payments, CRM & Finance",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/pdfops/pdfops-mcp",
   "sourceType": "registry",
   "registryName": "dev.pdfops/pdfops-mcp",
@@ -75677,7 +74419,7 @@ window.ECOSYSTEM_DATA = [
   "density": 85,
   "efficiency": 51,
   "tokensPerTool": 463,
-  "category": "Payments, CRM & Finance",
+  "category": "Finance, Crypto & Web3",
   "repository": null,
   "sourceType": "registry",
   "registryName": "io.polystate/mcp",
@@ -75778,7 +74520,7 @@ window.ECOSYSTEM_DATA = [
   "density": 85,
   "efficiency": 51,
   "tokensPerTool": 424,
-  "category": "Payments, CRM & Finance",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "xyz.quantumatlas/x402-payment-hub",
@@ -75900,7 +74642,7 @@ window.ECOSYSTEM_DATA = [
   "density": 90,
   "efficiency": 50,
   "tokensPerTool": 458,
-  "category": "Social, Media & Knowledge",
+  "category": "Design, UI & 3D Media",
   "repository": "https://github.com/colinize/kineticist-mcp",
   "sourceType": "registry",
   "registryName": "com.kineticist/mcp-server",
@@ -75971,7 +74713,7 @@ window.ECOSYSTEM_DATA = [
   "density": 91,
   "efficiency": 50,
   "tokensPerTool": 458,
-  "category": "Developer Tools & VCS",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/pugarte7/spanish-top-tech-companies",
   "sourceType": "registry",
   "registryName": "io.github.pugarte7/spanish-top-tech-companies",
@@ -76032,7 +74774,7 @@ window.ECOSYSTEM_DATA = [
   "density": 85,
   "efficiency": 50,
   "tokensPerTool": 435,
-  "category": "Developer Tools & VCS",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/toasternet/delegaize-mcp",
   "sourceType": "registry",
   "registryName": "io.github.toasternet/delegaize-agenten-check",
@@ -76134,7 +74876,7 @@ window.ECOSYSTEM_DATA = [
   "density": 86,
   "efficiency": 48,
   "tokensPerTool": 721,
-  "category": "Developer Tools & VCS",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/SoapyRED/freightutils-mcp",
   "sourceType": "registry",
   "registryName": "io.github.SoapyRED/freightutils",
@@ -76290,7 +75032,7 @@ window.ECOSYSTEM_DATA = [
   "density": 85,
   "efficiency": 48,
   "tokensPerTool": 510,
-  "category": "Payments, CRM & Finance",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/wonderpick/apify-b2b-ecom-automation-kit",
   "sourceType": "registry",
   "registryName": "io.github.wonderpick/apify-b2b-ecom-automation-kit",
@@ -76573,7 +75315,7 @@ window.ECOSYSTEM_DATA = [
   "density": 91,
   "efficiency": 73,
   "tokensPerTool": 195,
-  "category": "Other",
+  "category": "Design, UI & 3D Media",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.manofmany/mcp",
@@ -76654,7 +75396,7 @@ window.ECOSYSTEM_DATA = [
   "density": 97,
   "efficiency": 73,
   "tokensPerTool": 269,
-  "category": "Developer Tools & VCS",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/Quidli/connect-mcp",
   "sourceType": "registry",
   "registryName": "io.github.Quidli/connect-mcp",
@@ -77126,7 +75868,7 @@ window.ECOSYSTEM_DATA = [
   "density": 95,
   "efficiency": 70,
   "tokensPerTool": 1502,
-  "category": "Communication & Alerting",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/MyselfHamza/mm-nutrition-mcp",
   "sourceType": "registry",
   "registryName": "io.github.MyselfHamza/mm-nutrition",
@@ -77193,6 +75935,137 @@ window.ECOSYSTEM_DATA = [
   ]
  },
  {
+  "name": "com.layerhop/mcp",
+  "title": "LayerHop",
+  "slug": "com-layerhop-mcp",
+  "grade": "A",
+  "tqi": 80,
+  "strictness": 98,
+  "density": 95,
+  "efficiency": 69,
+  "tokensPerTool": 266,
+  "category": "Finance, Crypto & Web3",
+  "repository": "https://github.com/layerhop/layerhop-js",
+  "sourceType": "registry",
+  "registryName": "com.layerhop/mcp",
+  "version": "0.9.0",
+  "fetchedAt": "2026-11-22T12:49:37.224Z",
+  "publishedAt": "2026-11-22T10:08:55.124295Z",
+  "toolsCount": 22,
+  "tools": [
+   {
+    "name": "list_chains",
+    "tokens": 70,
+    "score": 92
+   },
+   {
+    "name": "list_tokens",
+    "tokens": 138,
+    "score": 92
+   },
+   {
+    "name": "get_quote",
+    "tokens": 793,
+    "score": 32
+   },
+   {
+    "name": "build_transaction",
+    "tokens": 211,
+    "score": 87
+   },
+   {
+    "name": "simulate_transaction",
+    "tokens": 192,
+    "score": 87
+   },
+   {
+    "name": "report_submitted",
+    "tokens": 186,
+    "score": 93
+   },
+   {
+    "name": "get_order_status",
+    "tokens": 191,
+    "score": 93
+   },
+   {
+    "name": "list_orders",
+    "tokens": 214,
+    "score": 93
+   },
+   {
+    "name": "get_swap_link",
+    "tokens": 466,
+    "score": 43
+   },
+   {
+    "name": "lookup_token",
+    "tokens": 211,
+    "score": 89
+   },
+   {
+    "name": "get_token_risk",
+    "tokens": 266,
+    "score": 83
+   },
+   {
+    "name": "list_limit_orders",
+    "tokens": 225,
+    "score": 93
+   },
+   {
+    "name": "get_limit_order",
+    "tokens": 96,
+    "score": 96
+   },
+   {
+    "name": "create_limit_order",
+    "tokens": 545,
+    "score": 82
+   },
+   {
+    "name": "submit_limit_order",
+    "tokens": 220,
+    "score": 93
+   },
+   {
+    "name": "cancel_limit_order",
+    "tokens": 165,
+    "score": 93
+   },
+   {
+    "name": "create_deposit_address",
+    "tokens": 746,
+    "score": 0
+   },
+   {
+    "name": "list_deposit_addresses",
+    "tokens": 192,
+    "score": 93
+   },
+   {
+    "name": "get_deposit_address",
+    "tokens": 208,
+    "score": 42
+   },
+   {
+    "name": "refresh_deposit_address",
+    "tokens": 133,
+    "score": 96
+   },
+   {
+    "name": "disable_deposit_address",
+    "tokens": 137,
+    "score": 96
+   },
+   {
+    "name": "simulate_deposit",
+    "tokens": 239,
+    "score": 93
+   }
+  ]
+ },
+ {
   "name": "com.parkgraph/mcp",
   "title": "Park Graph",
   "slug": "com-parkgraph-mcp",
@@ -77202,7 +76075,7 @@ window.ECOSYSTEM_DATA = [
   "density": 88,
   "efficiency": 63,
   "tokensPerTool": 334,
-  "category": "Other",
+  "category": "E-Commerce & Retail",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.parkgraph/mcp",
@@ -77268,7 +76141,7 @@ window.ECOSYSTEM_DATA = [
   "density": 96,
   "efficiency": 63,
   "tokensPerTool": 335,
-  "category": "Developer Tools & VCS",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/AnthonyPuggs/ausecon-mcp-server",
   "sourceType": "registry",
   "registryName": "io.github.AnthonyPuggs/ausecon-mcp-server",
@@ -77359,7 +76232,7 @@ window.ECOSYSTEM_DATA = [
   "density": 89,
   "efficiency": 63,
   "tokensPerTool": 329,
-  "category": "Developer Tools & VCS",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/Modelglass/modelglass-vscode",
   "sourceType": "registry",
   "registryName": "io.github.Modelglass/modelglass",
@@ -77415,7 +76288,7 @@ window.ECOSYSTEM_DATA = [
   "density": 92,
   "efficiency": 63,
   "tokensPerTool": 372,
-  "category": "Developer Tools & VCS",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "io.github.stea4lth/flipvo-agent-tools",
@@ -77501,7 +76374,7 @@ window.ECOSYSTEM_DATA = [
   "density": 85,
   "efficiency": 58,
   "tokensPerTool": 318,
-  "category": "Developer Tools & VCS",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/r3dz4r/datapulse-my",
   "sourceType": "registry",
   "registryName": "io.github.r3dz4r/datapulse-my",
@@ -77617,7 +76490,7 @@ window.ECOSYSTEM_DATA = [
   "density": 88,
   "efficiency": 56,
   "tokensPerTool": 452,
-  "category": "Other",
+  "category": "Jobs, Career & Learning",
   "repository": "https://github.com/AcademyOne-Inc/GoldSeam",
   "sourceType": "registry",
   "registryName": "com.ksaworks/goldseam",
@@ -78213,7 +77086,7 @@ window.ECOSYSTEM_DATA = [
   "density": 89,
   "efficiency": 55,
   "tokensPerTool": 424,
-  "category": "Other",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.valksor/anglo",
@@ -78241,6 +77114,1107 @@ window.ECOSYSTEM_DATA = [
     "name": "anglo_deromanize",
     "tokens": 272,
     "score": 83
+   }
+  ]
+ },
+ {
+  "name": "io.github.hermoso-ai/hermoso",
+  "title": "Hermoso",
+  "slug": "io-github-hermoso-ai-hermoso",
+  "grade": "A",
+  "tqi": 80,
+  "strictness": 93,
+  "density": 89,
+  "efficiency": 55,
+  "tokensPerTool": 615,
+  "category": "AI, LLMs & Agents",
+  "repository": "https://github.com/hermoso-ai/hermoso",
+  "sourceType": "registry",
+  "registryName": "io.github.hermoso-ai/hermoso",
+  "version": "0.1.661",
+  "fetchedAt": "2026-11-22T12:49:37.224Z",
+  "publishedAt": "2026-11-21T18:30:34.265162Z",
+  "toolsCount": 216,
+  "tools": [
+   {
+    "name": "enable_tools",
+    "tokens": 513,
+    "score": 78
+   },
+   {
+    "name": "get_instructions",
+    "tokens": 138,
+    "score": 92
+   },
+   {
+    "name": "find_tools",
+    "tokens": 434,
+    "score": 78
+   },
+   {
+    "name": "call_tool",
+    "tokens": 363,
+    "score": 78
+   },
+   {
+    "name": "post_to_bluesky",
+    "tokens": 1148,
+    "score": 73
+   },
+   {
+    "name": "post_to_telegram",
+    "tokens": 1282,
+    "score": 77
+   },
+   {
+    "name": "list_telegram_chats",
+    "tokens": 299,
+    "score": 83
+   },
+   {
+    "name": "post_to_wordpress",
+    "tokens": 858,
+    "score": 77
+   },
+   {
+    "name": "post_to_shopify_blog",
+    "tokens": 913,
+    "score": 77
+   },
+   {
+    "name": "post_to_webflow",
+    "tokens": 1009,
+    "score": 76
+   },
+   {
+    "name": "post_to_wix",
+    "tokens": 854,
+    "score": 77
+   },
+   {
+    "name": "post_to_discord",
+    "tokens": 1126,
+    "score": 72
+   },
+   {
+    "name": "post_to_slack",
+    "tokens": 755,
+    "score": 72
+   },
+   {
+    "name": "hermoso_capabilities",
+    "tokens": 162,
+    "score": 79
+   },
+   {
+    "name": "hermoso_credits",
+    "tokens": 295,
+    "score": 79
+   },
+   {
+    "name": "buy_credits",
+    "tokens": 496,
+    "score": 33
+   },
+   {
+    "name": "report_bug",
+    "tokens": 260,
+    "score": 87
+   },
+   {
+    "name": "request_feature",
+    "tokens": 202,
+    "score": 89
+   },
+   {
+    "name": "contact_support",
+    "tokens": 171,
+    "score": 89
+   },
+   {
+    "name": "billing_status",
+    "tokens": 243,
+    "score": 79
+   },
+   {
+    "name": "upgrade_plan",
+    "tokens": 305,
+    "score": 82
+   },
+   {
+    "name": "set_auto_reload",
+    "tokens": 270,
+    "score": 87
+   },
+   {
+    "name": "list_brands",
+    "tokens": 145,
+    "score": 83
+   },
+   {
+    "name": "use_brand",
+    "tokens": 227,
+    "score": 83
+   },
+   {
+    "name": "create_brand",
+    "tokens": 252,
+    "score": 83
+   },
+   {
+    "name": "delete_brand",
+    "tokens": 421,
+    "score": 78
+   },
+   {
+    "name": "list_meta_pages",
+    "tokens": 105,
+    "score": 88
+   },
+   {
+    "name": "upload_file",
+    "tokens": 798,
+    "score": 73
+   },
+   {
+    "name": "list_whatsapp_accounts",
+    "tokens": 373,
+    "score": 74
+   },
+   {
+    "name": "post_to_meta",
+    "tokens": 5732,
+    "score": 0
+   },
+   {
+    "name": "schedule_post",
+    "tokens": 9392,
+    "score": 52
+   },
+   {
+    "name": "list_scheduled",
+    "tokens": 425,
+    "score": 78
+   },
+   {
+    "name": "reschedule_post",
+    "tokens": 5881,
+    "score": 77
+   },
+   {
+    "name": "cancel_scheduled",
+    "tokens": 174,
+    "score": 89
+   },
+   {
+    "name": "retry_scheduled",
+    "tokens": 1019,
+    "score": 73
+   },
+   {
+    "name": "instagram_posting_hold",
+    "tokens": 325,
+    "score": 82
+   },
+   {
+    "name": "duplicate_scheduled",
+    "tokens": 978,
+    "score": 77
+   },
+   {
+    "name": "get_post_refill",
+    "tokens": 209,
+    "score": 79
+   },
+   {
+    "name": "set_post_refill",
+    "tokens": 1637,
+    "score": 77
+   },
+   {
+    "name": "run_post_refill",
+    "tokens": 935,
+    "score": 73
+   },
+   {
+    "name": "post_to_linkedin",
+    "tokens": 1438,
+    "score": 77
+   },
+   {
+    "name": "post_to_x",
+    "tokens": 2523,
+    "score": 77
+   },
+   {
+    "name": "post_x_article",
+    "tokens": 941,
+    "score": 52
+   },
+   {
+    "name": "list_pinterest_boards",
+    "tokens": 191,
+    "score": 93
+   },
+   {
+    "name": "post_to_pinterest",
+    "tokens": 1687,
+    "score": 73
+   },
+   {
+    "name": "list_business_locations",
+    "tokens": 223,
+    "score": 79
+   },
+   {
+    "name": "post_to_google_business",
+    "tokens": 789,
+    "score": 77
+   },
+   {
+    "name": "post_to_youtube",
+    "tokens": 1899,
+    "score": 77
+   },
+   {
+    "name": "post_to_tiktok",
+    "tokens": 1899,
+    "score": 77
+   },
+   {
+    "name": "tiktok_post_status",
+    "tokens": 239,
+    "score": 83
+   },
+   {
+    "name": "publish_to_shopify_product",
+    "tokens": 441,
+    "score": 82
+   },
+   {
+    "name": "send_sms",
+    "tokens": 477,
+    "score": 75
+   },
+   {
+    "name": "list_linkedin_pages",
+    "tokens": 154,
+    "score": 83
+   },
+   {
+    "name": "post_to_linkedin_page",
+    "tokens": 2462,
+    "score": 77
+   },
+   {
+    "name": "list_linkedin_lead_forms",
+    "tokens": 196,
+    "score": 89
+   },
+   {
+    "name": "list_linkedin_leads",
+    "tokens": 428,
+    "score": 82
+   },
+   {
+    "name": "get_linkedin_lead",
+    "tokens": 155,
+    "score": 92
+   },
+   {
+    "name": "subscribe_linkedin_leads",
+    "tokens": 333,
+    "score": 82
+   },
+   {
+    "name": "list_linkedin_lead_events",
+    "tokens": 150,
+    "score": 92
+   },
+   {
+    "name": "list_linkedin_lead_subscriptions",
+    "tokens": 171,
+    "score": 89
+   },
+   {
+    "name": "delete_linkedin_lead_subscription",
+    "tokens": 184,
+    "score": 89
+   },
+   {
+    "name": "save_to_drive",
+    "tokens": 271,
+    "score": 83
+   },
+   {
+    "name": "import_from_cloud",
+    "tokens": 467,
+    "score": 57
+   },
+   {
+    "name": "list_drive_files",
+    "tokens": 360,
+    "score": 78
+   },
+   {
+    "name": "get_drive_file",
+    "tokens": 106,
+    "score": 92
+   },
+   {
+    "name": "update_drive_file",
+    "tokens": 216,
+    "score": 89
+   },
+   {
+    "name": "delete_drive_file",
+    "tokens": 151,
+    "score": 92
+   },
+   {
+    "name": "create_drive_folder",
+    "tokens": 184,
+    "score": 83
+   },
+   {
+    "name": "create_sheet",
+    "tokens": 178,
+    "score": 89
+   },
+   {
+    "name": "append_to_sheet",
+    "tokens": 186,
+    "score": 89
+   },
+   {
+    "name": "read_sheet",
+    "tokens": 226,
+    "score": 83
+   },
+   {
+    "name": "export_swipefile_deck",
+    "tokens": 302,
+    "score": 78
+   },
+   {
+    "name": "list_notion_pages",
+    "tokens": 185,
+    "score": 93
+   },
+   {
+    "name": "save_to_notion",
+    "tokens": 348,
+    "score": 78
+   },
+   {
+    "name": "append_to_notion_page",
+    "tokens": 180,
+    "score": 89
+   },
+   {
+    "name": "read_notion_page",
+    "tokens": 97,
+    "score": 92
+   },
+   {
+    "name": "export_schedule_to_notion",
+    "tokens": 257,
+    "score": 89
+   },
+   {
+    "name": "query_notion_database",
+    "tokens": 467,
+    "score": 82
+   },
+   {
+    "name": "update_notion_row",
+    "tokens": 334,
+    "score": 78
+   },
+   {
+    "name": "create_doc",
+    "tokens": 131,
+    "score": 92
+   },
+   {
+    "name": "append_to_doc",
+    "tokens": 328,
+    "score": 78
+   },
+   {
+    "name": "read_doc",
+    "tokens": 282,
+    "score": 83
+   },
+   {
+    "name": "list_sheet_tabs",
+    "tokens": 178,
+    "score": 89
+   },
+   {
+    "name": "update_sheet",
+    "tokens": 550,
+    "score": 82
+   },
+   {
+    "name": "clear_sheet_range",
+    "tokens": 331,
+    "score": 78
+   },
+   {
+    "name": "manage_sheet_tabs",
+    "tokens": 407,
+    "score": 82
+   },
+   {
+    "name": "format_sheet",
+    "tokens": 315,
+    "score": 78
+   },
+   {
+    "name": "update_doc",
+    "tokens": 838,
+    "score": 48
+   },
+   {
+    "name": "save_to_onedrive",
+    "tokens": 214,
+    "score": 89
+   },
+   {
+    "name": "list_onedrive_files",
+    "tokens": 191,
+    "score": 89
+   },
+   {
+    "name": "get_onedrive_file",
+    "tokens": 110,
+    "score": 92
+   },
+   {
+    "name": "update_onedrive_file",
+    "tokens": 147,
+    "score": 92
+   },
+   {
+    "name": "delete_onedrive_file",
+    "tokens": 119,
+    "score": 92
+   },
+   {
+    "name": "share_onedrive_file",
+    "tokens": 407,
+    "score": 82
+   },
+   {
+    "name": "onedrive_file_permissions",
+    "tokens": 261,
+    "score": 87
+   },
+   {
+    "name": "convert_onedrive_file",
+    "tokens": 370,
+    "score": 82
+   },
+   {
+    "name": "create_onedrive_folder",
+    "tokens": 158,
+    "score": 92
+   },
+   {
+    "name": "plan_ad",
+    "tokens": 1915,
+    "score": 77
+   },
+   {
+    "name": "clone_video",
+    "tokens": 683,
+    "score": 73
+   },
+   {
+    "name": "click_to_ad",
+    "tokens": 516,
+    "score": 82
+   },
+   {
+    "name": "generate_image",
+    "tokens": 2068,
+    "score": 77
+   },
+   {
+    "name": "edit_image",
+    "tokens": 930,
+    "score": 76
+   },
+   {
+    "name": "headline_variants",
+    "tokens": 568,
+    "score": 57
+   },
+   {
+    "name": "resize_ad",
+    "tokens": 465,
+    "score": 78
+   },
+   {
+    "name": "localize_ad",
+    "tokens": 474,
+    "score": 53
+   },
+   {
+    "name": "make_thumbnail",
+    "tokens": 2081,
+    "score": 52
+   },
+   {
+    "name": "generate_voice",
+    "tokens": 701,
+    "score": 73
+   },
+   {
+    "name": "generate_music",
+    "tokens": 247,
+    "score": 89
+   },
+   {
+    "name": "generate_text",
+    "tokens": 411,
+    "score": 78
+   },
+   {
+    "name": "render_ad",
+    "tokens": 2983,
+    "score": 77
+   },
+   {
+    "name": "make_template_ad",
+    "tokens": 975,
+    "score": 73
+   },
+   {
+    "name": "make_motion_film",
+    "tokens": 1106,
+    "score": 77
+   },
+   {
+    "name": "finish_video",
+    "tokens": 466,
+    "score": 78
+   },
+   {
+    "name": "post_edit",
+    "tokens": 3108,
+    "score": 73
+   },
+   {
+    "name": "fix_beat",
+    "tokens": 830,
+    "score": 73
+   },
+   {
+    "name": "clip_video",
+    "tokens": 555,
+    "score": 78
+   },
+   {
+    "name": "add_subtitles",
+    "tokens": 874,
+    "score": 77
+   },
+   {
+    "name": "make_explainer",
+    "tokens": 2462,
+    "score": 52
+   },
+   {
+    "name": "resume_job",
+    "tokens": 359,
+    "score": 78
+   },
+   {
+    "name": "make_series",
+    "tokens": 1175,
+    "score": 76
+   },
+   {
+    "name": "make_effect",
+    "tokens": 528,
+    "score": 78
+   },
+   {
+    "name": "product_sizzle",
+    "tokens": 882,
+    "score": 77
+   },
+   {
+    "name": "generate_video",
+    "tokens": 2987,
+    "score": 52
+   },
+   {
+    "name": "generate_avatar",
+    "tokens": 635,
+    "score": 77
+   },
+   {
+    "name": "stitch_video",
+    "tokens": 462,
+    "score": 78
+   },
+   {
+    "name": "get_job",
+    "tokens": 185,
+    "score": 64
+   },
+   {
+    "name": "plan_week",
+    "tokens": 333,
+    "score": 78
+   },
+   {
+    "name": "list_skills",
+    "tokens": 111,
+    "score": 88
+   },
+   {
+    "name": "get_skill",
+    "tokens": 127,
+    "score": 92
+   },
+   {
+    "name": "save_skill",
+    "tokens": 210,
+    "score": 89
+   },
+   {
+    "name": "delete_skill",
+    "tokens": 121,
+    "score": 92
+   },
+   {
+    "name": "list_memory",
+    "tokens": 139,
+    "score": 92
+   },
+   {
+    "name": "remember",
+    "tokens": 244,
+    "score": 83
+   },
+   {
+    "name": "forget",
+    "tokens": 126,
+    "score": 92
+   },
+   {
+    "name": "tidy_memory",
+    "tokens": 221,
+    "score": 83
+   },
+   {
+    "name": "list_swipefile",
+    "tokens": 189,
+    "score": 83
+   },
+   {
+    "name": "save_to_swipefile",
+    "tokens": 493,
+    "score": 78
+   },
+   {
+    "name": "update_saved_creator",
+    "tokens": 241,
+    "score": 93
+   },
+   {
+    "name": "list_playbooks",
+    "tokens": 178,
+    "score": 89
+   },
+   {
+    "name": "save_playbook",
+    "tokens": 458,
+    "score": 78
+   },
+   {
+    "name": "delete_playbook",
+    "tokens": 125,
+    "score": 92
+   },
+   {
+    "name": "list_creators",
+    "tokens": 384,
+    "score": 82
+   },
+   {
+    "name": "save_creator",
+    "tokens": 745,
+    "score": 77
+   },
+   {
+    "name": "delete_creator",
+    "tokens": 164,
+    "score": 89
+   },
+   {
+    "name": "list_elements",
+    "tokens": 103,
+    "score": 96
+   },
+   {
+    "name": "update_brand",
+    "tokens": 872,
+    "score": 77
+   },
+   {
+    "name": "store_get",
+    "tokens": 209,
+    "score": 83
+   },
+   {
+    "name": "get_settings",
+    "tokens": 163,
+    "score": 79
+   },
+   {
+    "name": "update_settings",
+    "tokens": 634,
+    "score": 77
+   },
+   {
+    "name": "list_connectors",
+    "tokens": 210,
+    "score": 79
+   },
+   {
+    "name": "list_connector_accounts",
+    "tokens": 345,
+    "score": 82
+   },
+   {
+    "name": "set_connector_accounts",
+    "tokens": 440,
+    "score": 82
+   },
+   {
+    "name": "disconnect_connector",
+    "tokens": 477,
+    "score": 78
+   },
+   {
+    "name": "connect_connector",
+    "tokens": 851,
+    "score": 73
+   },
+   {
+    "name": "leave_connector",
+    "tokens": 229,
+    "score": 83
+   },
+   {
+    "name": "list_team",
+    "tokens": 59,
+    "score": 92
+   },
+   {
+    "name": "invite_member",
+    "tokens": 157,
+    "score": 96
+   },
+   {
+    "name": "remove_member",
+    "tokens": 255,
+    "score": 83
+   },
+   {
+    "name": "set_role",
+    "tokens": 142,
+    "score": 96
+   },
+   {
+    "name": "list_jobs",
+    "tokens": 63,
+    "score": 92
+   },
+   {
+    "name": "list_errors",
+    "tokens": 357,
+    "score": 82
+   },
+   {
+    "name": "error_detail",
+    "tokens": 125,
+    "score": 92
+   },
+   {
+    "name": "find_competitors",
+    "tokens": 217,
+    "score": 87
+   },
+   {
+    "name": "pull_competitor_ads",
+    "tokens": 417,
+    "score": 84
+   },
+   {
+    "name": "set_competitor_watch",
+    "tokens": 724,
+    "score": 77
+   },
+   {
+    "name": "list_watch_findings",
+    "tokens": 225,
+    "score": 83
+   },
+   {
+    "name": "research_ads",
+    "tokens": 431,
+    "score": 78
+   },
+   {
+    "name": "search_meta_ads",
+    "tokens": 528,
+    "score": 82
+   },
+   {
+    "name": "search_google_ads",
+    "tokens": 323,
+    "score": 82
+   },
+   {
+    "name": "search_linkedin_ads",
+    "tokens": 324,
+    "score": 88
+   },
+   {
+    "name": "find_creators",
+    "tokens": 635,
+    "score": 73
+   },
+   {
+    "name": "search_posts",
+    "tokens": 419,
+    "score": 78
+   },
+   {
+    "name": "search_tiktok",
+    "tokens": 399,
+    "score": 77
+   },
+   {
+    "name": "search_instagram",
+    "tokens": 354,
+    "score": 80
+   },
+   {
+    "name": "search_youtube",
+    "tokens": 304,
+    "score": 84
+   },
+   {
+    "name": "search_reddit",
+    "tokens": 245,
+    "score": 93
+   },
+   {
+    "name": "search_threads",
+    "tokens": 229,
+    "score": 93
+   },
+   {
+    "name": "search_meta_places",
+    "tokens": 491,
+    "score": 82
+   },
+   {
+    "name": "fetch_social_data",
+    "tokens": 370,
+    "score": 78
+   },
+   {
+    "name": "get_brand",
+    "tokens": 160,
+    "score": 87
+   },
+   {
+    "name": "draft_brand",
+    "tokens": 481,
+    "score": 78
+   },
+   {
+    "name": "list_library",
+    "tokens": 242,
+    "score": 85
+   },
+   {
+    "name": "delete_library_item",
+    "tokens": 153,
+    "score": 92
+   },
+   {
+    "name": "fetch_asset",
+    "tokens": 107,
+    "score": 92
+   },
+   {
+    "name": "analyze_video",
+    "tokens": 276,
+    "score": 87
+   },
+   {
+    "name": "find_sound",
+    "tokens": 280,
+    "score": 89
+   },
+   {
+    "name": "make_insert",
+    "tokens": 333,
+    "score": 84
+   },
+   {
+    "name": "score_ad",
+    "tokens": 275,
+    "score": 93
+   },
+   {
+    "name": "check_video",
+    "tokens": 454,
+    "score": 78
+   },
+   {
+    "name": "reframe_video",
+    "tokens": 289,
+    "score": 93
+   },
+   {
+    "name": "repurpose_video",
+    "tokens": 774,
+    "score": 77
+   },
+   {
+    "name": "insert_scene",
+    "tokens": 540,
+    "score": 82
+   },
+   {
+    "name": "upscale_video",
+    "tokens": 389,
+    "score": 82
+   },
+   {
+    "name": "restyle_video",
+    "tokens": 599,
+    "score": 82
+   },
+   {
+    "name": "edit_video",
+    "tokens": 1130,
+    "score": 77
+   },
+   {
+    "name": "multiply_ad",
+    "tokens": 770,
+    "score": 76
+   },
+   {
+    "name": "hook_variants",
+    "tokens": 764,
+    "score": 76
+   },
+   {
+    "name": "dub_video",
+    "tokens": 380,
+    "score": 84
+   },
+   {
+    "name": "change_voice",
+    "tokens": 294,
+    "score": 89
+   },
+   {
+    "name": "recast_motion",
+    "tokens": 989,
+    "score": 77
+   },
+   {
+    "name": "plan_variations",
+    "tokens": 332,
+    "score": 88
+   },
+   {
+    "name": "competitor_teardown",
+    "tokens": 429,
+    "score": 78
+   },
+   {
+    "name": "check_ad_policy",
+    "tokens": 362,
+    "score": 78
+   },
+   {
+    "name": "clone_static",
+    "tokens": 360,
+    "score": 78
+   },
+   {
+    "name": "remix_static",
+    "tokens": 274,
+    "score": 89
+   },
+   {
+    "name": "mine_angles",
+    "tokens": 673,
+    "score": 73
+   },
+   {
+    "name": "list_product_photos",
+    "tokens": 217,
+    "score": 83
+   },
+   {
+    "name": "set_product_image",
+    "tokens": 425,
+    "score": 78
+   },
+   {
+    "name": "fetch_app_screens",
+    "tokens": 357,
+    "score": 78
+   },
+   {
+    "name": "list_meta_posts",
+    "tokens": 592,
+    "score": 82
+   },
+   {
+    "name": "list_published_posts",
+    "tokens": 334,
+    "score": 78
+   },
+   {
+    "name": "list_hooks",
+    "tokens": 438,
+    "score": 82
+   },
+   {
+    "name": "post_performance",
+    "tokens": 466,
+    "score": 82
+   },
+   {
+    "name": "diagnose_posts",
+    "tokens": 524,
+    "score": 78
+   },
+   {
+    "name": "collect_post_metrics",
+    "tokens": 403,
+    "score": 78
+   },
+   {
+    "name": "backfill_posts",
+    "tokens": 464,
+    "score": 82
    }
   ]
  },
@@ -78340,7 +78314,7 @@ window.ECOSYSTEM_DATA = [
   "density": 100,
   "efficiency": 51,
   "tokensPerTool": 356,
-  "category": "Other",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.minimindslab.mcp/tools",
@@ -78548,7 +78522,7 @@ window.ECOSYSTEM_DATA = [
   "density": 85,
   "efficiency": 48,
   "tokensPerTool": 476,
-  "category": "Other",
+  "category": "E-Commerce & Retail",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.mystarletter/human-design-chart",
@@ -78629,7 +78603,7 @@ window.ECOSYSTEM_DATA = [
   "density": 87,
   "efficiency": 44,
   "tokensPerTool": 584,
-  "category": "Communication & Alerting",
+  "category": "E-Commerce & Retail",
   "repository": "https://github.com/since98vn/vietnam-mcp-servers",
   "sourceType": "registry",
   "registryName": "vn.since98/zalo-business-reference",
@@ -78685,7 +78659,7 @@ window.ECOSYSTEM_DATA = [
   "density": 85,
   "efficiency": 43,
   "tokensPerTool": 562,
-  "category": "Other",
+  "category": "Design, UI & 3D Media",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.fitralo/carriers",
@@ -78777,7 +78751,7 @@ window.ECOSYSTEM_DATA = [
   "density": 85,
   "efficiency": 70,
   "tokensPerTool": 240,
-  "category": "Other",
+  "category": "Healthcare & Wellness",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.digitalbusinessportal/fda-regulatory",
@@ -78818,7 +78792,7 @@ window.ECOSYSTEM_DATA = [
   "density": 93,
   "efficiency": 65,
   "tokensPerTool": 467,
-  "category": "Developer Tools & VCS",
+  "category": "Developer Tools & DevOps",
   "repository": null,
   "sourceType": "registry",
   "registryName": "io.github.ladderkit/hub-kb",
@@ -79221,7 +79195,7 @@ window.ECOSYSTEM_DATA = [
   "density": 85,
   "efficiency": 60,
   "tokensPerTool": 259,
-  "category": "Other",
+  "category": "Travel, Maps & Navigation",
   "repository": "https://github.com/tuxxin/worldip-sdk",
   "sourceType": "registry",
   "registryName": "io.worldip/worldip",
@@ -79252,7 +79226,7 @@ window.ECOSYSTEM_DATA = [
   "density": 85,
   "efficiency": 57,
   "tokensPerTool": 316,
-  "category": "Payments, CRM & Finance",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.qconsultai/qconsul-booking",
@@ -79303,7 +79277,7 @@ window.ECOSYSTEM_DATA = [
   "density": 90,
   "efficiency": 56,
   "tokensPerTool": 388,
-  "category": "Other",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/twzrd-sol/twzrd-trust",
   "sourceType": "registry",
   "registryName": "xyz.twzrd.intel/twzrd-agent-intel",
@@ -79434,7 +79408,7 @@ window.ECOSYSTEM_DATA = [
   "density": 88,
   "efficiency": 54,
   "tokensPerTool": 434,
-  "category": "Observability & Analytics",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/orcalayer/orcalayer-mcp",
   "sourceType": "registry",
   "registryName": "io.github.orcalayer/orcalayer-mcp",
@@ -79480,7 +79454,7 @@ window.ECOSYSTEM_DATA = [
   "density": 85,
   "efficiency": 50,
   "tokensPerTool": 440,
-  "category": "Payments, CRM & Finance",
+  "category": "Finance, Crypto & Web3",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.stockexpertai/research",
@@ -79622,7 +79596,7 @@ window.ECOSYSTEM_DATA = [
   "density": 85,
   "efficiency": 45,
   "tokensPerTool": 549,
-  "category": "Developer Tools & VCS",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/nanoodlecom/nanoodle-mcp",
   "sourceType": "registry",
   "registryName": "io.github.nanoodlecom/nanoodle-mcp",
@@ -79718,7 +79692,7 @@ window.ECOSYSTEM_DATA = [
   "density": 85,
   "efficiency": 37,
   "tokensPerTool": 608,
-  "category": "Other",
+  "category": "E-Commerce & Retail",
   "repository": null,
   "sourceType": "registry",
   "registryName": "app.herofab/marketplace-image-rules",
@@ -79795,7 +79769,7 @@ window.ECOSYSTEM_DATA = [
   "density": 93,
   "efficiency": 30,
   "tokensPerTool": 1385,
-  "category": "Developer Tools & VCS",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/HamedShams/whenship",
   "sourceType": "registry",
   "registryName": "io.github.HamedShams/whenship",
@@ -79836,7 +79810,7 @@ window.ECOSYSTEM_DATA = [
   "density": 91,
   "efficiency": 74,
   "tokensPerTool": 214,
-  "category": "Other",
+  "category": "Healthcare & Wellness",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.statutewire/psv",
@@ -80093,7 +80067,7 @@ window.ECOSYSTEM_DATA = [
   "density": 88,
   "efficiency": 59,
   "tokensPerTool": 358,
-  "category": "Communication & Alerting",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/Hugo0/swarmmemo",
   "sourceType": "registry",
   "registryName": "com.swarmmemo/bulletin",
@@ -80224,7 +80198,7 @@ window.ECOSYSTEM_DATA = [
   "density": 85,
   "efficiency": 57,
   "tokensPerTool": 349,
-  "category": "Other",
+  "category": "Security & Identity",
   "repository": "https://github.com/forumtrust/forum-verify",
   "sourceType": "registry",
   "registryName": "ai.forumtrust/forum",
@@ -80301,7 +80275,7 @@ window.ECOSYSTEM_DATA = [
   "density": 85,
   "efficiency": 50,
   "tokensPerTool": 417,
-  "category": "Other",
+  "category": "E-Commerce & Retail",
   "repository": "https://github.com/reevol-ai/mcp",
   "sourceType": "registry",
   "registryName": "ai.reevi/find-buyers",
@@ -80327,7 +80301,7 @@ window.ECOSYSTEM_DATA = [
   "density": 85,
   "efficiency": 50,
   "tokensPerTool": 461,
-  "category": "Other",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/alalanet/alalanet-agent",
   "sourceType": "registry",
   "registryName": "com.alalanet/check",
@@ -80388,7 +80362,7 @@ window.ECOSYSTEM_DATA = [
   "density": 85,
   "efficiency": 50,
   "tokensPerTool": 534,
-  "category": "Payments, CRM & Finance",
+  "category": "Finance, Crypto & Web3",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.mypivots/mypivots",
@@ -80414,7 +80388,7 @@ window.ECOSYSTEM_DATA = [
   "density": 85,
   "efficiency": 50,
   "tokensPerTool": 418,
-  "category": "Vector DBs & AI Search",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "io.github.zenoix888/agent-verifier",
@@ -80440,7 +80414,7 @@ window.ECOSYSTEM_DATA = [
   "density": 87,
   "efficiency": 46,
   "tokensPerTool": 1120,
-  "category": "Developer Tools & VCS",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/echochaofan/snapfolda-ucp-mcp",
   "sourceType": "registry",
   "registryName": "io.github.echochaofan/snapfolda-ucp-mcp",
@@ -80531,7 +80505,7 @@ window.ECOSYSTEM_DATA = [
   "density": 93,
   "efficiency": 45,
   "tokensPerTool": 488,
-  "category": "Developer Tools & VCS",
+  "category": "Travel, Maps & Navigation",
   "repository": null,
   "sourceType": "registry",
   "registryName": "app.sallim/korea-stay",
@@ -80559,92 +80533,6 @@ window.ECOSYSTEM_DATA = [
     "name": "report_issue",
     "tokens": 707,
     "score": 66
-   }
-  ]
- },
- {
-  "name": "com.senzing/mcp",
-  "title": "Senzing",
-  "slug": "com-senzing-mcp",
-  "grade": "B",
-  "tqi": 78,
-  "strictness": 92,
-  "density": 86,
-  "efficiency": 45,
-  "tokensPerTool": 804,
-  "category": "Productivity & Notes",
-  "repository": "https://github.com/Senzing/mcp",
-  "sourceType": "registry",
-  "registryName": "com.senzing/mcp",
-  "version": "1.46.3",
-  "fetchedAt": "2026-11-22T12:49:37.224Z",
-  "publishedAt": "2026-11-20T21:01:59.750978Z",
-  "toolsCount": 13,
-  "tools": [
-   {
-    "name": "analyze_record",
-    "tokens": 475,
-    "score": 78
-   },
-   {
-    "name": "download_resource",
-    "tokens": 738,
-    "score": 77
-   },
-   {
-    "name": "explain_error_code",
-    "tokens": 111,
-    "score": 84
-   },
-   {
-    "name": "find_examples",
-    "tokens": 511,
-    "score": 82
-   },
-   {
-    "name": "generate_scaffold",
-    "tokens": 423,
-    "score": 78
-   },
-   {
-    "name": "get_capabilities",
-    "tokens": 186,
-    "score": 75
-   },
-   {
-    "name": "get_sample_data",
-    "tokens": 879,
-    "score": 74
-   },
-   {
-    "name": "get_sdk_reference",
-    "tokens": 831,
-    "score": 77
-   },
-   {
-    "name": "mapping_workflow",
-    "tokens": 3535,
-    "score": 77
-   },
-   {
-    "name": "reporting_guide",
-    "tokens": 707,
-    "score": 77
-   },
-   {
-    "name": "sdk_guide",
-    "tokens": 1105,
-    "score": 77
-   },
-   {
-    "name": "search_docs",
-    "tokens": 578,
-    "score": 78
-   },
-   {
-    "name": "submit_feedback",
-    "tokens": 370,
-    "score": 78
    }
   ]
  },
@@ -80865,7 +80753,7 @@ window.ECOSYSTEM_DATA = [
   "density": 85,
   "efficiency": 41,
   "tokensPerTool": 698,
-  "category": "Developer Tools & VCS",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/xultrax-web/dogpolicies-mcp",
   "sourceType": "registry",
   "registryName": "io.github.xultrax-web/dogpolicies-mcp",
@@ -80976,7 +80864,7 @@ window.ECOSYSTEM_DATA = [
   "density": 85,
   "efficiency": 40,
   "tokensPerTool": 1267,
-  "category": "Other",
+  "category": "E-Commerce & Retail",
   "repository": "https://github.com/ryankiley/mahonia",
   "sourceType": "registry",
   "registryName": "app.mahonia/mahonia",
@@ -81089,7 +80977,7 @@ window.ECOSYSTEM_DATA = [
   "density": 90,
   "efficiency": 39,
   "tokensPerTool": 707,
-  "category": "Developer Tools & VCS",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/snayyar00/webability-mcp",
   "sourceType": "registry",
   "registryName": "io.github.snayyar00/webability",
@@ -81195,7 +81083,7 @@ window.ECOSYSTEM_DATA = [
   "density": 85,
   "efficiency": 37,
   "tokensPerTool": 843,
-  "category": "Cloud & Hosting Platforms",
+  "category": "Travel, Maps & Navigation",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.seeksat/seeksat",
@@ -81271,7 +81159,7 @@ window.ECOSYSTEM_DATA = [
   "density": 85,
   "efficiency": 37,
   "tokensPerTool": 604,
-  "category": "Payments, CRM & Finance",
+  "category": "Finance, Crypto & Web3",
   "repository": null,
   "sourceType": "registry",
   "registryName": "finance.norman/formation-planner",
@@ -81307,7 +81195,7 @@ window.ECOSYSTEM_DATA = [
   "density": 85,
   "efficiency": 36,
   "tokensPerTool": 840,
-  "category": "Other",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/simonmak-ascent/startup-valuation",
   "sourceType": "registry",
   "registryName": "com.ascent-partners/startup-valuation",
@@ -81398,7 +81286,7 @@ window.ECOSYSTEM_DATA = [
   "density": 85,
   "efficiency": 36,
   "tokensPerTool": 896,
-  "category": "Other",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "xyz.factahq/facta",
@@ -81454,7 +81342,7 @@ window.ECOSYSTEM_DATA = [
   "density": 85,
   "efficiency": 34,
   "tokensPerTool": 955,
-  "category": "Web Scraping & Automation",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/cyanheads/internet-archive-mcp-server",
   "sourceType": "registry",
   "registryName": "io.github.cyanheads/internet-archive-mcp-server",
@@ -81500,7 +81388,7 @@ window.ECOSYSTEM_DATA = [
   "density": 85,
   "efficiency": 33,
   "tokensPerTool": 793,
-  "category": "Developer Tools & VCS",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/OptimNow/ai-pricing-hub-mcp",
   "sourceType": "registry",
   "registryName": "io.github.OptimNow/ai-pricing-hub",
@@ -81561,7 +81449,7 @@ window.ECOSYSTEM_DATA = [
   "density": 90,
   "efficiency": 66,
   "tokensPerTool": 359,
-  "category": "Payments, CRM & Finance",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/mcp-dir/unicred-mcp",
   "sourceType": "registry",
   "registryName": "io.github.mcp-dir/unicred-mcp",
@@ -81707,7 +81595,7 @@ window.ECOSYSTEM_DATA = [
   "density": 90,
   "efficiency": 66,
   "tokensPerTool": 359,
-  "category": "Payments, CRM & Finance",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/mcp-dir/woop-mcp",
   "sourceType": "registry",
   "registryName": "io.github.mcp-dir/woop-mcp",
@@ -81853,7 +81741,7 @@ window.ECOSYSTEM_DATA = [
   "density": 90,
   "efficiency": 66,
   "tokensPerTool": 359,
-  "category": "Payments, CRM & Finance",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/mcp-dir/xp-mcp",
   "sourceType": "registry",
   "registryName": "io.github.mcp-dir/xp-mcp",
@@ -81999,7 +81887,7 @@ window.ECOSYSTEM_DATA = [
   "density": 87,
   "efficiency": 54,
   "tokensPerTool": 416,
-  "category": "Developer Tools & VCS",
+  "category": "Finance, Crypto & Web3",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.clawhard/studio",
@@ -82210,7 +82098,7 @@ window.ECOSYSTEM_DATA = [
   "density": 92,
   "efficiency": 54,
   "tokensPerTool": 472,
-  "category": "Productivity & Notes",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/stackin-io/stackin-mcp-plugin",
   "sourceType": "registry",
   "registryName": "io.github.stackin-io/stackin",
@@ -82406,7 +82294,7 @@ window.ECOSYSTEM_DATA = [
   "density": 85,
   "efficiency": 51,
   "tokensPerTool": 457,
-  "category": "Cloud & Hosting Platforms",
+  "category": "Other",
   "repository": "https://github.com/azmartone67/dchub-mcp-server",
   "sourceType": "registry",
   "registryName": "cloud.dchub/mcp-server",
@@ -82778,7 +82666,7 @@ window.ECOSYSTEM_DATA = [
    {
     "name": "find_alternatives",
     "tokens": 373,
-    "score": 82
+    "score": 57
    },
    {
     "name": "score_facility",
@@ -82959,302 +82847,6 @@ window.ECOSYSTEM_DATA = [
   ]
  },
  {
-  "name": "biz.valuein/mcp",
-  "title": "Valuein — SEC EDGAR Fundamentals & Smart-Money Data",
-  "slug": "biz-valuein-mcp",
-  "grade": "B",
-  "tqi": 77,
-  "strictness": 98,
-  "density": 86,
-  "efficiency": 42,
-  "tokensPerTool": 723,
-  "category": "Other",
-  "repository": "https://github.com/valuein/valuein",
-  "sourceType": "registry",
-  "registryName": "biz.valuein/mcp",
-  "version": "3.38.1",
-  "fetchedAt": "2026-11-22T12:49:37.224Z",
-  "publishedAt": "2026-11-22T01:24:05.889101Z",
-  "toolsCount": 55,
-  "tools": [
-   {
-    "name": "search_companies",
-    "tokens": 1079,
-    "score": 52
-   },
-   {
-    "name": "get_company_fundamentals",
-    "tokens": 1155,
-    "score": 77
-   },
-   {
-    "name": "get_valuation_metrics",
-    "tokens": 751,
-    "score": 77
-   },
-   {
-    "name": "get_financial_ratios",
-    "tokens": 1285,
-    "score": 77
-   },
-   {
-    "name": "get_sec_filing_links",
-    "tokens": 742,
-    "score": 77
-   },
-   {
-    "name": "list_filing_forms",
-    "tokens": 294,
-    "score": 87
-   },
-   {
-    "name": "latest_filings",
-    "tokens": 397,
-    "score": 78
-   },
-   {
-    "name": "list_filing_sections",
-    "tokens": 822,
-    "score": 77
-   },
-   {
-    "name": "read_filing_section",
-    "tokens": 802,
-    "score": 52
-   },
-   {
-    "name": "find_in_filing",
-    "tokens": 1198,
-    "score": 77
-   },
-   {
-    "name": "get_capital_allocation_profile",
-    "tokens": 721,
-    "score": 77
-   },
-   {
-    "name": "get_peer_comparables",
-    "tokens": 754,
-    "score": 77
-   },
-   {
-    "name": "get_pit_universe",
-    "tokens": 1067,
-    "score": 77
-   },
-   {
-    "name": "get_compute_ready_stream",
-    "tokens": 375,
-    "score": 82
-   },
-   {
-    "name": "describe_schema",
-    "tokens": 210,
-    "score": 93
-   },
-   {
-    "name": "list_sops",
-    "tokens": 277,
-    "score": 83
-   },
-   {
-    "name": "get_sop",
-    "tokens": 348,
-    "score": 78
-   },
-   {
-    "name": "verify_fact_lineage",
-    "tokens": 1367,
-    "score": 77
-   },
-   {
-    "name": "verify_facts",
-    "tokens": 1190,
-    "score": 77
-   },
-   {
-    "name": "match_derived",
-    "tokens": 710,
-    "score": 77
-   },
-   {
-    "name": "verify_filing_figures",
-    "tokens": 1232,
-    "score": 73
-   },
-   {
-    "name": "compare_periods",
-    "tokens": 849,
-    "score": 52
-   },
-   {
-    "name": "screen_universe",
-    "tokens": 880,
-    "score": 77
-   },
-   {
-    "name": "get_earnings_signals",
-    "tokens": 480,
-    "score": 82
-   },
-   {
-    "name": "get_filing_review_pack",
-    "tokens": 525,
-    "score": 82
-   },
-   {
-    "name": "get_company_brief_pack",
-    "tokens": 296,
-    "score": 87
-   },
-   {
-    "name": "list_restatements",
-    "tokens": 1605,
-    "score": 77
-   },
-   {
-    "name": "explain_restatement",
-    "tokens": 506,
-    "score": 82
-   },
-   {
-    "name": "submit_feedback",
-    "tokens": 1166,
-    "score": 32
-   },
-   {
-    "name": "submit_artifact_feedback",
-    "tokens": 991,
-    "score": 77
-   },
-   {
-    "name": "get_insider_transactions",
-    "tokens": 560,
-    "score": 82
-   },
-   {
-    "name": "get_institutional_holdings",
-    "tokens": 593,
-    "score": 82
-   },
-   {
-    "name": "get_manager_portfolio",
-    "tokens": 540,
-    "score": 88
-   },
-   {
-    "name": "get_blockholders",
-    "tokens": 497,
-    "score": 82
-   },
-   {
-    "name": "get_insider_sentiment",
-    "tokens": 277,
-    "score": 87
-   },
-   {
-    "name": "get_top_holders",
-    "tokens": 466,
-    "score": 82
-   },
-   {
-    "name": "get_smart_money_flow",
-    "tokens": 595,
-    "score": 82
-   },
-   {
-    "name": "get_ownership_pack",
-    "tokens": 396,
-    "score": 82
-   },
-   {
-    "name": "get_report",
-    "tokens": 245,
-    "score": 87
-   },
-   {
-    "name": "search_reports",
-    "tokens": 324,
-    "score": 88
-   },
-   {
-    "name": "compute_dcf",
-    "tokens": 1688,
-    "score": 77
-   },
-   {
-    "name": "forensic_audit",
-    "tokens": 264,
-    "score": 83
-   },
-   {
-    "name": "get_pit_valuation_ratios",
-    "tokens": 439,
-    "score": 82
-   },
-   {
-    "name": "run_backtest",
-    "tokens": 757,
-    "score": 48
-   },
-   {
-    "name": "project_three_statement",
-    "tokens": 828,
-    "score": 77
-   },
-   {
-    "name": "compute_lbo",
-    "tokens": 876,
-    "score": 77
-   },
-   {
-    "name": "compute_accretion_dilution",
-    "tokens": 797,
-    "score": 77
-   },
-   {
-    "name": "compute_price_multiples",
-    "tokens": 1036,
-    "score": 77
-   },
-   {
-    "name": "list_report_versions",
-    "tokens": 279,
-    "score": 93
-   },
-   {
-    "name": "get_report_version",
-    "tokens": 242,
-    "score": 87
-   },
-   {
-    "name": "render_report",
-    "tokens": 652,
-    "score": 77
-   },
-   {
-    "name": "generate_dcf_xlsx",
-    "tokens": 672,
-    "score": 73
-   },
-   {
-    "name": "generate_research_brief_docx",
-    "tokens": 839,
-    "score": 73
-   },
-   {
-    "name": "generate_comps_xlsx",
-    "tokens": 556,
-    "score": 78
-   },
-   {
-    "name": "generate_lbo_xlsx",
-    "tokens": 1277,
-    "score": 73
-   }
-  ]
- },
- {
   "name": "com.vocalstack/mcp",
   "title": "VocalStack",
   "slug": "com-vocalstack-mcp",
@@ -83360,7 +82952,7 @@ window.ECOSYSTEM_DATA = [
   "density": 85,
   "efficiency": 41,
   "tokensPerTool": 619,
-  "category": "Communication & Alerting",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "land.aletheia/4words",
@@ -83456,7 +83048,7 @@ window.ECOSYSTEM_DATA = [
   "density": 85,
   "efficiency": 34,
   "tokensPerTool": 1967,
-  "category": "Payments, CRM & Finance",
+  "category": "Finance, Crypto & Web3",
   "repository": null,
   "sourceType": "registry",
   "registryName": "ai.senaro/personal-finance",
@@ -83572,7 +83164,7 @@ window.ECOSYSTEM_DATA = [
   "density": 85,
   "efficiency": 30,
   "tokensPerTool": 686,
-  "category": "Communication & Alerting",
+  "category": "E-Commerce & Retail",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.go2trip.mcp/go2trip",
@@ -83615,77 +83207,6 @@ window.ECOSYSTEM_DATA = [
   ]
  },
  {
-  "name": "com.autotunempc/autotunempc",
-  "title": "AutoTuneMPC",
-  "slug": "com-autotunempc-autotunempc",
-  "grade": "B",
-  "tqi": 76,
-  "strictness": 89,
-  "density": 91,
-  "efficiency": 55,
-  "tokensPerTool": 887,
-  "category": "Other",
-  "repository": "https://github.com/kaiden8/autotunempc-examples",
-  "sourceType": "registry",
-  "registryName": "com.autotunempc/autotunempc",
-  "version": "1.0.1",
-  "fetchedAt": "2026-11-22T12:49:37.224Z",
-  "publishedAt": "2026-11-21T15:45:21.694078Z",
-  "toolsCount": 10,
-  "tools": [
-   {
-    "name": "identify_discrete_plant",
-    "tokens": 426,
-    "score": 78
-   },
-   {
-    "name": "validate_problem",
-    "tokens": 1930,
-    "score": 79
-   },
-   {
-    "name": "solve_mpc",
-    "tokens": 2570,
-    "score": 73
-   },
-   {
-    "name": "reset_warm_start",
-    "tokens": 169,
-    "score": 89
-   },
-   {
-    "name": "start_autotune_job",
-    "tokens": 2556,
-    "score": 73
-   },
-   {
-    "name": "get_autotune_job",
-    "tokens": 223,
-    "score": 77
-   },
-   {
-    "name": "autotune_root_zone_irrigation",
-    "tokens": 151,
-    "score": 92
-   },
-   {
-    "name": "autotune_battery_peak_shaving",
-    "tokens": 150,
-    "score": 92
-   },
-   {
-    "name": "autotune_embedded_controller_with_c_codegen",
-    "tokens": 328,
-    "score": 78
-   },
-   {
-    "name": "autotune_template",
-    "tokens": 364,
-    "score": 33
-   }
-  ]
- },
- {
   "name": "live.brontide/mech-arena",
   "title": "Brontide agent arena",
   "slug": "live-brontide-mech-arena",
@@ -83695,7 +83216,7 @@ window.ECOSYSTEM_DATA = [
   "density": 95,
   "efficiency": 52,
   "tokensPerTool": 729,
-  "category": "Other",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/beeswaxpat/brontide-agent-kit",
   "sourceType": "registry",
   "registryName": "live.brontide/mech-arena",
@@ -83762,6 +83283,92 @@ window.ECOSYSTEM_DATA = [
   ]
  },
  {
+  "name": "com.senzing/mcp",
+  "title": "Senzing",
+  "slug": "com-senzing-mcp",
+  "grade": "B",
+  "tqi": 76,
+  "strictness": 92,
+  "density": 86,
+  "efficiency": 45,
+  "tokensPerTool": 804,
+  "category": "Developer Tools & DevOps",
+  "repository": "https://github.com/Senzing/mcp",
+  "sourceType": "registry",
+  "registryName": "com.senzing/mcp",
+  "version": "1.46.3",
+  "fetchedAt": "2026-11-22T12:49:37.224Z",
+  "publishedAt": "2026-11-20T21:01:59.750978Z",
+  "toolsCount": 13,
+  "tools": [
+   {
+    "name": "analyze_record",
+    "tokens": 475,
+    "score": 78
+   },
+   {
+    "name": "download_resource",
+    "tokens": 738,
+    "score": 77
+   },
+   {
+    "name": "explain_error_code",
+    "tokens": 111,
+    "score": 84
+   },
+   {
+    "name": "find_examples",
+    "tokens": 511,
+    "score": 82
+   },
+   {
+    "name": "generate_scaffold",
+    "tokens": 423,
+    "score": 78
+   },
+   {
+    "name": "get_capabilities",
+    "tokens": 186,
+    "score": 75
+   },
+   {
+    "name": "get_sample_data",
+    "tokens": 879,
+    "score": 74
+   },
+   {
+    "name": "get_sdk_reference",
+    "tokens": 831,
+    "score": 77
+   },
+   {
+    "name": "mapping_workflow",
+    "tokens": 3535,
+    "score": 52
+   },
+   {
+    "name": "reporting_guide",
+    "tokens": 707,
+    "score": 77
+   },
+   {
+    "name": "sdk_guide",
+    "tokens": 1105,
+    "score": 77
+   },
+   {
+    "name": "search_docs",
+    "tokens": 578,
+    "score": 78
+   },
+   {
+    "name": "submit_feedback",
+    "tokens": 370,
+    "score": 78
+   }
+  ]
+ },
+ {
   "name": "com.midasiteurope/civil-nx",
   "title": "MIDAS CIVIL NX tools (MIDAS IT Europe)",
   "slug": "com-midasiteurope-civil-nx",
@@ -83771,7 +83378,7 @@ window.ECOSYSTEM_DATA = [
   "density": 86,
   "efficiency": 44,
   "tokensPerTool": 952,
-  "category": "Other",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.midasiteurope/civil-nx",
@@ -84252,7 +83859,7 @@ window.ECOSYSTEM_DATA = [
   "density": 87,
   "efficiency": 43,
   "tokensPerTool": 648,
-  "category": "Developer Tools & VCS",
+  "category": "Other",
   "repository": "https://github.com/Otha-Labs/persuasion-mcp",
   "sourceType": "registry",
   "registryName": "com.coppica/persuasion-taxonomy",
@@ -84309,6 +83916,302 @@ window.ECOSYSTEM_DATA = [
   ]
  },
  {
+  "name": "biz.valuein/mcp",
+  "title": "Valuein — SEC EDGAR Fundamentals & Smart-Money Data",
+  "slug": "biz-valuein-mcp",
+  "grade": "B",
+  "tqi": 76,
+  "strictness": 98,
+  "density": 86,
+  "efficiency": 42,
+  "tokensPerTool": 723,
+  "category": "AI, LLMs & Agents",
+  "repository": "https://github.com/valuein/valuein",
+  "sourceType": "registry",
+  "registryName": "biz.valuein/mcp",
+  "version": "3.38.1",
+  "fetchedAt": "2026-11-22T12:49:37.224Z",
+  "publishedAt": "2026-11-22T01:24:05.889101Z",
+  "toolsCount": 55,
+  "tools": [
+   {
+    "name": "search_companies",
+    "tokens": 1079,
+    "score": 27
+   },
+   {
+    "name": "get_company_fundamentals",
+    "tokens": 1155,
+    "score": 52
+   },
+   {
+    "name": "get_valuation_metrics",
+    "tokens": 751,
+    "score": 77
+   },
+   {
+    "name": "get_financial_ratios",
+    "tokens": 1285,
+    "score": 77
+   },
+   {
+    "name": "get_sec_filing_links",
+    "tokens": 742,
+    "score": 77
+   },
+   {
+    "name": "list_filing_forms",
+    "tokens": 294,
+    "score": 87
+   },
+   {
+    "name": "latest_filings",
+    "tokens": 397,
+    "score": 78
+   },
+   {
+    "name": "list_filing_sections",
+    "tokens": 822,
+    "score": 77
+   },
+   {
+    "name": "read_filing_section",
+    "tokens": 802,
+    "score": 52
+   },
+   {
+    "name": "find_in_filing",
+    "tokens": 1198,
+    "score": 77
+   },
+   {
+    "name": "get_capital_allocation_profile",
+    "tokens": 721,
+    "score": 77
+   },
+   {
+    "name": "get_peer_comparables",
+    "tokens": 754,
+    "score": 77
+   },
+   {
+    "name": "get_pit_universe",
+    "tokens": 1067,
+    "score": 77
+   },
+   {
+    "name": "get_compute_ready_stream",
+    "tokens": 375,
+    "score": 82
+   },
+   {
+    "name": "describe_schema",
+    "tokens": 210,
+    "score": 93
+   },
+   {
+    "name": "list_sops",
+    "tokens": 277,
+    "score": 83
+   },
+   {
+    "name": "get_sop",
+    "tokens": 348,
+    "score": 78
+   },
+   {
+    "name": "verify_fact_lineage",
+    "tokens": 1367,
+    "score": 77
+   },
+   {
+    "name": "verify_facts",
+    "tokens": 1190,
+    "score": 77
+   },
+   {
+    "name": "match_derived",
+    "tokens": 710,
+    "score": 77
+   },
+   {
+    "name": "verify_filing_figures",
+    "tokens": 1232,
+    "score": 73
+   },
+   {
+    "name": "compare_periods",
+    "tokens": 849,
+    "score": 52
+   },
+   {
+    "name": "screen_universe",
+    "tokens": 880,
+    "score": 77
+   },
+   {
+    "name": "get_earnings_signals",
+    "tokens": 480,
+    "score": 82
+   },
+   {
+    "name": "get_filing_review_pack",
+    "tokens": 525,
+    "score": 82
+   },
+   {
+    "name": "get_company_brief_pack",
+    "tokens": 296,
+    "score": 87
+   },
+   {
+    "name": "list_restatements",
+    "tokens": 1605,
+    "score": 77
+   },
+   {
+    "name": "explain_restatement",
+    "tokens": 506,
+    "score": 82
+   },
+   {
+    "name": "submit_feedback",
+    "tokens": 1166,
+    "score": 32
+   },
+   {
+    "name": "submit_artifact_feedback",
+    "tokens": 991,
+    "score": 77
+   },
+   {
+    "name": "get_insider_transactions",
+    "tokens": 560,
+    "score": 82
+   },
+   {
+    "name": "get_institutional_holdings",
+    "tokens": 593,
+    "score": 82
+   },
+   {
+    "name": "get_manager_portfolio",
+    "tokens": 540,
+    "score": 88
+   },
+   {
+    "name": "get_blockholders",
+    "tokens": 497,
+    "score": 82
+   },
+   {
+    "name": "get_insider_sentiment",
+    "tokens": 277,
+    "score": 87
+   },
+   {
+    "name": "get_top_holders",
+    "tokens": 466,
+    "score": 82
+   },
+   {
+    "name": "get_smart_money_flow",
+    "tokens": 595,
+    "score": 82
+   },
+   {
+    "name": "get_ownership_pack",
+    "tokens": 396,
+    "score": 82
+   },
+   {
+    "name": "get_report",
+    "tokens": 245,
+    "score": 87
+   },
+   {
+    "name": "search_reports",
+    "tokens": 324,
+    "score": 88
+   },
+   {
+    "name": "compute_dcf",
+    "tokens": 1688,
+    "score": 77
+   },
+   {
+    "name": "forensic_audit",
+    "tokens": 264,
+    "score": 83
+   },
+   {
+    "name": "get_pit_valuation_ratios",
+    "tokens": 439,
+    "score": 82
+   },
+   {
+    "name": "run_backtest",
+    "tokens": 757,
+    "score": 48
+   },
+   {
+    "name": "project_three_statement",
+    "tokens": 828,
+    "score": 77
+   },
+   {
+    "name": "compute_lbo",
+    "tokens": 876,
+    "score": 77
+   },
+   {
+    "name": "compute_accretion_dilution",
+    "tokens": 797,
+    "score": 77
+   },
+   {
+    "name": "compute_price_multiples",
+    "tokens": 1036,
+    "score": 77
+   },
+   {
+    "name": "list_report_versions",
+    "tokens": 279,
+    "score": 93
+   },
+   {
+    "name": "get_report_version",
+    "tokens": 242,
+    "score": 87
+   },
+   {
+    "name": "render_report",
+    "tokens": 652,
+    "score": 77
+   },
+   {
+    "name": "generate_dcf_xlsx",
+    "tokens": 672,
+    "score": 73
+   },
+   {
+    "name": "generate_research_brief_docx",
+    "tokens": 839,
+    "score": 73
+   },
+   {
+    "name": "generate_comps_xlsx",
+    "tokens": 556,
+    "score": 78
+   },
+   {
+    "name": "generate_lbo_xlsx",
+    "tokens": 1277,
+    "score": 73
+   }
+  ]
+ },
+ {
   "name": "com.finerxfinder/finerx",
   "title": "FineRx",
   "slug": "com-finerxfinder-finerx",
@@ -84318,7 +84221,7 @@ window.ECOSYSTEM_DATA = [
   "density": 89,
   "efficiency": 66,
   "tokensPerTool": 301,
-  "category": "Other",
+  "category": "E-Commerce & Retail",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.finerxfinder/finerx",
@@ -84425,57 +84328,6 @@ window.ECOSYSTEM_DATA = [
   ]
  },
  {
-  "name": "com.seedviews/seedviews",
-  "title": "SeedViews",
-  "slug": "com-seedviews-seedviews",
-  "grade": "B",
-  "tqi": 75,
-  "strictness": 92,
-  "density": 90,
-  "efficiency": 59,
-  "tokensPerTool": 428,
-  "category": "Other",
-  "repository": null,
-  "sourceType": "registry",
-  "registryName": "com.seedviews/seedviews",
-  "version": "1.0.0",
-  "fetchedAt": "2026-11-22T12:49:37.224Z",
-  "publishedAt": "2026-11-22T02:43:28.422947Z",
-  "toolsCount": 6,
-  "tools": [
-   {
-    "name": "cast",
-    "tokens": 955,
-    "score": 32
-   },
-   {
-    "name": "send_offers",
-    "tokens": 834,
-    "score": 73
-   },
-   {
-    "name": "check_video",
-    "tokens": 270,
-    "score": 83
-   },
-   {
-    "name": "pay_creator",
-    "tokens": 166,
-    "score": 89
-   },
-   {
-    "name": "get_results",
-    "tokens": 217,
-    "score": 83
-   },
-   {
-    "name": "get_files",
-    "tokens": 127,
-    "score": 92
-   }
-  ]
- },
- {
   "name": "travel.ourway/camino-de-santiago",
   "title": "Ourway – Camino de Santiago",
   "slug": "travel-ourway-camino-de-santiago",
@@ -84485,7 +84337,7 @@ window.ECOSYSTEM_DATA = [
   "density": 86,
   "efficiency": 51,
   "tokensPerTool": 620,
-  "category": "Other",
+  "category": "E-Commerce & Retail",
   "repository": "https://github.com/contactoourway-art/ourway-mcp",
   "sourceType": "registry",
   "registryName": "travel.ourway/camino-de-santiago",
@@ -84576,7 +84428,7 @@ window.ECOSYSTEM_DATA = [
   "density": 85,
   "efficiency": 50,
   "tokensPerTool": 477,
-  "category": "Other",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.valksor/interslavic",
@@ -84612,7 +84464,7 @@ window.ECOSYSTEM_DATA = [
   "density": 85,
   "efficiency": 45,
   "tokensPerTool": 754,
-  "category": "Other",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/autoview-com/mcp",
   "sourceType": "registry",
   "registryName": "com.autoview/mcp",
@@ -84728,7 +84580,7 @@ window.ECOSYSTEM_DATA = [
   "density": 85,
   "efficiency": 38,
   "tokensPerTool": 1219,
-  "category": "Developer Tools & VCS",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/Craig-Horton/ai-bvf",
   "sourceType": "registry",
   "registryName": "io.github.Craig-Horton/aibvf-mcp",
@@ -84814,7 +84666,7 @@ window.ECOSYSTEM_DATA = [
   "density": 89,
   "efficiency": 74,
   "tokensPerTool": 189,
-  "category": "Other",
+  "category": "Finance, Crypto & Web3",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.scriptmasterlabs/token-verdict",
@@ -84890,7 +84742,7 @@ window.ECOSYSTEM_DATA = [
   "density": 88,
   "efficiency": 69,
   "tokensPerTool": 200,
-  "category": "Other",
+  "category": "E-Commerce & Retail",
   "repository": null,
   "sourceType": "registry",
   "registryName": "rent.workman/workman",
@@ -84936,7 +84788,7 @@ window.ECOSYSTEM_DATA = [
   "density": 86,
   "efficiency": 54,
   "tokensPerTool": 375,
-  "category": "Other",
+  "category": "AI, LLMs & Agents",
   "repository": null,
   "sourceType": "registry",
   "registryName": "com.n9t2/xrpl-agent-gateway",
@@ -85373,7 +85225,7 @@ window.ECOSYSTEM_DATA = [
   "density": 85,
   "efficiency": 40,
   "tokensPerTool": 838,
-  "category": "Other",
+  "category": "Jobs, Career & Learning",
   "repository": null,
   "sourceType": "registry",
   "registryName": "so.tallyho/tallyho",
@@ -85414,7 +85266,7 @@ window.ECOSYSTEM_DATA = [
   "density": 85,
   "efficiency": 66,
   "tokensPerTool": 269,
-  "category": "Payments, CRM & Finance",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/base-buzz/paystage",
   "sourceType": "registry",
   "registryName": "io.github.base-buzz/x402-payment-safety",
@@ -85485,7 +85337,7 @@ window.ECOSYSTEM_DATA = [
   "density": 86,
   "efficiency": 53,
   "tokensPerTool": 420,
-  "category": "Security & Identity",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/Project-Gifted1/pg1-ai-agent",
   "sourceType": "registry",
   "registryName": "io.github.Project-Gifted1/pg1-threat-intel",
@@ -85616,7 +85468,7 @@ window.ECOSYSTEM_DATA = [
   "density": 85,
   "efficiency": 50,
   "tokensPerTool": 573,
-  "category": "Cloud & Hosting Platforms",
+  "category": "AI, LLMs & Agents",
   "repository": "https://github.com/OptimNow/cloud-finops-skills",
   "sourceType": "registry",
   "registryName": "io.github.OptimNow/cloud-finops",
@@ -85865,7 +85717,7 @@ window.ECOSYSTEM_DATA = [
   "density": 87,
   "efficiency": 61,
   "tokensPerTool": 321,
-  "category": "Other",
+  "category": "E-Commerce & Retail",
   "repository": null,
   "sourceType": "registry",
   "registryName": "se.glowjakt/glowjakt",
@@ -85972,7 +85824,7 @@ window.ECOSYSTEM_DATA = [
   "density": 88,
   "efficiency": 52,
   "tokensPerTool": 580,
-  "category": "Other",
+  "category": "E-Commerce & Retail",
   "repository": null,
   "sourceType": "registry",
   "registryName": "ai.craterview/mcp",
@@ -86159,7 +86011,7 @@ window.ECOSYSTEM_DATA = [
   "density": 90,
   "efficiency": 53,
   "tokensPerTool": 432,
-  "category": "Payments, CRM & Finance",
+  "category": "Finance, Crypto & Web3",
   "repository": null,
   "sourceType": "registry",
   "registryName": "eu.paymentslaw/legislation",
@@ -86302,83 +86154,73 @@ window.ECOSYSTEM_DATA = [
   ]
  },
  {
-  "name": "com.datingpond/pond",
-  "title": "Pond",
-  "slug": "com-datingpond-pond",
+  "name": "com.autotunempc/autotunempc",
+  "title": "AutoTuneMPC",
+  "slug": "com-autotunempc-autotunempc",
   "grade": "C",
-  "tqi": 67,
-  "strictness": 94,
-  "density": 88,
-  "efficiency": 47,
-  "tokensPerTool": 696,
-  "category": "Other",
-  "repository": "https://github.com/Smitten/pond-skill",
+  "tqi": 64,
+  "strictness": 89,
+  "density": 91,
+  "efficiency": 55,
+  "tokensPerTool": 887,
+  "category": "Productivity & Notes",
+  "repository": "https://github.com/kaiden8/autotunempc-examples",
   "sourceType": "registry",
-  "registryName": "com.datingpond/pond",
-  "version": "1.0.0",
+  "registryName": "com.autotunempc/autotunempc",
+  "version": "1.0.1",
   "fetchedAt": "2026-11-22T12:49:37.224Z",
-  "publishedAt": "2026-11-20T14:39:44.049102Z",
-  "toolsCount": 12,
+  "publishedAt": "2026-11-21T15:45:21.694078Z",
+  "toolsCount": 10,
   "tools": [
    {
-    "name": "pond_publish",
-    "tokens": 1916,
-    "score": 29
+    "name": "identify_discrete_plant",
+    "tokens": 426,
+    "score": 78
    },
    {
-    "name": "pond_agent",
-    "tokens": 1250,
-    "score": 29
+    "name": "validate_problem",
+    "tokens": 1930,
+    "score": 79
    },
    {
-    "name": "pond_profile",
-    "tokens": 1014,
-    "score": 74
+    "name": "solve_mpc",
+    "tokens": 2570,
+    "score": 28
    },
    {
-    "name": "pond_profile_link",
-    "tokens": 272,
-    "score": 83
-   },
-   {
-    "name": "pond_candidates",
-    "tokens": 378,
-    "score": 82
-   },
-   {
-    "name": "pond_interest",
-    "tokens": 375,
-    "score": 82
-   },
-   {
-    "name": "pond_confirm",
-    "tokens": 361,
-    "score": 82
-   },
-   {
-    "name": "pond_decline",
-    "tokens": 297,
-    "score": 93
-   },
-   {
-    "name": "pond_delete",
-    "tokens": 250,
+    "name": "reset_warm_start",
+    "tokens": 169,
     "score": 89
    },
    {
-    "name": "pond_setups",
-    "tokens": 801,
-    "score": 3
+    "name": "start_autotune_job",
+    "tokens": 2556,
+    "score": 28
    },
    {
-    "name": "pond_answers",
-    "tokens": 1030,
-    "score": 73
+    "name": "get_autotune_job",
+    "tokens": 223,
+    "score": 77
    },
    {
-    "name": "pond_followup",
-    "tokens": 405,
-    "score": 80
+    "name": "autotune_root_zone_irrigation",
+    "tokens": 151,
+    "score": 92
+   },
+   {
+    "name": "autotune_battery_peak_shaving",
+    "tokens": 150,
+    "score": 92
+   },
+   {
+    "name": "autotune_embedded_controller_with_c_codegen",
+    "tokens": 328,
+    "score": 78
+   },
+   {
+    "name": "autotune_template",
+    "tokens": 364,
+    "score": 0
    }
   ]
  },
@@ -86392,7 +86234,7 @@ window.ECOSYSTEM_DATA = [
   "density": 85,
   "efficiency": 37,
   "tokensPerTool": 1163,
-  "category": "Developer Tools & VCS",
+  "category": "Developer Tools & DevOps",
   "repository": null,
   "sourceType": "registry",
   "registryName": "io.github.Kromatic-Innovation/neumann",
@@ -86489,6 +86331,138 @@ window.ECOSYSTEM_DATA = [
   ]
  },
  {
+  "name": "com.seedviews/seedviews",
+  "title": "SeedViews",
+  "slug": "com-seedviews-seedviews",
+  "grade": "C",
+  "tqi": 63,
+  "strictness": 92,
+  "density": 90,
+  "efficiency": 59,
+  "tokensPerTool": 428,
+  "category": "Other",
+  "repository": null,
+  "sourceType": "registry",
+  "registryName": "com.seedviews/seedviews",
+  "version": "1.0.0",
+  "fetchedAt": "2026-11-22T12:49:37.224Z",
+  "publishedAt": "2026-11-22T02:43:28.422947Z",
+  "toolsCount": 6,
+  "tools": [
+   {
+    "name": "cast",
+    "tokens": 955,
+    "score": 0
+   },
+   {
+    "name": "send_offers",
+    "tokens": 834,
+    "score": 28
+   },
+   {
+    "name": "check_video",
+    "tokens": 270,
+    "score": 83
+   },
+   {
+    "name": "pay_creator",
+    "tokens": 166,
+    "score": 89
+   },
+   {
+    "name": "get_results",
+    "tokens": 217,
+    "score": 83
+   },
+   {
+    "name": "get_files",
+    "tokens": 127,
+    "score": 92
+   }
+  ]
+ },
+ {
+  "name": "com.datingpond/pond",
+  "title": "Pond",
+  "slug": "com-datingpond-pond",
+  "grade": "C",
+  "tqi": 62,
+  "strictness": 94,
+  "density": 88,
+  "efficiency": 47,
+  "tokensPerTool": 696,
+  "category": "AI, LLMs & Agents",
+  "repository": "https://github.com/Smitten/pond-skill",
+  "sourceType": "registry",
+  "registryName": "com.datingpond/pond",
+  "version": "1.0.0",
+  "fetchedAt": "2026-11-22T12:49:37.224Z",
+  "publishedAt": "2026-11-20T14:39:44.049102Z",
+  "toolsCount": 12,
+  "tools": [
+   {
+    "name": "pond_publish",
+    "tokens": 1916,
+    "score": 0
+   },
+   {
+    "name": "pond_agent",
+    "tokens": 1250,
+    "score": 0
+   },
+   {
+    "name": "pond_profile",
+    "tokens": 1014,
+    "score": 74
+   },
+   {
+    "name": "pond_profile_link",
+    "tokens": 272,
+    "score": 83
+   },
+   {
+    "name": "pond_candidates",
+    "tokens": 378,
+    "score": 82
+   },
+   {
+    "name": "pond_interest",
+    "tokens": 375,
+    "score": 82
+   },
+   {
+    "name": "pond_confirm",
+    "tokens": 361,
+    "score": 82
+   },
+   {
+    "name": "pond_decline",
+    "tokens": 297,
+    "score": 93
+   },
+   {
+    "name": "pond_delete",
+    "tokens": 250,
+    "score": 89
+   },
+   {
+    "name": "pond_setups",
+    "tokens": 801,
+    "score": 3
+   },
+   {
+    "name": "pond_answers",
+    "tokens": 1030,
+    "score": 73
+   },
+   {
+    "name": "pond_followup",
+    "tokens": 405,
+    "score": 80
+   }
+  ]
+ },
+ {
   "name": "io.github.Kromatic-Innovation/fermi",
   "title": "io.github.Kromatic-Innovation/fermi",
   "slug": "io-github-kromatic-innovation-fermi",
@@ -86498,7 +86472,7 @@ window.ECOSYSTEM_DATA = [
   "density": 85,
   "efficiency": 41,
   "tokensPerTool": 769,
-  "category": "Developer Tools & VCS",
+  "category": "Developer Tools & DevOps",
   "repository": "https://github.com/Kromatic-Innovation/fermi",
   "sourceType": "registry",
   "registryName": "io.github.Kromatic-Innovation/fermi",
@@ -86541,6 +86515,32 @@ window.ECOSYSTEM_DATA = [
     "name": "check_account_and_credits",
     "tokens": 298,
     "score": 71
+   }
+  ]
+ },
+ {
+  "name": "ai.achromat/mcp-server",
+  "title": "Achromat Machine Operational Memory",
+  "slug": "ai-achromat-mcp-server",
+  "grade": "F",
+  "tqi": 37,
+  "strictness": 100,
+  "density": 85,
+  "efficiency": 50,
+  "tokensPerTool": 536,
+  "category": "Vector DBs & AI Search",
+  "repository": "https://github.com/achromat-ai/achromat-mcp-server",
+  "sourceType": "registry",
+  "registryName": "ai.achromat/mcp-server",
+  "version": "0.1.7",
+  "fetchedAt": "2026-11-22T12:49:37.224Z",
+  "publishedAt": "2026-11-21T11:02:29.109259Z",
+  "toolsCount": 1,
+  "tools": [
+   {
+    "name": "achromat_recall",
+    "tokens": 536,
+    "score": 37
    }
   ]
  }

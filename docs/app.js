@@ -293,7 +293,7 @@
         tool.description = d;
       }
 
-      // Empty enum removal & array items addition
+      // Empty enum removal & array items addition & boolean required fix
       if (tool.inputSchema.properties) {
         for (const [key, prop] of Object.entries(tool.inputSchema.properties)) {
           if (prop && Array.isArray(prop.enum) && prop.enum.length === 0) {
@@ -304,10 +304,31 @@
             prop.items = { type: 'string' };
             changeCount++;
           }
+          if (prop && typeof prop === 'object' && prop.required === true) {
+            delete prop.required;
+            if (!Array.isArray(tool.inputSchema.required)) tool.inputSchema.required = [];
+            if (!tool.inputSchema.required.includes(key)) tool.inputSchema.required.push(key);
+            changeCount++;
+          } else if (prop && typeof prop === 'object' && prop.required === false) {
+            delete prop.required;
+            changeCount++;
+          }
         }
       }
     }
     return { fixedTools: fixed, changeCount };
+  }
+
+  function extractTools(raw) {
+    if (!raw) throw new Error("Input is empty");
+    if (Array.isArray(raw)) return raw;
+    if (raw.tools && Array.isArray(raw.tools)) return raw.tools;
+    if (raw.result && raw.result.tools && Array.isArray(raw.result.tools)) return raw.result.tools;
+    if (raw.name && (raw.inputSchema || raw.description)) return [raw];
+    if (raw.mcpServers && typeof raw.mcpServers === 'object') {
+      throw new Error("This is an MCP client config file (mcpServers). To benchmark servers from client config, run in terminal: npx mcp-benchmark -c ~/.cursor/mcp.json");
+    }
+    throw new Error("Could not find a valid MCP tool or array of tools in the JSON.");
   }
 
   // PRESETS
@@ -337,13 +358,65 @@
         }
       }
     ],
+    postgres: [
+      {
+        name: "execute_query",
+        description: "Execute a read-only SQL query against the connected PostgreSQL database.",
+        inputSchema: {
+          type: "object",
+          required: ["sql"],
+          properties: {
+            sql: { type: "string", description: "SQL query statement to run." },
+            max_rows: { type: "integer", description: "Maximum number of rows to return (default: 100)." }
+          }
+        }
+      },
+      {
+        name: "list_tables",
+        description: "List all public database tables, view definitions, and row estimates.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            schema: { type: "string", description: "Schema filter (defaults to 'public')." }
+          }
+        }
+      }
+    ],
+    github: [
+      {
+        name: "search_repositories",
+        description: "Find GitHub repositories matching query syntax, topics, and stars.",
+        inputSchema: {
+          type: "object",
+          required: ["query"],
+          properties: {
+            query: { type: "string", description: "Search query string with optional qualifiers." },
+            sort: { type: "string", enum: ["stars", "forks", "updated"], description: "Sort field." },
+            per_page: { type: "integer", description: "Results per page (max 100)." }
+          }
+        }
+      },
+      {
+        name: "get_pull_request",
+        description: "Fetch comprehensive pull request status, reviewers, and diff stats.",
+        inputSchema: {
+          type: "object",
+          required: ["owner", "repo", "pull_number"],
+          properties: {
+            owner: { type: "string", description: "Repository owner username or org." },
+            repo: { type: "string", description: "Repository name." },
+            pull_number: { type: "integer", description: "Pull request number." }
+          }
+        }
+      }
+    ],
     sample_fluffy: [
       {
         name: "weather-lookup",
         description: "This tool allows you to check current weather conditions for any city.",
         inputSchema: {
           properties: {
-            city: { description: "City name" },
+            city: { description: "City name", required: true },
             units: { enum: [] },
             tags: { type: "array" }
           },
@@ -368,6 +441,7 @@
   window.McpBenchmark = {
     benchmarkServer,
     autoFixTools,
+    extractTools,
     PRESETS,
   };
 })();

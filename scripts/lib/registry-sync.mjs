@@ -210,18 +210,23 @@ export function serverFilePath(dir, slug) {
   return target;
 }
 
-const CATEGORY_KEYWORDS = [
-  ['Databases & Storage', ['database', 'postgres', 'mysql', 'sqlite', 'mongo', 'redis', 'sql', 'storage', 'bucket']],
-  ['Vector DBs & AI Search', ['vector', 'embedding', 'rag', 'semantic search', 'search engine', 'web search']],
-  ['Cloud & Hosting Platforms', ['cloud', 'deploy', 'hosting', 'kubernetes', 'docker', 'serverless', 'aws', 'azure', 'gcp']],
-  ['Observability & Analytics', ['monitor', 'observability', 'analytics', 'logging', 'logs', 'metrics', 'tracing', 'sentry']],
-  ['Payments, CRM & Finance', ['payment', 'crm', 'finance', 'invoice', 'billing', 'stock', 'crypto', 'trading', 'bank']],
-  ['Communication & Alerting', ['slack', 'email', 'chat', 'message', 'sms', 'notification', 'discord', 'telegram']],
-  ['Productivity & Notes', ['note', 'task', 'todo', 'calendar', 'project management', 'docs', 'document', 'wiki']],
-  ['Web Scraping & Automation', ['scrap', 'crawl', 'browser', 'automation', 'fetch', 'web page']],
-  ['Security & Identity', ['security', 'vulnerab', 'identity', 'auth', 'threat', 'secret']],
-  ['Developer Tools & VCS', ['github', 'gitlab', 'git ', 'code', 'developer', 'api', 'sdk', 'documentation']],
-  ['Social, Media & Knowledge', ['news', 'video', 'music', 'social', 'weather', 'knowledge', 'research', 'paper']],
+export const CATEGORY_KEYWORDS = [
+  ['AI, LLMs & Agents', ['agent', 'llm', 'prompt', 'model', 'gpt', 'claude', 'chatbot', 'assistant', 'reasoning', 'openai', 'gemini', 'anthropic', 'copilot']],
+  ['Databases & Storage', ['database', 'postgres', 'mysql', 'sqlite', 'mongo', 'redis', 'sql', 'storage', 'bucket', 'supabase', 'dynamo']],
+  ['Vector DBs & AI Search', ['vector', 'embedding', 'rag', 'semantic search', 'pinecone', 'qdrant', 'chroma', 'weaviate']],
+  ['Developer Tools & DevOps', ['github', 'gitlab', 'git ', 'compiler', 'cli', 'lint', 'debug', 'sdk', 'vcs', 'docker', 'k8s', 'kubernetes', 'terminal', 'bash', 'deploy', 'serverless', 'aws', 'azure', 'gcp']],
+  ['Finance, Crypto & Web3', ['payment', 'finance', 'invoice', 'billing', 'stock', 'crypto', 'trading', 'bank', 'wallet', 'btc', 'eth', 'token', 'defi', 'forex', 'nft', 'blockchain', 'solana', 'xrpl']],
+  ['E-Commerce & Retail', ['shop', 'store', 'coupon', 'product', 'price', 'retail', 'order', 'cart', 'ecommerce', 'voucher', 'catalog', 'shipping', 'parcel', 'inventory']],
+  ['Web Scraping & Automation', ['scrap', 'crawl', 'browser', 'automation', 'fetch', 'web page', 'puppeteer', 'playwright', 'scrape']],
+  ['Communication & Alerting', ['slack', 'email', 'chat', 'message', 'sms', 'notification', 'discord', 'telegram', 'webhook', 'alert']],
+  ['Productivity & Notes', ['note', 'task', 'todo', 'calendar', 'project management', 'docs', 'document', 'wiki', 'crm', 'jira', 'notion', 'linear', 'sheet', 'spreadsheet', 'trello']],
+  ['Healthcare & Wellness', ['health', 'medical', 'clinic', 'pharma', 'drug', 'herb', 'bio', 'doctor', 'patient', 'wellness', 'fitness', 'nutrition', 'psych', 'hospital']],
+  ['Design, UI & 3D Media', ['design', 'ui', 'ux', 'component', '3d', 'model', 'color', 'font', 'svg', 'icon', 'image', 'photo', 'canvas', 'graphic', 'render', 'figma']],
+  ['Jobs, Career & Learning', ['job', 'career', 'resume', 'hire', 'interview', 'examination', 'education', 'course', 'school', 'student', 'learn', 'teach', 'academy', 'training']],
+  ['Travel, Maps & Navigation', ['travel', 'flight', 'hotel', 'airport', 'map', 'geo', 'location', 'booking', 'tour', 'transit', 'city', 'atlas', 'route']],
+  ['Security & Identity', ['security', 'vulnerab', 'identity', 'auth', 'threat', 'secret', 'scam', 'audit', 'verify', 'fraud', 'privacy', 'firewall']],
+  ['Observability & Analytics', ['monitor', 'observability', 'analytics', 'logging', 'logs', 'metrics', 'tracing', 'sentry', 'uptime', 'telemetry', 'seo']],
+  ['Social, Media & Knowledge', ['news', 'video', 'music', 'social', 'weather', 'forecast', 'knowledge', 'research', 'paper', 'podcast', 'youtube', 'reddit', 'content']],
 ];
 
 /** Keyword heuristic over name/title/description; falls back to "Other". */
