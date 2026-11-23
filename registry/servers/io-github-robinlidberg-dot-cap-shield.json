@@ -1,0 +1,237 @@
+{
+  "$schema": "../schema.json",
+  "name": "io.github.robinlidberg-dot/cap-shield",
+  "category": "Developer Tools & VCS",
+  "description": "Context selection and compression for AI agents - recall measured, not claimed.",
+  "repository": "https://github.com/robinlidberg-dot/cap-shield-mcp",
+  "tools": [
+    {
+      "name": "measure_traffic",
+      "description": "Measure how much of your own agent traffic could be saved. NO ACCOUNT OR KEY NEEDED — use this first. Returns byte savings over the wire and, if a query is given, token savings from selective context retrieval. Nothing is stored: the text is compressed in memory and discarded. Rate limited to 20 calls per hour per IP.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "texts": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Your actual messages. 200 max."
+          },
+          "query": {
+            "type": "string",
+            "description": "Optional. What your agent would search its memory for. Given this, token savings are measured too."
+          },
+          "dict_id": {
+            "type": "string",
+            "default": "finance",
+            "description": "Which trained dictionary to measure against. Call list_packages to see the options and their measured figures."
+          }
+        },
+        "required": [
+          "texts"
+        ]
+      }
+    },
+    {
+      "name": "list_packages",
+      "description": "List the available dictionaries with their MEASURED compression, including the ones that perform badly. Each entry says whether it works one message at a time or only batched, and how many messages came out LARGER. No key needed.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "remember",
+      "description": "Store a memory entry for later retrieval. REQUIRES A KEY. This does not call any language model — it stores text in an isolated per-tenant archive. Use assemble_context to get relevant entries back.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "namespace": {
+            "type": "string",
+            "description": "Groups related memories."
+          },
+          "text": {
+            "type": "string"
+          },
+          "item_id": {
+            "type": "string",
+            "description": "Optional. Same id overwrites the entry. Omit for a generated one."
+          },
+          "ttl_days": {
+            "type": "integer",
+            "description": "Optional. After this many days, assemble_context stops selecting this entry. It is not deleted, just no longer chosen. Omit to keep it eligible indefinitely, as before this field existed."
+          }
+        },
+        "required": [
+          "namespace",
+          "text"
+        ]
+      }
+    },
+    {
+      "name": "assemble_context",
+      "description": "Retrieve the memory entries that answer a question, within a token budget. REQUIRES A KEY. Send the returned 'context' to your language model INSTEAD of the whole history. This does not call a model itself — it selects what to send. The budget is a ceiling, not a target: selection stops where relevance runs out, often well below it. The response says how many entries were left behind and why. If the response has a 'budget_warning', the best match did not fit: call again with its suggested_token_budget.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "namespace": {
+            "type": "string"
+          },
+          "query": {
+            "type": "string",
+            "description": "What you need context about."
+          },
+          "token_budget": {
+            "type": "integer",
+            "default": 2000
+          },
+          "reduce": {
+            "type": "boolean",
+            "default": false,
+            "description": "Opt-in (FAS L): shorten the assembled context with a small, local, task-agnostic model before it is returned, to lower your own model's token cost. Requires tenant consent for context_reduction (set via /api/v1/gdpr/consent) — otherwise the call is rejected with SAMTYCKE_KRAVS instead of silently ignoring the request. NOT query-aware: selection is driven by what is least informative in general, not by this query."
+          },
+          "target_tokens": {
+            "type": "integer",
+            "description": "Only relevant together with reduce=true. How many tokens the assembled context should be shortened to. Omit for a default halving of what was actually retrieved."
+          }
+        },
+        "required": [
+          "namespace",
+          "query"
+        ]
+      }
+    },
+    {
+      "name": "assemble_escalation_context",
+      "description": "Retrieve a WIDE context for a question your model could not answer from assemble_context. REQUIRES A KEY. Use it when assemble_context returned escalate_recommended=true, or when the answer depends on dates, counts or several sessions. This does not call a model itself. Returns 'context' (up to token_budget, default 150 000 tokens: lower it if your model's window is smaller), where each stored entry starts with a header '--- Session YYYY/MM/DD (Ddd) HH:MM ---' giving when it was stored, and 'utelamnat_kontext': lower-ranked entries that were left out, in the same format. Read those only if the answer is still missing from 'context'. Python users can pass the whole response to cap_escalate_helper.eskalera_om_behovs_v6().",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "namespace": {
+            "type": "string"
+          },
+          "query": {
+            "type": "string",
+            "description": "The question to answer."
+          },
+          "token_budget": {
+            "type": "integer",
+            "default": 150000,
+            "description": "Ceiling for 'context'. The default is what the method was measured with."
+          },
+          "utelamnat_tokens": {
+            "type": "integer",
+            "default": 60000,
+            "description": "Ceiling for 'utelamnat_kontext'. 0 = none."
+          }
+        },
+        "required": [
+          "namespace",
+          "query"
+        ]
+      }
+    },
+    {
+      "name": "get_account",
+      "description": "Get an account and an API key. Requires an email address. The key is returned ONCE and cannot be shown again — store it immediately. Beta quotas are low by design; they are hard stops, never overage billing.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "traffic": {
+            "type": "string",
+            "description": "Optional. What your agent sends."
+          }
+        },
+        "required": [
+          "email"
+        ]
+      }
+    },
+    {
+      "name": "issue_pass",
+      "description": "Issue a short-lived (15 minute) signed credential (a JWT) stating who the caller acts for. REQUIRES A KEY. Anyone can verify it independently against /.well-known/jwks.json — without calling CAP-Shield again. 'acts_for' and 'scope' are NOT validated against reality: the pass only attests that the key holder claimed this, at this time, and that the claim is recorded in the audit chain. This is identity and claimed authorization, not a payment or access-control mechanism.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "acts_for": {
+            "type": "string",
+            "description": "Who the agent claims to act for, e.g. 'acme-corp/procurement'."
+          },
+          "audience": {
+            "type": "string",
+            "description": "Optional. Who the pass is shown to."
+          },
+          "scope": {
+            "type": "object",
+            "description": "Optional, freeform, NOT validated. Example: {\"can_read\": \"invoice_json\", \"max_budget_usd\": 500}."
+          }
+        },
+        "required": [
+          "acts_for"
+        ]
+      }
+    },
+    {
+      "name": "pack_batch",
+      "description": "Pack several messages into ONE compressed packet instead of packing them one at a time. REQUIRES A KEY. Worth it for many small/medium messages (the per-message header cost is paid once per batch, and zstd shares context across them) — for a single message this has no advantage. Returns packet_b64 (hand it to unpack_batch to get the messages back) plus the measured byte savings versus packing each message separately. SECURITY: only batch messages that already share the SAME trust boundary (same tenant/agent — nothing attacker-influenced mixed in with a secret). Batched messages share one compression context, which can leak size-based information between them (a CRIME/BREACH-style side channel). There is no padding mitigation on this endpoint today, so trust-boundary separation is the only protection — don't rely on padding.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "texts": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The messages to batch together, in order. Two or more — a single message gets no benefit."
+          },
+          "dict_id": {
+            "type": "string",
+            "default": "finance",
+            "description": "Which trained dictionary to compress against. Call list_packages to see the options."
+          },
+          "agent_id": {
+            "type": "string",
+            "description": "Optional. A label for audit/metrics."
+          }
+        },
+        "required": [
+          "texts"
+        ]
+      }
+    },
+    {
+      "name": "unpack_batch",
+      "description": "Unpack a batch packet made by pack_batch (or by the /api/v1/pack-batch endpoint) back into the exact original list of messages, in order. REQUIRES A KEY. Not for a packet made by the single-message pack endpoint — that is a different format and this will reject it.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "packet_b64": {
+            "type": "string",
+            "description": "The packet_b64 returned by pack_batch."
+          },
+          "agent_id": {
+            "type": "string",
+            "description": "Optional. A label for audit/metrics."
+          }
+        },
+        "required": [
+          "packet_b64"
+        ]
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "io.github.robinlidberg-dot/cap-shield",
+    "version": "0.7.1",
+    "remoteUrl": "https://cap-shield-robin.fly.dev/mcp",
+    "publishedAt": "2026-11-22T14:38:30.773873Z",
+    "fetchedAt": "2026-11-23T16:50:40.239Z",
+    "toolsSha256": "697f2b1aad1dc5d3952c8b1beafad04f36d64508939c61a11cb34af660f2cea7"
+  }
+}

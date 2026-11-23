@@ -3,12 +3,12 @@
   "name": "io.github.wonderpick/apify-b2b-ecom-automation-kit",
   "title": "Apify External Business Intelligence MCP Server",
   "category": "Payments, CRM & Finance",
-  "description": "8 external-intel tools & 6 prompts: B2B site audits, stockists, Shopify, SOC 2 & K-Beauty.",
+  "description": "9 external-intel tools & 7 prompts: Meta Ads, B2B audits, stockists, Shopify, SOC 2 & K-Beauty.",
   "repository": "https://github.com/wonderpick/apify-b2b-ecom-automation-kit",
   "tools": [
     {
       "name": "extract_brand_store_stockists",
-      "description": "Extract physical retail stockists and independent boutiques carrying external competitor brands (Stockist, Storepoint, StoreRocket, Storemapper, WP Store Locator, JSON-LD, HTML) and enrich each retailer website with buyer/wholesale emails (including Cloudflare decoding), Instagram, LinkedIn, independent-vs-chain classification, and 0-100 outreachReadinessScore ($5/1K stores; $0 when empty or filtered). Use for wholesale retail prospecting; do not use for editing your own store locator map or enriching corporate SaaS companies (use enrich_b2b_company_leads instead).",
+      "description": "Extract retail stockists carrying external brands and enrich each store domain with verified buyer emails and DNS deliverability checks. Supply at least one source (urls, rawCsvOrUrls, datasetId, or sourceRunId); omitting all sources returns 0 items at $0. Optional filters (onlyIndependentStores, onlyWithEmail, minReadinessScore) gate billing before charge, while maxStoresPerBrand (1-5,000) bounds fan-out per brand. Bills $5/1K stores ($0 when empty or filtered), runs ~15-60s per brand with per-store failure isolation in OUTPUT_SUMMARY, and optionally posts to webhookUrl. Use for wholesale retail prospecting; do not use for editing your own store map or enriching corporate B2B companies (use enrich_b2b_company_leads instead).",
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
@@ -20,15 +20,28 @@
             "items": {
               "type": "string"
             },
-            "description": "Competitor brand homepages or store locator URLs, e.g. [\"https://fellowproducts.com\", \"https://brooklynhotdogcompany.com\"]. Optional when datasetId is provided."
+            "description": "Competitor brand homepages or store locator URLs, e.g. [\"https://fellowproducts.com\", \"https://brooklynhotdogcompany.com\"]. Optional when rawCsvOrUrls, datasetId, or sourceRunId is provided."
+          },
+          "rawCsvOrUrls": {
+            "type": "string",
+            "description": "Optional pasted CSV/TSV rows or newline-separated brand/locator URLs."
           },
           "datasetId": {
             "type": "string",
-            "description": "Optional upstream Apify Dataset ID containing brand or store locator URLs."
+            "description": "Optional upstream Apify Dataset ID or URL containing brand or store locator URLs."
+          },
+          "sourceRunId": {
+            "type": "string",
+            "description": "Optional upstream Apify Run ID or URL; automatically resolves defaultDatasetId."
           },
           "enrichEmails": {
             "type": "boolean",
             "description": "Visit each unique retailer website (plus /wholesale and /contact) to extract buyer emails and social links.",
+            "default": true
+          },
+          "enableDnsEmailCheck": {
+            "type": "boolean",
+            "description": "Run out-of-band 11-query DNS MX/SPF/DMARC/BIMI checks ($0) to output deliverabilityGrade (A-F) and emailProvider.",
             "default": true
           },
           "onlyWithEmail": {
@@ -58,13 +71,29 @@
             "maximum": 100,
             "description": "Minimum outreachReadinessScore (0-100) required to save and bill ($0 for filtered stores).",
             "default": 0
+          },
+          "crmExportPreset": {
+            "type": "string",
+            "enum": [
+              "default",
+              "instantly",
+              "smartlead",
+              "hubspot",
+              "lemlist"
+            ],
+            "description": "Optional flat CRM column mapping preset while preserving standard fields.",
+            "default": "default"
+          },
+          "webhookUrl": {
+            "type": "string",
+            "description": "Optional SSRF-protected HTTPS webhook URL notified with run metrics and top stockists on completion."
           }
         }
       }
     },
     {
       "name": "monitor_shopify_competitor_deltas",
-      "description": "Monitor up to 50 external Shopify competitor stores (up to 2,500 products each = 125K SKUs) for price drops, price hikes, restocks, stockouts, new launches, and MAP violations using persistent Key-Value Store snapshots ($2/1K real deltas; $0 on baseline or unchanged runs). Returns severity (CRITICAL, INVENTORY, CATALOG), oldPrice, newPrice, priceChangePercent, mapViolation, and productUrl. Use for tracking external Shopify competitors; do not use for editing your own Shopify admin or non-Shopify sites.",
+      "description": "Monitor up to 50 external Shopify competitor stores (up to 2,500 products each) for price, stock, catalog, and MAP changes against persisted Key-Value Store snapshots. Requires storeUrls; minPriceChangePercent and mapFloorPrices drive CRITICAL alerts, while stateStoreName isolates snapshots per workflow (avoid concurrent runs on the same stateStoreName to prevent race overwrites). Persists snapshot state and optional webhookUrl alerts (explaining readOnlyHint=false), isolating per-store or webhook failures in OUTPUT_SUMMARY without aborting the run. Bills $2/1K real deltas ($0 on baseline or unchanged runs). Use for recurring Shopify SKU tracking; do not use for editing your Shopify admin, Meta ad audits (use audit_meta_ads_advertisers), or retail stockists (use extract_brand_store_stockists).",
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
@@ -112,7 +141,17 @@
                 "restocked"
               ]
             },
-            "description": "Optional subset of catalog or pricing event types to emit."
+            "description": "Optional subset of catalog or pricing event types to emit.",
+            "default": [
+              "new_product",
+              "removed_product",
+              "price_drop",
+              "price_increase",
+              "discount_started",
+              "discount_ended",
+              "out_of_stock",
+              "restocked"
+            ]
           },
           "mapThresholds": {
             "type": "object",
@@ -138,7 +177,7 @@
     },
     {
       "name": "audit_saas_trust_center",
-      "description": "Audit or monitor up to 500 external SaaS vendor Trust Centers (Vanta, Drata, SafeBase, Conveyor, Whistic, Secureframe, OneTrust) for SOC 2, ISO 27001, HIPAA, PCI-DSS certifications, DNS IAM/SSO, 75+ third-party and AI subprocessors (OpenAI, Anthropic, AWS Bedrock, Vertex AI), complianceScore (0-100), and missingSoc2Lead ($5/1K audits or real changes; $0 unchanged). Use for third-party vendor risk (TPRM) or finding SaaS prospects missing SOC 2; do not use for editing your own internal GRC workspace.",
+      "description": "Audit or monitor up to 500 external SaaS vendor Trust Centers for security certifications, DNS IAM/SSO, and third-party/AI subprocessors. Requires domains (empty input returns 0 items at $0); mode=\"audit\" runs statelessly, while mode=\"monitor\" diffs against stateStoreName snapshots and emitBaselineSummary controls first-run output. Persists monitor snapshots and optional webhookUrl alerts (explaining readOnlyHint=false), isolating per-domain 403/timeout failures in OUTPUT_SUMMARY. Bills $5/1K audited domains or real changes ($0 when unchanged or WAF-blocked). Use for TPRM vendor risk or finding SaaS vendors lacking SOC 2; do not use for editing internal GRC workspaces or local SMB website audits (use audit_local_b2b_websites instead).",
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
@@ -182,6 +221,15 @@
             "maximum": 15,
             "description": "Concurrent domains to check (1-15).",
             "default": 5
+          },
+          "emitBaselineSummary": {
+            "type": "boolean",
+            "description": "In monitor mode, emit 1 zero-cost baseline_initialized summary record per domain on its first run.",
+            "default": true
+          },
+          "webhookUrl": {
+            "type": "string",
+            "description": "Optional Slack, Discord, or n8n webhook URL notified in monitor mode when compliance or AI subprocessor changes occur."
           }
         },
         "required": [
@@ -191,7 +239,7 @@
     },
     {
       "name": "enrich_b2b_company_leads",
-      "description": "Read-only 3-in-1 B2B company enricher: resolve company names, domains, work emails, or an Apify datasetId into verified official domain, LinkedIn /company/ URL (rejecting /in/ noise), Cloudflare-decoded corporate emails (sales@, contact@, hello@), WhatsApp links, phones, 6 social profiles, and 0-100 leadQualityScore ($2.50/1K enriched; $0 for misses, parked domains, or onlyWithEmail skips). Use for B2B corporate enrichment; do not use for influencer/creator bios (use enrich_creator_bio_leads instead).",
+      "description": "Resolve company names, domains, or work emails into verified official websites, LinkedIn company pages, business emails, and DNS deliverability grades. Supply at least one source (inputs, rawCsvOrUrls, datasetId, or sourceRunId; omitting all returns 0 items at $0); datasetField selects the upstream column, minConfidence sets name-match strictness, and onlyWithEmail or includeUnresolved=false drops misses before billing. Streams in 50-item chunks (~10-45s per 100 companies) with per-company error isolation in OUTPUT_SUMMARY, optional webhookUrl delivery, and $2.50/1K enriched billing ($0 for parked, unresolved, or filtered skips). Use for B2B corporate enrichment; do not use for creator link-in-bio pages (use enrich_creator_bio_leads instead).",
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
@@ -203,19 +251,32 @@
             "items": {
               "type": "string"
             },
-            "description": "Up to 2,000 company names, domains, URLs, or work emails, e.g. [\"Stripe\", \"Linear\", \"apify.com\"]. Optional when datasetId is provided."
+            "description": "Up to 2,000 company names, domains, URLs, or work emails, e.g. [\"Stripe\", \"Linear\", \"apify.com\"]. Optional when rawCsvOrUrls, datasetId, or sourceRunId is provided."
+          },
+          "rawCsvOrUrls": {
+            "type": "string",
+            "description": "Optional pasted CSV/TSV rows or newline-separated company names, domains, URLs, or work emails."
           },
           "datasetId": {
             "type": "string",
-            "description": "Optional upstream Apify Dataset ID (auto-detects website, domain, companyName, name, or email fields)."
+            "description": "Optional upstream Apify Dataset ID or URL (auto-detects website, domain, companyName, name, or email fields)."
+          },
+          "sourceRunId": {
+            "type": "string",
+            "description": "Optional upstream Apify Run ID or URL; automatically resolves defaultDatasetId."
           },
           "datasetField": {
             "type": "string",
-            "description": "Optional explicit field name to read from datasetId items when chaining."
+            "description": "Optional explicit field name to read from datasetId/sourceRunId items when chaining."
           },
           "enrichContactPages": {
             "type": "boolean",
             "description": "Follow up to 2 internal /contact or /about pages when the homepage lacks emails or LinkedIn.",
+            "default": true
+          },
+          "enableDnsEmailCheck": {
+            "type": "boolean",
+            "description": "Run out-of-band 11-query DNS MX/SPF/DMARC/BIMI checks ($0) to output deliverabilityGrade (A-F) and emailProvider.",
             "default": true
           },
           "onlyWithEmail": {
@@ -226,7 +287,7 @@
           "includeUnresolved": {
             "type": "boolean",
             "description": "Include unresolved/not_found rows in the dataset for auditability (always $0 cost).",
-            "default": false
+            "default": true
           },
           "minConfidence": {
             "type": "string",
@@ -238,19 +299,35 @@
             "description": "Minimum confidence threshold for accepting company-name-to-domain matches.",
             "default": "medium"
           },
+          "crmExportPreset": {
+            "type": "string",
+            "enum": [
+              "default",
+              "instantly",
+              "smartlead",
+              "hubspot",
+              "lemlist"
+            ],
+            "description": "Optional flat CRM column mapping preset while preserving standard fields.",
+            "default": "default"
+          },
           "concurrency": {
             "type": "integer",
             "minimum": 1,
             "maximum": 15,
             "description": "Concurrent domain resolutions (1-15).",
             "default": 6
+          },
+          "webhookUrl": {
+            "type": "string",
+            "description": "Optional SSRF-protected HTTPS webhook URL notified with run metrics and top leads on completion."
           }
         }
       }
     },
     {
       "name": "enrich_creator_bio_leads",
-      "description": "Read-only creator enricher across 15+ Link-in-Bio platforms (Linktree, Stan.store, Bio.site, Beacons, Komi, Hoo.be, Carrd, etc.). Extracts talent agency and business emails (with 1-hop personal site following + Cloudflare email decoding), phones/WhatsApp, 14 social networks, monetization links, promo codes, and 0-100 Creator Readiness Score ($2.50/1K enriched; $0 for 404/WAF/no-email skips). Use for influencer and UGC sponsorship outreach; do not use for corporate B2B companies (use enrich_b2b_company_leads instead).",
+      "description": "Enrich creator Link-in-Bio pages across 15+ bio platforms with agency or business emails, DNS deliverability checks, and sponsorship readiness scores. Supply at least one source (urls, rawCsvOrUrls, datasetId, or sourceRunId; omitting all returns 0 items at $0); enableDeepContactFollow toggles 1-hop personal-site crawling, while onlyWithEmail and minReadinessScore gate billing before charge. Streams up to 50,000 profiles in 50-item chunks at $2.50/1K enriched ($0 on 404, WAF, or filtered skips), isolating per-profile failures in OUTPUT_SUMMARY with optional webhookUrl delivery. Use for influencer and UGC sponsorship outreach; do not use for corporate B2B companies (use enrich_b2b_company_leads instead).",
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
@@ -262,15 +339,28 @@
             "items": {
               "type": "string"
             },
-            "description": "List of creator Link-in-Bio URLs or handles, e.g. [\"https://linktr.ee/heathertraska\", \"https://stan.store/stan\"]. Optional when datasetId is provided."
+            "description": "List of creator Link-in-Bio URLs or handles, e.g. [\"https://linktr.ee/heathertraska\", \"https://stan.store/stan\"]. Optional when rawCsvOrUrls, datasetId, or sourceRunId is provided."
+          },
+          "rawCsvOrUrls": {
+            "type": "string",
+            "description": "Optional pasted CSV/TSV rows or newline-separated creator Link-in-Bio URLs."
           },
           "datasetId": {
             "type": "string",
-            "description": "Optional Apify Dataset ID from an upstream Instagram, TikTok, or YouTube scraper (preserves upstreamHandle and upstreamFollowers)."
+            "description": "Optional Apify Dataset ID or URL from an upstream Instagram, TikTok, or YouTube scraper (preserves upstreamHandle and upstreamFollowers)."
+          },
+          "sourceRunId": {
+            "type": "string",
+            "description": "Optional upstream Apify Run ID or URL; automatically resolves defaultDatasetId."
           },
           "enableDeepContactFollow": {
             "type": "boolean",
             "description": "When no email is on the bio page, follow up to 2 personal website, Contact, or Media Kit links (1-hop, SSRF-safe, Cloudflare decoding included).",
+            "default": true
+          },
+          "enableDnsEmailCheck": {
+            "type": "boolean",
+            "description": "Run out-of-band 11-query DNS MX/SPF/DMARC/BIMI checks ($0) on custom creator/agency email domains.",
             "default": true
           },
           "onlyWithEmail": {
@@ -298,13 +388,29 @@
             "maximum": 20,
             "description": "Concurrent requests (1-20; capped automatically on 128-256 MB containers).",
             "default": 5
+          },
+          "crmExportPreset": {
+            "type": "string",
+            "enum": [
+              "default",
+              "instantly",
+              "smartlead",
+              "hubspot",
+              "lemlist"
+            ],
+            "description": "Optional flat CRM column mapping preset while preserving standard fields.",
+            "default": "default"
+          },
+          "webhookUrl": {
+            "type": "string",
+            "description": "Optional SSRF-protected HTTPS webhook URL notified with run metrics and top creators on completion."
           }
         }
       }
     },
     {
       "name": "search_korea_mfds_recalls",
-      "description": "Read-only search of official South Korea MFDS (식약처) cosmetic recall and sales suspension orders in plain English or Korean (auto-bridges 50+ K-Beauty terms like \"sunscreen\", \"soap\", \"Cosmax\"). Returns productName, companyName, isActiveRecall, lotNumber, recallReason, recallOrderDate, and businessNumber ($3/1K matches; $0 if none). Use for K-Beauty import safety and recall compliance screening; do not use for US FDA/EU recalls or functional OEM factory discovery (use search_korea_mfds_oem_filings instead).",
+      "description": "Search official South Korea MFDS cosmetic recall and sales-suspension orders in English or Korean. Filter inputs accept English or Korean terms (50+ K-Beauty terms like \"sunscreen\", \"soap\", and \"Cosmax\" auto-translate server-side); omitting all filters returns recent orders up to maxItems (default 100), and onlyActiveRecalls excludes lifted orders before billing. Queries the live MFDS public API (~2-10s) with automatic retries on transient gateway errors and bills $3/1K matches ($0 if none). Use for K-Beauty import safety and recall screening; do not use for US FDA/EU recalls or functional OEM factory discovery (use search_korea_mfds_oem_filings instead).",
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
@@ -346,7 +452,7 @@
     },
     {
       "name": "search_korea_mfds_oem_filings",
-      "description": "Read-only search across 219,000+ official South Korea MFDS functional cosmetic filings in plain English or Korean (\"sunscreen\", \"retinol cream\", \"Cosmax\", \"Kolmar\" auto-bridge to Korean queries). Auto-joins reviewed base formulas to uncover hidden Korean OEM/ODM factories, SPF/PA ratings, and English functionalClaims ($2/1K records; $0 if empty). Use for K-Beauty OEM sourcing and regulatory R&D; do not use for recall checks (use search_korea_mfds_recalls instead).",
+      "description": "Search 219,000+ official South Korea MFDS functional cosmetic filings in English or Korean to uncover Korean OEM/ODM factories and functional claims. Filter inputs accept English or Korean (common terms like \"sunscreen\", \"Cosmax\", \"Kolmar\" auto-bridge; unmapped English falls back to raw substring match), datasetType selects reported/reviewed/both registries, resolveOemFromReviewed joins reviewed base formulas to expose hidden factories, and maxItems/maxPagesToScan cap scan volume. Queries the live MFDS API (~5-20s; slower when resolveOemFromReviewed joins formulas) with transient retries and bills $2/1K records ($0 if empty). Use for K-Beauty OEM sourcing and R&D; do not use for recall checks (use search_korea_mfds_recalls instead).",
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
@@ -398,7 +504,7 @@
     },
     {
       "name": "audit_local_b2b_websites",
-      "description": "Read-only all-in-one agency lead auditor: accept Google Maps Apify datasetId, up to 2,000 company website URLs, or 13 live-verified US Chamber of Commerce presets, and run an 8-point website weakness X-ray (HTTPS/SSL, mobile viewport, load speed, outdated copyright year, SEO/LocalBusiness schema, GA4/GTM/Meta/TikTok pixels, booking/chat widgets, CMS), Cloudflare-decoded owner email recovery, 0-100 pitchPriorityScore, and factual cold-email subject & icebreaker ($4.50/1K leads; $0 on optional filtered misses). Use for web design, local SEO, paid ads, and AI chatbot agency prospecting; do not use for SaaS SOC 2 Trust Center security audits (use audit_saas_trust_center instead).",
+      "description": "Audit local SMB websites for technical, SEO, pixel, and DNS deliverability weaknesses, then extract owner emails and factual cold-pitch copy. Supply at least one source (websiteUrls, rawCsvOrUrls, datasetId + datasetField, sourceRunId, or presetChambers; omitting all returns 0 items at $0); agencyPreset tailors scoring and copy, dedupStoreName persists 16-shard KV snapshots for skip_seen or watch_diff modes, and onlyWithEmail/onlyWithWeakness/minPitchScore filter before billing. Persists KV dedup shards and optional webhookUrl payloads (explaining readOnlyHint=false), isolates per-site WAF/timeout errors in OUTPUT_SUMMARY, and bills $4.50/1K leads ($0 on WAF, filtered misses, or skip_seen repeats). Use for local agency prospecting; do not use for SaaS SOC 2 audits (use audit_saas_trust_center) or Meta/DTC ad audits (use audit_meta_ads_advertisers).",
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
@@ -410,11 +516,23 @@
             "items": {
               "type": "string"
             },
-            "description": "Optional list of up to 2,000 local business website URLs to audit, e.g. [\"https://ddofoods.com\"]."
+            "description": "Optional list of up to 2,000 local business website URLs to audit, e.g. [\"https://ddofoods.com\"]. Optional when rawCsvOrUrls, datasetId, sourceRunId, or presetChambers is provided."
+          },
+          "rawCsvOrUrls": {
+            "type": "string",
+            "description": "Optional pasted CSV, TSV spreadsheet rows, or newline-separated company website URLs/domains."
           },
           "datasetId": {
             "type": "string",
-            "description": "Optional upstream Apify Dataset ID (e.g. from Google Maps Scraper) to chain leads directly, preserving no_website VIP leads."
+            "description": "Optional upstream Apify Dataset ID or URL (e.g. from Google Maps Scraper) to chain leads directly, preserving no_website VIP leads."
+          },
+          "sourceRunId": {
+            "type": "string",
+            "description": "Optional upstream Apify Run ID or Console URL; automatically resolves defaultDatasetId and streams leads."
+          },
+          "datasetField": {
+            "type": "string",
+            "description": "Optional explicit field name to read from datasetId/sourceRunId items when chaining non-standard datasets."
           },
           "presetChambers": {
             "type": "array",
@@ -456,15 +574,55 @@
               "web_design",
               "local_seo",
               "paid_ads",
-              "ai_chatbot_booking"
+              "ai_chatbot_booking",
+              "deliverability_agency"
             ],
-            "description": "Agency service vertical used to weight pitchPriorityScore and tailor coldEmailSubject & coldEmailIcebreaker.",
+            "description": "Agency service vertical used to weight pitchPriorityScore and tailor coldEmailSubject, coldEmailIcebreaker, and linkedInDm.",
             "default": "all"
+          },
+          "customAgencyOffer": {
+            "type": "string",
+            "description": "Optional 1-line agency value proposition deterministically woven into coldEmailBody ($0 AI)."
+          },
+          "crmExportPreset": {
+            "type": "string",
+            "enum": [
+              "default",
+              "instantly",
+              "smartlead",
+              "hubspot",
+              "lemlist"
+            ],
+            "description": "Optional flat CRM column mapping preset (default keeps standard structured schema).",
+            "default": "default"
+          },
+          "dedupStoreName": {
+            "type": "string",
+            "description": "Optional Apify Named Key-Value Store (16-shard compact snapshots) for weekly skip_seen ($0 repeats) or watch_diff buying-trigger tracking."
+          },
+          "dedupMode": {
+            "type": "string",
+            "enum": [
+              "skip_seen",
+              "watch_diff"
+            ],
+            "description": "When dedupStoreName is set: skip_seen skips previously audited leads at $0; watch_diff detects website/DNS buying triggers.",
+            "default": "skip_seen"
           },
           "enableContactPageFollow": {
             "type": "boolean",
-            "description": "Follow up to 1 internal /contact or /about page when the homepage lacks an email.",
+            "description": "Follow up to 1 internal /contact, /about, or /team page when the homepage lacks an email.",
             "default": true
+          },
+          "enableDnsEmailCheck": {
+            "type": "boolean",
+            "description": "Run out-of-band 11-query DNS MX/SPF/DMARC/BIMI checks ($0) to output deliverabilityGrade (A-F) and emailProvider.",
+            "default": true
+          },
+          "dnsFallbackOnBlocked": {
+            "type": "boolean",
+            "description": "Default false skips WAF-blocked (403/429) sites at $0. Set true to run out-of-band DNS-only audit on live blocked domains.",
+            "default": false
           },
           "onlyWithEmail": {
             "type": "boolean",
@@ -489,6 +647,123 @@
             "maximum": 2000,
             "description": "Maximum total leads to audit and save (1-2,000).",
             "default": 100
+          },
+          "webhookUrl": {
+            "type": "string",
+            "description": "Optional SSRF-protected HTTP/HTTPS webhook URL to receive audited leads JSON on completion."
+          }
+        }
+      }
+    },
+    {
+      "name": "audit_meta_ads_advertisers",
+      "description": "Deduplicate Meta Ad Library datasets or DTC ad landing URLs into audited advertiser brands with tech-stack detection, DNS deliverability checks, verified emails, and outreach copy. Supply at least one source (landingPageUrls, rawCsvOrUrls, sourceDatasetId, or sourceRunId; omitting all returns 0 items at $0); dedupStoreName persists 16-shard KV snapshots for skip_seen ($0 repeats) or weekly watch_diff triggers, while onlyWithEmail, onlyWithActiveLeaks, and minLeakScore filter before billing. Persists KV dedup snapshots and optional webhookUrl batches (explaining readOnlyHint=false), runs ~15-60s per 20 brands with per-brand WAF/403/timeout isolation in OUTPUT_SUMMARY, and bills $4.50/1K unique brands ($0 on marketplaces, WAF skips, repeats, or filtered misses). Use for Meta Ad Library and DTC advertiser audits; do not use for local SMB audits (use audit_local_b2b_websites) or Shopify SKU price tracking (use monitor_shopify_competitor_deltas).",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "landingPageUrls": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 2000,
+            "items": {
+              "type": "string"
+            },
+            "description": "Up to 2,000 ad landing URLs, bare DTC domains, l.facebook.com links, or shorteners/bio links (bit.ly, linktr.ee). Optional when sourceDatasetId, sourceRunId, or rawCsvOrUrls is provided."
+          },
+          "sourceDatasetId": {
+            "type": "string",
+            "description": "Optional upstream Apify Dataset ID or URL from any Meta/Social Ad Library scraper (streams in 250-item pages and aggregates active ads per brand)."
+          },
+          "sourceRunId": {
+            "type": "string",
+            "description": "Optional upstream Apify Run ID or Console URL; automatically resolves defaultDatasetId and streams records."
+          },
+          "rawCsvOrUrls": {
+            "type": "string",
+            "description": "Optional pasted CSV, TSV/Google Sheets rows, or newline-separated URLs/domains."
+          },
+          "agencyPreset": {
+            "type": "string",
+            "enum": [
+              "auto_best_fit",
+              "tiktok_google_ads",
+              "tiktok_ads_agency",
+              "google_ads_agency",
+              "email_sms_retention",
+              "cro_landing_page",
+              "ugc_creative",
+              "deliverability_agency"
+            ],
+            "description": "Agency service vertical used to score leaks and tailor coldEmailSubject, coldEmailOpener, and linkedInDm.",
+            "default": "auto_best_fit"
+          },
+          "customAgencyOffer": {
+            "type": "string",
+            "description": "Optional 1-line agency value proposition deterministically woven into outreach copy ($0 AI)."
+          },
+          "crmExportPreset": {
+            "type": "string",
+            "enum": [
+              "default",
+              "instantly",
+              "smartlead",
+              "hubspot",
+              "lemlist"
+            ],
+            "description": "Optional CRM flat column mapping preset (default keeps standard structured schema).",
+            "default": "default"
+          },
+          "dedupStoreName": {
+            "type": "string",
+            "description": "Optional Apify Named Key-Value Store (16-shard compact snapshots) for weekly skip_seen ($0 repeats) or watch_diff buying-trigger tracking."
+          },
+          "dedupMode": {
+            "type": "string",
+            "enum": [
+              "skip_seen",
+              "watch_diff"
+            ],
+            "description": "When dedupStoreName is set: skip_seen skips previously audited brands at $0; watch_diff detects ad/ESP/pixel/404/DMARC changes.",
+            "default": "skip_seen"
+          },
+          "enableDnsEmailCheck": {
+            "type": "boolean",
+            "description": "Run out-of-band 11-query DNS MX/SPF/DMARC/BIMI checks ($0) to output deliverabilityGrade (A-F) and emailProvider.",
+            "default": true
+          },
+          "dnsFallbackOnBlocked": {
+            "type": "boolean",
+            "description": "Default false skips WAF-blocked (403/429) brands at $0. Set true to run out-of-band DNS-only audit on live blocked domains.",
+            "default": false
+          },
+          "onlyWithEmail": {
+            "type": "boolean",
+            "description": "When true, save and bill only advertisers where at least 1 brand email is recovered ($0 otherwise).",
+            "default": false
+          },
+          "onlyWithActiveLeaks": {
+            "type": "boolean",
+            "description": "When true, skip leak-free advertisers at $0.",
+            "default": false
+          },
+          "minLeakScore": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100,
+            "description": "Optional minimum 0-100 leakScore threshold ($0 below threshold).",
+            "default": 0
+          },
+          "maxBrands": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2000,
+            "description": "Maximum unique deduplicated brand domains to audit (1-2,000).",
+            "default": 100
+          },
+          "webhookUrl": {
+            "type": "string",
+            "description": "Optional SSRF-protected HTTP/HTTPS webhook URL to receive audited advertiser JSON on completion."
           }
         }
       }
@@ -498,10 +773,10 @@
     "type": "registry",
     "registry": "registry.modelcontextprotocol.io",
     "name": "io.github.wonderpick/apify-b2b-ecom-automation-kit",
-    "version": "2.1.1",
+    "version": "2.3.0",
     "remoteUrl": "https://apify-factory-rapidapi-gateway.apify-factory-rapidapi-gateway.workers.dev/mcp",
-    "publishedAt": "2026-11-22T07:52:35.496456Z",
-    "fetchedAt": "2026-11-22T12:49:37.224Z",
-    "toolsSha256": "53729261e861c00c045e829eb3249e1dfaf65342affc69d2d0af208c06f458dc"
+    "publishedAt": "2026-11-23T06:51:35.935587Z",
+    "fetchedAt": "2026-11-23T16:50:40.239Z",
+    "toolsSha256": "0616f0695492db165f34cb5f935c0bff67b0c13ba727e63989929ddce18ea06d"
   }
 }

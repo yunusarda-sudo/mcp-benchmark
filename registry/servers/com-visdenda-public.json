@@ -1,0 +1,1828 @@
+{
+  "$schema": "../schema.json",
+  "name": "com.visdenda/public",
+  "title": "Visdenda MCP",
+  "category": "Security & Identity",
+  "description": "Account MCP for Search Console, audits, AI visibility and fixes. OAuth sign-in.",
+  "tools": [
+    {
+      "name": "get_agent_skill",
+      "description": "Load the visdenda-agent skill before the first diagnosis. Use when an agent connects to this MCP server and needs the read -> evidence -> fix -> verify loop, tool-selection order and non-negotiables instead of a generic SEO checklist. Returns the exact SKILL.md markdown, version, canonical URL and task references. No siteId, no network; safe to call once per session.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": [
+              "visdenda-agent"
+            ],
+            "description": "Skill to load; only visdenda-agent is available on the account server."
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "list_sites",
+      "description": "Use to resolve a domain to a siteId and to see attention order across sites. Each row carries the latest run outcome, open finding count and how many data sources are connected; totals cover every site under the key. Competitor targets are listed only when the key has the sites:read scope. Requires the audit:read scope.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200,
+            "default": 50,
+            "description": "Max sites to return (default 50, max 200)"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_site_insights",
+      "description": "Start here before raw reads: deterministic insights across GSC, audit, indexing and AI-crawler data, each with typed evidence, severity, impact and a suggested next action. The list is ranked and says what could not be checked and why; an empty list means no rule fired, not that the site is healthy. Live GSC is used only when the plan and daily budget allow; otherwise the GSC types are reported as not evaluated and the other sources still return. Read-only. Requires the audit:read scope.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "siteId": {
+            "type": "string",
+            "description": "Site id from list_sites"
+          },
+          "days": {
+            "type": "integer",
+            "enum": [
+              7,
+              28,
+              90
+            ],
+            "default": 28,
+            "description": "Comparison window; GSC final data ends ~3 days ago"
+          },
+          "types": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "declining_page",
+                "high_impressions_low_ctr",
+                "cannibalization",
+                "audit_fail_on_traffic_page",
+                "index_coverage_gap",
+                "crawler_gap",
+                "crawled_not_cited",
+                "high_exit_low_read",
+                "page_performance_regression"
+              ]
+            },
+            "maxItems": 9,
+            "description": "Optional subset of insight types; omit for all"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50,
+            "default": 20
+          }
+        },
+        "required": [
+          "siteId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_project_status",
+      "description": "Use for one site's run history, delta since the previous run, radar context and archived GSC month. Latest and previous runs with coverage, new failures/resolved/pages added or removed, highest-priority fixes with severity and sample URLs, recent P0/P1 radar updates that hit its failing rules, uptime/CWV/watchdog signals, and the archived GSC month. The delta comes from stored audit history, which no source repo can produce. Read-only, no live GSC or page fetch. Requires the audit:read scope.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "siteId": {
+            "type": "string",
+            "description": "Site id from list_sites"
+          },
+          "priorityLimit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 20,
+            "default": 5
+          },
+          "radarDays": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 90,
+            "default": 14,
+            "description": "Only radar updates published within this many days"
+          }
+        },
+        "required": [
+          "siteId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "diagnose_site",
+      "description": "Rank what to fix from a site's latest run: failing rules grouped by page count, each linked to a P0/P1 radar update when the rule came from one. No writes, no network. Requires the audit:read scope.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "siteId": {
+            "type": "string",
+            "description": "Site id from list_sites"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 20,
+            "default": 10
+          }
+        },
+        "required": [
+          "siteId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_opportunities",
+      "description": "Rank pages worth fixing: latest-run fails weighted by archived-month clicks. Returns the top 20 by default (raise limit to 100); total/hasMore say whether more exist. Empty means no evidence, not no problems. The weighting needs GSC clicks, so this ranking cannot be reproduced from the repo. Requires the audit:read scope.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "siteId": {
+            "type": "string"
+          },
+          "month": {
+            "type": "string"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "default": 20,
+            "description": "Max ranked pages to return (default 20, max 100)"
+          }
+        },
+        "required": [
+          "siteId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "audit_url",
+      "description": "Without siteId: a read-only three-check probe of any public URL (favicon, canonical self-reference with hreflang x-default, BreadcrumbList). With siteId: run that site's full applicable rule set on this one page and diff every rule against the site's most recent completed audit run, reporting fixed / regressed / still failing — use this after you change a page. Read-only on both paths: it never writes an audit run or flips finding state, so a full audit is still what commits a resolution. Requires the audit:read scope.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "format": "uri",
+            "description": "Public http(s) URL to audit"
+          },
+          "siteId": {
+            "type": "string",
+            "description": "Optional. Scope the check to a site you can read: uses its rule set and compares against its latest completed run. The URL must belong to that site's domain."
+          },
+          "rules": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 50,
+            "description": "Optional rule ids to check (default: every rule that applies to this page). Rule ids that do not apply are reported in notApplicable."
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_audit_history",
+      "description": "A site's recent audit runs, newest first, with status, summary, coverage quality and trigger. Use it to pick a run, or to judge improvement across runs. Requires the audit:read scope.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "siteId": {
+            "type": "string",
+            "description": "Site id from list_sites"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 20,
+            "default": 5
+          }
+        },
+        "required": [
+          "siteId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_audit_trends",
+      "description": "Pass rate and added/fixed/regressed across a site's last N runs — the 'is it getting better' view rather than just the latest run. Needs at least two completed runs. Requires the audit:read scope.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "siteId": {
+            "type": "string",
+            "description": "Site id from list_sites"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 20,
+            "default": 10
+          }
+        },
+        "required": [
+          "siteId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_audit_findings",
+      "description": "Read findings for a site (latest run by default, or one run by id) with server-side filters: status, severity, rule and page substring. Returns rule, page, status, detail, evidence key plus facet counts so the caller can see what else is in the run. Rule text is returned as authored. Requires the audit:read scope.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "siteId": {
+            "type": "string",
+            "description": "Site id from list_sites"
+          },
+          "runId": {
+            "type": "string",
+            "description": "Audit run id; defaults to the latest run"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "fail",
+              "warn",
+              "pass",
+              "na"
+            ],
+            "description": "Only return findings with this status"
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "blocker",
+              "warning",
+              "info"
+            ],
+            "description": "Only return findings frozen at this severity"
+          },
+          "ruleId": {
+            "type": "string",
+            "description": "Only return findings for this rule"
+          },
+          "page": {
+            "type": "string",
+            "description": "Only return findings whose page URL contains this substring"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "default": 20
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100000,
+            "default": 0,
+            "description": "Skip this many findings (pagination)"
+          }
+        },
+        "required": [
+          "siteId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "explain_finding",
+      "description": "Explain a single finding: the page, status and detail, plus the rule's title, category, documentation link and verification guidance as stored. Requires the audit:read scope.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "runId": {
+            "type": "string",
+            "description": "Audit run id"
+          },
+          "findingId": {
+            "type": "string",
+            "description": "Finding id within that run"
+          }
+        },
+        "required": [
+          "runId",
+          "findingId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "compare_audit_runs",
+      "description": "Use this after you deploy a fix: diff two committed runs of the same site — added/fixed/regressed, per-run pass/fail totals, truncated change list. Both runs must already exist; for a single page that has not been re-audited, use audit_url with siteId instead (read-only, no audit run consumed). Requires the audit:read scope.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "siteId": {
+            "type": "string",
+            "description": "Site id from list_sites"
+          },
+          "baseline": {
+            "type": "string",
+            "description": "Older run id (baseline)"
+          },
+          "target": {
+            "type": "string",
+            "description": "Newer run id (target)"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200,
+            "default": 50
+          }
+        },
+        "required": [
+          "siteId",
+          "baseline",
+          "target"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_finding_lifecycle",
+      "description": "The open finding backlog with age buckets, resolutions in the last 30 days and the rules with the most open items — use it to judge whether the backlog is ageing or being cleared. Needs more than one completed run to mean anything. Requires the audit:read scope.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "siteId": {
+            "type": "string",
+            "description": "Site id from list_sites"
+          }
+        },
+        "required": [
+          "siteId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_site_health",
+      "description": "The site's 0–100 health score with four explainable penalties (open findings, backlog age, audit freshness, coverage) and the raw inputs behind them. Computed from audit history, so a source repo cannot produce it; null means no completed audit yet. Requires the audit:read scope.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "siteId": {
+            "type": "string",
+            "description": "Site id from list_sites"
+          }
+        },
+        "required": [
+          "siteId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_update_impact",
+      "description": "Given a radar update and a site, return the active rules linked to that update plus that site's latest-run findings for those rules. It joins an external Google change to your own failures — neither side alone tells you whether the update hits you. Requires the audit:read scope.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "updateId": {
+            "type": "string",
+            "description": "Radar update id from get_radar_updates"
+          },
+          "siteId": {
+            "type": "string",
+            "description": "Site id from list_sites"
+          }
+        },
+        "required": [
+          "updateId",
+          "siteId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_radar_updates",
+      "description": "Recent P0/P1 Google Search updates and how many active audit rules each one links to. This is change outside the site and outside its source code — use it to explain why a rule matters now. Requires the radar:read scope.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10,
+            "default": 5,
+            "description": "Max items to return (default 5, max 10)"
+          },
+          "since": {
+            "type": "string",
+            "format": "date",
+            "description": "Only updates published on or after this date (YYYY-MM-DD)"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_gsc_monthly",
+      "description": "One month of Google Search Console data (clicks, impressions, CTR, position) from the stored archive; falls back to a live read with the key owner's credentials (paid plans only, daily-capped). Search performance exists only in GSC — it cannot be derived from the site or its code. Requires the audit:read scope.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "siteId": {
+            "type": "string"
+          },
+          "month": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "siteId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_gsc_overview",
+      "description": "Clicks, impressions, CTR and average position for the last 7, 28 or 90 days with previous-period deltas. Live GSC data (final data lags ~3 days); paid plans, counts against the daily live-read cap. This is the only source for search performance — nothing in the site's code or HTML reveals it. Requires the audit:read scope.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "siteId": {
+            "type": "string"
+          },
+          "days": {
+            "type": "integer",
+            "enum": [
+              7,
+              28,
+              90
+            ],
+            "default": 28,
+            "description": "Window length ending ~3 days ago"
+          },
+          "includeDaily": {
+            "type": "boolean",
+            "default": false,
+            "description": "Include the day-by-day series"
+          }
+        },
+        "required": [
+          "siteId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_gsc_queries",
+      "description": "Top search queries by clicks for the last 7, 28 or 90 days with impressions, CTR, position and previous-period deltas. Live GSC read on paid plans, daily-capped; not derivable from the site itself. Requires the audit:read scope.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "siteId": {
+            "type": "string"
+          },
+          "days": {
+            "type": "integer",
+            "enum": [
+              7,
+              28,
+              90
+            ],
+            "default": 28
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50,
+            "default": 10
+          }
+        },
+        "required": [
+          "siteId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_gsc_pages",
+      "description": "Top landing pages by clicks for the last 7, 28 or 90 days with impressions, CTR, position and previous-period deltas. Live GSC read on paid plans, daily-capped; not derivable from the site itself. Requires the audit:read scope.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "siteId": {
+            "type": "string"
+          },
+          "days": {
+            "type": "integer",
+            "enum": [
+              7,
+              28,
+              90
+            ],
+            "default": 28
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50,
+            "default": 10
+          }
+        },
+        "required": [
+          "siteId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_gsc_quick_wins",
+      "description": "Queries where the site ranks 4-20 with above-median impressions, each row carrying the page, position, impressions, CTR and potentialClicks — the click headroom if the page reached the site's own top-position CTR (a site baseline, not an industry curve), best opportunity first. The server does the ranking; do not re-rank by impressions alone. Live GSC read on paid plans, daily-capped; not derivable from the site itself. Requires the audit:read scope.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "siteId": {
+            "type": "string"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 25,
+            "default": 10
+          }
+        },
+        "required": [
+          "siteId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_gsc_cannibalization",
+      "description": "One call over the live GSC query×page matrix: queries where two or more qualifying pages (at least 2 impressions, at least 10% of the query's impressions, position 30 or better) compete, ordered by clicks landing on non-leader pages. Each group carries the leader's impression share and each page's position and clicks, winner first — evidence for fold/canonical decisions, not a deletion verdict. Live GSC read on paid plans, daily-capped. Requires the audit:read scope.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "siteId": {
+            "type": "string"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 20,
+            "default": 10
+          }
+        },
+        "required": [
+          "siteId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_gsc_weekly_report",
+      "description": "The last 7 days versus the previous 7 days in a single read: totals (clicks, impressions, CTR, position) with deltas, top-5 winning and losing pages, top-5 new and lost queries, top-3 quick wins and the top-3 pages with the largest position swing. Every list is bounded and server-ranked; numbers are co-occurrence observations and never name a cause — pair a drop with get_radar_updates before explaining it. Live GSC read on paid plans, daily-capped. Requires the audit:read scope.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "siteId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "siteId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_gsc_decay",
+      "description": "Pages losing clicks between two equal windows (28 or 90 days, versus the previous window or the same window last year), each labeled by cause: decayed-content means position held and the content aged (refresh it), ranking-drop means position fell and a refresh will not fix it. Rows are ordered by clicks lost and capped; counts always cover the full evaluated set, steady rows are excluded from the list. Live GSC read on paid plans, daily-capped. Requires the audit:read scope.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "siteId": {
+            "type": "string"
+          },
+          "windowDays": {
+            "type": "integer",
+            "enum": [
+              28,
+              90
+            ],
+            "default": 28
+          },
+          "compare": {
+            "type": "string",
+            "enum": [
+              "prev",
+              "yoy"
+            ],
+            "default": "prev"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 25,
+            "default": 15
+          }
+        },
+        "required": [
+          "siteId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_page_report",
+      "description": "Everything known about a single URL in one read: GSC queries/clicks for that page, sessions and engagement, AI crawler fetches, AI referral clicks, the latest index verdict, open audit findings and real-user CWV. Paid plans read GSC live for that page (queries and average position); otherwise the archived page snapshot is returned with search.source=archive and empty queries. The join is per page, so numbers are not duplicated across queries. Each block carries its own na/reason — a missing source is not a zero. Read-only. Requires the audit:read scope.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "siteId": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string",
+            "maxLength": 2048
+          },
+          "days": {
+            "type": "integer",
+            "enum": [
+              7,
+              28,
+              30
+            ],
+            "default": 28
+          }
+        },
+        "required": [
+          "siteId",
+          "url"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_traffic_pages",
+      "description": "Per-page join of GSC clicks and average position (aggregated by page, never per query), sessions and engaged rate, AI crawler fetches, AI referral sessions, index verdict, open findings and LCP. Search numbers are read live per page when the plan and daily budget allow; otherwise they fall back to the archived snapshot and position stays empty. Each row and the response say which source was used. Use it to find pages with traffic but no engagement, or pages AI reads that no human visits. Empty means no evidence, not no problems. Read-only. Requires the audit:read scope.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "siteId": {
+            "type": "string"
+          },
+          "days": {
+            "type": "integer",
+            "enum": [
+              7,
+              28,
+              30
+            ],
+            "default": 28
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50,
+            "default": 20
+          }
+        },
+        "required": [
+          "siteId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_crawler_gaps",
+      "description": "Paths AI and search crawlers requested that returned 404/410, paths blocked by robots or 403, and whether the machine-facing files (robots.txt, llms.txt, sitemap.xml, markdown) were fetched at all. This is the only signal that turns 'what machines wanted' into a task: create, redirect, unblock or publish llms.txt. Read-only. Requires the audit:read scope.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "siteId": {
+            "type": "string"
+          },
+          "days": {
+            "type": "integer",
+            "enum": [
+              7,
+              28,
+              30
+            ],
+            "default": 28
+          }
+        },
+        "required": [
+          "siteId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_ai_traffic",
+      "description": "Read what AI crawlers and AI referrals actually did on a site in the last 7, 28 or 30 days: hits by agent, previous-window delta, markdown negotiation, machine-file reads, AI referral hosts, and robots violations. Use this when the user asks whether AI bots visit, whether they are blocked, or whether AI sends traffic. Returns na with a reason when the site has no probe data; missing data is never treated as zero. Read-only. Requires the audit:read scope.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "siteId": {
+            "type": "string"
+          },
+          "days": {
+            "type": "integer",
+            "enum": [
+              7,
+              28,
+              30
+            ],
+            "default": 28
+          }
+        },
+        "required": [
+          "siteId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_aio_visibility",
+      "description": "Read the latest AI Overview check for the site's tracked queries: whether an AI Overview appeared and whether it cited the user's domain. Paid plans also get up to 90 days of sampled presence for up to 10 queries. Use this when the user asks whether they appear in Google AI Overviews or whether AI answers cite them. An empty trend means not sampled, not absent. Read-only. Requires the audit:read scope.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "siteId": {
+            "type": "string"
+          },
+          "days": {
+            "type": "integer",
+            "enum": [
+              7,
+              28,
+              90
+            ],
+            "default": 28
+          },
+          "query": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "siteId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_asn_candidates",
+      "description": "Read which autonomous systems reached the site in the judged window (yesterday + today, each UTC day scored separately) and how the server tiers them: A = actionable, B = watch, report = count only, with requests, distinct URLs, the trigger day and 404/blocked evidence. Ignored ASNs are listed separately and never counted as candidates; per-platform block-rule text is returned for A-tier ASNs. Returns na with a reason (no-probe, no-ip-source, insufficient-signal) when probe data is missing — missing data is never treated as clean. Evidence only: this tool never blocks, ignores or changes anything, and a tier is not a block decision. Requires the audit:read scope.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "siteId": {
+            "type": "string",
+            "description": "Site id from list_sites"
+          }
+        },
+        "required": [
+          "siteId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_asn_detail",
+      "description": "Read one ASN's evidence for a site: the current tier and reason (judged on yesterday + today), plus a 7, 30 or 90 day history with per-day requests and distinct URLs, the status distribution (2xx/3xx/4xx/5xx/unknown), the top normalized paths, the UA pool and its automation share, the cross-ASN group the ASN shares a signature with, the ignore flag, and the per-ASN Cloudflare/nginx/app block-rule text when it is A-tier. An ASN with history but no current tier still returns its days; an ASN with no rows in the chosen history window is not found. Evidence only: this tool never blocks or ignores traffic, and a tier is not a block decision. Requires the audit:read scope.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "siteId": {
+            "type": "string",
+            "description": "Site id from list_sites"
+          },
+          "asn": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Autonomous system number from get_asn_candidates"
+          },
+          "historyDays": {
+            "type": "integer",
+            "enum": [
+              7,
+              30,
+              90
+            ],
+            "default": 7,
+            "description": "History window for daily rows, top paths and UA pool; the tier is always judged on yesterday + today"
+          }
+        },
+        "required": [
+          "siteId",
+          "asn"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_site_fingerprint",
+      "description": "Technology fingerprint (framework, router, rendering, i18n lib, hosting signals), from the 24h cache when fresh. If you can read the site's source repository, prefer the repo — it is authoritative and richer; use this for a site whose code you do not have. Requires the audit:read scope.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "siteId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "siteId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_site_i18n",
+      "description": "Internationalization maturity level and gaps, derived from the tech fingerprint. If you can read the source repository, prefer the repo; use this for a site whose code you do not have. Requires the audit:read scope.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "siteId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "siteId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_competitor_changes",
+      "description": "Read recent sitemap/content changes for one competitor target; use get_competitor_feed for page text and coverage. New, removed, lastmod-updated and content-changed pages in the last N days (default 7). Requires the sites:read scope.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "siteId": {
+            "type": "string"
+          },
+          "days": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 30,
+            "default": 7
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "added",
+              "removed",
+              "lastmod_changed",
+              "content_changed",
+              "fetch_failed"
+            ]
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50,
+            "default": 20
+          }
+        },
+        "required": [
+          "siteId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_competitor_feed",
+      "description": "Read one competitor's detected page feed with covered/partial/gap matching and excerpts; filter by match or triage. Pages whose content has not been fetched yet appear with matchReason=not-enriched and are counted in counts.pending. Matching compares page content signatures against the parent site's latest completed audit pages, never against Google or traffic data. Requires the sites:read scope.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "siteId": {
+            "type": "string"
+          },
+          "match": {
+            "type": "string",
+            "enum": [
+              "covered",
+              "partial",
+              "gap",
+              "na"
+            ]
+          },
+          "triage": {
+            "type": "string",
+            "enum": [
+              "new",
+              "saved",
+              "dismissed"
+            ]
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50,
+            "default": 20
+          }
+        },
+        "required": [
+          "siteId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_competitor_gaps",
+      "description": "List one competitor's pages with no equivalent own-site coverage (match=gap), lowest similarity first. Each row carries the closest own pages so you can decide whether to write, merge or ignore. Requires the sites:read scope.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "siteId": {
+            "type": "string"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50,
+            "default": 20
+          }
+        },
+        "required": [
+          "siteId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_competitor_brief",
+      "description": "Read the deterministic 30-day brief for every competitor under one own site: new page counts, coverage against your pages, recurring title themes, top gaps and publishing pace (last 7 days vs the 7 before). Includes the cached AI explanation when one was generated. Requires the sites:read scope.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "siteId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "siteId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_competitor_rank",
+      "description": "Read the latest keyword-compare run for one own site: top-10 positions per keyword for your site and each observed competitor, capture status and classification. SERP evidence only; no traffic estimates. Requires the sites:read scope.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "siteId": {
+            "type": "string"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50,
+            "default": 20
+          }
+        },
+        "required": [
+          "siteId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_competitor_discovery",
+      "description": "List candidate competitors that appear in the top 10 of your tracked keywords (from the latest keyword-compare evidence): appearances, how many keywords you both rank for, average position and sample queries. Dismissed domains are excluded and returned separately. Requires the sites:read scope.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "siteId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "siteId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_serp_results",
+      "description": "Run one live Google SERP read per query (no 3-read merge, no averaging) and return ranked organic results plus SERP extras from the same response: feature types present, People Also Ask questions, related searches and the featured snippet. Saved as a research report. Paid tool: without confirm:true it only returns a dry-run estimate with cache hits; confirm:true requires an idempotencyKey and respects maxCostUsd. Cached for 12 hours per account. Requires the research:write scope.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "queries": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "minItems": 1,
+            "maxItems": 10
+          },
+          "depth": {
+            "type": "integer",
+            "minimum": 10,
+            "maximum": 100,
+            "multipleOf": 10,
+            "default": 10
+          },
+          "device": {
+            "type": "string",
+            "enum": [
+              "desktop",
+              "mobile"
+            ],
+            "default": "desktop"
+          },
+          "locale": {
+            "type": "string",
+            "enum": [
+              "us",
+              "all"
+            ],
+            "default": "us"
+          },
+          "confirm": {
+            "type": "boolean",
+            "default": false
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "maxCostUsd": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "maximum": 50,
+            "default": 5
+          },
+          "usePlatformCredits": {
+            "type": "boolean",
+            "default": false
+          },
+          "maxCredits": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "queries"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_keyword_metrics",
+      "description": "Read volume, difficulty, CPC and competition for up to 1,000 terms that are already tracked for one site. Fresh rows reuse the 30-day metrics cache; only stale or missing terms hit DataForSEO. Never creates a report (reportId is always null). Paid tool: confirm:true plus idempotencyKey is required to execute. Requires the research:write scope.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "siteId": {
+            "type": "string"
+          },
+          "terms": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "minItems": 1,
+            "maxItems": 1000
+          },
+          "locale": {
+            "type": "string"
+          },
+          "confirm": {
+            "type": "boolean",
+            "default": false
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "maxCostUsd": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "maximum": 50,
+            "default": 5
+          },
+          "usePlatformCredits": {
+            "type": "boolean",
+            "default": false
+          },
+          "maxCredits": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "siteId",
+          "terms"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "research_keywords",
+      "description": "Ask DataForSEO Labs for keyword ideas from up to 5 seeds with limit 50/150/200 per seed, returning term, volume, difficulty and intent. Results are cached for 24 hours per account and saved as a research report. Paid tool: dry-run without confirm:true; confirm:true needs an idempotencyKey. Requires the research:write scope.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "seeds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "minItems": 1,
+            "maxItems": 5
+          },
+          "limit": {
+            "type": "integer",
+            "enum": [
+              50,
+              150,
+              200
+            ],
+            "default": 150
+          },
+          "locale": {
+            "type": "string",
+            "enum": [
+              "us",
+              "all"
+            ],
+            "default": "us"
+          },
+          "confirm": {
+            "type": "boolean",
+            "default": false
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "maxCostUsd": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "maximum": 50,
+            "default": 5
+          },
+          "usePlatformCredits": {
+            "type": "boolean",
+            "default": false
+          },
+          "maxCredits": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "seeds"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "check_ai_visibility",
+      "description": "Check whether Google shows an AI Overview for up to 50 tracked terms and whether the site is referenced. Terms already sampled today for the same site are reused for free; missing terms trigger a live AI Overview query. Paid tool: dry-run without confirm:true; confirm:true needs an idempotencyKey. Requires the research:write scope.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "siteId": {
+            "type": "string"
+          },
+          "terms": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "minItems": 1,
+            "maxItems": 50
+          },
+          "locale": {
+            "type": "string"
+          },
+          "confirm": {
+            "type": "boolean",
+            "default": false
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "maxCostUsd": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "maximum": 50,
+            "default": 5
+          },
+          "usePlatformCredits": {
+            "type": "boolean",
+            "default": false
+          },
+          "maxCredits": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "siteId",
+          "terms"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "estimate_research_cost",
+      "description": "Return cache hits, billable items, estimated provider cost and whether the call fits maxCostUsd for one of the four paid research tools, using the same parameters you would pass to it. Zero vendor calls and zero writes. Requires the research:read scope.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "tool": {
+            "type": "string",
+            "enum": [
+              "get_serp_results",
+              "get_keyword_metrics",
+              "research_keywords",
+              "check_ai_visibility"
+            ]
+          },
+          "queries": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "depth": {
+            "type": "integer"
+          },
+          "device": {
+            "type": "string",
+            "enum": [
+              "desktop",
+              "mobile"
+            ]
+          },
+          "locale": {
+            "type": "string"
+          },
+          "siteId": {
+            "type": "string"
+          },
+          "terms": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "seeds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "limit": {
+            "type": "integer"
+          },
+          "maxCostUsd": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "maximum": 50
+          },
+          "usePlatformCredits": {
+            "type": "boolean"
+          },
+          "maxCredits": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "tool"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "list_research_reports",
+      "description": "List research reports for this account with kind, site, saved status, cost and reuse window. Reads only; never calls DataForSEO. Requires the research:read scope.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "serp",
+              "keywords",
+              "aio",
+              "mixed"
+            ]
+          },
+          "siteId": {
+            "type": "string"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50,
+            "default": 20
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_research_report",
+      "description": "Read one saved research report: SERP results, keyword ideas or AI Overview checks plus the current GSC query rows, AI Overview samples and tracked keywords for the same terms. Missing context is returned as status na with a reason. Reads only; never calls DataForSEO and never creates a new run. Requires the research:read scope.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "reportId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "reportId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "add_site",
+      "description": "Onboard one domain under this API key: creates the site row on the key's plan (the free plan allows one own site) and returns the ownership verification material (DNS TXT name, well-known file URL or homepage meta tag). auditUrls are the pages the first audit will check. Duplicate domains and plan limits fail with the same messages as POST /v1/ai/sites. Requires the sites:write scope. Writes need confirm:true plus a unique idempotencyKey; without confirm:true it returns a dry-run preview and creates nothing. Reusing the same idempotencyKey within 24h returns the first result.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "domain": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 253,
+            "description": "Bare domain without protocol or path (example.com)"
+          },
+          "auditUrls": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^https?://"
+            },
+            "minItems": 1,
+            "maxItems": 5000,
+            "description": "http(s) pages the first audit should check"
+          },
+          "verificationMethod": {
+            "type": "string",
+            "enum": [
+              "dns",
+              "file",
+              "meta",
+              "google"
+            ]
+          },
+          "locales": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 16
+            },
+            "maxItems": 20
+          },
+          "notes": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 500
+          },
+          "confirm": {
+            "type": "boolean",
+            "default": false
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "domain",
+          "auditUrls",
+          "verificationMethod"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "verify_site",
+      "description": "Re-check ownership for one site owned by this API key using its verification material: DNS TXT record, /.well-known file or homepage meta tag. The verdict is persisted as verified/failed with a reason; a failed check still returns a structured result so you can report the reason. Google-bound sites skip manual verification. Requires the sites:write scope. Writes need confirm:true plus a unique idempotencyKey; without confirm:true it returns a dry-run preview and fetches nothing. Reusing the same idempotencyKey within 24h returns the first result.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "siteId": {
+            "type": "string",
+            "description": "Site id from add_site or list_sites"
+          },
+          "method": {
+            "type": "string",
+            "enum": [
+              "dns",
+              "file",
+              "meta",
+              "google"
+            ]
+          },
+          "confirm": {
+            "type": "boolean",
+            "default": false
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "siteId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "run_audit",
+      "description": "Start a full audit for one verified site owned by this API key. This is the call that commits finding state (resolved / regressed) and feeds trends and health. Depth defaults to the site's configured audit depth: standard runs the core rule set (indexability, compliance, agent readiness); deep adds performance, media, accessibility detail and the extended schema rules. It reserves audit page checks from the account's monthly pool (settled by successfully fetched pages) and queues the run when the account or global audit capacity is busy; a queued result includes queuePosition and queueEtaSeconds. Requires the audits:write scope. Writes need confirm:true plus a unique idempotencyKey; without confirm:true it returns a dry-run preview and changes nothing. Reusing the same idempotencyKey within 24h returns the first result.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "siteId": {
+            "type": "string"
+          },
+          "depth": {
+            "type": "string",
+            "enum": [
+              "standard",
+              "deep"
+            ],
+            "description": "standard (default) runs the core rule set; deep runs every applicable rule."
+          },
+          "confirm": {
+            "type": "boolean",
+            "default": false
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "siteId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "import_sitemap",
+      "description": "Fetch the site's sitemap and add new pages to its audit list, truncated at the plan's auditUrls limit. Requires the audits:write scope. Writes need confirm:true plus a unique idempotencyKey; without confirm:true the call returns a dry-run preview and changes nothing.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "siteId": {
+            "type": "string"
+          },
+          "confirm": {
+            "type": "boolean",
+            "default": false
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "siteId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "verify_fix",
+      "description": "Run the console's single-page fix re-check and commit the result: a pass resolves the finding as fix-applied; anything else only records the verdict and leaves it open. Use this after changing a page, once audit_url shows the rule now passes. The result carries a research block with the latest SERP snapshot rank and AI Overview sample per query (up to 3; omitted queries default to the page's top Search Console queries — the block reads already-collected research data and never calls a vendor). It does not write an audit run or consume an audit run. Requires the audits:write scope. Writes need confirm:true plus a unique idempotencyKey; without confirm:true it returns a dry-run preview and changes nothing. Reusing the same idempotencyKey within 24h returns the first result.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "siteId": {
+            "type": "string"
+          },
+          "findingStateId": {
+            "type": "string"
+          },
+          "queries": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "maxItems": 3
+          },
+          "confirm": {
+            "type": "boolean",
+            "default": false
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "siteId",
+          "findingStateId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "fetch_page",
+      "description": "Fetch one public HTML page and return what is actually on it: final URL, status code, redirect count, title, meta description, canonical, meta robots, html lang, H1 texts, heading counts, JSON-LD @types, word count and HTML size. No rule verdicts — call check_url for those, or audit_url to diff against the site's last completed run. Use it to look before you decide, or to see what a change actually shipped. Requires the audit:read scope and counts one network fetch.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "format": "uri",
+            "description": "Public http(s) URL to fetch. Private hosts and non-HTML responses are rejected."
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "check_url",
+      "description": "Run the site's applicable audit rules on 1–5 URLs that belong to that site's domain, and return per-rule verdicts (pass / warn / fail / na) with the checker detail for each URL. Narrow the set with rule ids when you only care about a few checks. Read-only: it never writes an audit run or flips finding state, and it does not diff against history — use audit_url for the before/after diff. Requires the audit:read scope and counts one network fetch per URL.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "siteId": {
+            "type": "string",
+            "description": "Site under this API key; supplies the rule set and the allowed domain."
+          },
+          "urls": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uri"
+            },
+            "minItems": 1,
+            "maxItems": 5,
+            "description": "1–5 http(s) URLs on the site's domain. Duplicates are checked once."
+          },
+          "rules": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 50,
+            "description": "Optional rule ids to check (default: every rule that applies to the page). Ids that do not apply come back in notApplicable."
+          }
+        },
+        "required": [
+          "siteId",
+          "urls"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_rule",
+      "description": "Return one rule's definition: what it checks, severity, requirement, scope, which pages and site types it applies to, the official source link and version, and whether the rule is active, draft or retired (with the retirement reason). Use it to explain a finding, to cite the rule's source, or to decide which rule to check next. Requires the rules:read scope; reads only the database.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "ruleId": {
+            "type": "string",
+            "description": "Rule id as returned by get_audit_findings, check_url or audit_url."
+          }
+        },
+        "required": [
+          "ruleId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "propose_fix",
+      "description": "Write a pending change request instead of changing the site: title, summary, rationale, 1–20 concrete changes and optional rule ids. The site owner approves or rejects it in the console; rejection notes come back through list_proposals. Use this when the fix is a judgment call or touches the user's pages — it does not modify the site, write an audit run or consume an audit run. Requires the audits:write scope and a key owned by an account. Repeating an identical proposal while one is pending returns the existing row with deduplicated=true.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "siteId": {
+            "type": "string",
+            "description": "Site id from list_sites"
+          },
+          "targetUrl": {
+            "type": "string",
+            "format": "uri",
+            "description": "Optional page URL; must be http(s) and on the site's domain"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "summary": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000,
+            "description": "One-paragraph statement of what should change and why it matters"
+          },
+          "rationale": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4000,
+            "description": "The evidence chain: findings, rules, pages and expected effect"
+          },
+          "changes": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 20,
+            "items": {
+              "type": "object",
+              "properties": {
+                "target": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                },
+                "change": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 500
+                },
+                "current": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "maxLength": 2000
+                },
+                "proposed": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "maxLength": 2000
+                }
+              },
+              "required": [
+                "target",
+                "change"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "ruleIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20,
+            "description": "Optional rule ids this proposal addresses"
+          }
+        },
+        "required": [
+          "siteId",
+          "title",
+          "summary",
+          "rationale",
+          "changes"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "list_proposals",
+      "description": "List proposals owned by this key's account, newest first, with status counts. Defaults to pending; expired proposals are reported as expired after the server sweeps stale pending rows. Approved means the owner authorized the change (not that it was executed); applied means the owner marked the authorized change as executed; rejected proposals carry the owner's decision note. Requires the audit:read scope and a key owned by an account.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "approved",
+              "applied",
+              "rejected",
+              "withdrawn",
+              "expired"
+            ],
+            "default": "pending"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50,
+            "default": 20
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_page_links",
+      "description": "Read the internal link neighbourhood of one page from the latest audit crawl snapshot: inlink and outlink counts with up to 20 example URLs each, crawl depth, URL template cluster, and whether the page is an orphan. Use it before recommending internal links or judging whether a page is reachable; a page that is not in the snapshot is reported with inSnapshot=false rather than an error. The result carries the snapshot coverage (crawled pages, sitemap URLs, truncated) so a partial crawl is never read as the whole site. Requires the audit:read scope.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "siteId": {
+            "type": "string",
+            "description": "Site id from list_sites"
+          },
+          "url": {
+            "type": "string",
+            "description": "Page URL or path on the site's domain"
+          }
+        },
+        "required": [
+          "siteId",
+          "url"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "find_anchor_usage",
+      "description": "Search internal anchor texts in the latest audit crawl snapshot: returns matching anchor texts, how many times each occurs, which pages use it (up to 20) and which pages it points to (up to 20). Use it to audit generic or over-optimised anchor text, or to find pages that already link to a target. An empty anchor argument returns the most used anchor texts. Exact matches rank before substring matches. The result carries the snapshot coverage and whether the anchor index was truncated, so a partial crawl or capped index is never read as the whole site. Requires the audit:read scope.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "siteId": {
+            "type": "string",
+            "description": "Site id from list_sites"
+          },
+          "anchor": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "Anchor text to search for (case-insensitive substring; exact matches rank first). Omit to list the most used anchors."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "description": "Maximum anchor texts to return (default 20)."
+          }
+        },
+        "required": [
+          "siteId"
+        ],
+        "additionalProperties": false
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "com.visdenda/public",
+    "version": "2.4.0",
+    "remoteUrl": "https://visdenda.com/v1/mcp",
+    "publishedAt": "2026-11-23T11:01:15.831667Z",
+    "fetchedAt": "2026-11-23T16:50:40.239Z",
+    "toolsSha256": "1ae4611be62ca7f150440303622097bc9a7b74ee98eca2df7fa0dc3c6e69749f"
+  }
+}

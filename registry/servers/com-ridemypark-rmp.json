@@ -1,0 +1,693 @@
+{
+  "$schema": "../schema.json",
+  "name": "com.ridemypark/rmp",
+  "title": "RideMyPark",
+  "category": "Other",
+  "description": "Find or suggest skateparks, street spots, pumptracks, shops and events. 30,000+ rider spots.",
+  "tools": [
+    {
+      "name": "ridemypark_search_spots",
+      "description": "Cherche des spots de skate, BMX, trottinette et roller dans le catalogue public RideMyPark : plus de 30 000 fiches dans un catalogue mondial. La couverture varie selon les pays et les villes.\n\nSert à répondre à « trouve-moi un skatepark avec un bowl près de Lyon » ou « où faire du BMX à Bordeaux ».\n\nParamètres :\n  - near (string) : nom du lieu, géocodé automatiquement (« Lyon », « Bordeaux »). Sinon latitude + longitude.\n  - radius_km (number) : rayon en km, défaut 25, maximum 200.\n  - discipline ('skate' | 'bmx' | 'scooter' | 'roller') : garde les spots qui conviennent à cette pratique, les mieux adaptés en premier.\n  - modules (string[]) : modules voulus en langage naturel (« bowl », « des rails », « escaliers »). Un spot suffit s'il en a UN.\n  - match_all_modules (boolean) : true pour exiger TOUS les modules demandés.\n  - spot_type ('street' | 'skatepark' | 'pumptrack') : nature du spot.\n  - indoor (boolean) : true = couvert, false = extérieur, omis = les deux.\n  - min_rating (number 0-5) : note minimale. Écarte les spots sans avis, qui sont la majorité.\n  - query (string) : mot-clé dans le nom, la description ou l'adresse.\n  - include_closed (boolean) : true pour rendre aussi les spots fermés, signalés comme tels. Par défaut ils sont masqués, comme sur le site.\n  - limit (number 1-50, défaut 10), offset (number 0-499) : pagination.\n  - response_format ('markdown' | 'json') : défaut markdown.\n\nRend pour chaque spot : titre, adresse, distance au point de recherche, type, modules, photo, lien de la fiche, le slug à passer à ridemypark_get_spot, et son état quand il est fermé. Les spots sont rendus du plus proche au plus éloigné ; avec une discipline, du mieux adapté au moins adapté. total_matched compte tous les spots qui passent les filtres. La pagination atteint les 500 premiers : au-delà, affine les filtres ou déplace le point de recherche.\n\nLimite connue : peu de fiches déclarent leur discipline. Le filtre discipline garde aussi les spots qui portent un module adapté à la pratique. C'est une approximation, et la réponse le dit.\n\nErreurs :\n  - Rien trouvé pour un lieu non géocodable : réessaie avec un nom de ville simple.\n  - Aucun résultat : élargis radius_km ou retire un filtre.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "near": {
+            "description": "Nom du lieu autour duquel chercher : « Lyon », « Bordeaux », « Paris 11e ». Géocodé automatiquement. À défaut, fournir latitude et longitude.",
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 120
+          },
+          "latitude": {
+            "description": "Latitude du point de recherche. À utiliser avec longitude, en remplacement de near.",
+            "type": "number",
+            "minimum": -90,
+            "maximum": 90
+          },
+          "longitude": {
+            "description": "Longitude du point de recherche. À utiliser avec latitude.",
+            "type": "number",
+            "minimum": -180,
+            "maximum": 180
+          },
+          "radius_km": {
+            "default": 25,
+            "description": "Rayon de recherche en kilomètres (défaut 25, maximum 200).",
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "maximum": 200
+          },
+          "discipline": {
+            "description": "Discipline pratiquée : skate, bmx, scooter (trottinette) ou roller. Garde les spots qui conviennent à cette pratique et met les mieux adaptés en premier.",
+            "type": "string",
+            "enum": [
+              "skate",
+              "bmx",
+              "scooter",
+              "roller"
+            ]
+          },
+          "modules": {
+            "description": "Modules recherchés, en langage naturel : « bowl », « des rails », « curbs », « escaliers ». Par défaut un spot suffit s'il en a UN ; passer match_all_modules pour exiger les tous.",
+            "maxItems": 10,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 60
+            }
+          },
+          "match_all_modules": {
+            "default": false,
+            "description": "true = le spot doit porter TOUS les modules demandés. false (défaut) = au moins un.",
+            "type": "boolean"
+          },
+          "spot_type": {
+            "description": "Nature du spot : street (spot urbain), skatepark ou pumptrack.",
+            "type": "string",
+            "enum": [
+              "street",
+              "skatepark",
+              "pumptrack"
+            ]
+          },
+          "indoor": {
+            "description": "true = uniquement les spots couverts, false = uniquement en extérieur. Omis = les deux.",
+            "type": "boolean"
+          },
+          "min_rating": {
+            "description": "Note minimale sur 5. Attention : écarte les spots pas encore notés, qui sont la majorité.",
+            "type": "number",
+            "minimum": 0,
+            "maximum": 5
+          },
+          "query": {
+            "description": "Mot-clé cherché dans le nom, la description et l'adresse du spot. « Bordeaux » ramène aussi les spots bordelais dont le nom ne contient pas la ville.",
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 120
+          },
+          "include_closed": {
+            "default": false,
+            "description": "true = rendre aussi les spots fermés, signalés comme tels. false (défaut) = les spots fermés sont masqués, comme sur le site.",
+            "type": "boolean"
+          },
+          "limit": {
+            "default": 10,
+            "description": "Nombre de spots rendus (défaut 10, maximum 50).",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50
+          },
+          "offset": {
+            "default": 0,
+            "description": "Nombre de spots à sauter, pour paginer. Maximum 499.",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 499
+          },
+          "response_format": {
+            "default": "markdown",
+            "description": "markdown pour une réponse lisible, json pour les données brutes.",
+            "type": "string",
+            "enum": [
+              "markdown",
+              "json"
+            ]
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "ridemypark_get_spot",
+      "description": "Rend la fiche complète d'un spot RideMyPark : où il est, ses modules, sa note, ses horaires, sa photo et le lien vers sa page publique.\n\nParamètres :\n  - slug (string) : identifiant lisible du spot, tel que rendu par ridemypark_search_spots (« place-louis-pradel-spot »).\n  - id (number) : identifiant numérique, à défaut de slug.\n  - response_format ('markdown' | 'json') : défaut markdown.\n\nRend : titre, type (street / skatepark / pumptrack), adresse et ville, coordonnées, couvert ou extérieur, liste des modules, note sur 5 AVEC son nombre d'avis, horaires d'ouverture avec fuseau quand ils sont saisis, photo, galerie, réseaux sociaux, lien de la fiche.\n\nÀ savoir sur les données :\n  - la note est absente sur la plupart des fiches ; l'outil dit « pas encore notée » plutôt que de rendre 0 ;\n  - quand elle existe, elle repose presque toujours sur UN seul avis — le compte est rendu avec la note, ne la présente pas comme un consensus ;\n  - les horaires ne sont saisis que sur les spots gérés (skateparks indoor surtout) ; un spot en accès libre n'en a pas ;\n  - une fiche sans photo ne rend aucune URL, jamais l'image bouchon du site ;\n  - un spot FERMÉ (moderation_status « closed », plus accessible) ou ARCHIVÉ (« archived », n'existe plus) reste lisible par son slug ou son id : la réponse le dit en tête. La recherche ne rend jamais ces spots.\n\nErreurs :\n  - « Aucun spot … » quand le slug n'existe pas : le reprendre d'un résultat de ridemypark_search_spots.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "slug": {
+            "description": "Identifiant lisible du spot, tel que rendu par ridemypark_search_spots : « place-louis-pradel-spot ».",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "id": {
+            "description": "Identifiant numérique du spot, à défaut de slug.",
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "response_format": {
+            "default": "markdown",
+            "description": "markdown pour une réponse lisible, json pour les données brutes.",
+            "type": "string",
+            "enum": [
+              "markdown",
+              "json"
+            ]
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "ridemypark_list_spot_features",
+      "description": "Rend le vocabulaire exact des filtres du catalogue RideMyPark : les 41 modules (bowls, curbs, euro gap…), les 3 sous-types de spot et les 4 disciplines, chacun avec son slug d'API, son libellé français et ses synonymes acceptés.\n\nSert quand une recherche doit être filtrée précisément et que le terme employé par la personne n'est pas forcément un slug du catalogue (« un bol » désigne « bowls », « escaliers » désigne « stairs »).\n\nParamètres :\n  - response_format ('markdown' | 'json') : défaut markdown.\n\nRend :\n  - modules : liste de { slug, label, synonyms } — le slug est la valeur que l'API accepte ;\n  - spot_types : les trois sous-types (street, skatepark, pumptrack) avec leur libellé ;\n  - disciplines : skate, bmx, scooter, roller — les valeurs du filtre discipline de ridemypark_search_spots.\n\nLimites connues des données :\n  - Peu de fiches déclarent leur discipline. Le filtre discipline de la recherche retient aussi les spots qui portent un module adapté à la pratique : c'est l'API qui applique cette règle, la même pour le site et la CLI.\n  - Les libellés français ne sont pas acceptés par l'API : elle compare des slugs. C'est la raison d'être des synonymes rendus ici.\n\nErreurs : aucune. Cet outil ne fait aucun appel réseau, la taxonomie est embarquée.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "response_format": {
+            "default": "markdown",
+            "description": "markdown pour une réponse lisible, json pour les données brutes.",
+            "type": "string",
+            "enum": [
+              "markdown",
+              "json"
+            ]
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "ridemypark_browse_geography",
+      "description": "Parcourt l'arborescence géographique du catalogue public — pays, puis régions d'un pays, puis villes d'une région — avec le nombre de spots à chaque niveau.\n\nSert à répondre à « dans quels pays y a-t-il des spots ? », « quelles régions françaises sont les mieux couvertes ? », « quelles villes de Bretagne ont un skatepark ? ».\n\nParamètres :\n  - country (string, 2 à 80 caractères) : slug du pays (« france »). Omis, l'outil rend la liste des pays.\n  - region (string, 1 à 80 caractères) : slug de la région. Exige country ; l'outil rend alors les villes.\n  - response_format ('markdown' | 'json') : défaut markdown.\n\nRend le niveau atteint (level), puis selon ce niveau :\n  - countries : { country, country_slug, country_code, count } par pays ;\n  - regions : country_slug, et { region, region_slug, count } par région (avec le pays de chacune) ;\n  - cities : country_slug, region_slug, et { city, city_slug, count } par ville.\nLe slug à repasser au niveau suivant est country_slug, puis region_slug ; count est le nombre de fiches de la zone. country_code peut manquer.\n\nLimites connues des données :\n  - les compteurs portent sur les fiches GÉOCODÉES : une fiche sans coordonnées n'est comptée dans aucune zone ;\n  - les slugs sont normalisés côté API (minuscules, sans accent) et ne correspondent pas toujours au nom d'usage ;\n  - la couverture varie selon les pays et les villes.\n\nErreurs :\n  - un slug inconnu ne lève PAS d'erreur : la liste revient vide. Reprendre un slug rendu au niveau précédent ;\n  - region fourni sans country : l'outil refuse, car une région ne se résout pas sans son pays.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "country": {
+            "description": "Slug du pays (« france », « united-states »). Omis : rend la liste des pays.",
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 80
+          },
+          "region": {
+            "description": "Slug de la région. Exige country ; rend alors les villes de cette région.",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "response_format": {
+            "default": "markdown",
+            "description": "markdown pour une réponse lisible, json pour les données brutes.",
+            "type": "string",
+            "enum": [
+              "markdown",
+              "json"
+            ]
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "ridemypark_get_geo_area",
+      "description": "Rend la synthèse publique d'une zone géographique (pays, région ou ville) : combien de spots, leur répartition par sous-type et par module, quelques fiches représentatives, et le texte de présentation affiché sur la page de zone du site.\n\nSert à répondre à « qu'est-ce qu'il y a à rouler à Bordeaux ? » par une vue d'ensemble, avant d'entrer dans le détail spot par spot.\n\nParamètres :\n  - country (string, obligatoire) : slug du pays (« france »).\n  - region (string) : slug de la région, pour une zone régionale.\n  - city (string) : slug de la ville, pour une zone urbaine. Exige region.\n  - locale ('fr' | 'en') : langue de la prose rendue, défaut fr.\n  - response_format ('markdown' | 'json') : défaut markdown.\n\nRend : le libellé de la zone, le nombre de fiches, des agrégats (sous-types, modules les plus fréquents), des fiches vitrines avec leur slug, et la prose éditoriale quand elle existe.\n\nLimites connues des données :\n  - la prose n'existe que sur les zones travaillées éditorialement ; ailleurs, seuls les agrégats sont rendus ;\n  - une fiche non géocodée n'entre dans aucune zone, donc les compteurs sont un plancher, pas un total ;\n  - les slugs viennent de la normalisation géo de l'API et se lisent dans ridemypark_browse_geography.\n\nErreurs :\n  - un slug inconnu ne lève PAS d'erreur : la synthèse revient sans fiche. Vérifier les slugs dans ridemypark_browse_geography ;\n  - city fourni sans region : l'outil refuse, car l'API lirait alors le pays entier sans le dire.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "country": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 80,
+            "description": "Slug du pays de la zone (« france »)."
+          },
+          "region": {
+            "description": "Slug de la région, pour une zone régionale.",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "city": {
+            "description": "Slug de la ville, pour une zone urbaine.",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "locale": {
+            "default": "fr",
+            "description": "Langue de la synthèse rédigée (fr par défaut).",
+            "type": "string",
+            "enum": [
+              "fr",
+              "en"
+            ]
+          },
+          "response_format": {
+            "default": "markdown",
+            "description": "markdown pour une réponse lisible, json pour les données brutes.",
+            "type": "string",
+            "enum": [
+              "markdown",
+              "json"
+            ]
+          }
+        },
+        "required": [
+          "country"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "ridemypark_search_shops",
+      "description": "Cherche les boutiques du catalogue public RideMyPark : skateshops, magasins de vélo, ateliers et locations. Les résultats sont des fiches de l’univers shops, avec un lien /shops/<slug>.\n\nParamètres :\n  - near (string, 3 à 120 caractères) : lieu autour duquel chercher. Sinon latitude + longitude, en degrés décimaux. Ces deux modes ne se combinent pas.\n  - radius_km (number > 0, maximum 200, défaut 25) : rayon autour du point de recherche. Sans point, aucun rayon n’est appliqué.\n  - country (string, 2 à 80 caractères), region, city (string, 1 à 80 caractères) : slugs rendus par ridemypark_browse_geography.\n  - query (string, 2 à 120 caractères) : mot-clé dans le titre, la description ou l’adresse.\n  - limit (integer 1-50, défaut 10), page (integer 1-20, défaut 1) : pagination.\n  - response_format ('markdown' | 'json') : défaut markdown.\n\nRend : shops (id, title, slug, url, adresse, coordonnées, photo et site web quand renseignés), page, total_matched, has_more et notes. origin et radius_km sont présents si la recherche est centrée sur un lieu. Le slug ou l’id permet de lire la fiche avec ridemypark_get_shop.\n\nLimites : les fiches peuvent être incomplètes ou anciennes. Aucun stock, prix ou disponibilité de produit. Si une réponse amont contient un autre univers, ces fiches sont écartées, le total est omis et la pagination s’arrête avec une note.\n\nErreurs : lieu introuvable, coordonnées incomplètes ou modes de localisation combinés. Aucun résultat : élargir le rayon ou retirer un filtre.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "near": {
+            "description": "Lieu à géocoder pour chercher autour de ce point. Ne pas combiner avec latitude et longitude.",
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 120
+          },
+          "latitude": {
+            "description": "Latitude du point de recherche, avec longitude et sans near.",
+            "type": "number",
+            "minimum": -90,
+            "maximum": 90
+          },
+          "longitude": {
+            "description": "Longitude du point de recherche, avec latitude et sans near.",
+            "type": "number",
+            "minimum": -180,
+            "maximum": 180
+          },
+          "radius_km": {
+            "default": 25,
+            "description": "Rayon en km autour du point de recherche. Sans point, ce rayon ne s’applique pas.",
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "maximum": 200
+          },
+          "country": {
+            "description": "Slug du pays, rendu par ridemypark_browse_geography.",
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 80
+          },
+          "region": {
+            "description": "Slug de la région, rendu par ridemypark_browse_geography.",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "city": {
+            "description": "Slug de la ville, rendu par ridemypark_browse_geography.",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "query": {
+            "description": "Mot-clé dans le titre, la description ou l’adresse.",
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 120
+          },
+          "limit": {
+            "default": 10,
+            "description": "Nombre de boutiques par page, de 1 à 50, défaut 10.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50
+          },
+          "page": {
+            "default": 1,
+            "description": "Numéro de page, de 1 à 20. La première page est 1.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 20
+          },
+          "response_format": {
+            "default": "markdown",
+            "description": "markdown pour une réponse lisible, json pour les données brutes.",
+            "type": "string",
+            "enum": [
+              "markdown",
+              "json"
+            ]
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "ridemypark_get_shop",
+      "description": "Rend la fiche publique d’une boutique du catalogue RideMyPark.\n\nParamètres :\n  - slug (string, 1 à 200 caractères) ou id (integer > 0) : fournir exactement un identifiant rendu par ridemypark_search_shops.\n  - response_format ('markdown' | 'json') : défaut markdown.\n\nRend : id, title, slug, url, gallery, links ; description, adresse, lieu, coordonnées, site web, téléphone, horaires, fuseau horaire, photo, état de modération et date de mise à jour quand renseignés. Les horaires sont ceux de la fiche, sans garantie d’ouverture en temps réel.\n\nLimites : les données peuvent être incomplètes ou anciennes. Aucun stock, prix, marque disponible ou achat. Une fiche de spot ou d’événement est refusée.\n\nErreurs : identifiant absent, ambigu ou inconnu, ou fiche d’un autre univers.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "slug": {
+            "description": "Slug de la boutique, rendu par ridemypark_search_shops. Fournir slug ou id.",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "id": {
+            "description": "Identifiant numérique de la boutique. Fournir id ou slug.",
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "response_format": {
+            "default": "markdown",
+            "description": "markdown pour une réponse lisible, json pour les données brutes.",
+            "type": "string",
+            "enum": [
+              "markdown",
+              "json"
+            ]
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "ridemypark_list_events",
+      "description": "Liste les événements publics du catalogue RideMyPark : contests, jams, démos, inaugurations de park. Un événement est une fiche publique du site, au même titre qu'un spot, avec sa page sur ridemypark.com/events/.\n\nSert à répondre à « il y a un contest bientôt près de Lyon ? » ou « quels événements sont annoncés en Bretagne ce printemps ? ».\n\nParamètres :\n  - near (string, 3 à 120 caractères) : lieu autour duquel chercher, géocodé automatiquement. Sinon latitude + longitude.\n  - latitude (number -90 à 90), longitude (number -180 à 180) : point de recherche, à défaut de near.\n  - radius_km (number, défaut 25, maximum 200) : rayon autour du point de recherche. Sans point de recherche, aucun filtre géographique n'est appliqué.\n  - country, region, city (string) : slugs de zone, tels que rendus par ridemypark_browse_geography.\n  - query (string, 2 à 120 caractères) : mot-clé dans le titre, la description et l'adresse.\n  - from (string AAAA-MM-JJ) : ne garde que les événements dont une date tombe à partir de ce jour.\n  - to (string AAAA-MM-JJ) : borne haute de la même fenêtre.\n  - limit (number 1-50, défaut 10), page (number 1-20, défaut 1) : pagination, la page 1 étant la première.\n  - response_format ('markdown' | 'json') : défaut markdown.\n\nRend pour chaque événement : identifiant, titre, slug, date annoncée au format ISO, adresse, photo, état de la fiche, et le lien de la page publique. Plus : la page, le point de recherche et le rayon quand ils s'appliquent, has_more, et total_matched quand aucune fiche n'a été écartée. Le slug se repasse à ridemypark_get_event pour la fiche complète.\n\nLimites connues des données :\n  - le catalogue d'événements est BEAUCOUP plus petit que celui des spots — quelques dizaines de fiches actives, souvent concentrées sur la France. Une réponse vide est un résultat courant, pas une panne ;\n  - la date rendue est la prochaine occurrence à venir ou, à défaut, la dernière passée : une fiche d'événement récurrent porte plusieurs dates, et seule la fiche complète les liste toutes ;\n  - un événement dont l'organisateur n'a jamais saisi de date n'a pas de date du tout, et la fenêtre from / to ne peut alors pas le retenir ;\n  - les événements de la page rendue sont classés du plus proche dans le temps au plus lointain ; ceux sans date ferment la marche. Ce classement porte sur la page, pas sur le catalogue entier ;\n  - les sorties entre riders (« Ça ride ») ne sont PAS des événements et n'apparaissent jamais ici : elles se consultent avec ridemypark_list_my_sessions après connexion avec account:read.\n\nErreurs :\n  - Rien trouvé pour un lieu non géocodable : réessayer avec un nom de ville simple.\n  - Aucun résultat : élargir la fenêtre de dates, augmenter radius_km, ou retirer un filtre de zone.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "near": {
+            "description": "Nom du lieu autour duquel chercher (« Lyon », « Bordeaux »), géocodé automatiquement.",
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 120
+          },
+          "latitude": {
+            "description": "Latitude du point de recherche, à utiliser avec longitude.",
+            "type": "number",
+            "minimum": -90,
+            "maximum": 90
+          },
+          "longitude": {
+            "description": "Longitude du point de recherche, à utiliser avec latitude.",
+            "type": "number",
+            "minimum": -180,
+            "maximum": 180
+          },
+          "radius_km": {
+            "default": 25,
+            "description": "Rayon autour du point de recherche, en km (défaut 25, maximum 200). Sans point de recherche, ce rayon ne s'applique pas.",
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "maximum": 200
+          },
+          "country": {
+            "description": "Slug du pays, tel que rendu par ridemypark_browse_geography.",
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 80
+          },
+          "region": {
+            "description": "Slug de la région, tel que rendu par ridemypark_browse_geography.",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "city": {
+            "description": "Slug de la ville, tel que rendu par ridemypark_browse_geography.",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "query": {
+            "description": "Mot-clé cherché dans le titre, la description et l'adresse de l'événement.",
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 120
+          },
+          "from": {
+            "description": "Début de la fenêtre, au format AAAA-MM-JJ. Omis = pas de borne basse.",
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          },
+          "to": {
+            "description": "Fin de la fenêtre, au format AAAA-MM-JJ. Omis = pas de borne haute.",
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          },
+          "limit": {
+            "default": 10,
+            "description": "Nombre d'événements rendus (défaut 10, maximum 50).",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50
+          },
+          "page": {
+            "default": 1,
+            "description": "Numéro de page, à partir de 1 (maximum 20).",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 20
+          },
+          "response_format": {
+            "default": "markdown",
+            "description": "markdown pour une réponse lisible, json pour les données brutes.",
+            "type": "string",
+            "enum": [
+              "markdown",
+              "json"
+            ]
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "ridemypark_get_event",
+      "description": "Rend la fiche publique complète d'un événement RideMyPark : de quoi il s'agit, où et quand il a lieu, et le lien vers sa page. Un événement est une fiche du catalogue, servie par la même route qu'un spot ; cet outil vérifie que la fiche demandée appartient bien à l'univers des événements.\n\nParamètres :\n  - slug (string, 1 à 200 caractères) : identifiant lisible de l'événement.\n  - id (number entier positif) : identifiant numérique, à défaut de slug.\n  - response_format ('markdown' | 'json') : défaut markdown.\n\nRend : titre, description, toutes les occurrences datées au format ISO (champ dates) et celles encore à venir (champ future_dates), adresse et ville, coordonnées, catégories, photo et galerie, lien source (website : le « Site web » de la page), réseaux sociaux (links), état de la fiche, date de dernière mise à jour, lien de la page publique.\n\nLimites connues des données :\n  - une fiche d'événement peut n'avoir AUCUNE date saisie : les listes d'occurrences sont alors vides, et c'est la description qui porte l'information ;\n  - les occurrences passées restent dans le champ dates : c'est future_dates qui dit ce qui reste à venir ;\n  - la description est du texte libre saisi par l'organisateur, et la fiche peut ne plus être à jour à l'approche de la date ;\n  - le nombre de participants et la liste des personnes présentes n'existent pas sur une fiche d'événement : cet outil n'en rend jamais.\n\nErreurs :\n  - « Aucun événement … » quand le slug n'existe pas : le reprendre d'un résultat de ridemypark_list_events.\n  - « Cette fiche n'est pas un événement » quand le slug désigne un spot ou une boutique : l'erreur indique l'outil qui sert cet univers.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "slug": {
+            "description": "Identifiant lisible de l'événement, tel que rendu par ridemypark_list_events.",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "id": {
+            "description": "Identifiant numérique de l'événement, à défaut de slug.",
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "response_format": {
+            "default": "markdown",
+            "description": "markdown pour une réponse lisible, json pour les données brutes.",
+            "type": "string",
+            "enum": [
+              "markdown",
+              "json"
+            ]
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "ridemypark_search_blog",
+      "description": "Cherche parmi les articles PUBLIÉS du blog RideMyPark : guides, tests de matériel, portraits, actualités des spots.\n\nSert à répondre à « avez-vous un guide pour débuter le skate ? » ou « qu'avez-vous écrit sur les pumptracks ? ».\n\nParamètres :\n  - query (string, 2 à 120 caractères) : mots-clés cherchés dans le titre et le chapô, dans la langue d'origine de l'article ET dans sa traduction. Chaque mot doit apparaître ; casse et accents ignorés.\n  - tag (string, 1 à 60 caractères) : étiquette éditoriale exacte ; casse et accents ignorés.\n  - category (string, 1 à 80 caractères) : catégorie exacte, casse comprise, dans la langue d'origine de l'article. Un résultat servi en traduction (served_lang ≠ content_lang) montre sa catégorie traduite : elle ne filtre pas.\n  - locale ('fr' | 'en') : langue des titres et chapôs rendus, défaut fr.\n  - limit (number 1-50, défaut 20), offset (number 0-5000, multiple de limit) : pagination.\n  - response_format ('markdown' | 'json') : défaut markdown.\n\nRend pour chaque article : titre, slug, chapô, catégorie, étiquettes, date de publication ISO, image de couverture, langue d'origine (content_lang), langue servie (served_lang) et lien public. Plus : total (le nombre d'articles qui répondent au filtre), page et per_page appliqués. Le corps complet s'obtient avec ridemypark_get_blog_article.\n\nLimites connues des données :\n  - seuls les articles au statut « publié » sont rendus : un brouillon n'apparaît jamais ;\n  - tri : le plus récemment publié en tête ;\n  - le catalogue éditorial est modeste, une recherche vide est fréquente ;\n  - la traduction n'existe que sur une partie des articles : sans elle, titre et chapô restent dans la langue d'origine.\n\nErreurs :\n  - « offset doit être un multiple de limit » : reprendre avec offset = 0, limit, 2×limit…\n  - Aucun résultat : retirer l'étiquette ou la catégorie, ou garder un seul mot-clé.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "query": {
+            "description": "Mots-clés cherchés dans le titre et le chapô, dans toutes les langues de l'article. Chaque mot doit apparaître.",
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 120
+          },
+          "tag": {
+            "description": "Étiquette éditoriale exacte (« guides », « lyon »…).",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 60
+          },
+          "category": {
+            "description": "Catégorie exacte, dans la langue d'origine de l'article (celle d'un résultat où served_lang = content_lang).",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "locale": {
+            "default": "fr",
+            "description": "Langue des titres et chapôs rendus, défaut fr.",
+            "type": "string",
+            "enum": [
+              "fr",
+              "en"
+            ]
+          },
+          "limit": {
+            "default": 20,
+            "description": "Articles par page (1 à 50, défaut 20).",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50
+          },
+          "offset": {
+            "default": 0,
+            "description": "Décalage : un MULTIPLE de limit (0, limit, 2×limit…), le blog se lit par pages entières.",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 5000
+          },
+          "response_format": {
+            "default": "markdown",
+            "description": "markdown pour une réponse lisible, json pour les données brutes.",
+            "type": "string",
+            "enum": [
+              "markdown",
+              "json"
+            ]
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "ridemypark_get_blog_article",
+      "description": "Rend un article de blog RideMyPark en entier : titre, chapô, corps, auteur, date de publication, étiquettes et lien public.\n\nParamètres :\n  - slug (string, obligatoire, 1 à 200 caractères) : identifiant lisible de l'article.\n  - locale ('fr' | 'en') : langue demandée, défaut fr.\n  - response_format ('markdown' | 'json') : défaut markdown.\n\nRend : titre, chapô, corps HTML de l'article, auteur, catégorie, étiquettes, date de publication ISO, image de couverture, langue d'origine (content_lang), langue servie (served_lang) et lien public.\n\nLimites connues des données :\n  - le corps peut être long ; la réponse est plafonnée en taille et le dit quand elle a été tronquée ;\n  - un article sans traduction dans la langue demandée est rendu dans sa langue d'origine (served_lang le dit) ;\n  - un brouillon n'est jamais rendu, même avec le bon slug.\n\nErreurs :\n  - « Aucun article … » quand le slug n'existe pas ou n'est pas publié : le reprendre d'un résultat de recherche d'articles.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "slug": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "Identifiant lisible de l'article, tel que rendu par la recherche d'articles."
+          },
+          "locale": {
+            "default": "fr",
+            "description": "Langue demandée, défaut fr.",
+            "type": "string",
+            "enum": [
+              "fr",
+              "en"
+            ]
+          },
+          "response_format": {
+            "default": "markdown",
+            "description": "markdown pour une réponse lisible, json pour les données brutes.",
+            "type": "string",
+            "enum": [
+              "markdown",
+              "json"
+            ]
+          }
+        },
+        "required": [
+          "slug"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "ridemypark_get_platform_stats",
+      "description": "Rend les compteurs vitrine publics de RideMyPark : nombre de spots référencés, nombre de riders inscrits, nombre de villes couvertes.\n\nSert à répondre à « c'est gros, RideMyPark ? » avec les chiffres affichés sur la page d'accueil, plutôt qu'avec une estimation.\n\nParamètres :\n  - response_format ('markdown' | 'json') : défaut markdown.\n\nRend : data.spots (spots référencés), data.riders (riders inscrits) et data.cities (villes couvertes). Aucune date de calcul n'est rendue.\n\nLimites connues des données :\n  - ce sont les compteurs VITRINE, mis en cache côté API : ils peuvent avoir quelques heures de retard ;\n  - le compte de spots exclut les fiches fermées et archivées, contrairement à un total brut de base ;\n  - aucun chiffre de fréquentation, de trafic ni de revenu n'est exposé ici.\n\nErreurs :\n  - Service momentanément saturé : réessayer dans un instant.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "response_format": {
+            "default": "markdown",
+            "description": "markdown pour une réponse lisible, json pour les données brutes.",
+            "type": "string",
+            "enum": [
+              "markdown",
+              "json"
+            ]
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "ridemypark_get_spot_weather",
+      "description": "Rend la météo courante et la prévision des prochains jours aux coordonnées d'un spot RideMyPark, pour savoir si la session tient.\n\nParamètres :\n  - slug (string, obligatoire, 1 à 200 caractères) : slug du spot.\n  - response_format ('markdown' | 'json') : défaut markdown.\n\nRend : mode, puis selon ce mode :\n  - current (le cas courant) : current (température et ressenti en °C, vent en km/h, condition, jour ou nuit) et days, la prévision par jour (température min et max, condition, probabilité de pluie en %) ;\n  - event (fiche d'événement datée) : event_date et event_day, la prévision du jour de l'événement ;\n  - pending (événement trop lointain) : event_date et available_from, la date à partir de laquelle la prévision existera.\nToujours : observed_at (horodatage de la mesure) et provider. condition vaut clear, partly-cloudy, cloudy, overcast, fog, drizzle, rain, heavy-rain, sleet, snow ou thunder.\n\nLimites connues des données :\n  - la météo vient d'un fournisseur tiers appelé aux coordonnées de la fiche : un spot mal géocodé rend la météo du mauvais endroit ;\n  - un spot COUVERT rend quand même une météo extérieure — elle ne dit rien de la praticabilité d'un park indoor ;\n  - la donnée est mise en cache côté API et peut avoir un décalage de l'ordre de l'heure. Quand le fournisseur tiers est en panne, l'API ressert le dernier relevé connu, jusqu'à 6 h d'âge : observed_at dit cet âge, et passé une heure current est absent (seuls les jours restent) ;\n  - la pluie est une PROBABILITÉ par jour, pas une quantité ;\n  - le sol peut rester mouillé longtemps après la pluie : la prévision ne dit pas si le spot est sec.\n\nErreurs :\n  - « Pas de météo … » quand le slug n'existe pas, quand la fiche n'a pas de coordonnées ou n'est pas un spot ni un événement (une boutique), ou quand la météo n'est pas activée sur le serveur.\n  - Météo indisponible : le fournisseur tiers n'a pas répondu, réessayer plus tard.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "slug": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "Slug du spot, tel que rendu par ridemypark_search_spots."
+          },
+          "response_format": {
+            "default": "markdown",
+            "description": "markdown pour une réponse lisible, json pour les données brutes.",
+            "type": "string",
+            "enum": [
+              "markdown",
+              "json"
+            ]
+          }
+        },
+        "required": [
+          "slug"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "ridemypark_can_i_ride_tonight",
+      "description": "Répond oui ou non pour CE SOIR autour d'un point, et nomme les spots praticables les plus proches. C'est la question d'un rider en fin de journée, pas un bulletin météo.\n\nLe verdict est calculé par l'API RideMyPark, jamais ici : ce serveur ne fait que traduire la question en coordonnées et la réponse en phrases.\n\nParamètres :\n  - near (string, 1 à 200 caractères) : nom d'un lieu, géocodé avant la recherche ;\n  - latitude + longitude (number) : le point directement, les deux ensemble ;\n  - response_format ('markdown' | 'json') : défaut markdown.\n  near OU le couple latitude/longitude est obligatoire.\n\nRend : le verdict ('yes' | 'no'), la soirée couverte (date, heures locales, fuseau), le motif d'un non ('rain', 'closed', 'no-spots', 'no-weather'), et jusqu'à trois spots avec leur créneau praticable ou ce qui les en empêche.\n\nCe que la réponse VÉRIFIE, et ce qu'elle ignore :\n  - SEC : la probabilité de précipitation heure par heure sur la soirée, pas la moyenne du jour ;\n  - COUVERT : un spot de catégorie indoor est considéré à l'abri de la pluie ;\n  - OUVERT : les horaires déclarés de la fiche ; un spot qui n'en déclare aucun est considéré ouvert 24 h/24 ;\n  - ÉCLAIRAGE : il n'entre PAS dans la réponse. La nuit ne bloque aucun spot : c'est au rider de savoir si son spot est éclairé.\n\nAutres limites connues :\n  - le point est arrondi à environ 1 km, et seuls les spots les plus proches sont interrogés : la réponse porte sur une poignée de spots, pas sur tout le rayon (le champ 'scanned' dit combien) ;\n  - la météo vient d'un fournisseur tiers, mise en cache côté API : elle peut avoir une demi-heure de décalage, et jusqu'à 6 h quand ce fournisseur est en panne ;\n  - le sol peut rester mouillé longtemps après la pluie — « sec » parle du ciel, pas du béton ;\n  - passé la fin de soirée, la réponse porte sur DEMAIN soir ('tomorrow' vaut alors vrai).\n\nErreurs :\n  - « Rien trouvé pour … » quand le lieu n'est pas reconnu : essaie un nom de ville simple, ou donne latitude et longitude.\n  - Outil indisponible : la météo n'est pas configurée côté serveur, il n'y a pas de réponse à donner.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "near": {
+            "description": "Nom d'un lieu (ville, quartier) — géocodé avant la recherche. Alternative à latitude/longitude.",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "latitude": {
+            "description": "Latitude en degrés décimaux.",
+            "type": "number",
+            "minimum": -90,
+            "maximum": 90
+          },
+          "longitude": {
+            "description": "Longitude en degrés décimaux.",
+            "type": "number",
+            "minimum": -180,
+            "maximum": 180
+          },
+          "response_format": {
+            "default": "markdown",
+            "description": "markdown pour une réponse lisible, json pour les données brutes.",
+            "type": "string",
+            "enum": [
+              "markdown",
+              "json"
+            ]
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "com.ridemypark/rmp",
+    "version": "1.0.0",
+    "remoteUrl": "https://mcp.ridemypark.com/mcp",
+    "publishedAt": "2026-11-22T13:50:17.731466Z",
+    "fetchedAt": "2026-11-23T16:50:40.239Z",
+    "toolsSha256": "97fcffacbe7090e762c43c814c520207f8d32c6524f2066a693f2d9a7c194032"
+  }
+}

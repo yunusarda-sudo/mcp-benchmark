@@ -8,7 +8,7 @@
   "tools": [
     {
       "name": "issue_invoice",
-      "description": "Issue a Brazilian fiscal document: NFS-e or NF-e.\n\nThis produces a legal fiscal document. Confirm the data with the\nuser before calling when you inferred any field.\n\nSend unit_price with quantity when the user quotes a price per\nunit, amount when they quote the line. Sending both asserts they\nagree and is refused if they do not.\n\nnfse is a service invoice: the address is optional and\nservice_code (LC 116/2003 item.subitem) falls back to the\ncompany's fiscal profile. nfe is for goods, and the SEFAZ rejects\na partial one: ncm and cfop on every item and the full\nrecipient_address. Call validate_invoice_payload first when any of\nthat was inferred rather than given.\n\nA complementary, adjustment or return NF-e sets purpose and names\nthe original in referenced_keys; a return the company receives\nback sets direction in. An export has recipient_address state EX\nwith country_code, the export group, and foreign_id when the\nbuyer has a passport.\n\nLook the recipient up with list_clients first and pass its id as\nclient_id. A new recipient is saved as a client after a\nsuccessful issuance.\n\nPass idempotency_key when a retry is possible: the same key with\nthe same payload replays the first answer instead of issuing a\nsecond document. Without one, a retry after a lost response\nissues again, burning another credit and number that only a\ncancellation within its deadline undoes. One key per business\nevent, not per call; nothing generates it for you.\n\nBefore a company's first document, get_company_readiness says\nwhether it can issue at all.\n",
+      "description": "Issue a Brazilian fiscal document: NFS-e or NF-e.\n\nThis produces a legal fiscal document. Confirm the data with the\nuser before calling when you inferred any field.\n\nSend unit_price with quantity when the user quotes a price per\nunit, amount when they quote the line; both must agree.\n\nnfse is a service invoice: the address is optional and\nservice_code (LC 116/2003 item.subitem) falls back to the\ncompany's fiscal profile. nfe is for goods, and the SEFAZ rejects\na partial one: ncm and cfop on every item and the full\nrecipient_address. Call validate_invoice_payload first when any of\nthat was inferred.\n\nA complementary, adjustment or return NF-e sets purpose and names\nthe original in referenced_keys; a return the company receives\nback sets direction in. An export has recipient_address state EX\nwith country_code, the export group, and foreign_id for a passport.\n\nLook the recipient up with list_clients and pass its id as\nclient_id. A new recipient is saved as a client after issuance.\n\nPass idempotency_key, one per business event, when a retry is\npossible: the same key and payload replays the first answer.\nWithout one, a retry after a lost response issues again, burning\nanother credit and number that only a cancellation within its\ndeadline undoes. Nothing generates the key for you.\n\nBefore a company's first document, get_company_readiness says\nwhether it can issue at all.\n",
       "inputSchema": {
         "properties": {
           "document_type": {
@@ -20,12 +20,25 @@
             "type": "string"
           },
           "items": {
-            "description": "One entry per line. Each needs a description and a price: unit_price with quantity, or amount for the whole line. nfe also needs ncm (8 digits) and cfop (4 digits) on every item; nfse may carry service_code. Example: {\"description\": \"Cadeira de escritorio\", \"unit_price\": 225, \"quantity\": 2, \"ncm\": \"94013000\", \"cfop\": \"5102\"}. The tax, fuel and ibs_cbs groups in full: the stackin://schemas/invoice-item resource.",
+            "description": "One entry per line. Each needs a description and a price: unit_price with quantity, or amount for the whole line, or an item_id from list_items for these and the fiscal codes; what the line sends wins. nfe also needs ncm (8 digits) and cfop (4 digits) on every item; nfse may carry service_code. Groups in full: the stackin://schemas/invoice-item resource.",
             "items": {
               "properties": {
                 "description": {
+                  "default": null,
+                  "description": "Required unless item_id names a catalog item.",
                   "minLength": 1,
-                  "type": "string"
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "item_id": {
+                  "default": null,
+                  "description": "A catalog item from list_items: fills what the line leaves out.",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
                 },
                 "amount": {
                   "anyOf": [
@@ -119,6 +132,20 @@
                   "pattern": "^\\d{1,6}$",
                   "type": [
                     "string",
+                    "null"
+                  ]
+                },
+                "net_weight": {
+                  "description": "kg per unit, NF-e only.",
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "gross_weight": {
+                  "description": "kg per unit, NF-e only.",
+                  "type": [
+                    "number",
                     "null"
                   ]
                 },
@@ -234,7 +261,7 @@
                   ]
                 },
                 "ibs_cbs": {
-                  "description": "The Reforma Tributaria group (IBS/CBS) for the item, computed: cst (3 digits), classification (cClassTrib, 6 digits), rate_state, rate_city and rate_federal; base, reduction_ibs and reduction_cbs when they apply. Full shape in the stackin://schemas/invoice-item resource.",
+                  "description": "IBS/CBS: cst (3 digits), classification (cClassTrib, 6). nfe: rate_state, rate_city, rate_federal; base, reduction_ibs, reduction_cbs when they apply. nfse: operation_indicator (cIndOp, 6 digits) only. Full shape in the stackin://schemas/invoice-item resource.",
                   "type": "object"
                 },
                 "extra_groups": {
@@ -246,7 +273,7 @@
                   ]
                 },
                 "tax": {
-                  "description": "The item's taxes, already computed: icms, icms_uf_dest, ipi, pis, pis_st, cofins, cofins_st and v_tot_trib, each ICMS variant chosen by its cst or csosn. Leave it out unless the user gave the computed values. Validated against the SDK model; full shape in the stackin://schemas/invoice-item resource.",
+                  "description": "The item's taxes, already computed: icms, icms_uf_dest, ipi, pis, pis_st, cofins, cofins_st and v_tot_trib, each ICMS variant chosen by its cst or csosn. Leave it out unless the user gave the computed values. Full shape in the stackin://schemas/invoice-item resource.",
                   "type": "object"
                 },
                 "fuel": {
@@ -284,9 +311,6 @@
                   ]
                 }
               },
-              "required": [
-                "description"
-              ],
               "type": "object"
             },
             "type": "array"
@@ -313,16 +337,42 @@
               }
             ],
             "default": null,
-            "description": "A saved client's id, from list_clients: its name, document and address fill whatever this call leaves out. Without it, client_name and tax_id are required."
+            "description": "A saved client's id, from list_clients: it fills what this call leaves out. Without it, client_name and tax_id are required."
           },
           "update_client": {
             "default": false,
-            "description": "Save the recipient data sent in this call back onto the client named by client_id.",
+            "description": "Save the recipient data sent here onto client_id's client.",
             "type": "boolean"
+          },
+          "client_email": {
+            "anyOf": [
+              {
+                "maxLength": 254,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Optional. Recipient e-mail, written into the document when valid. Omitted: client_id's."
+          },
+          "client_phone": {
+            "anyOf": [
+              {
+                "maxLength": 20,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Optional. Recipient phone, written into the document when valid. Omitted: client_id's."
           },
           "recipient_address": {
             "default": null,
-            "description": "The recipient's address. Required for nfe with street, number, neighborhood, city, state (UF, e.g. SP), zip_code (8 digits) and city_code (7-digit IBGE code, e.g. 3550308); optional for nfse. A buyer abroad has state EX and a country_code. With client_id, omit it to use the saved one.",
+            "description": "Required for nfe, with street, number, neighborhood, city, state (UF), zip_code (8 digits) and city_code (7-digit IBGE, e.g. 3550308); optional for nfse. Abroad: state EX and country_code. With client_id, omit it to use the saved one.",
             "properties": {
               "state": {
                 "default": null,
@@ -375,7 +425,7 @@
               },
               "country_code": {
                 "default": null,
-                "description": "BACEN country code, 1 to 4 digits. Required, and not 1058, when state is EX. Its check digit is not verified: the official table has countries whose digit does not close.",
+                "description": "BACEN code, 1 to 4 digits. Required, not 1058, when state is EX.",
                 "pattern": "^[0-9]{1,4}$",
                 "type": [
                   "string",
@@ -391,7 +441,7 @@
               },
               "state_registration": {
                 "default": null,
-                "description": "Recipient's IE (inscrição estadual), NF-e only. Send it for a recipient registered as an ICMS contributor; ISENTO for an exempt one; leave it out for a non-contributor.",
+                "description": "IE, NF-e only: the number for an ICMS contributor, ISENTO if exempt, left out for a non-contributor.",
                 "type": [
                   "string",
                   "null"
@@ -425,7 +475,7 @@
               }
             ],
             "default": null,
-            "description": "Document number (número), e.g. 1532. Omitted means the next one from the company's counter; set it only to fill a known gap."
+            "description": "Document number, e.g. 1532. Omitted means the company's next; set it only to fill a known gap."
           },
           "purpose": {
             "anyOf": [
@@ -459,7 +509,7 @@
               }
             ],
             "default": null,
-            "description": "out for an outgoing NF-e (CFOP 5/6/7); in for one the company issues for goods coming in, such as a sale the buyer returned (CFOP 1/2/3). nfe only; omitted means out."
+            "description": "out for an outgoing NF-e (CFOP 5/6/7); in for goods coming in, such as a sale returned (CFOP 1/2/3). nfe only; omitted means out."
           },
           "referenced_keys": {
             "anyOf": [
@@ -474,7 +524,7 @@
               }
             ],
             "default": null,
-            "description": "Access keys of the NF-e this one refers to: the note being returned, complemented or adjusted. Required for complementary (exactly one) and for most returns. nfe only."
+            "description": "Access keys of the NF-e being returned, complemented or adjusted. Required for complementary (exactly one) and most returns. nfe only."
           },
           "foreign_id": {
             "anyOf": [
@@ -488,27 +538,24 @@
               }
             ],
             "default": null,
-            "description": "Passport or other document of a buyer abroad, used when recipient_address.state is EX. nfe only; may be omitted."
+            "description": "Passport or other document of a buyer abroad (state EX). nfe only; may be omitted."
           },
           "export": {
             "default": null,
-            "description": "Where the goods leave Brazil (exporta): exit_state (UF) and place, e.g. Porto de Santos. Required for an nfe to a buyer abroad (recipient_address.state EX), refused otherwise.",
+            "description": "Where the goods leave Brazil (exporta): exit_state (UF), place (e.g. Porto de Santos), optional dispatch_place (customs). Required for an nfe to a buyer abroad (state EX), refused otherwise.",
             "properties": {
               "exit_state": {
-                "description": "UFSaidaPais: the Brazilian state the goods leave from.",
                 "maxLength": 2,
                 "minLength": 2,
                 "type": "string"
               },
               "place": {
-                "description": "xLocExporta: place of shipment or border crossing.",
                 "maxLength": 60,
                 "minLength": 1,
                 "type": "string"
               },
               "dispatch_place": {
                 "default": null,
-                "description": "xLocDespacho: customs facility of dispatch.",
                 "maxLength": 60,
                 "minLength": 1,
                 "type": [
@@ -550,7 +597,7 @@
               }
             ],
             "default": null,
-            "description": "A discount on the whole document, in BRL, e.g. 15.50. The API spreads it over the lines in proportion to each line's amount. Omitted means none; a per-line discount goes on the item."
+            "description": "Discount on the whole document, BRL, e.g. 15.50, spread over the lines pro rata. Omitted means none; a per-line one goes on the item."
           },
           "issued_at": {
             "anyOf": [
@@ -562,12 +609,72 @@
               }
             ],
             "default": null,
-            "description": "Emission date-time (dhEmi), ISO 8601 with a timezone offset, e.g. 2026-11-15T09:30:00-03:00; a value without an offset is refused. Omitted means now. nfe: at most 30 days back and 5 minutes ahead; nfse: never in the future. Set it only when the user asks for a date other than now."
+            "description": "Emission date-time (dhEmi), ISO 8601 with offset, e.g. 2026-11-15T09:30:00-03:00; one without an offset is refused. Omitted means now. nfe: up to 30 days back, 5 minutes ahead; nfse: never future. Set it only when the user asks."
           },
           "contingency": {
             "default": false,
-            "description": "nfe only: send through the state's contingency authorizer (SVC-AN or SVC-RS) because its own is down. Use it only when the user says the SEFAZ is unavailable, never as a retry for a rejection.",
+            "description": "nfe only: use the contingency authorizer (SVC-AN or SVC-RS) because the state's is down. Only when the user says so, never as a retry for a rejection.",
             "type": "boolean"
+          },
+          "presence": {
+            "anyOf": [
+              {
+                "enum": [
+                  "0",
+                  "1",
+                  "2",
+                  "3",
+                  "5",
+                  "9"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "nfe, optional. Buyer presence (indPres): 1 in person, 2 internet, 3 phone, 5 off-site, 9 other, 0 n/a. Ask the user."
+          },
+          "intermediary": {
+            "default": null,
+            "description": "nfe, optional. Marketplace the sale went through: tax_id (CNPJ) and identifier (the seller's id there).",
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "transport": {
+            "default": null,
+            "description": "nfe, optional. freight_mode (modFrete): 0 sender, 1 recipient, 2 third party, 3 sender's own, 4 recipient's own, 9 none; ask the user, never infer. volumes: [{quantity, species, brand, numbering, net_weight, gross_weight in kg}].",
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "payments": {
+            "default": null,
+            "description": "nfe, optional, up to 100: {method (tPag, e.g. 01 cash, 03 credit card, 17 Pix, 99 other with description), amount, description, card {integration, tax_id, brand, authorization}}. Ask the user, never infer.",
+            "items": {
+              "type": "object"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "change": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "nfe, optional. Change given back (vTroco), BRL."
           },
           "idempotency_key": {
             "anyOf": [
@@ -582,7 +689,7 @@
               }
             ],
             "default": null,
-            "description": "One per business event, e.g. order-1042. Sent as an HTTP header: printable ASCII up to 255, no leading or trailing space."
+            "description": "One per business event, e.g. order-1042. Printable ASCII up to 255, no leading or trailing space."
           },
           "company_id": {
             "anyOf": [
@@ -596,7 +703,7 @@
               }
             ],
             "default": null,
-            "description": "UUID of the company this call acts for. Omit it when the connection covers a single company; with several it is required (see list_authorized_companies). Send company_id or company_tax_id, never both."
+            "description": "UUID of the company acted for. Omit for a single company; else see list_authorized_companies. Send one, never both."
           },
           "company_tax_id": {
             "anyOf": [
@@ -610,7 +717,7 @@
               }
             ],
             "default": null,
-            "description": "CNPJ or CPF of the company this call acts for, never the recipient or a taxpayer being looked up. Omit it when the connection covers a single company; with several it is required (see list_authorized_companies). Send company_id or company_tax_id, never both."
+            "description": "CNPJ or CPF of the company acted for, never the recipient or a taxpayer looked up. Omit for a single company; else see list_authorized_companies. Send one, never both."
           }
         },
         "required": [
@@ -622,13 +729,9 @@
     },
     {
       "name": "consult_invoice",
-      "description": "Look up an invoice's current status by its access key.\n\nRead-only: it never changes the document.\n",
+      "description": "Look up an invoice's current status. Read-only.\n\nAfter an OUTCOME_UNKNOWN issuance, consult its document_id: the\ndps_id of an nfse, the access_key of an nfe. A 404 on a dps_id\nmeans nothing was issued.\n",
       "inputSchema": {
         "properties": {
-          "access_key": {
-            "description": "The access key (chave de acesso) the authorizer assigned, as issue_invoice and list_invoices return it. An NF-e key has 44 characters; the issuer's CNPJ inside it may carry letters since July 2026, so copy it exactly.",
-            "type": "string"
-          },
           "document_type": {
             "description": "nfse for a service invoice, nfe for goods.",
             "enum": [
@@ -636,6 +739,30 @@
               "nfe"
             ],
             "type": "string"
+          },
+          "access_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "The access key (chave de acesso) the authorizer assigned, as issue_invoice and list_invoices return it. An NF-e key has 44 characters; the issuer's CNPJ inside it may carry letters since July 2026, so copy it exactly."
+          },
+          "dps_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "nfse instead of access_key: its DPS id."
           },
           "company_id": {
             "anyOf": [
@@ -649,7 +776,7 @@
               }
             ],
             "default": null,
-            "description": "UUID of the company this call acts for. Omit it when the connection covers a single company; with several it is required (see list_authorized_companies). Send company_id or company_tax_id, never both."
+            "description": "UUID of the company acted for. Omit for a single company; else see list_authorized_companies. Send one, never both."
           },
           "company_tax_id": {
             "anyOf": [
@@ -663,11 +790,10 @@
               }
             ],
             "default": null,
-            "description": "CNPJ or CPF of the company this call acts for, never the recipient or a taxpayer being looked up. Omit it when the connection covers a single company; with several it is required (see list_authorized_companies). Send company_id or company_tax_id, never both."
+            "description": "CNPJ or CPF of the company acted for, never the recipient or a taxpayer looked up. Omit for a single company; else see list_authorized_companies. Send one, never both."
           }
         },
         "required": [
-          "access_key",
           "document_type"
         ],
         "type": "object"
@@ -709,7 +835,7 @@
               }
             ],
             "default": null,
-            "description": "One per business event, e.g. order-1042. Sent as an HTTP header: printable ASCII up to 255, no leading or trailing space."
+            "description": "One per business event, e.g. order-1042. Printable ASCII up to 255, no leading or trailing space."
           },
           "company_id": {
             "anyOf": [
@@ -723,7 +849,7 @@
               }
             ],
             "default": null,
-            "description": "UUID of the company this call acts for. Omit it when the connection covers a single company; with several it is required (see list_authorized_companies). Send company_id or company_tax_id, never both."
+            "description": "UUID of the company acted for. Omit for a single company; else see list_authorized_companies. Send one, never both."
           },
           "company_tax_id": {
             "anyOf": [
@@ -737,7 +863,7 @@
               }
             ],
             "default": null,
-            "description": "CNPJ or CPF of the company this call acts for, never the recipient or a taxpayer being looked up. Omit it when the connection covers a single company; with several it is required (see list_authorized_companies). Send company_id or company_tax_id, never both."
+            "description": "CNPJ or CPF of the company acted for, never the recipient or a taxpayer looked up. Omit for a single company; else see list_authorized_companies. Send one, never both."
           }
         },
         "required": [
@@ -777,7 +903,7 @@
               }
             ],
             "default": null,
-            "description": "UUID of the company this call acts for. Omit it when the connection covers a single company; with several it is required (see list_authorized_companies). Send company_id or company_tax_id, never both."
+            "description": "UUID of the company acted for. Omit for a single company; else see list_authorized_companies. Send one, never both."
           },
           "company_tax_id": {
             "anyOf": [
@@ -791,7 +917,7 @@
               }
             ],
             "default": null,
-            "description": "CNPJ or CPF of the company this call acts for, never the recipient or a taxpayer being looked up. Omit it when the connection covers a single company; with several it is required (see list_authorized_companies). Send company_id or company_tax_id, never both."
+            "description": "CNPJ or CPF of the company acted for, never the recipient or a taxpayer looked up. Omit for a single company; else see list_authorized_companies. Send one, never both."
           }
         },
         "required": [
@@ -823,7 +949,7 @@
               }
             ],
             "default": null,
-            "description": "One per business event, e.g. order-1042. Sent as an HTTP header: printable ASCII up to 255, no leading or trailing space."
+            "description": "One per business event, e.g. order-1042. Printable ASCII up to 255, no leading or trailing space."
           },
           "company_id": {
             "anyOf": [
@@ -837,7 +963,7 @@
               }
             ],
             "default": null,
-            "description": "UUID of the company this call acts for. Omit it when the connection covers a single company; with several it is required (see list_authorized_companies). Send company_id or company_tax_id, never both."
+            "description": "UUID of the company acted for. Omit for a single company; else see list_authorized_companies. Send one, never both."
           },
           "company_tax_id": {
             "anyOf": [
@@ -851,7 +977,7 @@
               }
             ],
             "default": null,
-            "description": "CNPJ or CPF of the company this call acts for, never the recipient or a taxpayer being looked up. Omit it when the connection covers a single company; with several it is required (see list_authorized_companies). Send company_id or company_tax_id, never both."
+            "description": "CNPJ or CPF of the company acted for, never the recipient or a taxpayer looked up. Omit for a single company; else see list_authorized_companies. Send one, never both."
           }
         },
         "required": [
@@ -887,7 +1013,7 @@
               }
             ],
             "default": null,
-            "description": "UUID of the company this call acts for. Omit it when the connection covers a single company; with several it is required (see list_authorized_companies). Send company_id or company_tax_id, never both."
+            "description": "UUID of the company acted for. Omit for a single company; else see list_authorized_companies. Send one, never both."
           },
           "company_tax_id": {
             "anyOf": [
@@ -901,7 +1027,7 @@
               }
             ],
             "default": null,
-            "description": "CNPJ or CPF of the company this call acts for, never the recipient or a taxpayer being looked up. Omit it when the connection covers a single company; with several it is required (see list_authorized_companies). Send company_id or company_tax_id, never both."
+            "description": "CNPJ or CPF of the company acted for, never the recipient or a taxpayer looked up. Omit for a single company; else see list_authorized_companies. Send one, never both."
           }
         },
         "required": [
@@ -948,7 +1074,7 @@
               }
             ],
             "default": null,
-            "description": "UUID of the company this call acts for. Omit it when the connection covers a single company; with several it is required (see list_authorized_companies). Send company_id or company_tax_id, never both."
+            "description": "UUID of the company acted for. Omit for a single company; else see list_authorized_companies. Send one, never both."
           },
           "company_tax_id": {
             "anyOf": [
@@ -962,7 +1088,7 @@
               }
             ],
             "default": null,
-            "description": "CNPJ or CPF of the company this call acts for, never the recipient or a taxpayer being looked up. Omit it when the connection covers a single company; with several it is required (see list_authorized_companies). Send company_id or company_tax_id, never both."
+            "description": "CNPJ or CPF of the company acted for, never the recipient or a taxpayer looked up. Omit for a single company; else see list_authorized_companies. Send one, never both."
           }
         },
         "required": [
@@ -1048,7 +1174,7 @@
               }
             ],
             "default": null,
-            "description": "UUID of the company this call acts for. Omit it when the connection covers a single company; with several it is required (see list_authorized_companies). Send company_id or company_tax_id, never both."
+            "description": "UUID of the company acted for. Omit for a single company; else see list_authorized_companies. Send one, never both."
           },
           "company_tax_id": {
             "anyOf": [
@@ -1062,7 +1188,7 @@
               }
             ],
             "default": null,
-            "description": "CNPJ or CPF of the company this call acts for, never the recipient or a taxpayer being looked up. Omit it when the connection covers a single company; with several it is required (see list_authorized_companies). Send company_id or company_tax_id, never both."
+            "description": "CNPJ or CPF of the company acted for, never the recipient or a taxpayer looked up. Omit for a single company; else see list_authorized_companies. Send one, never both."
           }
         },
         "type": "object"
@@ -1089,7 +1215,7 @@
               }
             ],
             "default": null,
-            "description": "UUID of the company this call acts for. Omit it when the connection covers a single company; with several it is required (see list_authorized_companies). Send company_id or company_tax_id, never both."
+            "description": "UUID of the company acted for. Omit for a single company; else see list_authorized_companies. Send one, never both."
           },
           "company_tax_id": {
             "anyOf": [
@@ -1103,7 +1229,7 @@
               }
             ],
             "default": null,
-            "description": "CNPJ or CPF of the company this call acts for, never the recipient or a taxpayer being looked up. Omit it when the connection covers a single company; with several it is required (see list_authorized_companies). Send company_id or company_tax_id, never both."
+            "description": "CNPJ or CPF of the company acted for, never the recipient or a taxpayer looked up. Omit for a single company; else see list_authorized_companies. Send one, never both."
           }
         },
         "required": [
@@ -1136,7 +1262,7 @@
               }
             ],
             "default": null,
-            "description": "UUID of the company this call acts for. Omit it when the connection covers a single company; with several it is required (see list_authorized_companies). Send company_id or company_tax_id, never both."
+            "description": "UUID of the company acted for. Omit for a single company; else see list_authorized_companies. Send one, never both."
           },
           "company_tax_id": {
             "anyOf": [
@@ -1150,7 +1276,7 @@
               }
             ],
             "default": null,
-            "description": "CNPJ or CPF of the company this call acts for, never the recipient or a taxpayer being looked up. Omit it when the connection covers a single company; with several it is required (see list_authorized_companies). Send company_id or company_tax_id, never both."
+            "description": "CNPJ or CPF of the company acted for, never the recipient or a taxpayer looked up. Omit for a single company; else see list_authorized_companies. Send one, never both."
           }
         },
         "type": "object"
@@ -1186,7 +1312,7 @@
               }
             ],
             "default": null,
-            "description": "UUID of the company this call acts for. Omit it when the connection covers a single company; with several it is required (see list_authorized_companies). Send company_id or company_tax_id, never both."
+            "description": "UUID of the company acted for. Omit for a single company; else see list_authorized_companies. Send one, never both."
           },
           "company_tax_id": {
             "anyOf": [
@@ -1200,7 +1326,7 @@
               }
             ],
             "default": null,
-            "description": "CNPJ or CPF of the company this call acts for, never the recipient or a taxpayer being looked up. Omit it when the connection covers a single company; with several it is required (see list_authorized_companies). Send company_id or company_tax_id, never both."
+            "description": "CNPJ or CPF of the company acted for, never the recipient or a taxpayer looked up. Omit for a single company; else see list_authorized_companies. Send one, never both."
           }
         },
         "type": "object"
@@ -1208,7 +1334,7 @@
     },
     {
       "name": "validate_invoice_payload",
-      "description": "Check invoice data against the field rules without issuing anything.\n\nNothing is sent to the tax authority and no document is created.\nThe SDK models check field formats, and for nfe the rules the SEFAZ\nrefuses a document over: ncm and cfop on every item, and a complete\nrecipient address. Worth calling before issue_invoice whenever a\nfield was inferred rather than given.\n\nThis does not replace issuing: the authorizer's cross-field and\nfiscal rules are only checked when the document is transmitted.\n",
+      "description": "Dry-run issue_invoice: the API runs issuance's pre-authority\nchecks (company blockers; NCM, CEST, IBS/CBS and presumed-credit\ntables; layout and cross-field rules). Nothing is sent, numbered,\nstored or charged. Malformed fields come back first, without the\nAPI.\n\nIt does not replace issuing: the authorizer can still reject what\npasses (recipient registration, a number already used).\n",
       "inputSchema": {
         "properties": {
           "document_type": {
@@ -1220,12 +1346,34 @@
             "type": "string"
           },
           "items": {
-            "description": "The items exactly as they would go to issue_invoice, e.g. [{\"description\": \"Cadeira\", \"amount\": 450, \"ncm\": \"94013000\", \"cfop\": \"5102\"}].",
+            "description": "As issue_invoice takes them.",
             "items": {
               "additionalProperties": true,
               "type": "object"
             },
             "type": "array"
+          },
+          "client_name": {
+            "default": "",
+            "description": "As in issue_invoice.",
+            "type": "string"
+          },
+          "tax_id": {
+            "default": "",
+            "description": "As in issue_invoice.",
+            "type": "string"
+          },
+          "client_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "As in issue_invoice."
           },
           "recipient_address": {
             "anyOf": [
@@ -1238,7 +1386,230 @@
               }
             ],
             "default": null,
-            "description": "The recipient_address exactly as it would go to issue_invoice. Required for nfe."
+            "description": "As in issue_invoice."
+          },
+          "series": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "As in issue_invoice."
+          },
+          "number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "As in issue_invoice."
+          },
+          "purpose": {
+            "anyOf": [
+              {
+                "enum": [
+                  "normal",
+                  "complementary",
+                  "adjustment",
+                  "return"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "As in issue_invoice."
+          },
+          "direction": {
+            "anyOf": [
+              {
+                "enum": [
+                  "out",
+                  "in"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "As in issue_invoice."
+          },
+          "referenced_keys": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "As in issue_invoice."
+          },
+          "foreign_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "As in issue_invoice."
+          },
+          "export": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "As in issue_invoice."
+          },
+          "discount": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "As in issue_invoice."
+          },
+          "issued_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "As in issue_invoice."
+          },
+          "contingency": {
+            "default": false,
+            "description": "As in issue_invoice.",
+            "type": "boolean"
+          },
+          "presence": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "As in issue_invoice."
+          },
+          "intermediary": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "As in issue_invoice."
+          },
+          "transport": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "As in issue_invoice."
+          },
+          "payments": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "As in issue_invoice."
+          },
+          "change": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "As in issue_invoice."
+          },
+          "company_id": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "UUID of the company acted for. Omit for a single company; else see list_authorized_companies. Send one, never both."
+          },
+          "company_tax_id": {
+            "anyOf": [
+              {
+                "maxLength": 18,
+                "minLength": 11,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "CNPJ or CPF of the company acted for, never the recipient or a taxpayer looked up. Omit for a single company; else see list_authorized_companies. Send one, never both."
           }
         },
         "required": [
@@ -1278,7 +1649,7 @@
               }
             ],
             "default": null,
-            "description": "UUID of the company this call acts for. Omit it when the connection covers a single company; with several it is required (see list_authorized_companies). Send company_id or company_tax_id, never both."
+            "description": "UUID of the company acted for. Omit for a single company; else see list_authorized_companies. Send one, never both."
           },
           "company_tax_id": {
             "anyOf": [
@@ -1292,7 +1663,7 @@
               }
             ],
             "default": null,
-            "description": "CNPJ or CPF of the company this call acts for, never the recipient or a taxpayer being looked up. Omit it when the connection covers a single company; with several it is required (see list_authorized_companies). Send company_id or company_tax_id, never both."
+            "description": "CNPJ or CPF of the company acted for, never the recipient or a taxpayer looked up. Omit for a single company; else see list_authorized_companies. Send one, never both."
           }
         },
         "type": "object"
@@ -1315,7 +1686,7 @@
               }
             ],
             "default": null,
-            "description": "UUID of the company this call acts for. Omit it when the connection covers a single company; with several it is required (see list_authorized_companies). Send company_id or company_tax_id, never both."
+            "description": "UUID of the company acted for. Omit for a single company; else see list_authorized_companies. Send one, never both."
           },
           "company_tax_id": {
             "anyOf": [
@@ -1329,7 +1700,7 @@
               }
             ],
             "default": null,
-            "description": "CNPJ or CPF of the company this call acts for, never the recipient or a taxpayer being looked up. Omit it when the connection covers a single company; with several it is required (see list_authorized_companies). Send company_id or company_tax_id, never both."
+            "description": "CNPJ or CPF of the company acted for, never the recipient or a taxpayer looked up. Omit for a single company; else see list_authorized_companies. Send one, never both."
           }
         },
         "type": "object"
@@ -1378,7 +1749,7 @@
               }
             ],
             "default": null,
-            "description": "UUID of the company this call acts for. Omit it when the connection covers a single company; with several it is required (see list_authorized_companies). Send company_id or company_tax_id, never both."
+            "description": "UUID of the company acted for. Omit for a single company; else see list_authorized_companies. Send one, never both."
           },
           "company_tax_id": {
             "anyOf": [
@@ -1392,12 +1763,56 @@
               }
             ],
             "default": null,
-            "description": "CNPJ or CPF of the company this call acts for, never the recipient or a taxpayer being looked up. Omit it when the connection covers a single company; with several it is required (see list_authorized_companies). Send company_id or company_tax_id, never both."
+            "description": "CNPJ or CPF of the company acted for, never the recipient or a taxpayer looked up. Omit for a single company; else see list_authorized_companies. Send one, never both."
           }
         },
         "required": [
           "access_key",
           "manifestation"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "get_received_invoice_xml",
+      "description": "Return the full XML (procNFe) of an NF-e issued against this\ncompany. Read-only and never charged.\n\nOnly when list_received_invoices shows has_full_document; for a\nsummary the answer says to manifest first. An XML above 500 KB is\nnot inlined: the answer says to download it from the API instead.\n",
+      "inputSchema": {
+        "properties": {
+          "access_key": {
+            "description": "The 44-character access key of the received NF-e, as list_received_invoices returns it.",
+            "type": "string"
+          },
+          "company_id": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "UUID of the company acted for. Omit for a single company; else see list_authorized_companies. Send one, never both."
+          },
+          "company_tax_id": {
+            "anyOf": [
+              {
+                "maxLength": 18,
+                "minLength": 11,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "CNPJ or CPF of the company acted for, never the recipient or a taxpayer looked up. Omit for a single company; else see list_authorized_companies. Send one, never both."
+          }
+        },
+        "required": [
+          "access_key"
         ],
         "type": "object"
       }
@@ -1562,6 +1977,160 @@
       }
     },
     {
+      "name": "calculate_ibs_cbs",
+      "description": "Simulate IBS/CBS per item and in total. Issues nothing.\n\nNot a fiscal document: say so to the user. Rates left out use\nthe official 2026 ones in 2026; outside 2026 they are required.\n",
+      "inputSchema": {
+        "$defs": {
+          "IbsCbsLine": {
+            "properties": {
+              "cst": {
+                "description": "CST, 3 digits.",
+                "pattern": "^\\d{3}$",
+                "type": "string"
+              },
+              "classification": {
+                "description": "cClassTrib, 6 digits.",
+                "pattern": "^\\d{6}$",
+                "type": "string"
+              },
+              "amount": {
+                "anyOf": [
+                  {
+                    "exclusiveMinimum": 0,
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Item amount; base if no base."
+              },
+              "base": {
+                "anyOf": [
+                  {
+                    "exclusiveMinimum": 0,
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "vBC."
+              },
+              "reduction_ibs": {
+                "anyOf": [
+                  {
+                    "maximum": 100,
+                    "minimum": 0,
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "pRedAliq IBS, %."
+              },
+              "reduction_cbs": {
+                "anyOf": [
+                  {
+                    "maximum": 100,
+                    "minimum": 0,
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "pRedAliq CBS, %."
+              }
+            },
+            "required": [
+              "cst",
+              "classification"
+            ],
+            "type": "object"
+          }
+        },
+        "properties": {
+          "items": {
+            "description": "The items.",
+            "items": {
+              "$ref": "#/$defs/IbsCbsLine"
+            },
+            "maxItems": 990,
+            "minItems": 1,
+            "type": "array"
+          },
+          "operation_date": {
+            "description": "YYYY-MM-DD; picks vigência and rates.",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "type": "string"
+          },
+          "document_type": {
+            "default": "nfe",
+            "description": "Model the cClassTrib is checked for; amounts are the NF-e's.",
+            "enum": [
+              "nfe",
+              "nfce",
+              "nfse"
+            ],
+            "type": "string"
+          },
+          "rate_state": {
+            "anyOf": [
+              {
+                "maximum": 100,
+                "minimum": 0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "pIBSUF, %."
+          },
+          "rate_city": {
+            "anyOf": [
+              {
+                "maximum": 100,
+                "minimum": 0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "pIBSMun, %."
+          },
+          "rate_federal": {
+            "anyOf": [
+              {
+                "maximum": 100,
+                "minimum": 0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "pCBS, %."
+          }
+        },
+        "required": [
+          "items",
+          "operation_date"
+        ],
+        "type": "object"
+      }
+    },
+    {
       "name": "list_authorized_companies",
       "description": "List the companies this connection may act for, and what it may\ndo on each.\n\nCall it before acting when the user has more than one company, or\nwhen a tool answered that it needs a company. Each row carries the\ncompany_id (UUID) and tax_id (CNPJ or CPF) the other tools accept as\ncompany_id or company_tax_id, and the permissions granted there.\n\nOne connection may cover several companies; when it covers only\none, the other tools need no company at all. Read-only.\n",
       "inputSchema": {
@@ -1586,7 +2155,7 @@
               }
             ],
             "default": null,
-            "description": "UUID of the company this call acts for. Omit it when the connection covers a single company; with several it is required (see list_authorized_companies). Send company_id or company_tax_id, never both."
+            "description": "UUID of the company acted for. Omit for a single company; else see list_authorized_companies. Send one, never both."
           },
           "company_tax_id": {
             "anyOf": [
@@ -1600,7 +2169,7 @@
               }
             ],
             "default": null,
-            "description": "CNPJ or CPF of the company this call acts for, never the recipient or a taxpayer being looked up. Omit it when the connection covers a single company; with several it is required (see list_authorized_companies). Send company_id or company_tax_id, never both."
+            "description": "CNPJ or CPF of the company acted for, never the recipient or a taxpayer looked up. Omit for a single company; else see list_authorized_companies. Send one, never both."
           }
         },
         "type": "object"
@@ -1623,7 +2192,7 @@
               }
             ],
             "default": null,
-            "description": "UUID of the company this call acts for. Omit it when the connection covers a single company; with several it is required (see list_authorized_companies). Send company_id or company_tax_id, never both."
+            "description": "UUID of the company acted for. Omit for a single company; else see list_authorized_companies. Send one, never both."
           },
           "company_tax_id": {
             "anyOf": [
@@ -1637,7 +2206,7 @@
               }
             ],
             "default": null,
-            "description": "CNPJ or CPF of the company this call acts for, never the recipient or a taxpayer being looked up. Omit it when the connection covers a single company; with several it is required (see list_authorized_companies). Send company_id or company_tax_id, never both."
+            "description": "CNPJ or CPF of the company acted for, never the recipient or a taxpayer looked up. Omit for a single company; else see list_authorized_companies. Send one, never both."
           }
         },
         "type": "object"
@@ -1805,7 +2374,7 @@
               }
             ],
             "default": null,
-            "description": "UUID of the company this call acts for. Omit it when the connection covers a single company; with several it is required (see list_authorized_companies). Send company_id or company_tax_id, never both."
+            "description": "UUID of the company acted for. Omit for a single company; else see list_authorized_companies. Send one, never both."
           },
           "company_tax_id": {
             "anyOf": [
@@ -1819,7 +2388,7 @@
               }
             ],
             "default": null,
-            "description": "CNPJ or CPF of the company this call acts for, never the recipient or a taxpayer being looked up. Omit it when the connection covers a single company; with several it is required (see list_authorized_companies). Send company_id or company_tax_id, never both."
+            "description": "CNPJ or CPF of the company acted for, never the recipient or a taxpayer looked up. Omit for a single company; else see list_authorized_companies. Send one, never both."
           }
         },
         "type": "object"
@@ -1873,7 +2442,7 @@
               }
             ],
             "default": null,
-            "description": "UUID of the company this call acts for. Omit it when the connection covers a single company; with several it is required (see list_authorized_companies). Send company_id or company_tax_id, never both."
+            "description": "UUID of the company acted for. Omit for a single company; else see list_authorized_companies. Send one, never both."
           },
           "company_tax_id": {
             "anyOf": [
@@ -1887,7 +2456,7 @@
               }
             ],
             "default": null,
-            "description": "CNPJ or CPF of the company this call acts for, never the recipient or a taxpayer being looked up. Omit it when the connection covers a single company; with several it is required (see list_authorized_companies). Send company_id or company_tax_id, never both."
+            "description": "CNPJ or CPF of the company acted for, never the recipient or a taxpayer looked up. Omit for a single company; else see list_authorized_companies. Send one, never both."
           }
         },
         "type": "object"
@@ -1914,7 +2483,7 @@
               }
             ],
             "default": null,
-            "description": "UUID of the company this call acts for. Omit it when the connection covers a single company; with several it is required (see list_authorized_companies). Send company_id or company_tax_id, never both."
+            "description": "UUID of the company acted for. Omit for a single company; else see list_authorized_companies. Send one, never both."
           },
           "company_tax_id": {
             "anyOf": [
@@ -1928,7 +2497,7 @@
               }
             ],
             "default": null,
-            "description": "CNPJ or CPF of the company this call acts for, never the recipient or a taxpayer being looked up. Omit it when the connection covers a single company; with several it is required (see list_authorized_companies). Send company_id or company_tax_id, never both."
+            "description": "CNPJ or CPF of the company acted for, never the recipient or a taxpayer looked up. Omit for a single company; else see list_authorized_companies. Send one, never both."
           }
         },
         "required": [
@@ -2075,7 +2644,7 @@
               },
               "country_code": {
                 "default": null,
-                "description": "BACEN country code, 1 to 4 digits. Required, and not 1058, when state is EX. Its check digit is not verified: the official table has countries whose digit does not close.",
+                "description": "BACEN code, 1 to 4 digits. Required, not 1058, when state is EX.",
                 "pattern": "^[0-9]{1,4}$",
                 "type": [
                   "string",
@@ -2091,7 +2660,7 @@
               },
               "state_registration": {
                 "default": null,
-                "description": "Recipient's IE (inscrição estadual), NF-e only. Send it for a recipient registered as an ICMS contributor; ISENTO for an exempt one; leave it out for a non-contributor.",
+                "description": "IE, NF-e only: the number for an ICMS contributor, ISENTO if exempt, left out for a non-contributor.",
                 "type": [
                   "string",
                   "null"
@@ -2128,7 +2697,7 @@
               }
             ],
             "default": null,
-            "description": "UUID of the company this call acts for. Omit it when the connection covers a single company; with several it is required (see list_authorized_companies). Send company_id or company_tax_id, never both."
+            "description": "UUID of the company acted for. Omit for a single company; else see list_authorized_companies. Send one, never both."
           },
           "company_tax_id": {
             "anyOf": [
@@ -2142,7 +2711,7 @@
               }
             ],
             "default": null,
-            "description": "CNPJ or CPF of the company this call acts for, never the recipient or a taxpayer being looked up. Omit it when the connection covers a single company; with several it is required (see list_authorized_companies). Send company_id or company_tax_id, never both."
+            "description": "CNPJ or CPF of the company acted for, never the recipient or a taxpayer looked up. Omit for a single company; else see list_authorized_companies. Send one, never both."
           }
         },
         "required": [
@@ -2172,7 +2741,7 @@
               }
             ],
             "default": null,
-            "description": "UUID of the company this call acts for. Omit it when the connection covers a single company; with several it is required (see list_authorized_companies). Send company_id or company_tax_id, never both."
+            "description": "UUID of the company acted for. Omit for a single company; else see list_authorized_companies. Send one, never both."
           },
           "company_tax_id": {
             "anyOf": [
@@ -2186,7 +2755,7 @@
               }
             ],
             "default": null,
-            "description": "CNPJ or CPF of the company this call acts for, never the recipient or a taxpayer being looked up. Omit it when the connection covers a single company; with several it is required (see list_authorized_companies). Send company_id or company_tax_id, never both."
+            "description": "CNPJ or CPF of the company acted for, never the recipient or a taxpayer looked up. Omit for a single company; else see list_authorized_companies. Send one, never both."
           }
         },
         "required": [
@@ -2216,7 +2785,7 @@
               }
             ],
             "default": null,
-            "description": "UUID of the company this call acts for. Omit it when the connection covers a single company; with several it is required (see list_authorized_companies). Send company_id or company_tax_id, never both."
+            "description": "UUID of the company acted for. Omit for a single company; else see list_authorized_companies. Send one, never both."
           },
           "company_tax_id": {
             "anyOf": [
@@ -2230,11 +2799,517 @@
               }
             ],
             "default": null,
-            "description": "CNPJ or CPF of the company this call acts for, never the recipient or a taxpayer being looked up. Omit it when the connection covers a single company; with several it is required (see list_authorized_companies). Send company_id or company_tax_id, never both."
+            "description": "CNPJ or CPF of the company acted for, never the recipient or a taxpayer looked up. Omit for a single company; else see list_authorized_companies. Send one, never both."
           }
         },
         "required": [
           "client_id"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "list_items",
+      "description": "Find the products and services in the company's catalog.\n\nLook a line up here before typing it into issue_invoice: when it\nis saved, pass its id as item_id and the description, price and\nfiscal codes come from the catalog. Most recently used first.\nRead-only.\n",
+      "inputSchema": {
+        "properties": {
+          "search": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Part of the description, code or external reference; digits also match the NCM and GTIN."
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "enum": [
+                  "product",
+                  "service"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "product for goods, service for services."
+          },
+          "inactive": {
+            "default": false,
+            "description": "List the deactivated items instead of the active ones.",
+            "type": "boolean"
+          },
+          "limit": {
+            "default": 20,
+            "description": "Rows per page, 1 to 100.",
+            "maximum": 100,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "offset": {
+            "default": 0,
+            "description": "Rows to skip, for the next page: offset + limit.",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "company_id": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "UUID of the company acted for. Omit for a single company; else see list_authorized_companies. Send one, never both."
+          },
+          "company_tax_id": {
+            "anyOf": [
+              {
+                "maxLength": 18,
+                "minLength": 11,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "CNPJ or CPF of the company acted for, never the recipient or a taxpayer looked up. Omit for a single company; else see list_authorized_companies. Send one, never both."
+          }
+        },
+        "type": "object"
+      }
+    },
+    {
+      "name": "get_item",
+      "description": "Read one catalog item with its fiscal fields. Read-only.",
+      "inputSchema": {
+        "properties": {
+          "item_id": {
+            "description": "The item's id, from list_items.",
+            "type": "string"
+          },
+          "company_id": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "UUID of the company acted for. Omit for a single company; else see list_authorized_companies. Send one, never both."
+          },
+          "company_tax_id": {
+            "anyOf": [
+              {
+                "maxLength": 18,
+                "minLength": 11,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "CNPJ or CPF of the company acted for, never the recipient or a taxpayer looked up. Omit for a single company; else see list_authorized_companies. Send one, never both."
+          }
+        },
+        "required": [
+          "item_id"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "save_item",
+      "description": "Save a product or service in the catalog, or update a saved one.\n\nWithout item_id it creates, or updates the item with the same\nexternal_reference (else the same code): sending it twice never\nmakes two. Nothing fiscal is required to save; an NF-e still\nneeds ncm and cfop when issued. It issues nothing. Confirm the\ndata with the user when any of it was inferred.\n",
+      "inputSchema": {
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "What is sold: at most 120 characters for a product (NF-e), 2000 for a service. Required to create."
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "enum": [
+                  "product",
+                  "service"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "product (NF-e) or service (NFS-e). Required to create; a field of the other kind is refused."
+          },
+          "item_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Update this saved item instead of creating one. Only the fields sent change."
+          },
+          "code": {
+            "anyOf": [
+              {
+                "maxLength": 60,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "SKU, unique in the company."
+          },
+          "unit_price": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Price per unit in BRL."
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "maxLength": 6,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "UN, KG, CX..."
+          },
+          "external_reference": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Another system's id, unique in the company."
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Free text kept with it."
+          },
+          "ncm": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Product: 8 digits. Only from the user or classify_item once confirmed; never inferred."
+          },
+          "cfop": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Product: 4 digits, e.g. 5102."
+          },
+          "tax_situation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Product: ICMS CST (2 digits) or CSOSN (3)."
+          },
+          "origin": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Product: 0 to 8; needs tax_situation."
+          },
+          "cest": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Product: 7 digits."
+          },
+          "gtin": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Product: 8, 12, 13 or 14 digits, checked."
+          },
+          "service_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Service: LC 116 code, e.g. 1.07."
+          },
+          "iss_retained": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Service: ISS retained by the customer."
+          },
+          "net_weight": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Product: kg per unit, NF-e only."
+          },
+          "gross_weight": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Product: kg per unit, NF-e only."
+          },
+          "ibs_cbs_cst": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "IBS/CBS CST, 3 digits."
+          },
+          "ibs_cbs_class": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "IBS/CBS cClassTrib, 6 digits."
+          },
+          "company_id": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "UUID of the company acted for. Omit for a single company; else see list_authorized_companies. Send one, never both."
+          },
+          "company_tax_id": {
+            "anyOf": [
+              {
+                "maxLength": 18,
+                "minLength": 11,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "CNPJ or CPF of the company acted for, never the recipient or a taxpayer looked up. Omit for a single company; else see list_authorized_companies. Send one, never both."
+          }
+        },
+        "type": "object"
+      }
+    },
+    {
+      "name": "deactivate_item",
+      "description": "Hide a catalog item; reactivate_item brings it back.",
+      "inputSchema": {
+        "properties": {
+          "item_id": {
+            "description": "The item's id, from list_items.",
+            "type": "string"
+          },
+          "company_id": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "UUID of the company acted for. Omit for a single company; else see list_authorized_companies. Send one, never both."
+          },
+          "company_tax_id": {
+            "anyOf": [
+              {
+                "maxLength": 18,
+                "minLength": 11,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "CNPJ or CPF of the company acted for, never the recipient or a taxpayer looked up. Omit for a single company; else see list_authorized_companies. Send one, never both."
+          }
+        },
+        "required": [
+          "item_id"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "reactivate_item",
+      "description": "Bring a deactivated item back into the company's catalog.",
+      "inputSchema": {
+        "properties": {
+          "item_id": {
+            "description": "From list_items with inactive=true.",
+            "type": "string"
+          },
+          "company_id": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "UUID of the company acted for. Omit for a single company; else see list_authorized_companies. Send one, never both."
+          },
+          "company_tax_id": {
+            "anyOf": [
+              {
+                "maxLength": 18,
+                "minLength": 11,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "CNPJ or CPF of the company acted for, never the recipient or a taxpayer looked up. Omit for a single company; else see list_authorized_companies. Send one, never both."
+          }
+        },
+        "required": [
+          "item_id"
         ],
         "type": "object"
       }
@@ -2261,7 +3336,7 @@
               }
             ],
             "default": null,
-            "description": "UUID of the company this call acts for. Omit it when the connection covers a single company; with several it is required (see list_authorized_companies). Send company_id or company_tax_id, never both."
+            "description": "UUID of the company acted for. Omit for a single company; else see list_authorized_companies. Send one, never both."
           },
           "company_tax_id": {
             "anyOf": [
@@ -2275,7 +3350,7 @@
               }
             ],
             "default": null,
-            "description": "CNPJ or CPF of the company this call acts for, never the recipient or a taxpayer being looked up. Omit it when the connection covers a single company; with several it is required (see list_authorized_companies). Send company_id or company_tax_id, never both."
+            "description": "CNPJ or CPF of the company acted for, never the recipient or a taxpayer looked up. Omit for a single company; else see list_authorized_companies. Send one, never both."
           }
         },
         "required": [
@@ -2398,7 +3473,7 @@
               }
             ],
             "default": null,
-            "description": "UUID of the company this call acts for. Omit it when the connection covers a single company; with several it is required (see list_authorized_companies). Send company_id or company_tax_id, never both."
+            "description": "UUID of the company acted for. Omit for a single company; else see list_authorized_companies. Send one, never both."
           },
           "company_tax_id": {
             "anyOf": [
@@ -2412,7 +3487,7 @@
               }
             ],
             "default": null,
-            "description": "CNPJ or CPF of the company this call acts for, never the recipient or a taxpayer being looked up. Omit it when the connection covers a single company; with several it is required (see list_authorized_companies). Send company_id or company_tax_id, never both."
+            "description": "CNPJ or CPF of the company acted for, never the recipient or a taxpayer looked up. Omit for a single company; else see list_authorized_companies. Send one, never both."
           }
         },
         "required": [
@@ -2439,7 +3514,7 @@
               }
             ],
             "default": null,
-            "description": "UUID of the company this call acts for. Omit it when the connection covers a single company; with several it is required (see list_authorized_companies). Send company_id or company_tax_id, never both."
+            "description": "UUID of the company acted for. Omit for a single company; else see list_authorized_companies. Send one, never both."
           },
           "company_tax_id": {
             "anyOf": [
@@ -2453,7 +3528,7 @@
               }
             ],
             "default": null,
-            "description": "CNPJ or CPF of the company this call acts for, never the recipient or a taxpayer being looked up. Omit it when the connection covers a single company; with several it is required (see list_authorized_companies). Send company_id or company_tax_id, never both."
+            "description": "CNPJ or CPF of the company acted for, never the recipient or a taxpayer looked up. Omit for a single company; else see list_authorized_companies. Send one, never both."
           }
         },
         "type": "object"
@@ -2461,7 +3536,7 @@
     },
     {
       "name": "create_webhook",
-      "description": "Register a URL to receive this company's document events.\n\nEvery document authorized, rejected, cancelled or corrected is\nthen sent there, with its data, signed with the secret. Confirm\nthe URL with the user before calling: it is where their fiscal\ndata goes. The API refuses a URL that is not HTTPS or points at a\nprivate network. Needs webhook:manage.\n\nCalling it twice registers two endpoints, and each receives every\nevent: list_webhooks first.\n",
+      "description": "Register a URL to receive this company's document events.\n\nEvery document authorized, rejected, cancelled or corrected, and\nevery received NF-e first stored (received_invoice.stored) or\nwhose full XML arrived (received_invoice.full_document), is then\nsent there, signed with the secret. Confirm the URL with the user\nbefore calling: it is where their fiscal data goes. The API refuses a URL that is not HTTPS or points at a\nprivate network. Needs webhook:manage.\n\nCalling it twice registers two endpoints, and each receives every\nevent: list_webhooks first.\n",
       "inputSchema": {
         "properties": {
           "url": {
@@ -2482,7 +3557,9 @@
                     "invoice.authorized",
                     "invoice.rejected",
                     "invoice.cancelled",
-                    "invoice.corrected"
+                    "invoice.corrected",
+                    "received_invoice.stored",
+                    "received_invoice.full_document"
                   ],
                   "type": "string"
                 },
@@ -2507,7 +3584,7 @@
               }
             ],
             "default": null,
-            "description": "UUID of the company this call acts for. Omit it when the connection covers a single company; with several it is required (see list_authorized_companies). Send company_id or company_tax_id, never both."
+            "description": "UUID of the company acted for. Omit for a single company; else see list_authorized_companies. Send one, never both."
           },
           "company_tax_id": {
             "anyOf": [
@@ -2521,7 +3598,7 @@
               }
             ],
             "default": null,
-            "description": "CNPJ or CPF of the company this call acts for, never the recipient or a taxpayer being looked up. Omit it when the connection covers a single company; with several it is required (see list_authorized_companies). Send company_id or company_tax_id, never both."
+            "description": "CNPJ or CPF of the company acted for, never the recipient or a taxpayer looked up. Omit for a single company; else see list_authorized_companies. Send one, never both."
           }
         },
         "required": [
@@ -2553,7 +3630,7 @@
               }
             ],
             "default": null,
-            "description": "UUID of the company this call acts for. Omit it when the connection covers a single company; with several it is required (see list_authorized_companies). Send company_id or company_tax_id, never both."
+            "description": "UUID of the company acted for. Omit for a single company; else see list_authorized_companies. Send one, never both."
           },
           "company_tax_id": {
             "anyOf": [
@@ -2567,7 +3644,7 @@
               }
             ],
             "default": null,
-            "description": "CNPJ or CPF of the company this call acts for, never the recipient or a taxpayer being looked up. Omit it when the connection covers a single company; with several it is required (see list_authorized_companies). Send company_id or company_tax_id, never both."
+            "description": "CNPJ or CPF of the company acted for, never the recipient or a taxpayer looked up. Omit for a single company; else see list_authorized_companies. Send one, never both."
           }
         },
         "required": [
@@ -2606,7 +3683,7 @@
               }
             ],
             "default": null,
-            "description": "UUID of the company this call acts for. Omit it when the connection covers a single company; with several it is required (see list_authorized_companies). Send company_id or company_tax_id, never both."
+            "description": "UUID of the company acted for. Omit for a single company; else see list_authorized_companies. Send one, never both."
           },
           "company_tax_id": {
             "anyOf": [
@@ -2620,7 +3697,7 @@
               }
             ],
             "default": null,
-            "description": "CNPJ or CPF of the company this call acts for, never the recipient or a taxpayer being looked up. Omit it when the connection covers a single company; with several it is required (see list_authorized_companies). Send company_id or company_tax_id, never both."
+            "description": "CNPJ or CPF of the company acted for, never the recipient or a taxpayer looked up. Omit for a single company; else see list_authorized_companies. Send one, never both."
           }
         },
         "type": "object"
@@ -2631,10 +3708,10 @@
     "type": "registry",
     "registry": "registry.modelcontextprotocol.io",
     "name": "io.github.stackin-io/stackin",
-    "version": "1.4.0",
+    "version": "1.6.0",
     "remoteUrl": "https://mcp.stackin.io/mcp",
-    "publishedAt": "2026-11-21T22:31:43.745556Z",
-    "fetchedAt": "2026-11-22T12:49:37.224Z",
-    "toolsSha256": "a4c28367bd65d829bf3e3f417d586b71d4e241ede4373c022e663ae766e478ae"
+    "publishedAt": "2026-11-23T02:27:47.184127Z",
+    "fetchedAt": "2026-11-23T16:50:40.239Z",
+    "toolsSha256": "e6c53d0c5e3e9e5013910d54f49d9598a14392a3cbb9397163ac4ea1275ab44d"
   }
 }

@@ -1,0 +1,893 @@
+{
+  "$schema": "../schema.json",
+  "name": "xyz.urlgate/mcp",
+  "title": "URLGate",
+  "category": "Other",
+  "description": "Pay-to-open short links for humans and AI agents, charged in USDC over x402 v2.",
+  "repository": "https://github.com/Arithmos111/urlgate",
+  "tools": [
+    {
+      "name": "open_link",
+      "description": "Open a paid link. Without a payment signature you get the x402 v2 payment requirements; send them back signed to get the destination. Already paid, or your own link (signed in as that wallet: token, or a SIGN-IN-WITH-X header signed over this link's challenge)? You get the destination directly. Taken-down links return status 410 with a machine-readable reason. PAYMENT TAKES TWO SIGNATURES: (1) call without payment → isError result whose structuredContent is the x402 PaymentRequired; (2) sign one accepts[] entry (main leg, to the creator) AND the extensions[\"platform-fee\"].accepts[] entry on the same network (0.3% fee leg, to URLGate), same wallet; (3) call again with both: params._meta[\"x402/payment\"] + params._meta[\"x402/payment-fee\"] (PaymentPayload objects) or the arguments paymentSignature + paymentSignatureFee (base64). Only the main leg → refused with fee_leg_missing before anything is charged. Balance must cover BOTH legs (else insufficient_funds, charged:false). If an earlier payment settled only one leg, the result has code partial_payment, partial { paid, owed } and accepts[] with ONLY the owed leg: sign that one and send it alone (fee owed: x402/payment-fee or paymentSignatureFee). Settlement comes back in result._meta[\"x402/payment-response\"]. Test your client for free first with payment_compat_check. The preview testnet test link REQUIRES a wallet with Base Sepolia testnet + test USDC. If your wallet can't use testnet, follow the production path: run payment_compat_check on production (verify-only, no funds move) and, if you meet the two-signature requirements, proceed with the real paid tools.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "Short code, e.g. \"Gp1qJx\""
+          },
+          "promo": {
+            "type": "string",
+            "description": "Promo code"
+          },
+          "paymentSignature": {
+            "type": "string",
+            "description": "MAIN leg: base64 x402 v2 PaymentPayload for an accepts[] entry (same as the PAYMENT-SIGNATURE header). Fallback for params._meta[\"x402/payment\"], which wins when both are sent. Omit on the first call to get the payment requirements."
+          },
+          "paymentSignatureFee": {
+            "type": "string",
+            "description": "FEE leg (open_link only, REQUIRED when the requirements have extensions[\"platform-fee\"]): base64 x402 v2 PaymentPayload for the extensions[\"platform-fee\"].accepts[] entry on the same network, signed by the same wallet (same as PAYMENT-SIGNATURE-FEE). Fallback for params._meta[\"x402/payment-fee\"]. Without it the call is refused with fee_leg_missing and nothing is charged. Sent ALONE when a partial payment owes only the platform fee (code partial_payment)."
+          },
+          "token": {
+            "type": "string",
+            "description": "Session token (Bearer) when the MCP connection cannot carry an Authorization header"
+          }
+        },
+        "required": [
+          "code"
+        ]
+      }
+    },
+    {
+      "name": "get_link_info",
+      "description": "Public metadata for a link: price, title, description, options, status. Never reveals the destination.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "Short code, e.g. \"Gp1qJx\""
+          }
+        },
+        "required": [
+          "code"
+        ]
+      }
+    },
+    {
+      "name": "link_status",
+      "description": "Availability of a link: active / paused / expired / sold_out / removed_by_seller / removed_by_admin, with the reason code and public note.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "Short code, e.g. \"Gp1qJx\""
+          }
+        },
+        "required": [
+          "code"
+        ]
+      }
+    },
+    {
+      "name": "report_link",
+      "description": "Report a link to URLGate moderators (scam / phishing, malware, illegal content, copyright, spam, child sexual abuse or exploitation). One report per reporter per link.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "Short code, e.g. \"Gp1qJx\""
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "scam_phishing",
+              "malware",
+              "illegal",
+              "dmca",
+              "spam",
+              "child_sexual_exploitation",
+              "other"
+            ]
+          },
+          "details": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "email": {
+            "type": "string",
+            "description": "optional, for follow-up"
+          },
+          "wallet": {
+            "type": "string",
+            "description": "optional 0x… contact wallet"
+          },
+          "token": {
+            "type": "string",
+            "description": "Session token (Bearer) when the MCP connection cannot carry an Authorization header"
+          }
+        },
+        "required": [
+          "code",
+          "reason"
+        ]
+      }
+    },
+    {
+      "name": "my_unlocks",
+      "description": "Links you paid for, newest first, with access state (open / expired / unavailable + reason), receipt and tx links.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string",
+            "description": "Session token (Bearer) when the MCP connection cannot carry an Authorization header"
+          }
+        }
+      }
+    },
+    {
+      "name": "get_receipt",
+      "description": "A receipt by id: paid at, amount, fee, explorer links, permanent URL.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    },
+    {
+      "name": "payment_compat_check",
+      "description": "FREE, verify-only check that your x402 client can pay URLGate before you spend anything. Call without payment → isError result with a two-leg PaymentRequired (main accepts[] entry + extensions[\"platform-fee\"] entry; tiny amounts, 30 s validBefore). Sign BOTH with the same wallet and call again with _meta[\"x402/payment\"] + _meta[\"x402/payment-fee\"] (or paymentSignature + paymentSignatureFee). Both legs are verified, NEVER settled; you get verdict ok | fee_leg_missing | main_leg_missing | wrong_network | bad_signature | amount_mismatch (or requirement_mismatch, payer_mismatch, expired, insufficient_funds, facilitator_unavailable). Signatures sent here can never pay for anything. The preview testnet test link REQUIRES a wallet with Base Sepolia testnet + test USDC. If your wallet can't use testnet, follow the production path: run payment_compat_check on production (verify-only, no funds move) and, if you meet the two-signature requirements, proceed with the real paid tools. Testnet path: 1. wallet on Base Sepolia with test USDC; 2. payment_compat_check on the preview deployment; 3. sign both legs, call again; 4. verdict ok = ready. Production path: 1. payment_compat_check on production (verify-only, no funds move); 2. sign both legs, call again; 3. verdict ok = proceed with the real paid tools.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "paymentSignature": {
+            "type": "string",
+            "description": "MAIN leg: base64 x402 v2 PaymentPayload for an accepts[] entry (same as the PAYMENT-SIGNATURE header). Fallback for params._meta[\"x402/payment\"], which wins when both are sent. Omit on the first call to get the payment requirements."
+          },
+          "paymentSignatureFee": {
+            "type": "string",
+            "description": "FEE leg (open_link only, REQUIRED when the requirements have extensions[\"platform-fee\"]): base64 x402 v2 PaymentPayload for the extensions[\"platform-fee\"].accepts[] entry on the same network, signed by the same wallet (same as PAYMENT-SIGNATURE-FEE). Fallback for params._meta[\"x402/payment-fee\"]. Without it the call is refused with fee_leg_missing and nothing is charged. Sent ALONE when a partial payment owes only the platform fee (code partial_payment)."
+          }
+        }
+      }
+    },
+    {
+      "name": "create_link",
+      "description": "Create a paid short link. Signed in (sign_in token / Bearer; SIGN-IN-WITH-X does not count) or with an agent key (token = ugk_…): FREE within your daily quota (10 a day, 100 on Premium; see get_started), the link and its earnings are your wallet's (an agent key's owner). Anonymous, over quota, or free creation paused: 0.01 USDC via x402: the call returns isError with the PaymentRequired and a code (anonymous, free_quota_exhausted, …) plus nextSteps in _meta[\"urlgate/payment-error\"]; call again with the payment. Limits: 429 rate_limited, 409 duplicate_link, 403 domain_blocked. Payment is ONE signature (no platform-fee leg): sign an accepts[] entry and call again with params._meta[\"x402/payment\"] (PaymentPayload) or paymentSignature (base64). Settlement comes back in result._meta[\"x402/payment-response\"].",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "price": {
+            "type": "string",
+            "description": "USDC, e.g. \"0.25\". Minimum 0.01, max 6 decimals"
+          },
+          "wallet": {
+            "type": "string"
+          },
+          "shortcode": {
+            "type": "string",
+            "description": "Custom code (premium)"
+          },
+          "title": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "afterPay": {
+            "type": "string",
+            "enum": [
+              "receipt",
+              "redirect"
+            ]
+          },
+          "networks": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "paymentSignature": {
+            "type": "string",
+            "description": "MAIN leg: base64 x402 v2 PaymentPayload for an accepts[] entry (same as the PAYMENT-SIGNATURE header). Fallback for params._meta[\"x402/payment\"], which wins when both are sent. Omit on the first call to get the payment requirements."
+          },
+          "token": {
+            "type": "string",
+            "description": "Session token (Bearer) when the MCP connection cannot carry an Authorization header"
+          }
+        },
+        "required": [
+          "url",
+          "price"
+        ]
+      }
+    },
+    {
+      "name": "get_started",
+      "description": "FREE, call this first. Returns JSON: pricing and limits, your tier and today's free-link quota (limit / used / remaining / resetsAt) when signed in or using an agent key, the three ways to create links (own wallet = free daily quota, earnings to you; agent key from a human = free within the key cap, earnings to the owner; anonymous or over quota = 0.01 USDC via x402), and nextSteps (sign_in, use_agent_key, pay_0.01, upgrade, create_link, compat_check).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string",
+            "description": "Session token (Bearer) when the MCP connection cannot carry an Authorization header"
+          }
+        }
+      }
+    },
+    {
+      "name": "pricing_and_limits",
+      "description": "FREE. Alias of get_started: creation fee, free daily quota (Free / Premium / new wallets), global ceiling, agent-key limits, per-minute limits, Premium perks, and your remaining free links today when signed in or using an agent key.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string",
+            "description": "Session token (Bearer) when the MCP connection cannot carry an Authorization header"
+          }
+        }
+      }
+    },
+    {
+      "name": "my_links",
+      "description": "Links you created: destination, options, status (with reason and when it changed), clicks, 402 views, sales, free unlocks, unique payers, gross, platform fees, earnings, conversion, failed payments, agent vs human sales, last sale and abuse report count.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string",
+            "description": "Session token (Bearer) when the MCP connection cannot carry an Authorization header"
+          }
+        }
+      }
+    },
+    {
+      "name": "get_my_link",
+      "description": "Owner view of one of your links, including destination, options and which premium options you can use.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "Short code, e.g. \"Gp1qJx\""
+          },
+          "token": {
+            "type": "string",
+            "description": "Session token (Bearer) when the MCP connection cannot carry an Authorization header"
+          }
+        },
+        "required": [
+          "code"
+        ]
+      }
+    },
+    {
+      "name": "update_link",
+      "description": "Edit one of your links. Free: price, title, description, afterPay, networks. Premium: receiptMessage, expiresAt, maxUses, accessTtlSeconds, destinationUrl after the first sale. null clears an option.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "Short code, e.g. \"Gp1qJx\""
+          },
+          "price": {
+            "type": "string",
+            "description": "USDC, minimum 0.01 (a link already priced below it keeps its price until changed)"
+          },
+          "title": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "afterPay": {
+            "type": "string",
+            "enum": [
+              "receipt",
+              "redirect"
+            ]
+          },
+          "networks": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
+          "receiptMessage": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "expiresAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "maxUses": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "accessTtlSeconds": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "destinationUrl": {
+            "type": "string",
+            "format": "uri"
+          },
+          "token": {
+            "type": "string",
+            "description": "Session token (Bearer) when the MCP connection cannot carry an Authorization header"
+          }
+        },
+        "required": [
+          "code"
+        ]
+      }
+    },
+    {
+      "name": "set_link_status",
+      "description": "Pause, resume, remove or restore one of your links. Buyers who already paid keep access while paused.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "Short code, e.g. \"Gp1qJx\""
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "pause",
+              "resume",
+              "remove",
+              "restore"
+            ]
+          },
+          "note": {
+            "type": "string"
+          },
+          "token": {
+            "type": "string",
+            "description": "Session token (Bearer) when the MCP connection cannot carry an Authorization header"
+          }
+        },
+        "required": [
+          "code",
+          "action"
+        ]
+      }
+    },
+    {
+      "name": "link_analytics",
+      "description": "Analytics for one of your links, including the agent vs human split of sales (payerKinds) per day and in total (range 7d / 30d; 90d / all and referrer/country/buyer breakdowns need premium).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "Short code, e.g. \"Gp1qJx\""
+          },
+          "range": {
+            "type": "string",
+            "enum": [
+              "7d",
+              "30d",
+              "90d",
+              "all"
+            ]
+          },
+          "token": {
+            "type": "string",
+            "description": "Session token (Bearer) when the MCP connection cannot carry an Authorization header"
+          }
+        },
+        "required": [
+          "code"
+        ]
+      }
+    },
+    {
+      "name": "my_analytics",
+      "description": "Your totals and daily earnings across all your links.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "range": {
+            "type": "string",
+            "enum": [
+              "7d",
+              "30d",
+              "90d",
+              "all"
+            ]
+          },
+          "token": {
+            "type": "string",
+            "description": "Session token (Bearer) when the MCP connection cannot carry an Authorization header"
+          }
+        }
+      }
+    },
+    {
+      "name": "link_payments",
+      "description": "Payments for one of your links (buyer, amount, fee, tx links, payerKind agent/human/unknown). Optional payerKind filter.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "Short code, e.g. \"Gp1qJx\""
+          },
+          "payerKind": {
+            "type": "string",
+            "enum": [
+              "agent",
+              "human",
+              "unknown"
+            ]
+          },
+          "token": {
+            "type": "string",
+            "description": "Session token (Bearer) when the MCP connection cannot carry an Authorization header"
+          }
+        },
+        "required": [
+          "code"
+        ]
+      }
+    },
+    {
+      "name": "link_audit",
+      "description": "Audit trail for one of your links: 402 shown, paid, re-opened, edits, status changes. IP addresses are truncated.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "Short code, e.g. \"Gp1qJx\""
+          },
+          "type": {
+            "type": "string"
+          },
+          "cursor": {
+            "type": "string"
+          },
+          "limit": {
+            "type": "integer"
+          },
+          "token": {
+            "type": "string",
+            "description": "Session token (Bearer) when the MCP connection cannot carry an Authorization header"
+          }
+        },
+        "required": [
+          "code"
+        ]
+      }
+    },
+    {
+      "name": "link_grants",
+      "description": "Manage the allowlist / promo codes of one of your links (premium). action=list|create|revoke.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "Short code, e.g. \"Gp1qJx\""
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "list",
+              "create",
+              "revoke"
+            ]
+          },
+          "id": {
+            "type": "integer",
+            "description": "Grant id (revoke)"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "wallet",
+              "promo"
+            ]
+          },
+          "wallet": {
+            "type": "string"
+          },
+          "promoCode": {
+            "type": "string"
+          },
+          "discountPct": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "maxRedemptions": {
+            "type": "integer"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "note": {
+            "type": "string"
+          },
+          "token": {
+            "type": "string",
+            "description": "Session token (Bearer) when the MCP connection cannot carry an Authorization header"
+          }
+        },
+        "required": [
+          "code"
+        ]
+      }
+    },
+    {
+      "name": "link_qr",
+      "description": "QR code for a link as SVG markup.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "Short code, e.g. \"Gp1qJx\""
+          }
+        },
+        "required": [
+          "code"
+        ]
+      }
+    },
+    {
+      "name": "membership_status",
+      "description": "Premium plan (price, period, features) and your membership: tier, state, period end, days left, renewal reminder.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string",
+            "description": "Session token (Bearer) when the MCP connection cannot carry an Authorization header"
+          }
+        }
+      }
+    },
+    {
+      "name": "buy_membership",
+      "description": "Buy (or extend by) 30 days of Premium (5.00 USDC). Call without a signature to get the x402 requirements; nothing renews automatically. Credited to the signed-in wallet, else the payer. Payment is ONE signature (no platform-fee leg): sign an accepts[] entry and call again with params._meta[\"x402/payment\"] (PaymentPayload) or paymentSignature (base64). Settlement comes back in result._meta[\"x402/payment-response\"].",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "paymentSignature": {
+            "type": "string",
+            "description": "MAIN leg: base64 x402 v2 PaymentPayload for an accepts[] entry (same as the PAYMENT-SIGNATURE header). Fallback for params._meta[\"x402/payment\"], which wins when both are sent. Omit on the first call to get the payment requirements."
+          },
+          "token": {
+            "type": "string",
+            "description": "Session token (Bearer) when the MCP connection cannot carry an Authorization header"
+          }
+        }
+      }
+    },
+    {
+      "name": "redeem_premium_code",
+      "description": "Redeem a URLGate premium code for the signed-in wallet. Adds the code’s cycles (30 days each) on top of your current period. Each wallet can use a code once; invalid, expired, withdrawn and used-up codes all return invalid_code.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "The premium code, e.g. \"ABCD-EFGH-JKMN-PQRS\" (case, spaces and dashes ignored)"
+          },
+          "token": {
+            "type": "string",
+            "description": "Session token (Bearer) when the MCP connection cannot carry an Authorization header"
+          }
+        },
+        "required": [
+          "code"
+        ]
+      }
+    },
+    {
+      "name": "dismiss_renewal_reminder",
+      "description": "Dismiss the \"Premium ends soon\" reminder for the current period.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string",
+            "description": "Session token (Bearer) when the MCP connection cannot carry an Authorization header"
+          }
+        }
+      }
+    },
+    {
+      "name": "my_points",
+      "description": "Your points: confirmed vs pending (7-day review), items with state and reason, not-eligible events, rank, adjustments.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string",
+            "description": "Session token (Bearer) when the MCP connection cannot carry an Authorization header"
+          }
+        }
+      }
+    },
+    {
+      "name": "set_points_prefs",
+      "description": "Hide or show your wallet on the public leaderboard (points keep accruing).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "hideFromLeaderboard": {
+            "type": "boolean"
+          },
+          "token": {
+            "type": "string",
+            "description": "Session token (Bearer) when the MCP connection cannot carry an Authorization header"
+          }
+        },
+        "required": [
+          "hideFromLeaderboard"
+        ]
+      }
+    },
+    {
+      "name": "points_leaderboard",
+      "description": "Public top-100 leaderboard ranked by confirmed (final) points only, ties to the earliest earner. Each row also shows pending: points whose review is still open (not voided, confirmed or expired), never used for rank. Banned wallets are excluded. Wallets are shortened. Page with limit (max 100) and offset or page.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "page": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "points_leaderboard_me",
+      "description": "Your rank on the public leaderboard plus confirmed and pending points. rank is null when you have no confirmed points, opted out, or are banned (reason says which).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string",
+            "description": "Session token (Bearer) when the MCP connection cannot carry an Authorization header"
+          }
+        }
+      }
+    },
+    {
+      "name": "points_rules",
+      "description": "How points are earned, the caps, and every not-eligible reason.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "site_config",
+      "description": "FREE. The fees, prices, quotas, periods and limits in force right now, as JSON (the values every URLGate page and doc is rendered from). Personal quota usage: get_started.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "verify_ledger",
+      "description": "Verify the hash chain of the points ledger.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "sign_in",
+      "description": "Sign in with a wallet. Step 1: {address} → message to sign (EIP-191). Step 2: {message, signature} → token; pass it as Authorization: Bearer on the MCP connection (or as `token` on each tool call). This token is what every account change needs: a SIGN-IN-WITH-X header only re-opens paid links and reads (GET /api/v2/auth/siwx/challenge).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "address": {
+            "type": "string"
+          },
+          "chainId": {
+            "type": "integer"
+          },
+          "message": {
+            "type": "string"
+          },
+          "signature": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "whoami",
+      "description": "The wallet this connection is signed in as, with tier and membership.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string",
+            "description": "Session token (Bearer) when the MCP connection cannot carry an Authorization header"
+          }
+        }
+      }
+    },
+    {
+      "name": "sessions",
+      "description": "List your sessions/tokens (action=list) or revoke them (action=revoke with scope current|all or a jti).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "list",
+              "revoke"
+            ]
+          },
+          "scope": {
+            "type": "string",
+            "enum": [
+              "current",
+              "all"
+            ]
+          },
+          "jti": {
+            "type": "string"
+          },
+          "token": {
+            "type": "string",
+            "description": "Session token (Bearer) when the MCP connection cannot carry an Authorization header"
+          }
+        }
+      }
+    },
+    {
+      "name": "agent_keys",
+      "description": "Manage agent keys for bots that have no wallet (signed in as the owner with the sign_in token; SIGN-IN-WITH-X is refused, even for list). action=list (default) | create (name, dailyCap, expiresInDays, networks; the key is returned once) | revoke (id). A key can only create links; they belong to your wallet.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "list",
+              "create",
+              "revoke"
+            ]
+          },
+          "id": {
+            "type": "string",
+            "description": "Key id (revoke)"
+          },
+          "name": {
+            "type": "string"
+          },
+          "dailyCap": {
+            "type": "integer"
+          },
+          "expiresInDays": {
+            "type": "integer"
+          },
+          "networks": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "token": {
+            "type": "string",
+            "description": "Session token (Bearer) when the MCP connection cannot carry an Authorization header"
+          }
+        }
+      }
+    },
+    {
+      "name": "my_preferences",
+      "description": "Your display preferences. Without arguments: read them. With theme (green | blue | system, or null to reset): save the colour scheme the URLGate website uses for your wallet.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "theme": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "green",
+              "blue",
+              "system",
+              null
+            ]
+          },
+          "token": {
+            "type": "string",
+            "description": "Session token (Bearer) when the MCP connection cannot carry an Authorization header"
+          }
+        }
+      }
+    },
+    {
+      "name": "list_networks",
+      "description": "Payment networks this deployment accepts right now (CAIP-2), the USDC contract on each, which is the default, and the mode (mainnet on production, testnet on preview). A link's networks must be a non-empty subset of these.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "open_link_instructions",
+      "description": "How to pay for and open a link over HTTP x402 v2 (returns the exact URL and steps).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code"
+        ]
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "xyz.urlgate/mcp",
+    "version": "2.0.0",
+    "remoteUrl": "https://urlgate.xyz/mcp",
+    "publishedAt": "2026-11-23T03:55:06.757764Z",
+    "fetchedAt": "2026-11-23T16:50:40.239Z",
+    "toolsSha256": "33e77eb64c0a2a230d3bb31cf3bc1ee1995d757948a83a0030ca820747e2f4b2"
+  }
+}

@@ -1,0 +1,426 @@
+{
+  "$schema": "../schema.json",
+  "name": "net.anyhook/anyhook",
+  "title": "AnyHook",
+  "category": "Other",
+  "description": "A webhook inbox for agents: one call returns a live URL. Mock, verify, inspect and replay.",
+  "repository": "https://github.com/gba3124/anyhook-mcp",
+  "tools": [
+    {
+      "name": "anyhook_mock",
+      "description": "Generate a webhook request with a valid signature for Stripe, GitHub, or Slack. If targetUrl is provided, the request is POSTed there and the response is returned. This hosted server reaches public https URLs only; to reach localhost, run npx -y anyhook-mcp.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "provider": {
+            "type": "string",
+            "enum": [
+              "stripe",
+              "github",
+              "slack"
+            ],
+            "description": "Webhook provider to simulate."
+          },
+          "event": {
+            "type": "string",
+            "description": "Event name (e.g. 'payment_intent.succeeded' for Stripe)."
+          },
+          "data": {
+            "description": "Optional fields to deep-merge into the fixture.",
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {}
+          },
+          "secret": {
+            "description": "Signing secret. Falls back to a deterministic default per provider.",
+            "type": "string"
+          },
+          "targetUrl": {
+            "description": "If set, POST the generated request to this URL and return the response.",
+            "type": "string",
+            "format": "uri"
+          }
+        },
+        "required": [
+          "provider",
+          "event"
+        ]
+      }
+    },
+    {
+      "name": "anyhook_verify",
+      "description": "Verify a webhook signature against a secret, for every source the AnyHook edge verifies, including stripe, github, shopify, slack, line, discord, linear, vercel, paddle, hubspot, paypal and xero.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "provider": {
+            "type": "string",
+            "description": "Provider name (e.g. 'stripe', 'github', 'slack')."
+          },
+          "headers": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Request headers as a flat object."
+          },
+          "body": {
+            "type": "string",
+            "description": "Raw request body."
+          },
+          "secret": {
+            "type": "string",
+            "description": "Signing secret to verify against."
+          },
+          "requestUrl": {
+            "description": "Original request URL (required for Twilio/HubSpot). Defaults to a placeholder.",
+            "type": "string",
+            "format": "uri"
+          }
+        },
+        "required": [
+          "provider",
+          "headers",
+          "body",
+          "secret"
+        ]
+      }
+    },
+    {
+      "name": "anyhook_providers",
+      "description": "List webhook providers AnyHook can mock, along with the event types available for each.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "anyhook_apps_list",
+      "description": "List apps in your AnyHook account with inbound URLs, sources, and destination URLs. With isActive false, an app's inbound URL answers setup handshakes but acknowledges and discards event POSTs (202, reason app_inactive) instead of relaying them. Destination signing secrets are redacted to has_signing_secret plus a 4-char hint; a new secret in plaintext comes only from rotating it. An app whose slug was changed lists its former URLs under legacyInboundUrls; those still route to it.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "anyhook_inbox",
+      "description": "Every AnyHook app is also an email inbox: mail sent to {user}.{app}@anyhook.net becomes an event (type email.received) you can read with anyhook_events. Returns the address and webhook URL for one of your apps.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "app": {
+            "description": "App slug (from anyhook_apps_list). Defaults to your first app.",
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "anyhook_apps_create",
+      "description": "Create a hosted webhook inbox in your connected account. Give the sender the returned inbound URL. Omit destinations to store deliveries for inspection. The URL keeps receiving between sessions. After reconnecting the same account, anyhook_events lists deliveries for the app slug and anyhook_inspect reads a payload.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Human-readable app name."
+          },
+          "source": {
+            "description": "Optional provider name (stripe, github, shopify, ...). Leave it out to accept any sender: naming one makes the edge refuse (401) requests without that provider's signature header, curl tests included.",
+            "type": "string"
+          },
+          "destinations": {
+            "description": "Destination URLs that should receive forwarded events.",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "url": {
+                  "type": "string",
+                  "format": "uri"
+                }
+              },
+              "required": [
+                "url"
+              ]
+            }
+          }
+        },
+        "required": [
+          "name"
+        ]
+      }
+    },
+    {
+      "name": "anyhook_destination_add",
+      "description": "Add a destination to an existing app: new events are forwarded to this URL, with retries, within about a minute, and the app's other destinations stay as they are. Adding a URL the app already has changes nothing. The signing secret for the AnyHook-Signature header is never returned here: the user gets it in the dashboard (the result says where).",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "appSlug": {
+            "type": "string",
+            "description": "The app whose events should be forwarded."
+          },
+          "url": {
+            "type": "string",
+            "format": "uri",
+            "description": "Public https URL that receives each event as a POST."
+          }
+        },
+        "required": [
+          "appSlug",
+          "url"
+        ]
+      }
+    },
+    {
+      "name": "anyhook_connect",
+      "description": "Hand the user the page that wires Stripe or GitHub to an app: they paste a provider key there, and AnyHook registers the app's inbound URL as a webhook at the provider, saves the signing secret it yields, and turns on signature verification at the edge. The key goes from the user to AnyHook, never through this conversation, and is not stored. Without appSlug a new app is created for the provider first. GitHub sends a signed ping once connected, so the first event appears within seconds (anyhook_events). Until the app has a destination (anyhook_destination_add), events are received and logged but not forwarded.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "provider": {
+            "description": "The provider to connect. Names the new app when appSlug is left out; Stripe if omitted.",
+            "type": "string",
+            "enum": [
+              "stripe",
+              "github"
+            ]
+          },
+          "appSlug": {
+            "description": "Connect this existing app. Omit to create a new app for the provider.",
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "anyhook_replay",
+      "description": "Re-send a stored event to its destinations. Replays sit outside the monthly event quota but within a daily replay limit per plan and the monthly compute allowance (anyhook_usage), and replaying an event that was held for quota bills it as a new event. The destination does run its handler again: a receiver that is not idempotent will process the event twice while debugging.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Event ID to replay. Replay does not consume event quota; it is charged to the compute allowance."
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    },
+    {
+      "name": "anyhook_undelivered",
+      "description": "Events for the given app that have not reached a destination: failed, held (circuit_open, quota_exceeded), still retrying, or logged while anyhook-mcp listen was stopped. An app with no destination has none: its events are logged, not forwarded.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "appSlug": {
+            "type": "string"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200
+          }
+        },
+        "required": [
+          "appSlug"
+        ]
+      }
+    },
+    {
+      "name": "anyhook_replay_failed",
+      "description": "Re-send an app's failed events after the destination is fixed, oldest first: by default those received in the last 24 hours, at most 50 per call (since and limit change both; limit goes up to 100). Events held by an open circuit are included. An event replayed once is not selected again, so a second call continues with the rest. The result lists what was replayed, what was skipped and why, and more: true while failed events are still waiting. Replays count against the plan's daily replay limit.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "appSlug": {
+            "type": "string",
+            "description": "The app whose failed events to replay."
+          },
+          "since": {
+            "description": "Only events received after this ISO 8601 time. Default: 24 hours ago.",
+            "type": "string"
+          },
+          "limit": {
+            "description": "Most events to replay in this call, 1 to 100. Default 50.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          }
+        },
+        "required": [
+          "appSlug"
+        ]
+      }
+    },
+    {
+      "name": "anyhook_code_get",
+      "description": "The code that runs on this app's events: its source, the names of its secrets (never the values), whether events are reaching it, and runs used this month against the plan's limit.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "appSlug": {
+            "type": "string",
+            "description": "The app whose code handler to read."
+          }
+        },
+        "required": [
+          "appSlug"
+        ]
+      }
+    },
+    {
+      "name": "anyhook_code_deploy",
+      "description": "Save a handler that runs on every event this app receives, in an isolated sandbox, with AnyHook's retries and replay around it: no server of your own. Each run's console output and return value are stored as that delivery's response (anyhook_inspect shows them). It can also run on a cron schedule. Pro and Scale; runs are capped per month with no overage, retries, test runs and schedule firings each count, and each run and package install is charged to the monthly compute allowance (anyhook_usage shows both). anyhook_code_test runs it on a stored event. Secrets (env.NAME) are set by the user on the app's dashboard page, under Code: this tool takes none, so never write a key into the code; anyhook_code_get lists the names set.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "appSlug": {
+            "type": "string",
+            "description": "The app whose events the code runs on."
+          },
+          "code": {
+            "type": "string",
+            "description": "An ES module, run in a sandboxed Node.js on every event this app receives. Either `export default async function (event, { env }) {}` (event: { method, headers, body, raw_body, delivery_id, attempt }; method is always POST, and the query string, path and caller IP are not kept) or a Pipedream Node.js code step: `export default defineComponent({ async run({ steps, $ }) {} })`, where steps.trigger.event is that same event (a step reading query, path, url or client_ip needs changing) and $.export and $.flow.exit work. npm packages it imports are installed on deploy (pin as \"pkg@1.2.3\", like Pipedream; a new package list usually takes seconds, a large one a few minutes). @pipedream/platform is a stand-in. State between events: the app's store (store.get/set/has/delete/keys, set takes { ttl }); every data_store prop is that one store, an app prop's this.<prop>.$auth.<field> reads the secret <APP>_<FIELD>, any other prop the secret named after it (channelId → CHANNEL_ID). Throwing fails the delivery, which AnyHook retries. Templates for common actions (Slack, email, Google Sheets, Notion, Claude and more): https://anyhook.net/code-templates.md"
+          },
+          "schedule": {
+            "description": "Also run on a cron schedule: five fields, UTC unless prefixed CRON_TZ=Area/City, e.g. \"*/15 * * * *\". Each firing arrives as an anyhook.schedule event and counts as a run. null removes it; omit to keep it. Only on an app that does not verify a sender's signature.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "enabled": {
+            "description": "Whether events run the code. false saves it switched off, so it runs only through anyhook_code_test. Omit: a first deploy goes live and later deploys keep the current state. If another system still handles the same events while this is on, both act on each one.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "appSlug",
+          "code"
+        ]
+      }
+    },
+    {
+      "name": "anyhook_code_test",
+      "description": "Run the saved handler now and return its logs, return value and duration: on a stored event (the latest when event_id is omitted) or on a body you give. Counts as a run. Nothing is delivered, but whatever the code itself sends does happen.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "appSlug": {
+            "type": "string"
+          },
+          "event_id": {
+            "description": "Run on this stored event. Omit for the app's latest event.",
+            "type": "string"
+          },
+          "body": {
+            "description": "Run on this JSON body instead of a stored event.",
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {}
+          }
+        },
+        "required": [
+          "appSlug"
+        ]
+      }
+    },
+    {
+      "name": "anyhook_usage",
+      "description": "What the plan allows and what this account has used of each: events this month (per delivery, large events count per 64 KB), overage, the compute allowance and what used it (retries, replays, waiting on slow destinations, code runs, builds, schedules), API calls today (each tool call that reads or changes the account counts one), code runs and package snapshots, with when each resets. It says how much is left when something answers with a limit, before bulk work such as replay_failed, or when the user asks what they are using.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "anyhook_events",
+      "description": "List webhook events, most recent first: id, app, type, status, attempt, destination status code, latency, timestamp. Summaries only, no request headers or body; anyhook_inspect reads one event's payload by the id from here. Uses your AnyHook account when connected, otherwise the local in-memory store. Shows what arrived in your webhook inbox while away and which deliveries need attention. To catch up across sessions, use since and page with nextCursor until null. Advance your saved time after reading all pages.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "appSlug": {
+            "description": "Filter to a specific app slug (account mode).",
+            "type": "string"
+          },
+          "status": {
+            "description": "Filter by status. Account mode: queued|success|retrying|failed|rejected|circuit_open|quota_exceeded. Local mode: received|forwarded|failed|retrying.",
+            "type": "string"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200
+          },
+          "since": {
+            "description": "Include events received at or after this UTC timestamp. When resuming, overlap the last read time and deduplicate by event id.",
+            "type": "string",
+            "maxLength": 27,
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "cursor": {
+            "description": "For the next page of older events, pass nextCursor from the previous page and keep the same filters.",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        }
+      }
+    },
+    {
+      "name": "anyhook_inspect",
+      "description": "Full detail for one event by id, including the inbound headers and body that anyhook_events omits, plus the destination's response. Payloads can be large and often contain personal data, so it reads one event at a time, for when the body is needed. Account or local store.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Event ID returned by anyhook_events."
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "net.anyhook/anyhook",
+    "version": "0.7.0",
+    "remoteUrl": "https://anyhook.net/mcp",
+    "publishedAt": "2026-11-22T15:50:34.965916Z",
+    "fetchedAt": "2026-11-23T16:50:40.239Z",
+    "toolsSha256": "ed6f7e5ef733cd895ac2480e9a234e4786fe2f07fd2a15edb8fd91cee23b15bb"
+  }
+}

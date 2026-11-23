@@ -1,0 +1,385 @@
+{
+  "$schema": "../schema.json",
+  "name": "com.keepplain/keepplain",
+  "title": "KeepPlain",
+  "category": "Other",
+  "description": "Your coding agents' past sessions as memory: search them, open the turn, see where agents failed.",
+  "repository": "https://github.com/keepplain/keepplain-plugin",
+  "tools": [
+    {
+      "name": "search_my_work",
+      "description": "Find your own or team tasks, and where in their sessions the words are. For continuing work, get the current repository key from the local plugin at query time and search that project first. Query: two to four key words of the work. Russian and English word forms match (\"выпускал сертификат\", \"issued certificates\"), translations do not: session titles are in English, so add the English terms to the user's words. Tasks come best match first (a title match outranks a word in a session, words found together outrank scattered ones), newest among equals. matched_sessions names the sessions the words were found in; a session's excerpt quotes the passage, and its cursor and text_offset go straight to get_session_excerpt. words_matched all_but_one: no task held every word, these miss one; none: the query held only stop words, the tasks are the newest. Why was this changed, or where did this code come from: pass paths (repository-relative, as git names them) or a commit sha from git blame or log, with agent_sessions, the values of that commit's Agent-Session trailer, and subject, the first line of its message; query may then be empty. A commit or a trailer finds its sessions in every repository (scope all), since an agent may have committed in another repository than its folder's: found_by says how, agent_session (the trailer names it), commit (its memory holds it) or team_commit (the team's repository puts it to it). Each matched session's change then gives the turn (cursor) where it changed the file or made the commit, and request, the person's last real request before it (short replies such as \"yes\" skipped): read from request.cursor to cursor with get_session_excerpt. own: true when the session made the change itself (its agent's edit or a git commit it ran), false when it only saw it in its git snapshots, as another session working in the same folder does; those that made it come first. found_by agent_session without a cursor: the trailer alone, which the hook writes into a commit made by hand too, for every session whose edits it holds, so it is not own; own comes from the session's git commit of that title (give subject) or its own edits of paths. op outside on a commit: the commit was made outside the session (by hand, a client's button) of files its agent edited; cursor is the agent's last edit of them before it. found_by edits_before: nothing names the commit (made by hand after the session, no trailer), and this session's agent last edited its files before it (give committed_at where the team's repository is not under the GitHub App): its work, not proven its commit; say so. closed_sessions: a teammate's session behind the change that you may not read (your team shows its members each other's sessions, their transcripts only to owners and admins): say whose it is and give its page, and that its author or an admin can tell more; nothing of it is returned. Offer the matching tasks when there are several; never silently broaden a repository search. No model generation.",
+      "inputSchema": {
+        "properties": {
+          "query": {
+            "type": "string"
+          },
+          "project_key": {
+            "type": "string"
+          },
+          "project_id": {
+            "type": "string"
+          },
+          "task_id": {
+            "type": "string"
+          },
+          "scope": {
+            "description": "Default project. Use all only for an explicitly broader search.",
+            "enum": [
+              "project",
+              "all"
+            ],
+            "type": "string"
+          },
+          "paths": {
+            "description": "Files to find the sessions that changed them, relative to the repository root.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "commit": {
+            "description": "A commit sha, 7 to 40 hex characters, to find the session that made it.",
+            "type": "string"
+          },
+          "agent_sessions": {
+            "description": "The Agent-Session trailer values of that commit.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "subject": {
+            "description": "The first line of that commit's message (git show -s --format=%s): tells the session's git commits apart when it committed in another repository.",
+            "type": "string"
+          },
+          "committed_at": {
+            "description": "When that commit was made (git show -s --format=%cI): with no trailer and no session that made it, the session whose agent last edited its files before then is found (found_by edits_before).",
+            "type": "string"
+          },
+          "cursor": {
+            "type": "string"
+          },
+          "limit": {
+            "minimum": 1,
+            "maximum": 10,
+            "type": "integer"
+          }
+        },
+        "type": "object",
+        "required": [
+          "query"
+        ]
+      }
+    },
+    {
+      "name": "get_task_context",
+      "description": "Read private task context after selecting a task. Returns source excerpts without a paid summary call. Check the actual checkout before continuing. Fetch more session turns if excerpts are insufficient.",
+      "inputSchema": {
+        "properties": {
+          "task_id": {
+            "type": "string"
+          },
+          "cursor": {
+            "type": "string"
+          },
+          "max_chars": {
+            "minimum": 1000,
+            "maximum": 24000,
+            "type": "integer"
+          }
+        },
+        "type": "object",
+        "required": [
+          "task_id"
+        ]
+      }
+    },
+    {
+      "name": "get_session_excerpt",
+      "description": "Read more turns from an accessible private work session. Use session_id returned by get_task_context and cursor to page through the source, or a matched session's excerpt from search_my_work: its cursor, limit 1 and its text_offset read the passage found and on from it.",
+      "inputSchema": {
+        "properties": {
+          "session_id": {
+            "type": "string"
+          },
+          "cursor": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "text_offset": {
+            "description": "For a long message, repeat its cursor with limit 1 and the returned next_text_offset.",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "limit": {
+            "minimum": 1,
+            "maximum": 10,
+            "type": "integer"
+          }
+        },
+        "type": "object",
+        "required": [
+          "session_id"
+        ]
+      }
+    },
+    {
+      "name": "attach_session_to_task",
+      "description": "After the user chooses a task to continue, attach the actual current session to it. Use the client and session ID from the local plugin context, never guess IDs. Pass continues: the session_id (from get_task_context) of the session you are continuing, usually the latest one you read; your session then goes on in that session's draft, so one Build shows the work of both agents. This records a private link; it does not upload or publish history.",
+      "inputSchema": {
+        "properties": {
+          "task_id": {
+            "type": "string"
+          },
+          "client": {
+            "enum": [
+              "claude_plugin",
+              "codex_plugin",
+              "cursor_plugin",
+              "pi_plugin",
+              "antigravity_plugin",
+              "copilot_plugin",
+              "gemini_cli_plugin",
+              "opencode_plugin",
+              "junie_plugin",
+              "cline_plugin",
+              "kilo_plugin",
+              "qwen_code_plugin",
+              "vibe_plugin",
+              "droid_plugin",
+              "goose_plugin",
+              "crush_plugin",
+              "grok_plugin"
+            ],
+            "type": "string"
+          },
+          "session_id": {
+            "type": "string"
+          },
+          "continues": {
+            "description": "The session_id of the task's session you are continuing, from get_task_context sources.",
+            "type": "string"
+          }
+        },
+        "type": "object",
+        "required": [
+          "task_id",
+          "client",
+          "session_id"
+        ]
+      }
+    },
+    {
+      "name": "search_coding_agent_sessions",
+      "description": "KeepPlain library: find published sessions where developers did a similar task with a coding agent. Use before a non-trivial task on a known stack, or when the user asks how others did something; skip small edits and questions about this repository. Returns up to 5 cards with the outcome, how long it took and how often the human had to step in. Query: the task in a few words, e.g. \"migrate queues to horizon\". An empty result means nobody has published such a session yet.",
+      "inputSchema": {
+        "properties": {
+          "query": {
+            "description": "The task in a few words, e.g. \"migrate queues to horizon\". No code, file paths, repository or company names.",
+            "type": "string"
+          },
+          "stack": {
+            "description": "Optional. The stack, e.g. \"laravel\" or \"nextjs, prisma\" (up to 5, comma-separated).",
+            "type": "string"
+          },
+          "task_type": {
+            "description": "Optional. The kind of task.",
+            "enum": [
+              "greenfield",
+              "feature",
+              "refactor",
+              "migration",
+              "debug",
+              "tests",
+              "infra",
+              "docs"
+            ],
+            "type": "string"
+          },
+          "agent": {
+            "description": "Optional. Only sessions of this coding agent.",
+            "enum": [
+              "claude-code",
+              "codex",
+              "cursor",
+              "copilot",
+              "gemini-cli",
+              "windsurf",
+              "aider",
+              "pi",
+              "antigravity",
+              "opencode",
+              "junie",
+              "cline",
+              "kilo",
+              "qwen-code",
+              "vibe",
+              "droid",
+              "goose",
+              "crush",
+              "grok",
+              "hermes",
+              "other"
+            ],
+            "type": "string"
+          },
+          "space": {
+            "description": "Optional. \"all\" (default): the user's own unpublished sessions first (two at most), then their team's, if the token belongs to a team, then the community's. \"mine\", \"team\" or \"community\": only those.",
+            "enum": [
+              "all",
+              "mine",
+              "team",
+              "community"
+            ],
+            "type": "string"
+          },
+          "project": {
+            "description": "Optional, your team's sessions only: those of one project, by the name the team's lists show (usually the repository's folder).",
+            "type": "string"
+          },
+          "task": {
+            "description": "Optional, your team's sessions only: those of one task, by its title or task number (list_team_tasks shows them).",
+            "type": "string"
+          },
+          "limit": {
+            "description": "How many sessions, 1 to 5. Default 3.",
+            "minimum": 1,
+            "maximum": 5,
+            "type": "integer"
+          }
+        },
+        "type": "object",
+        "required": [
+          "query"
+        ]
+      }
+    },
+    {
+      "name": "get_coding_agent_session",
+      "description": "KeepPlain library: read one published session found with search_coding_agent_sessions or find_coding_agent_failures. detail \"brief\" (default): the goal, the first prompt, the outcome, the whole verdict and the numbers. detail \"moments\": every moment in order, with the prompts that worked, where the agent failed and why the human stepped in.",
+      "inputSchema": {
+        "properties": {
+          "slug": {
+            "description": "The session's slug (or its KeepPlain link) from search_coding_agent_sessions or find_coding_agent_failures.",
+            "type": "string"
+          },
+          "detail": {
+            "description": "\"brief\" (default, about 500 tokens) or \"moments\" (about 1,500 tokens).",
+            "enum": [
+              "brief",
+              "moments"
+            ],
+            "type": "string"
+          },
+          "space": {
+            "description": "Optional. \"all\" (default): the user's own unpublished sessions first (two at most), then their team's, if the token belongs to a team, then the community's. \"mine\", \"team\" or \"community\": only those.",
+            "enum": [
+              "all",
+              "mine",
+              "team",
+              "community"
+            ],
+            "type": "string"
+          }
+        },
+        "type": "object",
+        "required": [
+          "slug"
+        ]
+      }
+    },
+    {
+      "name": "find_coding_agent_failures",
+      "description": "KeepPlain library: find moments where coding agents failed on a similar problem and what the human did about it. Use after two or three failed attempts at the same problem. Query: the symptom or error message in a few words, without paths or secrets.",
+      "inputSchema": {
+        "properties": {
+          "query": {
+            "description": "The symptom or error message in a few words, e.g. \"hydration mismatch after upgrade\". No paths, secrets or code.",
+            "type": "string"
+          },
+          "stack": {
+            "description": "Optional. The stack, e.g. \"laravel\" or \"nextjs, prisma\" (up to 5, comma-separated).",
+            "type": "string"
+          },
+          "space": {
+            "description": "Optional. \"all\" (default): the user's own unpublished sessions first (two at most), then their team's, if the token belongs to a team, then the community's. \"mine\", \"team\" or \"community\": only those.",
+            "enum": [
+              "all",
+              "mine",
+              "team",
+              "community"
+            ],
+            "type": "string"
+          }
+        },
+        "type": "object",
+        "required": [
+          "query"
+        ]
+      }
+    },
+    {
+      "name": "start_session_upload",
+      "description": "KeepPlain: step 1 of sending the current coding session to the user's KeepPlain drafts, for the KeepPlain skill or plugin only. Call it only after the user asked to send this session and agreed to what the skill's preview showed. Returns a one-time upload link (15 minutes) for the skill's upload step, and an upload_id for finish_session_upload. Never put anything else at the link.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "finish_session_upload",
+      "description": "KeepPlain: step 2 of sending the current coding session, after the KeepPlain skill's upload step put it at the link from start_session_upload. Makes a private draft (or the team's, as the preview said) and returns its link. Nothing is published: the user reviews the draft on KeepPlain.",
+      "inputSchema": {
+        "properties": {
+          "upload_id": {
+            "description": "The upload_id start_session_upload returned.",
+            "type": "string"
+          }
+        },
+        "type": "object",
+        "required": [
+          "upload_id"
+        ]
+      }
+    },
+    {
+      "name": "list_team_tasks",
+      "description": "Your team's pieces of work on KeepPlain, grouped from its members' agent sessions: title, task number, project, when it was last worked on, and its latest sessions (open one with get_coding_agent_session). Use when picking up work a teammate started, or to see what is going on in a project. Only for tokens of a team member.",
+      "inputSchema": {
+        "properties": {
+          "project": {
+            "description": "Optional. A project's name as the team's lists show it, usually the repository's folder, e.g. \"shop\".",
+            "type": "string"
+          },
+          "status": {
+            "description": "Optional. \"open\" (default), \"done\" or \"all\".",
+            "enum": [
+              "open",
+              "done",
+              "all"
+            ],
+            "type": "string"
+          },
+          "limit": {
+            "description": "How many tasks, 1 to 20. Default 10.",
+            "minimum": 1,
+            "maximum": 20,
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "com.keepplain/keepplain",
+    "version": "0.19.1",
+    "remoteUrl": "https://keepplain.com/mcp",
+    "publishedAt": "2026-11-22T21:34:51.118178Z",
+    "fetchedAt": "2026-11-23T16:50:40.239Z",
+    "toolsSha256": "630bf58f368954172f5a6377064f631b33c388d7fbb824f2dce44bf5871c8739"
+  }
+}

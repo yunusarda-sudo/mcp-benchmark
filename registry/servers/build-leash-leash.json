@@ -1,0 +1,409 @@
+{
+  "$schema": "../schema.json",
+  "name": "build.leash/leash",
+  "title": "Leash",
+  "category": "Databases & Storage",
+  "description": "One sign-in and a private Postgres database for every app you build with AI. Hosted, OAuth sign-in.",
+  "tools": [
+    {
+      "name": "list_apps",
+      "description": "List the person's Leash apps (id, slug, allowed origins).",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "create_app",
+      "description": "Create a Leash app: its own walled-off Postgres schema and sign-in. slug: 2–40 chars, lowercase letters, digits and dashes, starting with a letter. origins: where the web app is served (needed for browser sign-in and CORS). Free plans allow 1 app, Pro 25.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "slug": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40,
+            "description": "Short name, e.g. notes"
+          },
+          "origins": {
+            "maxItems": 10,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 300
+            },
+            "description": "Web origins the app is served from, e.g. https://myapp.example.com or http://localhost:5173 (no path)."
+          }
+        },
+        "required": [
+          "slug"
+        ]
+      }
+    },
+    {
+      "name": "set_app_origins",
+      "description": "Replace the app's allowed web origins (sign-in return URLs and CORS). Each is https://host[:port] or http://localhost:port, no path; at most 10.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "app": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "description": "The app's slug or id (from list_apps / create_app)."
+          },
+          "origins": {
+            "maxItems": 10,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 300
+            },
+            "description": "Web origins the app is served from, e.g. https://myapp.example.com or http://localhost:5173 (no path)."
+          }
+        },
+        "required": [
+          "app",
+          "origins"
+        ]
+      }
+    },
+    {
+      "name": "usage",
+      "description": "Show the account's storage: bytes per app as last measured (null with a note until first measured, a few minutes after the first write), total vs the plan's limit, plan, whether writes are blocked for being over the limit, snapshot usage, and the database server's state (running/stopped: it sleeps when idle and wakes on the next request).",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "reclaim_space",
+      "description": "Compact the app's tables that have many deleted rows (VACUUM FULL), then re-measure storage. Use after deleting lots of data to get back under the storage limit. Returns the tables compacted, the tables skipped because the app's role doesn't own them, and whether writes are still blocked.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "app": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "description": "The app's slug or id (from list_apps / create_app)."
+          }
+        },
+        "required": [
+          "app"
+        ]
+      }
+    },
+    {
+      "name": "list_tables",
+      "description": "List the app's tables and views (name, kind, estimated row count).",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "app": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "description": "The app's slug or id (from list_apps / create_app)."
+          }
+        },
+        "required": [
+          "app"
+        ]
+      }
+    },
+    {
+      "name": "describe_table",
+      "description": "Describe one of the app's tables or views: columns (name, type, nullable, default), primary key, constraints, indexes, and a view's definition.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "app": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "description": "The app's slug or id (from list_apps / create_app)."
+          },
+          "table": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 63,
+            "description": "Table or view name (unqualified)."
+          }
+        },
+        "required": [
+          "app",
+          "table"
+        ]
+      }
+    },
+    {
+      "name": "query",
+      "description": "Run one read-only SQL SELECT against the app's tables (its own schema). Returns { columns, rows (arrays), truncated }: at most 1000 rows and 10 MB; int8/numeric come back as strings, bytea as base64, dates as ISO text. Writes, multiple statements and system functions are refused.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "app": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "description": "The app's slug or id (from list_apps / create_app)."
+          },
+          "sql": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100000,
+            "description": "Exactly one SQL statement. Use $1, $2 … for values."
+          },
+          "params": {
+            "description": "Values for $1, $2 … (strings, numbers, booleans, null, or JSON for json/jsonb columns).",
+            "maxItems": 1000,
+            "type": "array",
+            "items": {}
+          }
+        },
+        "required": [
+          "app",
+          "sql"
+        ]
+      }
+    },
+    {
+      "name": "execute",
+      "description": "Run one SQL statement that changes data (insert/update/delete) or the schema. Returns { rowCount, columns, rows, rowsTruncated, snapshots }, or for DDL { changeId, snapshots } (logged like apply_schema_change). At most 100 RETURNING rows (10 MB) come back: when rowsTruncated is true the write still happened in full and rowCount counts every row. An update/delete touching more than 100 rows (or inside a WITH clause), a truncate or a drop first saves a 7-day snapshot of the table. EXPLAIN ANALYZE of a write is refused. One statement per call; time limit per statement = the plan's (Free 5 s, Pro 30 s).",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "app": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "description": "The app's slug or id (from list_apps / create_app)."
+          },
+          "sql": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100000,
+            "description": "Exactly one SQL statement. Use $1, $2 … for values."
+          },
+          "params": {
+            "description": "Values for $1, $2 … (strings, numbers, booleans, null, or JSON for json/jsonb columns).",
+            "maxItems": 1000,
+            "type": "array",
+            "items": {}
+          },
+          "description": {
+            "description": "For schema changes: what and why (logged).",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1000
+          },
+          "allowWithoutSnapshot": {
+            "description": "Go ahead even if a safety snapshot can't be taken (cap reached). Only when the person agrees.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "app",
+          "sql"
+        ]
+      }
+    },
+    {
+      "name": "apply_schema_change",
+      "description": "Apply one schema change (create/alter/drop table, index, view, sequence; truncate) to the app's own schema, recorded in its change log with your description. Destructive changes (drop table/column, column type change, truncate) first save a 7-day snapshot of each affected table; if the snapshot cap is reached the change is refused unless allowWithoutSnapshot. Returns { changeId, snapshots }. One statement per call.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "app": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "description": "The app's slug or id (from list_apps / create_app)."
+          },
+          "sql": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100000,
+            "description": "Exactly one SQL statement. Use $1, $2 … for values."
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1000,
+            "description": "What the change does and why (logged)."
+          },
+          "allowWithoutSnapshot": {
+            "description": "Go ahead even if a safety snapshot can't be taken (cap reached). Only when the person agrees.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "app",
+          "sql",
+          "description"
+        ]
+      }
+    },
+    {
+      "name": "mint_device_key",
+      "description": "Mint a device key for a non-browser client of the app (script, extension, phone app). The key is returned ONCE: store it in the device's local config or secret store, never in browser code or a repo. Use it as Authorization: Bearer lk_… on the data API.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "app": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "description": "The app's slug or id (from list_apps / create_app)."
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 60,
+            "description": "Which device or script, e.g. laptop-sync"
+          }
+        },
+        "required": [
+          "app",
+          "name"
+        ]
+      }
+    },
+    {
+      "name": "list_device_keys",
+      "description": "List the app's device keys (id, name, created, last used, revoked). Never shows the keys themselves.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "app": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "description": "The app's slug or id (from list_apps / create_app)."
+          }
+        },
+        "required": [
+          "app"
+        ]
+      }
+    },
+    {
+      "name": "revoke_device_key",
+      "description": "Revoke one of the app's device keys (it stops working immediately).",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "app": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "description": "The app's slug or id (from list_apps / create_app)."
+          },
+          "keyId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "description": "The key's id from list_device_keys"
+          }
+        },
+        "required": [
+          "app",
+          "keyId"
+        ]
+      }
+    },
+    {
+      "name": "list_snapshots",
+      "description": "List the app's safety snapshots (taken automatically before destructive changes; kept 7 days), newest first.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "app": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "description": "The app's slug or id (from list_apps / create_app)."
+          }
+        },
+        "required": [
+          "app"
+        ]
+      }
+    },
+    {
+      "name": "restore_snapshot",
+      "description": "Restore a snapshot as a table in the app: under its original name if that table no longer exists, otherwise as <table>_restored_<timestamp>, or as asTable. Rows only: re-create constraints, indexes and defaults with apply_schema_change. Returns { table }.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "app": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "description": "The app's slug or id (from list_apps / create_app)."
+          },
+          "snapshotId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "asTable": {
+            "description": "Name for the restored table (must not exist).",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 63
+          }
+        },
+        "required": [
+          "app",
+          "snapshotId"
+        ]
+      }
+    },
+    {
+      "name": "get_direct_connection",
+      "description": "Pro only: a Postgres connection locked to the app's own schema, for apps with their own server (Drizzle, migrations). Keep it in the server's environment, never in browser code.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "app": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "description": "The app's slug or id (from list_apps / create_app)."
+          }
+        },
+        "required": [
+          "app"
+        ]
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "build.leash/leash",
+    "version": "1.1.0",
+    "remoteUrl": "https://leash.build/mcp",
+    "publishedAt": "2026-11-23T03:47:21.224809Z",
+    "fetchedAt": "2026-11-23T16:50:40.239Z",
+    "toolsSha256": "b3687de7a8fac1ac195ffe5b0fb7f3543c509f5796ec9f7047ef332334efb7fe"
+  }
+}

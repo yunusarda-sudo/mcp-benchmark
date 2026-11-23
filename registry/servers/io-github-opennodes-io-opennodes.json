@@ -1,0 +1,618 @@
+{
+  "$schema": "../schema.json",
+  "name": "io.github.opennodes-io/opennodes",
+  "title": "OpenNodes",
+  "category": "Productivity & Notes",
+  "description": "Discover verified AI inference nodes, get the best node+model per task, pre-price chains.",
+  "repository": "https://github.com/opennodes-io/opennodes",
+  "tools": [
+    {
+      "name": "recommend",
+      "description": "Recommend the best AI node + model for a task, with an enforceable cost estimate and human-readable reasons. Use this first when you know the task but not the model. Pass `task` (sent to this registry, which extracts features and discards the text) or `features` already extracted on your side with extractFeatures from @opennodes/core, which keeps the prompt private. Returns ranked candidates with score components, a cost estimate pinned to the node's card revision, an optional cheaper two-step scenario, and MCP tool categories the task likely needs. To browse instead, use search_offerings; to price a specific chain, use estimate.",
+      "inputSchema": {
+        "type": "object",
+        "required": [],
+        "additionalProperties": false,
+        "properties": {
+          "task": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The task description or the prompt itself. Sent to the registry for feature extraction; use `features` to keep it private. Give this or `features`."
+          },
+          "features": {
+            "type": "object",
+            "description": "Features from extractFeatures(prompt) in @opennodes/core: task class, size, language and needs, no prompt text. Give this or `task`."
+          },
+          "est_output_tokens": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Expected answer length in tokens, if known. Improves the cost estimate; otherwise inferred from the task."
+          },
+          "policy": {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "Optional constraints and preferences for the recommendation.",
+            "properties": {
+              "preset": {
+                "type": "string",
+                "enum": [
+                  "cheap",
+                  "fast",
+                  "quality",
+                  "private"
+                ],
+                "description": "Weighting preset: cheap favours price, fast favours latency/throughput, quality favours model strength, private favours trust tier."
+              },
+              "min_tier": {
+                "type": "string",
+                "enum": [
+                  "unverified",
+                  "community",
+                  "verified",
+                  "attested"
+                ],
+                "description": "Exclude offerings below this trust tier."
+              },
+              "max_input_per_mtok": {
+                "type": "number",
+                "minimum": 0,
+                "description": "Maximum input price in USD per million tokens."
+              },
+              "max_total_usd": {
+                "type": "number",
+                "minimum": 0,
+                "description": "Maximum estimated total cost of the call in USD."
+              },
+              "region": {
+                "type": "string",
+                "description": "Required data region, e.g. \"CA\" or \"EU\" (EU and EEA include their member states). Offerings pinned to, or served from, other regions are excluded, and so are hosted offerings with no known location; models on this machine or LAN always qualify."
+              },
+              "jurisdiction": {
+                "type": "string",
+                "description": "Only operators that declare a country in this jurisdiction (inferred by the registry for imported listings): \"eea\" or ISO country codes (\"DE,FI\"). A declaration, not proof of where requests are processed. Local and LAN models always qualify."
+              },
+              "server_check": {
+                "type": "string",
+                "enum": [
+                  "passed",
+                  "any"
+                ],
+                "description": "\"passed\": only offerings whose server front the registry located in the declared country or region (behind a CDN: every declared origin address). A tripwire, not proof. Each recommendation carries server_check. Local and LAN models always qualify."
+              },
+              "prefer_local": {
+                "type": "boolean",
+                "description": "Give a bonus to nodes on this machine or LAN."
+              },
+              "sensitive": {
+                "type": "boolean",
+                "description": "true when the task carries personal data or is otherwise sensitive: only the trusted pool qualifies (an operator declaring a trusted jurisdiction with a passing server-location check, declared lineage without CN, tier verified or higher, a declared data policy of no retention and no training on inputs). Models on this machine or LAN qualify on jurisdiction, tier and data policy, but not on lineage. If nothing qualifies, recommendations is empty: do not fall back to the open pool."
+              },
+              "local_memory_gb": {
+                "type": "number",
+                "minimum": 1,
+                "description": "RAM/VRAM this machine can give a local model, in GB. Local models that cannot fit are left out, and the largest size that fits is picked (4-bit estimate). The local stdio server fills this from the machine when it is not given; otherwise catalogue models are scored for a typical 16 GB laptop, and none is picked."
+              },
+              "limit": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 20,
+                "default": 3,
+                "description": "Number of candidates to return."
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "search_offerings",
+      "description": "Search AI inference offerings in the OpenNodes registry — registered nodes AND imported catalogs (OpenRouter, Hugging Face Inference Providers, models.dev, local nodes). All filters are optional and combine with AND. Returns { offerings, total, counts }: each offering has node_id, offering_id, model, pricing (USD per MTok), trust tier, serving capabilities, measured probe results, and a rank explanation. Use get_offering for one offering's full card, recommend to let the advisor choose.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "modality": {
+            "type": "string",
+            "enum": [
+              "text",
+              "image",
+              "audio",
+              "video",
+              "embedding",
+              "multimodal",
+              "agent"
+            ],
+            "description": "What the model consumes/produces. Use \"text\" for chat and completion models."
+          },
+          "family": {
+            "type": "string",
+            "description": "Model family or exact artifact, e.g. \"llama-3.3\" or \"qwen3\". Matches model.family or model.artifact exactly."
+          },
+          "min_context": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Minimum context window in tokens, e.g. 32768."
+          },
+          "supports": {
+            "type": "string",
+            "description": "Comma-separated features the offering must all support: tool_calls, json_mode, vision, streaming. Example: \"tool_calls,json_mode\"."
+          },
+          "max_input_price": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Maximum input price in USD per million tokens."
+          },
+          "scheme": {
+            "type": "string",
+            "enum": [
+              "free",
+              "prepaid",
+              "x402"
+            ],
+            "description": "Payment scheme the offering must accept. \"free\" finds no-cost offerings."
+          },
+          "tier": {
+            "type": "string",
+            "enum": [
+              "unverified",
+              "community",
+              "verified",
+              "attested"
+            ],
+            "description": "Minimum trust tier. unverified < community (passed automated checks) < verified (identity and context verified) < attested."
+          },
+          "lang": {
+            "type": "string",
+            "description": "Language with minimum grade, \"<iso-code>[:basic|strong|native]\", e.g. \"pl:strong\" or \"de\"."
+          },
+          "region": {
+            "type": "string",
+            "description": "Data residency: every pinned region and every live serving site must lie inside this ISO 3166 code, e.g. \"CA\" (also matches \"CA-QC\") or \"EU\" (also matches member states such as \"DE\"; \"EEA\" adds IS, LI, NO)."
+          },
+          "location_basis": {
+            "type": "string",
+            "enum": [
+              "claimed",
+              "documented",
+              "measured",
+              "attested"
+            ],
+            "description": "Minimum evidence for the serving locations: claimed < documented (the provider's own dated page) < measured (registry probes) < attested. Offerings without known locations are excluded."
+          },
+          "exclude_lineage": {
+            "type": "string",
+            "description": "Comma-separated ISO country codes; drops offerings whose declared model lineage includes any of them, e.g. \"CN\". Offerings that declare no lineage are kept unless lineage is \"declared\"."
+          },
+          "lineage": {
+            "type": "string",
+            "enum": [
+              "declared",
+              "any"
+            ],
+            "description": "\"declared\": drop offerings whose model declares no lineage (unknown origin is not clean). Combine with exclude_lineage for a strict origin policy."
+          },
+          "retention": {
+            "type": "string",
+            "enum": [
+              "none",
+              "ephemeral",
+              "logged"
+            ],
+            "description": "Maximum data retention as the operator declares it in data_policy (a declaration: probing cannot verify it; data_policy.source links the published policy where the card gives one): \"none\" keeps offerings that declare storing nothing beyond the request; \"ephemeral\" also allows bounded holding. Offerings without a data_policy are excluded."
+          },
+          "no_training": {
+            "type": "boolean",
+            "description": "true: only offerings whose declared data_policy says training_on_inputs is false (a declaration, not verifiable by probing). Offerings without a data_policy are excluded."
+          },
+          "trust": {
+            "type": "string",
+            "enum": [
+              "trusted",
+              "open"
+            ],
+            "description": "\"trusted\": only the trusted pool, for personal data and sensitive work: operators that declare a country in the registry's trusted jurisdictions (see /v0/health trust) and whose server front passed the registry's location check, declared lineage without CN, tier verified or higher, a declared data policy of no retention and no training on inputs. \"open\" (or omitted): both pools. Each result carries pool: \"trusted\" or \"open\"."
+          },
+          "server_check": {
+            "type": "string",
+            "enum": [
+              "passed",
+              "any"
+            ],
+            "description": "\"passed\": only offerings whose API server front the registry located in the operator's declared country or region (or, behind a CDN, every origin address the card declares). A network tripwire, not proof: a front that forwards requests elsewhere passes it. Each hosted result carries jurisdiction.server_check: passed | passed_origin | cdn | mismatch | inconsistent | unchecked."
+          },
+          "q": {
+            "type": "string",
+            "description": "Free-text match against the model metadata, offering id, and node id, e.g. \"bielik\" or \"coder\"."
+          },
+          "local": {
+            "type": "boolean",
+            "description": "true: only models that run on the user's own machine (the Ollama library: no server, free, ranked by Ollama pulls, with local.sizes_memory per size). false: only hosted offerings. Omit for both (hosted listed first). The result's counts give { hosted, local }."
+          },
+          "memory_gb": {
+            "type": "number",
+            "minimum": 1,
+            "description": "RAM/VRAM the user can give a local model, in GB: keeps local models with a size that fits (4-bit estimate). Hosted offerings are unaffected."
+          },
+          "jurisdiction": {
+            "type": "string",
+            "description": "Only operators that DECLARE a country inside it: \"eea\" (EU + Iceland, Liechtenstein, Norway) or comma-separated ISO country codes, e.g. \"DE,FI\". Registered nodes declare their country in their signed card; imported listings of known providers carry one the registry inferred (jurisdiction.basis = \"inferred\"); listings without a country are excluded. A declaration, not proof of where requests are processed: the registry drops only a server it located outside. jurisdiction.evidence says what was checked, e.g. \"FR operator (EEA, declared), server front checked (FR)\"; add server_check \"passed\" to keep only offerings whose check passed."
+          },
+          "sort": {
+            "type": "string",
+            "enum": [
+              "rank",
+              "price",
+              "ttft",
+              "tps"
+            ],
+            "default": "rank",
+            "description": "rank = registry ranking (price, trust, reliability); price = cheapest input first; ttft = fastest first token; tps = highest throughput."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200,
+            "default": 50,
+            "description": "Maximum offerings to return; `total` still counts every match."
+          }
+        }
+      }
+    },
+    {
+      "name": "get_offering",
+      "description": "Full detail for one offering: endpoints, pricing, serving capabilities (context window, supported features, languages, hardware), data policy, trust tier, and the registry's observed probe results. Take node_id and offering_id from search_offerings or recommend results.",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "node_id",
+          "offering_id"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "node_id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Reverse-DNS node id, e.g. \"io.opennodes.demo-node\"."
+          },
+          "offering_id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Offering id within that node, as returned by search_offerings."
+          }
+        }
+      }
+    },
+    {
+      "name": "get_node",
+      "description": "Who runs a node and how it has behaved: operator, country and regions, endpoints, declared hardware, trust tier and its history (verifications, suspensions, reinstatements, with reasons), recent registry probe results with an availability summary, and its offerings with context window and price. Use it to vet a provider before relying on it; take node_id from search_offerings, recommend or get_offering results. For one offering's full card, use get_offering.",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "node_id"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "node_id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Reverse-DNS node id, e.g. \"io.opennodes.demo-node\" or \"import.openrouter.ai\"."
+          },
+          "offering_limit": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 200,
+            "default": 25,
+            "description": "Maximum offerings to list; imported catalogs can hold hundreds. `offerings_total` always gives the full count."
+          }
+        }
+      }
+    },
+    {
+      "name": "estimate",
+      "description": "Pre-price an invocation chain BEFORE spending money. Each step is either a concrete offering (\"node_id/offering_id\") or a `select` query that picks the best match, plus expected input and output tokens. Returns per-step cost bounds in USD, the pinned card_revision that makes each estimate enforceable at invocation, and chain totals. Use it to compare routes or budget a multi-model pipeline; nothing is invoked or charged.",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "steps"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "steps": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 20,
+            "description": "Steps in execution order.",
+            "items": {
+              "type": "object",
+              "required": [
+                "est_input_tokens",
+                "est_output_tokens"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "offering": {
+                  "type": "string",
+                  "description": "Concrete offering as \"node_id/offering_id\". Give this or `select`."
+                },
+                "select": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "modality": {
+                      "type": "string",
+                      "enum": [
+                        "text",
+                        "image",
+                        "audio",
+                        "video",
+                        "embedding",
+                        "multimodal",
+                        "agent"
+                      ],
+                      "description": "What the model consumes/produces. Use \"text\" for chat and completion models."
+                    },
+                    "family": {
+                      "type": "string",
+                      "description": "Model family or exact artifact, e.g. \"llama-3.3\" or \"qwen3\". Matches model.family or model.artifact exactly."
+                    },
+                    "min_context": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "description": "Minimum context window in tokens, e.g. 32768."
+                    },
+                    "supports": {
+                      "type": "string",
+                      "description": "Comma-separated features the offering must all support: tool_calls, json_mode, vision, streaming. Example: \"tool_calls,json_mode\"."
+                    },
+                    "max_input_price": {
+                      "type": "number",
+                      "minimum": 0,
+                      "description": "Maximum input price in USD per million tokens."
+                    },
+                    "scheme": {
+                      "type": "string",
+                      "enum": [
+                        "free",
+                        "prepaid",
+                        "x402"
+                      ],
+                      "description": "Payment scheme the offering must accept. \"free\" finds no-cost offerings."
+                    },
+                    "tier": {
+                      "type": "string",
+                      "enum": [
+                        "unverified",
+                        "community",
+                        "verified",
+                        "attested"
+                      ],
+                      "description": "Minimum trust tier. unverified < community (passed automated checks) < verified (identity and context verified) < attested."
+                    },
+                    "lang": {
+                      "type": "string",
+                      "description": "Language with minimum grade, \"<iso-code>[:basic|strong|native]\", e.g. \"pl:strong\" or \"de\"."
+                    },
+                    "region": {
+                      "type": "string",
+                      "description": "Data residency: every pinned region and every live serving site must lie inside this ISO 3166 code, e.g. \"CA\" (also matches \"CA-QC\") or \"EU\" (also matches member states such as \"DE\"; \"EEA\" adds IS, LI, NO)."
+                    },
+                    "location_basis": {
+                      "type": "string",
+                      "enum": [
+                        "claimed",
+                        "documented",
+                        "measured",
+                        "attested"
+                      ],
+                      "description": "Minimum evidence for the serving locations: claimed < documented (the provider's own dated page) < measured (registry probes) < attested. Offerings without known locations are excluded."
+                    },
+                    "exclude_lineage": {
+                      "type": "string",
+                      "description": "Comma-separated ISO country codes; drops offerings whose declared model lineage includes any of them, e.g. \"CN\". Offerings that declare no lineage are kept unless lineage is \"declared\"."
+                    },
+                    "lineage": {
+                      "type": "string",
+                      "enum": [
+                        "declared",
+                        "any"
+                      ],
+                      "description": "\"declared\": drop offerings whose model declares no lineage (unknown origin is not clean). Combine with exclude_lineage for a strict origin policy."
+                    },
+                    "retention": {
+                      "type": "string",
+                      "enum": [
+                        "none",
+                        "ephemeral",
+                        "logged"
+                      ],
+                      "description": "Maximum data retention as the operator declares it in data_policy (a declaration: probing cannot verify it; data_policy.source links the published policy where the card gives one): \"none\" keeps offerings that declare storing nothing beyond the request; \"ephemeral\" also allows bounded holding. Offerings without a data_policy are excluded."
+                    },
+                    "no_training": {
+                      "type": "boolean",
+                      "description": "true: only offerings whose declared data_policy says training_on_inputs is false (a declaration, not verifiable by probing). Offerings without a data_policy are excluded."
+                    },
+                    "trust": {
+                      "type": "string",
+                      "enum": [
+                        "trusted",
+                        "open"
+                      ],
+                      "description": "\"trusted\": only the trusted pool, for personal data and sensitive work: operators that declare a country in the registry's trusted jurisdictions (see /v0/health trust) and whose server front passed the registry's location check, declared lineage without CN, tier verified or higher, a declared data policy of no retention and no training on inputs. \"open\" (or omitted): both pools. Each result carries pool: \"trusted\" or \"open\"."
+                    },
+                    "server_check": {
+                      "type": "string",
+                      "enum": [
+                        "passed",
+                        "any"
+                      ],
+                      "description": "\"passed\": only offerings whose API server front the registry located in the operator's declared country or region (or, behind a CDN, every origin address the card declares). A network tripwire, not proof: a front that forwards requests elsewhere passes it. Each hosted result carries jurisdiction.server_check: passed | passed_origin | cdn | mismatch | inconsistent | unchecked."
+                    },
+                    "q": {
+                      "type": "string",
+                      "description": "Free-text match against the model metadata, offering id, and node id, e.g. \"bielik\" or \"coder\"."
+                    },
+                    "local": {
+                      "type": "boolean",
+                      "description": "true: only models that run on the user's own machine (the Ollama library: no server, free, ranked by Ollama pulls, with local.sizes_memory per size). false: only hosted offerings. Omit for both (hosted listed first). The result's counts give { hosted, local }."
+                    },
+                    "memory_gb": {
+                      "type": "number",
+                      "minimum": 1,
+                      "description": "RAM/VRAM the user can give a local model, in GB: keeps local models with a size that fits (4-bit estimate). Hosted offerings are unaffected."
+                    },
+                    "jurisdiction": {
+                      "type": "string",
+                      "description": "Only operators that DECLARE a country inside it: \"eea\" (EU + Iceland, Liechtenstein, Norway) or comma-separated ISO country codes, e.g. \"DE,FI\". Registered nodes declare their country in their signed card; imported listings of known providers carry one the registry inferred (jurisdiction.basis = \"inferred\"); listings without a country are excluded. A declaration, not proof of where requests are processed: the registry drops only a server it located outside. jurisdiction.evidence says what was checked, e.g. \"FR operator (EEA, declared), server front checked (FR)\"; add server_check \"passed\" to keep only offerings whose check passed."
+                    }
+                  },
+                  "description": "Pick the best-ranked offering matching these filters (same as search_offerings). Give this or `offering`."
+                },
+                "est_input_tokens": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "description": "Expected prompt tokens for this step."
+                },
+                "est_output_tokens": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "description": "Expected completion tokens for this step."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "find_locations",
+      "description": "Where AI models are served, by country: every known serving site (provider, region, city or facility, live or planned) with its evidence basis (claimed, documented, measured, attested), its source page, a map point (`geo`: lat, lon, precision; `derived` when only the region is known), and the models it serves. Sites whose provider publishes no model list are included with a note. Built from node cards, imported catalogs and curated location seeds. Use it to answer \"which providers serve which models in Canada\" or \"what serves gpt-oss within 500 km of Montréal\", or to check a residency requirement before choosing an offering; then search_offerings with `region` to pick one.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "country": {
+            "type": "string",
+            "description": "ISO 3166 code; a country also matches its subdivisions, e.g. \"CA\" matches \"CA-QC\". Omit for every country."
+          },
+          "basis": {
+            "type": "string",
+            "enum": [
+              "claimed",
+              "documented",
+              "measured",
+              "attested"
+            ],
+            "description": "Minimum evidence for a site: claimed < documented < measured < attested."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "live",
+              "planned"
+            ],
+            "description": "Only live or only planned sites. Omit for both."
+          },
+          "model": {
+            "type": "string",
+            "description": "Substring of a model name or artifact, e.g. \"gpt-oss\" or \"command\". Keeps only sites serving a match."
+          },
+          "exclude_lineage": {
+            "type": "string",
+            "description": "Comma-separated ISO country codes; drops models whose declared lineage includes any of them, e.g. \"CN\"."
+          },
+          "lineage": {
+            "type": "string",
+            "enum": [
+              "declared",
+              "any"
+            ],
+            "description": "\"declared\": also drop models that declare no lineage."
+          },
+          "near": {
+            "type": "string",
+            "description": "A point as \"lat,lon\" in decimal degrees, e.g. \"45.50,-73.57\" for Montréal. Adds distance_km to each site and sorts nearest first."
+          },
+          "within_km": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "With `near`: only sites within this great-circle distance. Sites known only to the country are excluded, since their point is a placeholder."
+          },
+          "residency": {
+            "type": "string",
+            "enum": [
+              "processing",
+              "storage"
+            ],
+            "description": "Only sites covered by a residency commitment at least this strong: processing (inference and stored data stay in the area) or storage (data at rest only)."
+          },
+          "availability": {
+            "type": "string",
+            "enum": [
+              "default",
+              "opt_in",
+              "enterprise"
+            ],
+            "description": "With a residency filter: count only commitments offered this widely: default (every customer), opt_in (adds settings and regional endpoints), enterprise (adds contract-only offers; the default)."
+          }
+        }
+      }
+    },
+    {
+      "name": "find_residency",
+      "description": "What each AI provider officially promises about where prompts, outputs and stored data stay: per provider (cloud, lab API, inference host or router), its commitments, each with a commitment level (processing: inference and stored data stay in the scope; storage: data at rest only; none; unstated), the region codes it covers, who gets it (default, opt_in, enterprise), the programme name, a short statement and the source page with the date it was checked. Includes routers and providers with no known sites. Use it to answer \"which providers keep data in the EU by default\" before choosing an offering; then find_locations or search_offerings with `region`.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "scope": {
+            "type": "string",
+            "description": "Region code, e.g. \"EU\", \"DE\", \"US\", \"CA\". Keeps providers with a processing or storage commitment whose scope lies within it. EU and EEA cover their member states."
+          },
+          "commitment": {
+            "type": "string",
+            "enum": [
+              "processing",
+              "storage"
+            ],
+            "description": "Minimum commitment: processing, or storage (which also matches processing)."
+          },
+          "availability": {
+            "type": "string",
+            "enum": [
+              "default",
+              "opt_in",
+              "enterprise"
+            ],
+            "description": "With a residency filter: count only commitments offered this widely: default (every customer), opt_in (adds settings and regional endpoints), enterprise (adds contract-only offers; the default)."
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "inference",
+              "cloud",
+              "lab",
+              "router",
+              "local",
+              "unknown"
+            ],
+            "description": "Only providers of this kind."
+          },
+          "node_id": {
+            "type": "string",
+            "description": "Only the provider that covers this registry node id."
+          }
+        }
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "io.github.opennodes-io/opennodes",
+    "version": "0.1.34",
+    "remoteUrl": "https://registry.opennodes.io/mcp",
+    "publishedAt": "2026-11-23T14:42:17.808377Z",
+    "fetchedAt": "2026-11-23T16:50:40.239Z",
+    "toolsSha256": "cf79311f4aee66ed6222072efd2e880b697ca1f3ea68bf246d9f2c1ce4f6798a"
+  }
+}

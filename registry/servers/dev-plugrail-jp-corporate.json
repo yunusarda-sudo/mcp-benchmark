@@ -1,0 +1,209 @@
+{
+  "$schema": "../schema.json",
+  "name": "dev.plugrail/jp-corporate",
+  "title": "PlugRail JP Corporate",
+  "category": "Payments, CRM & Finance",
+  "description": "Japan corporate number & invoice registration number lookup — official National Tax Agency data.",
+  "repository": "https://github.com/plugrail/servers",
+  "tools": [
+    {
+      "name": "search_corporate_by_number",
+      "description": "法人番号（ハイフンなし13桁）で日本の法人を1件検索し、法人番号・名称・所在地・存続状態を返します（国税庁「法人番号公表サイト」の公開データを加工）。番号が分かっているときに使い、名称や所在地しか分からないときは search_corporate_by_name／search_corporate_by_address か lookup_corporate を使います。返り値は candidates（該当は1件まで。status は active＝存続・closed＝閉鎖）、generation（取り込み世代）、出典。該当なしは candidates が空配列です。検査用数字が合わない番号は invalid_input で返ります（検索前に弾くため上限カウントにも入りません）。鍵なし・free プランは暦月100回まで、pro プランは無制限です。入力例: {\"corporateNumber\": \"1180301018771\"}",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "corporateNumber": {
+            "type": "string",
+            "description": "ハイフンなしの13桁の法人番号（検査用数字つき）。例: \"1180301018771\""
+          }
+        },
+        "required": [
+          "corporateNumber"
+        ]
+      }
+    },
+    {
+      "name": "search_corporate_by_name",
+      "description": "都道府県コードと法人名の前方一致（接頭辞）で日本の法人を検索し、候補の法人番号・名称・所在地・存続状態を返します（国税庁「法人番号公表サイト」の公開データを加工）。法人番号が分からず名称から探すときに使います。番号が分かれば search_corporate_by_number、名称と所在地から番号の確定まで行うなら lookup_corporate を使います。部分一致・曖昧一致はしません（「渋谷」は名称が「渋谷」で始まる法人だけが対象）。入力の法人格（株式会社など）は除いて照合し、旧字・新字の字体違いは両方検索します。返り値は candidates（limit 件まで。0件は「該当なし」であり「存在しない」との断定ではありません）、nextCursor（続きがあるときだけ。字体違いを展開した先頭ページでは返りません）、generation（取り込み世代）、出典。対象は法人番号を持つ法人のみで、個人事業者は含みません。鍵なし・free プランは暦月100回まで、pro プランは無制限です。入力例: {\"prefecture\": \"13\", \"prefix\": \"渋谷\", \"limit\": 10}",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "prefecture": {
+            "type": "string",
+            "description": "都道府県コード2桁（JIS X 0401。都道府県名は不可）。例: \"13\"（東京）"
+          },
+          "prefix": {
+            "type": "string",
+            "minLength": 1,
+            "description": "検索接頭辞（非空。全角・半角などの表記揺れは揃えて照合）。例: \"渋谷\""
+          },
+          "limit": {
+            "description": "取得件数 1〜20（省略時は10）。例: 10",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 20
+          },
+          "cursor": {
+            "description": "前回応答の nextCursor をそのまま渡す（自作・改変した値は invalid_input）。",
+            "type": "string"
+          }
+        },
+        "required": [
+          "prefecture",
+          "prefix"
+        ]
+      }
+    },
+    {
+      "name": "search_corporate_by_address",
+      "description": "都道府県＋所在地の接頭辞で日本の法人を検索します。国税庁公開データに基づきます。市区町村名の前方一致が主経路で、町名以降を含む指定（例: 港区港南・東京都港区港南）は住所全文の前方一致へ迂回し、町名のみの断片（例: 港南）は住所全文の部分一致で拾います。入力例: {\"prefecture\": \"13\", \"prefix\": \"渋谷\", \"limit\": 10}",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "prefecture": {
+            "type": "string",
+            "description": "都道府県コード2桁（JIS X 0401。都道府県名は不可）。例: \"13\"（東京）"
+          },
+          "prefix": {
+            "type": "string",
+            "minLength": 1,
+            "description": "検索接頭辞（非空。全角・半角などの表記揺れは揃えて照合）。例: \"渋谷\""
+          },
+          "limit": {
+            "description": "取得件数 1〜20（省略時は10）。例: 10",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 20
+          },
+          "cursor": {
+            "description": "前回応答の nextCursor をそのまま渡す（自作・改変した値は invalid_input）。",
+            "type": "string"
+          }
+        },
+        "required": [
+          "prefecture",
+          "prefix"
+        ]
+      }
+    },
+    {
+      "name": "lookup_corporate",
+      "description": "法人番号の確定照会と名称・所在地の候補探索を分離して返す。名称だけでは断定せず複数候補と根拠別scoreを返す。候補探索は name 指定時は prefecture 任意（省略時は全国前方一致で searchedNationwide:true・候補に県コード付き・県か住所を足すと絞り込める）。prefecture は '13' または '東京都' のどちらでも可。address が「東京都渋谷区…」のように都道府県名で始まれば prefecture は省略可（推定）。address のみの検索は prefecture または推定が必須（全国非対応）。番号確定例: {\"corporateNumber\": \"1180301018771\"}／候補例: {\"name\": \"渋谷\", \"prefecture\": \"13\", \"limit\": 10}／全国例: {\"name\": \"山田工業\"}corporateNumber はハイフンなし13桁の文字列（数値・ハイフン付き・先頭 T 付きは不可）。番号と name は併用不可。",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "corporateNumber": {
+            "description": "13桁の法人番号（確定照会）。例: \"1180301018771\"",
+            "type": "string",
+            "pattern": "^\\d{13}$"
+          },
+          "name": {
+            "description": "法人名の検索語（候補探索）。例: \"渋谷\"",
+            "type": "string",
+            "minLength": 1
+          },
+          "prefecture": {
+            "description": "都道府県（name 指定時は任意・省略時は全国検索。address のみのときは必須。address 先頭の都道府県名から推定できれば省略可）。JISコード \"13\"・13・\"1\" または都道府県名 \"東京都\"・\"東京\" のどちらでも可",
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              }
+            ]
+          },
+          "address": {
+            "description": "所在地の絞込語（候補探索の任意）。例: \"渋谷\"",
+            "type": "string",
+            "minLength": 1
+          },
+          "limit": {
+            "description": "取得件数 1〜20（省略時は10）",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 20
+          },
+          "cursor": {
+            "description": "前回応答の nextCursor（透過・省略可）。",
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "verify_invoice_number",
+      "description": "適格請求書発行事業者番号（T＋13桁）の登録・取消・失効を日付付きで照合します。本サービスは法人・人格のない社団等のデータのみを取り込み、個人事業者のデータを取り込んでいないため、個人事業者の番号はここでは見つかりません（公表サイト https://www.invoice-kohyo.nta.go.jp/ では確認できる場合があります）。未発見を無効・不存在と断定しません。登録ありの応答には法人番号データ由来の法人名 name・所在地 address を含みます（法人番号表に無い場合は null。未発見の応答は name/address ともに null）。入力例: {\"invoiceNumber\": \"T1180301018771\"}",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "invoiceNumber": {
+            "type": "string",
+            "description": "T＋13桁の登録番号。例: \"T1180301018771\""
+          }
+        },
+        "required": [
+          "invoiceNumber"
+        ]
+      }
+    },
+    {
+      "name": "search_invoice_batch",
+      "description": "適格請求書発行事業者番号（T＋13桁）を1回の呼び出しで最大100件まで一括照会し、番号ごとに status（active＝登録・cancelled＝取消・expired＝失効・not_found＝未登録）と登録日・取消日・失効日を返します（国税庁公表データを加工）。results は入力順に1対1で返し、重複は除去しません。summary は出現回数で数えます。not_found は「その番号が存在しない」との断定ではなく、取り込みデータに無いことを示します（個人事業者の番号は取り込んでいないため、ここでは見つかりません）。形式が合わない番号（半角の T＋13桁の数字でないもの）が1件でもあると、照会せず全体を拒否します。空配列と101件以上も拒否します。鍵なし・free プランは暦月100回まで（1回の呼び出しを1回として数えます）、pro プランは無制限です。入力例: {\"invoiceNumbers\": [\"T1180301018771\", \"T1180301018772\"]}",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "invoiceNumbers": {
+            "minItems": 1,
+            "maxItems": 100,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^T\\d{13}$"
+            },
+            "description": "半角の T＋13桁の適格請求書発行事業者番号の配列（1〜100件・入力順に結果を返す）。例: [\"T1180301018771\"]"
+          }
+        },
+        "required": [
+          "invoiceNumbers"
+        ]
+      }
+    },
+    {
+      "name": "company_profile",
+      "description": "法人番号（ハイフンなし13桁）を確定キーに、法人番号公表・インボイス（国税庁公表データ）と gBizINFO の4領域（基本情報・補助金・届出・財務）を1件にまとめて返します。領域ごとに出典・取得日時・欠損理由を付け、一部の領域だけ取得できたときは取得済みと欠損を同時に返します（全領域が欠損のときは not_found）。名称だけでは統合しません。gBizINFO の4領域は pro プランのみ。鍵なし・free プランは法人番号公表とインボイスだけを返し、gBizINFO の領域は欠損（pro_required）になります。鍵なし・free プランは暦月100回まで、pro プランは無制限です。入力例: {\"corporateNumber\": \"1180301018771\"}",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "corporateNumber": {
+            "type": "string",
+            "description": "ハイフンなしの13桁の法人番号。形式が違うと invalid_input。例: \"1180301018771\""
+          }
+        },
+        "required": [
+          "corporateNumber"
+        ]
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "dev.plugrail/jp-corporate",
+    "version": "0.1.2",
+    "remoteUrl": "https://jp-corporate.plugrail.dev/mcp",
+    "publishedAt": "2026-11-22T22:23:58.187704Z",
+    "fetchedAt": "2026-11-23T16:50:40.239Z",
+    "toolsSha256": "98197bff5c0dcb858fc5dfd9a31316529ef9ce2e51cfbafd6b54d8e27969e941"
+  }
+}

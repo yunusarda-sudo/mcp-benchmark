@@ -1,0 +1,731 @@
+{
+  "$schema": "../schema.json",
+  "name": "io.github.cyanheads/openstreetmap-mcp-server",
+  "category": "Developer Tools & VCS",
+  "description": "Geocode, reverse geocode, and run Overpass spatial queries on OpenStreetMap data.",
+  "repository": "https://github.com/cyanheads/openstreetmap-mcp-server",
+  "tools": [
+    {
+      "name": "openstreetmap_search_places",
+      "description": "Geocode a place name or address to coordinates and structured place data via Nominatim. Send either a free-form query or the structured address fields (street, city, county, state, country, postalcode), never both; results are the best-ranked matches, not every matching object, and matching never uses an OSM attribute tag, so filter or enumerate by tag with openstreetmap_query_nearby, openstreetmap_query_bbox, or openstreetmap_query_raw.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "query": {
+            "description": "Free-form search string, e.g. \"Space Needle Seattle\" or \"1600 Pennsylvania Ave NW, Washington DC\". Not combinable with the structured address fields. Nominatim reads commas as an address hierarchy, so give the name plus its city or region and nothing in between: \"Beinecke Library, New Haven\" matches where \"Beinecke Library, Yale University, New Haven\" returns nothing.",
+            "type": "string"
+          },
+          "street": {
+            "description": "House number and street name (structured query). Use with city/state/country fields. Cannot be combined with query.",
+            "type": "string"
+          },
+          "city": {
+            "description": "City name (structured query).",
+            "type": "string"
+          },
+          "county": {
+            "description": "County or district (structured query).",
+            "type": "string"
+          },
+          "state": {
+            "description": "State or province (structured query).",
+            "type": "string"
+          },
+          "country": {
+            "description": "Country name or ISO 3166-1 alpha-2 code (structured query).",
+            "type": "string"
+          },
+          "postalcode": {
+            "description": "Postal or ZIP code (structured query).",
+            "type": "string"
+          },
+          "limit": {
+            "default": 5,
+            "description": "Maximum results to return, up to 40 (Nominatim's own ceiling); a larger value is served as 40 and limitNotice says so. Nominatim may return fewer at its relevance cutoff; nextExcludeIds pages past it.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "countrycodes": {
+            "description": "Restrict results to one or more countries: comma-separated ISO 3166-1 alpha-2 codes (e.g. \"us,ca\"), any casing, optional spaces around the commas. Any other form — alpha-3, a semicolon list, a country name — is rejected rather than silently dropped upstream. A well-formed code for a country that does not exist matches nothing. An empty value counts as omitted. Prefer this over the structured country field for filtering.",
+            "anyOf": [
+              {
+                "type": "string",
+                "const": ""
+              },
+              {
+                "type": "string",
+                "pattern": "^\\s*(?:[A-Za-z]{2}\\s*)?(?:,\\s*(?:[A-Za-z]{2}\\s*)?)*$",
+                "description": "One ISO 3166-1 alpha-2 country code, or a comma-separated list of them, in any casing."
+              }
+            ]
+          },
+          "viewbox": {
+            "description": "Rectangular area to bias results toward, disambiguating a name that repeats worldwide (a creek in one watershed, a street in one municipality). Narrower than countrycodes. Bias only by default: a better match outside the box is still returned. Set bounded for a hard restriction. Unlike openstreetmap_query_bbox this box may not cross the antimeridian — west must be less than east and south less than north, or the call is rejected.",
+            "type": "object",
+            "properties": {
+              "west": {
+                "type": "number",
+                "minimum": -180,
+                "maximum": 180,
+                "description": "Western boundary longitude. Must be strictly less than east."
+              },
+              "south": {
+                "type": "number",
+                "minimum": -90,
+                "maximum": 90,
+                "description": "Southern boundary latitude. Must be strictly less than north."
+              },
+              "east": {
+                "type": "number",
+                "minimum": -180,
+                "maximum": 180,
+                "description": "Eastern boundary longitude. Must be strictly greater than west."
+              },
+              "north": {
+                "type": "number",
+                "minimum": -90,
+                "maximum": 90,
+                "description": "Northern boundary latitude. Must be strictly greater than south."
+              }
+            },
+            "required": [
+              "west",
+              "south",
+              "east",
+              "north"
+            ]
+          },
+          "bounded": {
+            "description": "Restrict results to the viewbox instead of merely biasing toward it. Requires viewbox — setting it alone is rejected rather than ignored. With it, a match outside the box is dropped even when it scores higher.",
+            "type": "boolean"
+          },
+          "layer": {
+            "description": "Filter by data layer: one of address, poi, railway, natural, manmade, or a comma-separated list of them, in any casing. Any other name is rejected here, not upstream; an empty value counts as omitted. Default: no restriction.",
+            "anyOf": [
+              {
+                "type": "string",
+                "const": ""
+              },
+              {
+                "type": "string",
+                "pattern": "^\\s*(?:(?:[aA][dD][dD][rR][eE][sS][sS]|[pP][oO][iI]|[rR][aA][iI][lL][wW][aA][yY]|[nN][aA][tT][uU][rR][aA][lL]|[mM][aA][nN][mM][aA][dD][eE])(?:\\s*,\\s*(?:[aA][dD][dD][rR][eE][sS][sS]|[pP][oO][iI]|[rR][aA][iI][lL][wW][aA][yY]|[nN][aA][tT][uU][rR][aA][lL]|[mM][aA][nN][mM][aA][dD][eE]))*)?\\s*$",
+                "description": "One documented layer name, or a comma-separated list of them, in any casing."
+              }
+            ]
+          },
+          "featureType": {
+            "description": "Restrict results to a geographic feature type. Automatically implies the address layer.",
+            "type": "string",
+            "enum": [
+              "country",
+              "state",
+              "city",
+              "settlement"
+            ]
+          },
+          "extratags": {
+            "default": false,
+            "description": "Include the matched object's extra OSM tags — contact and metadata (phone, website, opening_hours, wikidata) and physical attributes (surface, tracktype, sac_scale, ele, access). An absent tag describes that object, not OpenStreetMap. Increases response size.",
+            "type": "boolean"
+          },
+          "language": {
+            "description": "Language for names. Default: the local OSM language.",
+            "anyOf": [
+              {
+                "type": "string",
+                "const": ""
+              },
+              {
+                "type": "string",
+                "pattern": "^\\s*(?:(?:\\*|[A-Za-z]{2,3}(?:_[a-z]+)*(?:-[A-Za-z0-9_]*)*)(?:;\\s*[qQ]\\s*=\\s*[01](?:\\.\\d+)?)?\\s*)?(?:,\\s*(?:(?:\\*|[A-Za-z]{2,3}(?:_[a-z]+)*(?:-[A-Za-z0-9_]*)*)(?:;\\s*[qQ]\\s*=\\s*[01](?:\\.\\d+)?)?\\s*)?)*$",
+                "description": "A tag (\"en\", \"zh-Hant\") or a comma-separated, optionally weighted list (\"fr,en;q=0.8\")."
+              }
+            ]
+          },
+          "exclude_place_ids": {
+            "description": "OSM refs (N/W/R + id) or Nominatim place_ids to drop from results; any other token form is rejected here rather than by Nominatim. Entries are trimmed, lowercase ref prefixes uppercased, a blank entry treated as absent. Page toward further matches by passing back the previous page's nextExcludeIds, which prefers stable OSM refs over volatile place_ids; the walk ends when a page returns zero results with an exhaustion notice — a success, not an error. Best-effort, not a cursor: Nominatim ranking can reorder between calls, so already-seen results may shift.",
+            "type": "array",
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "const": ""
+                },
+                {
+                  "type": "string",
+                  "pattern": "^\\s*(?:[NWRnwr]\\d+|\\d+)?\\s*$",
+                  "description": "An OSM ref (N/W/R plus the object id) or a bare Nominatim place_id."
+                }
+              ],
+              "description": "One exclusion token, or an empty value that excludes nothing."
+            }
+          }
+        },
+        "additionalProperties": false,
+        "anyOf": [
+          {
+            "type": "object",
+            "required": [
+              "query"
+            ]
+          },
+          {
+            "type": "object",
+            "required": [
+              "street"
+            ]
+          },
+          {
+            "type": "object",
+            "required": [
+              "city"
+            ]
+          },
+          {
+            "type": "object",
+            "required": [
+              "county"
+            ]
+          },
+          {
+            "type": "object",
+            "required": [
+              "state"
+            ]
+          },
+          {
+            "type": "object",
+            "required": [
+              "country"
+            ]
+          },
+          {
+            "type": "object",
+            "required": [
+              "postalcode"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "openstreetmap_reverse_geocode",
+      "description": "Convert a latitude/longitude pair to the nearest address or named place via Nominatim. The result is the closest indexed OSM object at the requested zoom (18 building, 10 city), which in dense areas can be a neighbouring feature rather than the one containing the coordinate; proximity and layer pick it, never an OSM attribute tag, so find features by tag with openstreetmap_query_nearby, openstreetmap_query_bbox, or openstreetmap_query_raw.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "lat": {
+            "type": "number",
+            "minimum": -90,
+            "maximum": 90,
+            "description": "Latitude in WGS84 decimal degrees."
+          },
+          "lon": {
+            "type": "number",
+            "minimum": -180,
+            "maximum": 180,
+            "description": "Longitude in WGS84 decimal degrees."
+          },
+          "zoom": {
+            "default": 18,
+            "description": "Address detail level, roughly corresponding to map zoom. 18=building, 16=street, 14=neighbourhood, 12=town, 10=city, 8=county, 5=state, 3=country.",
+            "type": "integer",
+            "minimum": 3,
+            "maximum": 18
+          },
+          "layer": {
+            "description": "Restrict which OSM layer is matched: one of address, poi, railway, natural, manmade, or a comma-separated list of them, in any casing. Any other name is rejected here, not upstream; an empty value counts as omitted. Default: address,poi.",
+            "anyOf": [
+              {
+                "type": "string",
+                "const": ""
+              },
+              {
+                "type": "string",
+                "pattern": "^\\s*(?:(?:[aA][dD][dD][rR][eE][sS][sS]|[pP][oO][iI]|[rR][aA][iI][lL][wW][aA][yY]|[nN][aA][tT][uU][rR][aA][lL]|[mM][aA][nN][mM][aA][dD][eE])(?:\\s*,\\s*(?:[aA][dD][dD][rR][eE][sS][sS]|[pP][oO][iI]|[rR][aA][iI][lL][wW][aA][yY]|[nN][aA][tT][uU][rR][aA][lL]|[mM][aA][nN][mM][aA][dD][eE]))*)?\\s*$",
+                "description": "One documented layer name, or a comma-separated list of them, in any casing."
+              }
+            ]
+          },
+          "extratags": {
+            "default": false,
+            "description": "Include the matched object's extra OSM tags — contact and metadata (phone, website, opening_hours, wikidata) and physical attributes (surface, tracktype, sac_scale, ele, access). An absent tag describes that object, not OpenStreetMap.",
+            "type": "boolean"
+          },
+          "language": {
+            "description": "Language for names. Default: the local OSM language.",
+            "anyOf": [
+              {
+                "type": "string",
+                "const": ""
+              },
+              {
+                "type": "string",
+                "pattern": "^\\s*(?:(?:\\*|[A-Za-z]{2,3}(?:_[a-z]+)*(?:-[A-Za-z0-9_]*)*)(?:;\\s*[qQ]\\s*=\\s*[01](?:\\.\\d+)?)?\\s*)?(?:,\\s*(?:(?:\\*|[A-Za-z]{2,3}(?:_[a-z]+)*(?:-[A-Za-z0-9_]*)*)(?:;\\s*[qQ]\\s*=\\s*[01](?:\\.\\d+)?)?\\s*)?)*$",
+                "description": "A tag (\"en\", \"zh-Hant\") or a comma-separated, optionally weighted list (\"fr,en;q=0.8\")."
+              }
+            ]
+          }
+        },
+        "required": [
+          "lat",
+          "lon"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "openstreetmap_lookup_objects",
+      "description": "Fetch the Nominatim address record for known OSM objects by ID, 50 per call with any more returned under deferred_ids, each N (node), W (way), or R (relation) plus the id, e.g. \"N240109189\", or the object's openstreetmap.org path or URL. Use it for IDs already in hand from openstreetmap_query_nearby or openstreetmap_query_bbox; it returns only objects named in osm_ids and lists those with no Nominatim record under not_found (Nominatim skips unnamed and non-place objects, so such an ID may still exist). It cannot select by tag, so discover objects with those tools or openstreetmap_query_raw first.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "osm_ids": {
+            "minItems": 1,
+            "maxItems": 500,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^\\s*(?:([NWRnwr])(\\d+)|(?:(?:https?:\\/\\/)?(?:(?:www\\.)?openstreetmap|osm)\\.org\\/|\\/)?([nN][oO][dD][eE]|[wW][aA][yY]|[rR][eE][lL][aA][tT][iI][oO][nN])\\/(\\d+)(?:[/?#]\\S*)?)\\s*$"
+            },
+            "description": "OSM IDs to look up: N (node), W (way), or R (relation) plus the id (\"N240109189\"), the object path (\"node/240109189\"), or its openstreetmap.org URL. Always an array, including for a single ID: [\"N240109189\"], [\"W50637691\", \"R146656\"]. Up to 500 entries; duplicates are dropped and the first 50 unique IDs are looked up per call, the rest returned under deferred_ids to pass on the next call."
+          },
+          "extratags": {
+            "default": false,
+            "description": "Include each looked-up object's extra OSM tags — contact and metadata (phone, website, opening_hours, wikidata) and physical attributes (surface, tracktype, sac_scale, ele, access). An absent tag describes that object, not OpenStreetMap.",
+            "type": "boolean"
+          },
+          "language": {
+            "description": "Language for names. Default: the local OSM language.",
+            "anyOf": [
+              {
+                "type": "string",
+                "const": ""
+              },
+              {
+                "type": "string",
+                "pattern": "^\\s*(?:(?:\\*|[A-Za-z]{2,3}(?:_[a-z]+)*(?:-[A-Za-z0-9_]*)*)(?:;\\s*[qQ]\\s*=\\s*[01](?:\\.\\d+)?)?\\s*)?(?:,\\s*(?:(?:\\*|[A-Za-z]{2,3}(?:_[a-z]+)*(?:-[A-Za-z0-9_]*)*)(?:;\\s*[qQ]\\s*=\\s*[01](?:\\.\\d+)?)?\\s*)?)*$",
+                "description": "A tag (\"en\", \"zh-Hant\") or a comma-separated, optionally weighted list (\"fr,en;q=0.8\")."
+              }
+            ]
+          }
+        },
+        "required": [
+          "osm_ids"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "openstreetmap_query_nearby",
+      "description": "Find OSM features within a radius of a point via the Overpass API, the tool for \"what is near X?\" questions. Filter with amenity, or with tag_key plus an optional tag_value, ANDing up to five more filters; every feature returns with its full OSM tag set (no extratags flag here) or the keys tag_keys lists, sorted nearest-first by distance_meters. An area containing the point, such as the park or city it lies in, matches at 0 m whatever the radius.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "lat": {
+            "type": "number",
+            "minimum": -90,
+            "maximum": 90,
+            "description": "Center latitude in WGS84 decimal degrees."
+          },
+          "lon": {
+            "type": "number",
+            "minimum": -180,
+            "maximum": 180,
+            "description": "Center longitude in WGS84 decimal degrees."
+          },
+          "radius_meters": {
+            "default": 1000,
+            "description": "Search radius in meters. Max 50,000m (50km). Keep under 5,000m for dense urban POI queries to avoid slow responses.",
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "maximum": 50000
+          },
+          "amenity": {
+            "description": "OSM amenity tag value (e.g. \"hospital\", \"pharmacy\", \"restaurant\", \"atm\"), shortcut for tag_key=\"amenity\". Exactly one primary mode is required: this or tag_key, never both. Many categories live under other keys — tourism (museums, hotels, viewpoints), leisure (parks, pitches, playgrounds), shop (supermarkets), historic (castles, memorials), natural (beaches, peaks); query those with tag_key and tag_value.",
+            "type": "string"
+          },
+          "tag_key": {
+            "description": "Primary OSM tag key (e.g. \"leisure\", \"shop\", \"highway\"); omit tag_value to match any feature carrying the key, or supply it for exact equality. The alternative to amenity, never both. Additional filters are ANDed with this tag.",
+            "type": "string"
+          },
+          "tag_value": {
+            "description": "Literal value paired with tag_key for exact equality (e.g., \"park\", \"supermarket\"); omit for key existence. Exact equality misses semicolon-list values (cuisine=pizza;italian); tag_value_match \"list_item\" catches them. Explicit empty or whitespace-only values are invalid. Keys and values are trimmed; blank unused fields are ignored in amenity mode.",
+            "type": "string"
+          },
+          "tag_value_match": {
+            "description": "How tag_value matches: \"exact\" (default) compares the whole value; \"list_item\" matches one item of a semicolon list, so \"pizza\" finds cuisine=pizza;italian. Needs tag_value; not available with amenity.",
+            "type": "string",
+            "enum": [
+              "exact",
+              "list_item"
+            ]
+          },
+          "filters": {
+            "description": "Up to five additional filters, ANDed with the required primary amenity or tag_key filter in input order. Omitted or [] adds no conditions. Exact values miss semicolon-list values; set match \"list_item\" on the entry. Keys must be unique after trimming; keys and values must not contain Overpass QL metacharacters (\" \\ [ ] ; ( )).",
+            "maxItems": 5,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "key": {
+                  "type": "string",
+                  "description": "Literal OSM tag key. Trimmed and nonblank; must be unique across the primary tag and all filters."
+                },
+                "value": {
+                  "description": "Literal value to match. Omit for key existence; an explicitly blank value is invalid. Trimmed before matching.",
+                  "type": "string"
+                },
+                "match": {
+                  "description": "How value matches: \"exact\" (default) or \"list_item\", one item of a semicolon list. Needs value.",
+                  "type": "string",
+                  "enum": [
+                    "exact",
+                    "list_item"
+                  ]
+                }
+              },
+              "required": [
+                "key"
+              ],
+              "additionalProperties": false,
+              "description": "One additional equality, list-item, or key-existence filter."
+            }
+          },
+          "element_types": {
+            "default": [
+              "node",
+              "way",
+              "relation"
+            ],
+            "description": "OSM element types to search, at least one. Nodes cover most standalone POIs, ways most buildings and areas, relations large parks, lakes, campuses, and boundaries. Omit the field to search all three; pass [\"node\", \"way\"] to leave relations out. An empty array is rejected because it can only match nothing.",
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "node",
+                "way",
+                "relation"
+              ]
+            }
+          },
+          "tag_keys": {
+            "description": "Return only these tag keys in each feature's tags, matched exactly; list name:en to get it, no wildcards. Shrinks responses on heavily tagged features such as boundary relations. Matching, ranking, and paging still read every tag. Omitted or [] returns the full tag set.",
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "limit": {
+            "default": 20,
+            "description": "Maximum results to return, up to 500 per call; a larger value is served as 500 and limitNotice says so. Applied after the Overpass query — if the area has more features, they are truncated.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "offset": {
+            "default": 0,
+            "description": "Number of matching features to skip before applying limit, for paging through a large result set. Features are distance-sorted before paging, so higher offsets return progressively farther matches; the full set is cached ~10 minutes so re-paging costs no extra upstream request. Pass the nextOffset value from a prior truncated response.",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "timeout_seconds": {
+            "default": 25,
+            "description": "Overpass query timeout in seconds. Increase for large radius or dense areas.",
+            "type": "integer",
+            "minimum": 5,
+            "maximum": 60
+          }
+        },
+        "required": [
+          "lat",
+          "lon"
+        ],
+        "additionalProperties": false,
+        "anyOf": [
+          {
+            "type": "object",
+            "required": [
+              "amenity"
+            ]
+          },
+          {
+            "type": "object",
+            "required": [
+              "tag_key"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "openstreetmap_query_bbox",
+      "description": "Find OSM features inside an area via the Overpass API, for surveys of everything in a region (openstreetmap_query_nearby covers proximity to a point). Scope with the four corner fields south, west, north, east, or with within and a single OSM boundary ref such as a city relation or a park way, which searches the boundary polygon itself instead of an overcovering box; never both. Filter with amenity, or with tag_key plus an optional tag_value, ANDing up to five more filters; every feature returns with its full OSM tag set (no extratags flag here) or the keys tag_keys lists.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "within": {
+            "description": "OSM boundary to search inside, as one ref: R plus a relation id (\"R237385\", Seattle) or W plus a closed-way id (\"W13800188\", a park), case-insensitive, or the object path (\"relation/237385\") or its openstreetmap.org URL. Take it from osm_type plus osm_id on openstreetmap_search_places, openstreetmap_reverse_geocode, or openstreetmap_lookup_objects. The alternative to the four corner fields, never both. A node ref is rejected: a node is never an area. A ref that maps to no Overpass area returns an empty page whose notice names the cause.",
+            "anyOf": [
+              {
+                "type": "string",
+                "const": ""
+              },
+              {
+                "type": "string",
+                "pattern": "^\\s*(?:([WRwr])(\\d+)|(?:(?:https?:\\/\\/)?(?:(?:www\\.)?openstreetmap|osm)\\.org\\/|\\/)?([wW][aA][yY]|[rR][eE][lL][aA][tT][iI][oO][nN])\\/(\\d+)(?:[/?#]\\S*)?)\\s*$",
+                "description": "One way or relation ref, path, or openstreetmap.org URL."
+              }
+            ]
+          },
+          "south": {
+            "description": "Southern boundary latitude (minimum latitude). One of four corner fields: supply all four, or use within instead.",
+            "type": "number",
+            "minimum": -90,
+            "maximum": 90
+          },
+          "west": {
+            "description": "Western boundary longitude (minimum longitude). A west greater than east is valid, not an error: Overpass reads it as an antimeridian-crossing box and returns the union of west..180 and -180..east.",
+            "type": "number",
+            "minimum": -180,
+            "maximum": 180
+          },
+          "north": {
+            "description": "Northern boundary latitude (maximum latitude).",
+            "type": "number",
+            "minimum": -90,
+            "maximum": 90
+          },
+          "east": {
+            "description": "Eastern boundary longitude (maximum longitude). A value below west describes an antimeridian crossing rather than an inverted box.",
+            "type": "number",
+            "minimum": -180,
+            "maximum": 180
+          },
+          "amenity": {
+            "description": "OSM amenity tag value shortcut (e.g. \"cafe\", \"bench\", \"hospital\"). Exactly one primary mode is required: this or tag_key, never both. Many categories live under other keys — tourism (museums, hotels, viewpoints), leisure (parks, pitches, playgrounds), shop (supermarkets), historic (castles, memorials), natural (beaches, peaks); query those with tag_key and tag_value.",
+            "type": "string"
+          },
+          "tag_key": {
+            "description": "Primary OSM tag key (e.g. \"leisure\", \"shop\", \"natural\"); omit tag_value to match any feature carrying the key, or supply it for exact equality. The alternative to amenity, never both. Additional filters are ANDed with this tag.",
+            "type": "string"
+          },
+          "tag_value": {
+            "description": "Literal value paired with tag_key for exact equality (e.g., \"park\", \"supermarket\"); omit for key existence. Exact equality misses semicolon-list values (cuisine=pizza;italian); tag_value_match \"list_item\" catches them. Explicit empty or whitespace-only values are invalid. Keys and values are trimmed; blank unused fields are ignored in amenity mode.",
+            "type": "string"
+          },
+          "tag_value_match": {
+            "description": "How tag_value matches: \"exact\" (default) compares the whole value; \"list_item\" matches one item of a semicolon list, so \"pizza\" finds cuisine=pizza;italian. Needs tag_value; not available with amenity.",
+            "type": "string",
+            "enum": [
+              "exact",
+              "list_item"
+            ]
+          },
+          "filters": {
+            "description": "Up to five additional filters, ANDed with the required primary amenity or tag_key filter in input order. Omitted or [] adds no conditions. Exact values miss semicolon-list values; set match \"list_item\" on the entry. Keys must be unique after trimming; keys and values must not contain Overpass QL metacharacters (\" \\ [ ] ; ( )).",
+            "maxItems": 5,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "key": {
+                  "type": "string",
+                  "description": "Literal OSM tag key. Trimmed and nonblank; must be unique across the primary tag and all filters."
+                },
+                "value": {
+                  "description": "Literal value to match. Omit for key existence; an explicitly blank value is invalid. Trimmed before matching.",
+                  "type": "string"
+                },
+                "match": {
+                  "description": "How value matches: \"exact\" (default) or \"list_item\", one item of a semicolon list. Needs value.",
+                  "type": "string",
+                  "enum": [
+                    "exact",
+                    "list_item"
+                  ]
+                }
+              },
+              "required": [
+                "key"
+              ],
+              "additionalProperties": false,
+              "description": "One additional equality, list-item, or key-existence filter."
+            }
+          },
+          "element_types": {
+            "default": [
+              "node",
+              "way",
+              "relation"
+            ],
+            "description": "OSM element types to search, at least one. Nodes cover most standalone POIs, ways most buildings and areas, relations large parks, lakes, campuses, and boundaries. Omit the field to search all three; pass [\"node\", \"way\"] to leave relations out. An empty array is rejected because it can only match nothing.",
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "node",
+                "way",
+                "relation"
+              ]
+            }
+          },
+          "tag_keys": {
+            "description": "Return only these tag keys in each feature's tags, matched exactly; list name:en to get it, no wildcards. Shrinks responses on heavily tagged features such as boundary relations. Matching, ranking, and paging still read every tag. Omitted or [] returns the full tag set.",
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "sort_by": {
+            "description": "Rank the whole match set by a tag's numeric value before offset and limit apply. A value ranks when it is a plain decimal such as 4392 or -12.5; one with a unit, comma, range, or list (8280ft, 2,5, 100-200, 849;871) is not converted. Those and features lacking the tag follow the ranked ones in default order, counted in unrankedCount. A blank key means no sort.",
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string",
+                "description": "Tag whose numeric value ranks the features, e.g. \"ele\", \"population\"."
+              },
+              "order": {
+                "default": "desc",
+                "description": "\"desc\" puts the largest value first.",
+                "type": "string",
+                "enum": [
+                  "desc",
+                  "asc"
+                ]
+              }
+            },
+            "required": [
+              "key"
+            ],
+            "additionalProperties": false
+          },
+          "limit": {
+            "default": 20,
+            "description": "Maximum results to return, up to 500 per call; a larger value is served as 500 and limitNotice says so. Applied after the Overpass query — if the area has more features, they are truncated.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "offset": {
+            "default": 0,
+            "description": "Number of matching features to skip before applying limit, for paging through a large result set; sort_by ranks the whole set before the page is cut. The full match set is fetched and cached ~10 minutes keyed by the query, so re-paging at a new offset is deterministic and costs no extra upstream request. Pass the nextOffset value from a prior truncated response.",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "timeout_seconds": {
+            "default": 25,
+            "description": "Overpass query timeout in seconds. Increase for large bounding boxes or dense areas.",
+            "type": "integer",
+            "minimum": 5,
+            "maximum": 60
+          }
+        },
+        "additionalProperties": false,
+        "anyOf": [
+          {
+            "type": "object",
+            "required": [
+              "south",
+              "west",
+              "north",
+              "east",
+              "amenity"
+            ]
+          },
+          {
+            "type": "object",
+            "required": [
+              "south",
+              "west",
+              "north",
+              "east",
+              "tag_key"
+            ]
+          },
+          {
+            "type": "object",
+            "required": [
+              "within",
+              "amenity"
+            ]
+          },
+          {
+            "type": "object",
+            "required": [
+              "within",
+              "tag_key"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "openstreetmap_query_raw",
+      "description": "Run an arbitrary Overpass QL query for anything the convenience tools cannot express: multi-type or union queries, relation membership, historical queries, regex tag matching. The query must include [out:json], e.g. \"[out:json][timeout:15];node[\\\"natural\\\"=\\\"peak\\\"](47.5,-122.5,47.7,-122.2);out body;\"; scope to an OSM boundary with rel(<id>);map_to_area->.a; or way(<id>);map_to_area->.a; then (area.a) on each statement (the 2400000000 way-area offset is gone since Overpass 0.7.57; openstreetmap_query_bbox takes the same scope as within, without QL). The response is one page: page with limit and offset, and read totalFound and truncated for the whole match. Every element arrives whole unless max_element_bytes is set; an element over it then has its members, nodes or geometry array withheld whole, and withheldNotice says how to fetch it back. For plain \"near X\" or \"in this area\" questions use openstreetmap_query_nearby or openstreetmap_query_bbox.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Overpass QL query string. Must include [out:json]. The server sets the endpoint and User-Agent; do not include those. With no [maxsize:N] it adds [maxsize:268435456] (256 MiB), which a busy endpoint admits sooner than its 512 MiB default; write your own to change it. Example: \"[out:json][timeout:15];node[\\\"natural\\\"=\\\"peak\\\"](47.5,-122.5,47.7,-122.2);out body;\""
+          },
+          "limit": {
+            "default": 20,
+            "description": "Maximum elements to return, up to 500 per call; a larger value is served as 500 and limitNotice says so. Applied after the Overpass query — if the query matched more, they are truncated.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "offset": {
+            "default": 0,
+            "description": "Elements to skip before applying limit, for paging a large result set. The full match set is cached ~10 minutes keyed by the query, so re-paging at a new offset is deterministic and costs no extra request; a result over 100000 elements is served uncached, so paging that far re-queries and depends on the endpoint returning the same order. Pass the nextOffset from a prior truncated response.",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "max_element_bytes": {
+            "description": "Serialized-byte budget for one element, in UTF-8 bytes, applied per element after limit and offset — the dimension limit cannot bound, a single relation or geometry-heavy way. Omitted, every element arrives whole. An over-budget element keeps every scalar and its tags but has its members, nodes and geometry arrays withheld whole, never truncated to a prefix, and lists each under withheld_keys with its item count and byte size; withheldNotice then names the budget that returns the whole page and the offset and budget that fetch each of the first three withheld elements alone; withheldElements carries them for every one. That disclosure is not counted against the budget, so a bounded element runs ~60 bytes per withheld key above it.",
+            "type": "integer",
+            "minimum": 1000,
+            "maximum": 9007199254740991
+          },
+          "timeout_seconds": {
+            "default": 30,
+            "description": "How long Overpass may spend on the query. A [timeout:N] directive in the query string wins over this. The client waits the full value rather than cutting a long query off early, but the endpoint enforces its own budget and may answer HTTP 504 first.",
+            "type": "integer",
+            "minimum": 5,
+            "maximum": 180
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "additionalProperties": false
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "io.github.cyanheads/openstreetmap-mcp-server",
+    "version": "0.7.3",
+    "remoteUrl": "https://openstreetmap.caseyjhand.com/mcp",
+    "publishedAt": "2026-11-22T14:48:44.675934Z",
+    "fetchedAt": "2026-11-23T16:50:40.239Z",
+    "toolsSha256": "22ef7faaf323b81e7022979adba02d9722729cf4c1f64f8b10723c87b23ea1c6"
+  }
+}

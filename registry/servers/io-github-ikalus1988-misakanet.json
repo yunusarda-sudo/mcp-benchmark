@@ -1,0 +1,270 @@
+{
+  "$schema": "../schema.json",
+  "name": "io.github.Ikalus1988/misakanet",
+  "category": "Developer Tools & VCS",
+  "description": "Failure-memory layer for coding agents: search evidence-rated failure lessons by error text.",
+  "repository": "https://github.com/Ikalus1988/MisakaNet",
+  "tools": [
+    {
+      "name": "misakanet_register",
+      "description": "[ONBOARDING] Get a Bearer token for authenticated access (unlocks misakanet_write_lesson and higher rate limits). Reading needs no registration and has no daily cap: misakanet_search / misakanet_get_lesson work anonymously (a per-address burst limit protects the index; it is a speed limit, not a quota). No GitHub account or email needed, and no personal data is collected — the node is a pseudonym, not an account.\nToken lifetime: valid ~30 days. Pass client_id (a random UUID you generate once and keep private) to get the SAME node_id and token back on every later call and to renew them; without client_id every call creates a new node, which means your reuse evidence, receipts and history start over. `client_id` is a *name*, not the key: to renew a node, send the token it was given as `Authorization: Bearer` along with the same client_id. A renewal that presents only the name still works during a deprecation window, returns `deprecated`, and is refused once strict mode is on (`client_id_proof_required`). A fresh client_id registers as before. Still generate it randomly and keep it private — the name is how the node is found, and the token is how the caller proves it is the one that owns it.\nReturns: object {node_id: string, token: string, registered_at: string, agent_type: string, reused: boolean} — reused=true means an existing node was found for this client_id; reused=false means this call created a new node (so a client_id you expected to be recognised was not, and the identity you had is not attached to this token).\nExample: misakanet_register(agent_type='claude-code', client_id='8f14e45f-2b1c-4f3a-9d2e-7c6b5a4d3e2f')\nOptional referral_code: the code of the node that invited you (`misakanet` referral code, 4-16 letters/digits). Recorded against your node and counted for that code — the only place a referral has ever been recorded, since the invitation otherwise never leaves the inviting machine. Counted once per new node: calling register again with the same client_id renews the same node and does not add to the count.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "agent_type": {
+            "type": "string",
+            "description": "Agent type (e.g. claude-code, codex, cursor, dsh, other). Optional: an omitted value is recorded as \"unknown\", the same default the local surface has always used."
+          },
+          "client_id": {
+            "type": "string",
+            "description": "Optional stable identifier for this client (8-64 chars of A-Z a-z 0-9 . _ : -). Generate it once and reuse it so later calls return the same node instead of a new one."
+          }
+        }
+      }
+    },
+    {
+      "name": "misakanet_search",
+      "description": "[RETRIEVAL / READ] Search MisakaNet's public failure-lesson index by error text, keyword, or topic. This is the primary read path — run it first when you hit an error, before deciding to submit anything. Choosing among the retrieval tools: an actual error or keyword in hand → this one; something risky about to run and no error yet → misakanet_preflight (the third, misakanet_memory_context, is stdio-only and covers the before-you-start case). For a known lesson ID or path, prefer misakanet_get_lesson — it skips ranking and returns the full content. detail controls progressive disclosure: compact (default, ~80 tok/lesson) for broad scans, summary (~200 tok) adds domain/tags/fix, full returns complete lesson data.\nFAQ: results may also include answered questions (type=\"faq\", issue_url + answer) — if a maintainer already answered the same question, the answer surfaces here.\nReturns: object {results: [compact: {id, title, problem, freshness, evidence_level, score} | summary: + {domain, tags, fix} | full: the record], source, detail, query}; `score` is the ranker's relevance for that result and is omitted on the unranked fallback path. On no match: {no_match: true, suggestion, intake}. When the answer is degraded — no index loaded, or the live store refused the read and the corpus came from the snapshot — the response also carries `degraded: true`, `degraded_reasons` and a one-sentence `notice`; read it before concluding that no lesson exists.\nExample: misakanet_search(query='pip install timeout', domain='python', top=3)",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Required redacted error message, keyword, or topic (e.g. 'pip install timeout' or 'DCO sign-off failed')."
+          },
+          "domain": {
+            "type": "string",
+            "description": "Optional domain filter such as devops, python, network, feishu, rag, fanuc, or mcp."
+          },
+          "top": {
+            "type": "integer",
+            "description": "Maximum ranked results to return. Defaults to 5; keep small for MCP context and latency."
+          },
+          "detail": {
+            "type": "string",
+            "enum": [
+              "compact",
+              "summary",
+              "full"
+            ],
+            "description": "Progressive disclosure: compact (default, ~80 tok) includes id/title/problem/freshness/score; summary (~200 tok) adds domain/tags/fix; full returns complete lesson data with path."
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "all",
+              "lessons",
+              "evidence",
+              "related"
+            ],
+            "description": "Filter by kind: 'lessons' (lesson files only), 'evidence' (results with evidence_refs or verification), 'related' (cross-referenced/tag-overlap), 'all' (default). Auto-detected from query intent when omitted."
+          },
+          "bm25_weight": {
+            "type": "number",
+            "description": "Override BM25 keyword weight (0-1). Higher favors exact keyword match. Default: 0.65. All weights must sum to 1.0."
+          },
+          "metadata_weight": {
+            "type": "number",
+            "description": "Override metadata bonus weight (0-1). Higher favors matching domain/tags. Default: 0.20."
+          },
+          "baseline_weight": {
+            "type": "number",
+            "description": "Override baseline score weight (0-1). Higher favors proven/popular lessons. Default: 0.15."
+          }
+        },
+        "required": [
+          "query"
+        ]
+      }
+    },
+    {
+      "name": "misakanet_get_lesson",
+      "description": "[RETRIEVAL / READ] Fetch one public MisakaNet lesson by repository path or lesson ID. Use after misakanet_search returns a promising result to pull the full fix content. Pass `path` or `id` (path wins if both are supplied); at least one is required, and the empty call returns {error, code}. `path` must be a lesson file (lessons/<topic>/<slug>.md) — anything else is refused with code=invalid_lesson_path rather than read.\nReturns: object {path: string, content: string} — lesson markdown body, capped at 5000 chars per call; or {error, code}. The code says which: lesson_not_found (no such lesson — do not retry, search instead), invalid_lesson_path (the argument is not a lesson reference — fix the argument), internal_error (a service fault — retrying is reasonable). When the lesson is longer than the cap the response says so instead of pretending to be complete: {truncated: true, content_length: <full chars>, content_returned: <chars here>, full_content_url: <raw markdown>} — fetch that URL when the tail matters (the cut can fall before the Verification section).\nExample: misakanet_get_lesson(id='auto-merge-ci-pipeline')",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "Lesson path relative to the repository, e.g. lessons/core/auto-merge-ci-pipeline.md — must be a file under lessons/ ending in .md (other repository files are not readable through this tool). Either path or id is required."
+          },
+          "id": {
+            "type": "string",
+            "description": "Lesson ID, usually the filename without .md, e.g. auto-merge-ci-pipeline. Either id or path is required."
+          }
+        }
+      }
+    },
+    {
+      "name": "misakanet_submit_intake",
+      "description": "[OPEN TRIAGE / INTAKE] Use misakanet_submit_intake when you only have a partial failure description or want to ask a question; use misakanet_write_lesson (Bearer required) once you already have structured title/domain/problem/root_cause/fix. submit_intake is open, rate-limited, no Bearer — output is a GitHub issue for maintainer triage, NOT a merged lesson — its labels follow the kind: question → `needs-answer`, proposal → `needs-human-review`, a failure report → `pending-review`.\nRouting: if you are ASKING a how-to / knowledge question (not reporting a failure), set kind=\"question\" — it opens a [Question] issue that maintainers answer/FAQ instead of scoring it as a lesson. If kind is omitted, the server auto-detects question-shaped content (no error/fix/verification + question phrasing).\nPull answers later: questions are answered asynchronously (hours to days). Re-call this tool with the SAME problem text later and follow the returned poll_hint — the dedup response returns the maintainer's answer once it exists ({answered:true, answer}), and once your report has become a lesson it returns a conversion receipt ({converted:true, receipt, events}) naming the lesson, its path and its evidence_level; or re-run misakanet_search on the topic for FAQ hits. Every response also carries dedup_key, and poll_hint.recheck_after_seconds says when re-checking is worth it (21600s for questions, 86400s for failure reports).\nReturns: object {submitted: boolean, intake_id, status, dedup_key, poll_hint, redactions_applied, quality_score, receipt, routing:{kind, auto_detected}, follow_up?}; `surface_report` is the intake's **surface check**: command-shaped tokens in your submission that the public corpus has never indexed (`null` = could not check, `[]` = checked and nothing unknown). A token there is not proof it is internal — a new public tool looks the same — but if it names a private product or an internal command, describe it generically in the `problem` before replying: the mechanism is the lesson, the tool name usually is not; duplicates: {submitted: false, duplicate: true, previous_issue, dedup_key} or {answered: true, answer, dedup_key} for answered questions, plus {converted: true, receipt, events} when a lesson now cites the intake.\nShape: write `problem` as sections — the symptom, then `## Root Cause` and `## Fix` when you know them (`## Verification` if you have it). A report without a root cause is still filed, but it cannot become a lesson automatically: it waits for a person, and the queue is long. **If you do have a root cause or a fix, the submission is lesson-shaped and needs two more fields**, because every new lesson in this corpus must carry them (`lessons/TEMPLATE.md`): `trigger` — the error fragment or keywords a future search would use, <=160 chars, not the title again; and `verification` — how a reader confirms the fix, as a checkable pass/fail. Without them nothing is filed (and nothing is deduped), and the response names what is missing; with them the intake is convertible.\nExample: misakanet_submit_intake(kind='missing_lesson', problem='pip install times out behind corporate proxy', source='claude-code'); misakanet_submit_intake(kind='question', problem='How do I configure MCP auth in production?', source='claude-code')",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "description": "missing_lesson (knowledge gap), stale_lesson (outdated lesson), new_lesson_candidate (new failure mode), question (ask for help), or proposal (a plan / product request that is explicitly not a failure report — decided, never converted to a lesson)."
+          },
+          "problem": {
+            "type": "string",
+            "description": "Required: the symptom first, then `## Root Cause` and `## Fix` sections when known (max 2000 chars). Reports with those sections can become lessons automatically."
+          },
+          "error": {
+            "type": "string",
+            "description": "Optional: short error message (auto-redacted)."
+          },
+          "what_tried": {
+            "type": "string",
+            "description": "Optional: what was attempted."
+          },
+          "fix": {
+            "type": "string",
+            "description": "Optional: how it was resolved."
+          },
+          "trigger": {
+            "type": "string",
+            "description": "Required for a lesson-shaped submission (one with a `## Root Cause`/`## Fix`, or a `fix`): the error fragment or keywords a future search would use, <= 160 chars. This is the lesson's `trigger:` frontmatter (`lessons/TEMPLATE.md`, #1783) — what makes it findable rather than a story about one project. The server refuses a lesson-shaped submission without it instead of filing one the corpus can never accept."
+          },
+          "verification": {
+            "type": "string",
+            "description": "Required for a lesson-shaped submission: how a reader confirms the fix worked, as a checkable pass/fail (<= 200 chars). This becomes the lesson's `verify:` field; without it the claim is unverifiable and the corpus will not take it."
+          },
+          "matched_lesson_id": {
+            "type": "string",
+            "description": "Optional: lesson ID that was checked but didn't help."
+          },
+          "source": {
+            "type": "string",
+            "description": "Calling client: codex, claude-code, cursor, dsh, curl, cindy, or other."
+          },
+          "contributor": {
+            "type": "string",
+            "description": "Optional: contributor identity (GitHub username, agent name, or email). Included in issue body for attribution."
+          },
+          "notify_email": {
+            "type": "string",
+            "description": "Optional: an email for the ANSWER only, and only for kind=\"question\". Ask the user first — never invent it. It is used to send one confirmation message now and, once confirmed, one notification when the answer is ready (the issue URL; never the reporter's text). Omit it and the pull path (me_inbox / FAQ) is unchanged."
+          }
+        },
+        "required": [
+          "problem"
+        ]
+      }
+    },
+    {
+      "name": "misakanet_write_lesson",
+      "description": "[STRUCTURED COMMIT / VALIDATED SUBMISSION] Submit a complete, structured failure lesson (title/domain/problem/root_cause/fix) as a formal submission. Requires authentication (Bearer token in header) — this is the 'validated author' path, not open triage. Output goes through lesson-gate/lint/review and becomes a versioned lesson in the git repo. For quick open reports when you only have a partial failure description, use misakanet_submit_intake instead (no Bearer). Lessons are immutable once merged — corrections go through a new intake/PR, so there is intentionally no misakanet_update_lesson/misakanet_delete_lesson.\nReturns: object {submitted: true, lesson_id: string, status: 'pending_review', quality_score: number, issue_url: string, dedup_key: string}; a repeat of the SAME content returns {submitted: false, duplicate: true, lesson_id, issue_url, dedup_key} instead of filing a second issue; a refused submission returns {submitted: false, error}.\nTimeouts and retries: the outbound call to GitHub has an 8 s deadline, so a submission can time out AFTER its issue was created. The response therefore carries dedup_key (8 chars, derived from title+problem+root_cause+fix), and re-sending identical text is idempotent — you get the original issue back instead of a duplicate. To check its review status without re-submitting, call misakanet_me_inbox(dedup_key=<key>): it reports pending / converted and names the lesson once a maintainer merges it. The key is kept for 7 days; past that a resubmission files a new issue.\nExample: misakanet_write_lesson(title='pip timeout behind proxy', domain='python', problem='...', root_cause='...', fix='...')",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "description": "Short descriptive title."
+          },
+          "domain": {
+            "type": "string",
+            "description": "Domain: devops, python, network, feishu, rag, fanuc, mcp, etc."
+          },
+          "problem": {
+            "type": "string",
+            "description": "What failed (required)."
+          },
+          "root_cause": {
+            "type": "string",
+            "description": "Why it failed (required)."
+          },
+          "fix": {
+            "type": "string",
+            "description": "How to fix it (required)."
+          },
+          "verification": {
+            "type": "string",
+            "description": "How to confirm the fix works."
+          },
+          "tags": {
+            "type": "string",
+            "description": "Comma-separated tags."
+          },
+          "source": {
+            "type": "string",
+            "description": "Source: codex, claude-code, cursor, dsh, curl, cindy, etc."
+          },
+          "contributor": {
+            "type": "string",
+            "description": "Optional: contributor identity (GitHub username, agent name, or email). Included in lesson frontmatter for attribution."
+          }
+        },
+        "required": [
+          "title",
+          "domain",
+          "problem",
+          "root_cause",
+          "fix"
+        ]
+      }
+    },
+    {
+      "name": "misakanet_preflight",
+      "description": "[GUARD / RISK CHECK] Check risk level before executing high-risk operations. Matches agent intent against lesson triggers to provide proactive warnings. Use before RAG builds, WSL/GPU tasks, bulk imports, or any operation that might fail. Choosing among the retrieval tools: no error yet and a task about to start → misakanet_memory_context (stdio-only); an actual error or keyword in hand → misakanet_search; something risky about to run and no error yet → this one, which returns a risk verdict and guards, not lesson content. No side effects — safe to call multiple times before acting. **Open, read-only:** anonymous calls are rate-limited; `misakanet_register` lifts the limit.\nReturns: object {risk_level: 'low'|'medium'|'high', intent, matched_lessons: [{id, title, domain, relevance}], guards: [string]}.\nExample: misakanet_preflight(intent='build RAG pipeline with ChromaDB')",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "intent": {
+            "type": "string",
+            "description": "Required: what you plan to do (e.g. 'build RAG pipeline with ChromaDB')."
+          },
+          "context": {
+            "type": "string",
+            "description": "Optional: additional context about the environment or setup."
+          }
+        },
+        "required": [
+          "intent"
+        ]
+      }
+    },
+    {
+      "name": "misakanet_me_events",
+      "description": "[READ-ONLY EVIDENCE] Return evidence of a lesson being reused. E4 is observed reuse: `search_signals` shows two or more distinct clients actually retrieved the lesson — a count of requests, never of prose. Regression-benchmark citations, helpful votes and a lesson's own `verified by:` line are E3 hints: a citation is sandbox-level evidence, a vote is one person's opinion, and a provenance line is the lesson talking about itself, so none of them can confer E4. Use to check whether a lesson is proven by real usage, not just self-reported. Provide lesson_id or lesson_path — if neither is supplied the tool returns {error}. Semantically 'misakanet_get_my_events' (evidence for the lessons your node submitted/used); kept as me_events for backward compatibility. No auth required (read-only, rate-limited).\nReturns: object {lesson_id, events: [{type, count|queries|sources, evidence_level}], evidence: 'E0'|'E3'|'E4', note}.\nExample: misakanet_me_events(lesson_id='dco-auto-fix-workflow')",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "lesson_id": {
+            "type": "string",
+            "description": "Lesson ID (filename stem), e.g. dco-auto-fix-workflow. Either lesson_id or lesson_path is required."
+          },
+          "lesson_path": {
+            "type": "string",
+            "description": "Optional full path, e.g. lessons/core/dco-auto-fix-workflow.md. Either lesson_id or lesson_path is required."
+          }
+        }
+      }
+    },
+    {
+      "name": "misakanet_me_inbox",
+      "description": "[AGENT READABLE INBOX] Check the status of a previously submitted intake (question, missing_lesson, etc.) without re-submitting. Accepts an intake_id (e.g. 'issue-1234' or '1234') for question intakes, or a dedup_key (the 8-char FNV-1a key from a prior submit_intake response) for any intake. Returns: {status: 'answered'|'pending'|'converted'|'unknown', ...} — 'answered' includes the maintainer's answer, 'converted' includes the lesson_id this intake became, and 'unknown' means the lookup could not determine it, which is not the same answer as 'never happened'. Read-only, rate-limited, no auth required.\nReturns: object {intake_id, status, answer?, lesson_id?, issue_url?, note}.\nExample: misakanet_me_inbox(intake_id='issue-1528') or misakanet_me_inbox(dedup_key='9f8e7d6c')",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "intake_id": {
+            "type": "string",
+            "description": "Question intake ID from a prior submit_intake response, e.g. 'issue-1528' or '1528'; for non-question intakes use dedup_key. Either intake_id or dedup_key is required."
+          },
+          "dedup_key": {
+            "type": "string",
+            "description": "The dedup_key (8-char FNV-1a hex key) from a prior submit_intake response. Either intake_id or dedup_key is required."
+          }
+        }
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "io.github.Ikalus1988/misakanet",
+    "version": "3.20.0",
+    "remoteUrl": "https://misakanet.org/mcp",
+    "publishedAt": "2026-11-23T05:08:20.300992Z",
+    "fetchedAt": "2026-11-23T16:50:40.239Z",
+    "toolsSha256": "d02233f7b7a5e0a9605b85b47054fbacc841fe8682201d8766dedfba25d8e1be"
+  }
+}
