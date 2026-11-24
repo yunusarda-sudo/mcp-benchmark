@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { benchmarkServerTools } from './analyzer.js';
+import { gradeFromScore } from './scoring.js';
 import { compareToolCatalogs } from './compare.js';
 import { generateHtmlReport } from './htmlReport.js';
 import { fixToolCatalog } from './fixer.js';
@@ -545,17 +546,7 @@ async function run() {
     if (options.badge !== undefined) {
         const resolvedBadgePath = path.resolve(options.badge);
         const avgScore = results.length > 0 ? Math.round(results.reduce((sum, r) => sum + r.overallTQI, 0) / results.length) : 0;
-        let grade = 'F';
-        if (avgScore >= 90)
-            grade = 'A+';
-        else if (avgScore >= 80)
-            grade = 'A';
-        else if (avgScore >= 70)
-            grade = 'B';
-        else if (avgScore >= 60)
-            grade = 'C';
-        else if (avgScore >= 50)
-            grade = 'D';
+        const grade = gradeFromScore(avgScore);
         fs.writeFileSync(resolvedBadgePath, generateSvgBadge(avgScore, grade), 'utf-8');
         console.error(`🛡️ SVG quality badge written to ${resolvedBadgePath}`);
     }

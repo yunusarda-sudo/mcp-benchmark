@@ -12,3 +12,4 @@ export * from './configLoader.js';
 export * from './badge.js';
 export * from './costEstimator.js';
 export * from './prComment.js';
+export * from './scoring.js';

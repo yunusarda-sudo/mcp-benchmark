@@ -6,6 +6,30 @@ const FLUFF_REPLACEMENTS = [
     { pattern: /\bplease note that\s+/gi, replacement: '' },
     { pattern: /\bbasically\s+/gi, replacement: '' },
 ];
+function jsonTypeOf(value) {
+    if (value === null)
+        return 'null';
+    if (Array.isArray(value))
+        return 'array';
+    if (typeof value === 'number')
+        return Number.isInteger(value) ? 'integer' : 'number';
+    if (typeof value === 'boolean')
+        return 'boolean';
+    if (typeof value === 'object')
+        return 'object';
+    return 'string';
+}
+/** Infers the JSON Schema type(s) described by enum values; one type, or a list when mixed. */
+export function inferTypeFromEnum(values) {
+    const types = new Set(values.map(jsonTypeOf));
+    if (types.has('integer') && types.has('number'))
+        types.delete('integer');
+    const list = [...types];
+    return list.length === 1 ? list[0] : list;
+}
+function hasCompositionType(prop) {
+    return (Array.isArray(prop.oneOf) && prop.oneOf.length > 0) || (Array.isArray(prop.anyOf) && prop.anyOf.length > 0);
+}
 function capitalizeFirstLetter(str) {
     if (!str)
         return str;
@@ -76,13 +100,33 @@ export function fixToolDefinition(tool) {
                     });
                 }
             }
+            let removedEmptyEnum = false;
             if (Array.isArray(propVal.enum) && propVal.enum.length === 0) {
                 delete propVal.enum;
+                removedEmptyEnum = true;
                 changes.push({
                     toolName,
                     action: 'remove-empty-enum',
                     detail: `Removed empty enum array from property "${propName}"`,
                 });
+            }
+            if (propVal.type === undefined && !hasCompositionType(propVal)) {
+                if (Array.isArray(propVal.enum) && propVal.enum.length > 0) {
+                    propVal.type = inferTypeFromEnum(propVal.enum);
+                    changes.push({
+                        toolName,
+                        action: 'infer-type-from-enum',
+                        detail: `Inferred type ${JSON.stringify(propVal.type)} for property "${propName}" from its enum values`,
+                    });
+                }
+                else if (removedEmptyEnum) {
+                    propVal.type = 'string';
+                    changes.push({
+                        toolName,
+                        action: 'default-type-string',
+                        detail: `Set type "string" on property "${propName}" after removing its empty enum`,
+                    });
+                }
             }
             if (propVal.type === 'array' && !propVal.items) {
                 propVal.items = { type: 'string' };
@@ -98,8 +142,12 @@ export function fixToolDefinition(tool) {
     if (Array.isArray(fixed.inputSchema.required)) {
         const rawRequired = fixed.inputSchema.required;
         const deduplicated = [...new Set(rawRequired)].filter(key => typeof key === 'string');
-        const existingRequired = deduplicated.filter(key => Object.hasOwn(props, key));
-        const removedKeys = deduplicated.filter(key => !Object.hasOwn(props, key));
+        // A closed schema (additionalProperties: false) cannot be satisfied without the property, so
+        // pruning would hide a real contract bug; only open schemas get their dangling names removed.
+        const closed = fixed.inputSchema.additionalProperties === false;
+        const isPrunable = (key) => !Object.hasOwn(props, key) && !closed;
+        const existingRequired = deduplicated.filter(key => !isPrunable(key));
+        const removedKeys = deduplicated.filter(isPrunable);
         if (removedKeys.length > 0) {
             changes.push({
                 toolName,

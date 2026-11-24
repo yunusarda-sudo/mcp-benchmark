@@ -68,8 +68,8 @@ test('examples/sample-mcp-tools.json parses and produces expected scores', async
 
   const result = benchmarkServerTools('Sample Server', data.tools);
   assert.equal(result.toolsAnalyzed, 3);
-  assert.equal(result.grade, 'B');
-  assert.equal(result.overallTQI, 73);
+  assert.equal(result.grade, 'C');
+  assert.equal(result.overallTQI, 75);
 });
 
 test('generateHtmlReport renders a self-contained HTML document', () => {

@@ -1,4 +1,7 @@
 import { FixChange, FixResult, McpToolDefinition } from './types.js';
+type JsonSchemaType = 'string' | 'number' | 'integer' | 'boolean' | 'array' | 'object' | 'null';
+/** Infers the JSON Schema type(s) described by enum values; one type, or a list when mixed. */
+export declare function inferTypeFromEnum(values: unknown[]): JsonSchemaType | JsonSchemaType[];
 /**
  * Automatically cleans up common quality issues in an MCP tool definition:
  * - Ensures inputSchema has type: "object" and defined properties
@@ -13,3 +16,4 @@ export declare function fixToolDefinition(tool: McpToolDefinition): {
  * Fix an entire list of tool definitions and return the cleaned definitions and change log.
  */
 export declare function fixToolCatalog(tools: McpToolDefinition[]): FixResult;
+export {};
