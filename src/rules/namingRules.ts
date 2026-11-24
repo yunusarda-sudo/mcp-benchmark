@@ -50,8 +50,8 @@ export const nameFormatRule: RuleDefinition = {
   name: 'Standard tool name format',
   category: 'naming',
   defaultSeverity: 'warning',
-  description: 'Checks that tool name contains only alphanumeric characters, underscores, and hyphens.',
-  suggestion: 'Use alphanumeric characters, underscores, and hyphens in tool names.',
+  description: 'Checks that tool name contains only alphanumeric characters, underscores, hyphens, and dots.',
+  suggestion: 'Use alphanumeric characters, underscores, hyphens, and dots in tool names.',
   check(ctx: RuleContext): ToolDiagnostic[] {
     const toolName = (ctx.tool.name || '').trim();
     if (toolName && !/^[a-zA-Z0-9_.-]+$/.test(toolName)) {
@@ -60,7 +60,7 @@ export const nameFormatRule: RuleDefinition = {
         severity: 'warning',
         path: '/name',
         message: `Tool name "${toolName}" contains special characters outside [a-zA-Z0-9_.-]`,
-        suggestion: 'Use alphanumeric characters, underscores, and hyphens in tool names.',
+        suggestion: 'Use alphanumeric characters, underscores, hyphens, and dots in tool names.',
       }];
     }
     return [];

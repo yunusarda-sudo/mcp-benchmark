@@ -1,4 +1,5 @@
 import { ALL_RULES, hasValidPropertyType, PROMPT_INJECTION_PATTERNS, FLUFF_PATTERNS, IMPERATIVE_ACTION_VERBS, } from './rules/index.js';
+import { gradeFromScore, tokenEfficiencyScore } from './scoring.js';
 export { hasValidPropertyType, PROMPT_INJECTION_PATTERNS, FLUFF_PATTERNS, IMPERATIVE_ACTION_VERBS, };
 export function estimateTokenCount(text) {
     if (!text)
@@ -65,8 +66,11 @@ export function analyzeToolDefinition(tool, options = {}) {
         }
     }
     else {
-        // Parameterless tool
-        schemaScore += 60;
+        // Parameterless tool: no per-property evidence to reward, so it must not out-score
+        // fully specified schemas. Root type (+20) is already counted above.
+        schemaScore += 30;
+        if (schema.additionalProperties === false)
+            schemaScore += 10;
     }
     // 2. Semantic Density Evaluation (0 - 100)
     let semanticScore = 0;
@@ -93,22 +97,7 @@ export function analyzeToolDefinition(tool, options = {}) {
         }
     }
     // 3. Context Token Footprint Efficiency (0 - 100)
-    let tokenScore = 0;
-    if (tokenCount <= 80) {
-        tokenScore = 100;
-    }
-    else if (tokenCount <= 160) {
-        tokenScore = 85;
-    }
-    else if (tokenCount <= 300) {
-        tokenScore = 70;
-    }
-    else if (tokenCount <= 600) {
-        tokenScore = 50;
-    }
-    else {
-        tokenScore = 30;
-    }
+    const tokenScore = tokenEfficiencyScore(tokenCount, propKeys.length);
     // 4. Security & Prompt-Injection Hygiene
     let securityPenalty = 0;
     for (const pattern of PROMPT_INJECTION_PATTERNS) {
@@ -167,17 +156,7 @@ export function benchmarkServerTools(serverName, tools, options) {
     const avgDensity = Math.round(toolReports.reduce((acc, t) => acc + t.metrics.semanticDensity, 0) / tools.length);
     const avgEfficiency = Math.round(toolReports.reduce((acc, t) => acc + t.metrics.tokenEfficiency, 0) / tools.length);
     const overallTQI = Math.round(toolReports.reduce((acc, t) => acc + t.metrics.overallScore, 0) / tools.length);
-    let grade = 'F';
-    if (overallTQI >= 90)
-        grade = 'A+';
-    else if (overallTQI >= 80)
-        grade = 'A';
-    else if (overallTQI >= 70)
-        grade = 'B';
-    else if (overallTQI >= 60)
-        grade = 'C';
-    else if (overallTQI >= 50)
-        grade = 'D';
+    const grade = gradeFromScore(overallTQI);
     return {
         serverName,
         toolsAnalyzed: tools.length,
