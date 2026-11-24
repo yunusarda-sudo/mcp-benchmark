@@ -100,17 +100,19 @@ $ mcp-benchmark -f examples/sample-mcp-tools.json
 
 | Rank | MCP Server       | Grade | TQI Score | Schema Strictness | Semantic Density | Token Efficiency | Avg Tokens/Tool |
 |:---:|:---|:---:|:---:|:---:|:---:|:---:|:---:|
-| 1    | sample-mcp-tools | B     | 73/100    | 47%               | 90%              | 90%              | 95 tok          |
+| 1    | sample-mcp-tools | C     | 75/100    | 47%               | 90%              | 100%             | 95 tok          |
 
-sample-mcp-tools (Grade: B · TQI: 73/100)
-* search_knowledge_base (96/100) — Estimated tokens: 145
+sample-mcp-tools (Grade: C · TQI: 75/100)
+* search_knowledge_base (100/100) — Estimated tokens: 145
   * No findings.
 * send_notification (68/100) — Estimated tokens: 42
   * WARNING schema.root-type (/inputSchema/type): inputSchema missing root type: "object".
   * WARNING schema.parameter-types (/inputSchema/properties): 2 parameters lack explicit JSON primitive types.
   * WARNING schema.parameter-descriptions (/inputSchema/properties): Multiple input parameters lack descriptions.
-* handle_data (54/100) — Estimated tokens: 98
+* handle_data (58/100) — Estimated tokens: 98
   * WARNING schema.root-type (/inputSchema/type): inputSchema missing root type: "object".
+  * WARNING schema.parameter-types (/inputSchema/properties): 2 parameters lack explicit JSON primitive types.
+  * WARNING schema.parameter-descriptions (/inputSchema/properties): Multiple input parameters lack descriptions.
   * INFO description.filler (/description): Description contains conversational filler phrases.
 ```
 
@@ -145,7 +147,7 @@ The Tool Quality Index (TQI, 0 to 100) is calculated across three primary dimens
 
 * **Schema Strictness (40%):** Validates root `type: "object"`, explicit parameter primitive types, property descriptions, and constraints (enums, array items, regex patterns).
 * **Semantic Density (35%):** Analyzes description clarity, optimal length (25–400 chars), and flags conversational fluff that confuses tool selection.
-* **Token Efficiency (25%):** Measures context consumption per tool to eliminate schema bloat.
+* **Token Efficiency (25%):** Measures context consumption against a per-tool budget of `80 + 40 × property count` tokens, so rich schemas are not punished for the tokens their properties need. Ratio ≤ 1 scores 100, ≤ 1.5 scores 85, ≤ 2 scores 70, ≤ 3 scores 50, above that 30.
 * **Security & Prompt Hygiene (Penalties):** Detects prompt injection overrides, data exfiltration directives, and covert actions hidden inside tool or parameter descriptions.
 
 | Rule ID | Domain | Default Severity | Description |
@@ -160,10 +162,20 @@ The Tool Quality Index (TQI, 0 to 100) is calculated across three primary dimens
 | `description.length` | Semantic | Info | Encourages optimal description length (25–400 characters). |
 | `description.filler` | Semantic | Info | Flags conversational fluff phrases ("this tool allows you to..."). |
 | `security.prompt-hygiene` | Security | Critical | Flags prompt injection, system overrides, and secret exfiltration directives. |
-| `efficiency.context-footprint` | Efficiency | Info | Flags oversized tool definitions exceeding 600 context tokens. |
+| `efficiency.context-footprint` | Efficiency | Info | Flags definitions above 3× their token budget (`80 + 40 × properties`) or above 600 absolute context tokens. |
 | `tool.empty-name` | Naming | Critical | Ensures every tool has a non-empty name. |
 | `tool.name-length` | Naming | Warning | Checks that tool names stay under 64 characters for LLM function calling. |
-| `tool.invalid-name-format` | Naming | Warning | Ensures tool names only use alphanumeric characters, underscores, and hyphens. |
+| `tool.invalid-name-format` | Naming | Warning | Ensures tool names only use alphanumeric characters, underscores, hyphens, and dots. |
+
+Grades: **A+** ≥ 95, **A** ≥ 88, **B** ≥ 78, **C** ≥ 65, **D** ≥ 50, otherwise **F**.
+
+### Scoring changes in 1.4.0
+
+* **Zero-argument tools no longer get free strictness.** A tool with no properties scores `20` for `type: "object"`, `+30` baseline, and `+10` when `additionalProperties: false` (maximum 60), instead of a flat 80.
+* **Token efficiency is relative to schema size** (budget `80 + 40 × properties`) instead of the raw size of the whole definition. The large-definition info diagnostic fires above 3× the budget, or above 600 tokens.
+* **Grade thresholds were raised:** A+ ≥ 95 (was 90), A ≥ 88 (was 80), B ≥ 78 (was 70), C ≥ 65 (was 60). Scores and grades from earlier versions are not comparable.
+* **Security checks are narrower.** Secret disclosure needs a directive to send secrets, credentials or environment data to an external destination; silent execution needs a verb after "silently" or "without notifying the user"; phrases quoted by a detector ("detects ignore previous instructions") are ignored.
+* The browser playground engine is now identical to the CLI and covered by a parity test over the whole registry.
 
 ---
 
@@ -185,16 +197,16 @@ Explore the full interactive leaderboard with sorting, search, and tool inspecti
 <!-- NEW_RELEASES_START -->
 | Published | Server | Grade | TQI | Tools | Data |
 |:---|:---|:---:|---:|---:|:---:|
-| 2026-11-22 | **Zapmatte Green Screen Remover** · `com.zapmatte/green-screen-remover` | `A` | 82 | 6 | [json](registry/servers/com-zapmatte-green-screen-remover.json) |
-| 2026-11-22 | [**GoldSeam**](https://github.com/AcademyOne-Inc/GoldSeam) · `com.ksaworks/goldseam` | `A` | 80 | 115 | [json](registry/servers/com-ksaworks-goldseam.json) |
-| 2026-11-22 | [**Charmotion**](https://github.com/charmotion/charmotion-mcp) · `app.charmotion/charmotion` | `A` | 86 | 16 | [json](registry/servers/app-charmotion-charmotion.json) |
-| 2026-11-22 | [**io.github.cyanheads/internet-archive-mcp-server**](https://github.com/cyanheads/internet-archive-mcp-server) | `B` | 78 | 5 | [json](registry/servers/io-github-cyanheads-internet-archive-mcp-server.json) |
-| 2026-11-22 | [**Syracuse Company News**](https://github.com/1145-am/syracuse-mcp-server) · `io.github.1145-am/syracuse-mcp-server` | `A` | 82 | 4 | [json](registry/servers/io-github-1145-am-syracuse-mcp-server.json) |
-| 2026-11-22 | **ЦПО — оборудование для общепита и торговли, Владивосток и Хабаровск** · `ru.cpo-dv/catalog` | `A` | 89 | 5 | [json](registry/servers/ru-cpo-dv-catalog.json) |
-| 2026-11-22 | [**Kongus Site MCP Server**](https://github.com/Kongus/site) · `io.github.Kongus/site` | `A+` | 92 | 7 | [json](registry/servers/io-github-kongus-site.json) |
-| 2026-11-22 | **Jason Lau Academy** · `academy.jasonlau/classes` | `A+` | 90 | 6 | [json](registry/servers/academy-jasonlau-classes.json) |
-| 2026-11-22 | **AI for alle: priser og fakta om AI-værktøjer** · `dk.ai-foralle/ai-foralle` | `A+` | 94 | 6 | [json](registry/servers/dk-ai-foralle-ai-foralle.json) |
-| 2026-11-22 | [**OptimToken: AI and Compute Economics**](https://github.com/OptimNow/ai-pricing-hub-mcp) · `io.github.OptimNow/ai-pricing-hub` | `B` | 78 | 8 | [json](registry/servers/io-github-optimnow-ai-pricing-hub.json) |
+| 2026-11-22 | **Zapmatte Green Screen Remover** · `com.zapmatte/green-screen-remover` | `A` | 90 | 6 | [json](registry/servers/com-zapmatte-green-screen-remover.json) |
+| 2026-11-22 | [**GoldSeam**](https://github.com/AcademyOne-Inc/GoldSeam) · `com.ksaworks/goldseam` | `B` | 84 | 115 | [json](registry/servers/com-ksaworks-goldseam.json) |
+| 2026-11-22 | [**Charmotion**](https://github.com/charmotion/charmotion-mcp) · `app.charmotion/charmotion` | `B` | 87 | 16 | [json](registry/servers/app-charmotion-charmotion.json) |
+| 2026-11-22 | [**io.github.cyanheads/internet-archive-mcp-server**](https://github.com/cyanheads/internet-archive-mcp-server) | `B` | 81 | 5 | [json](registry/servers/io-github-cyanheads-internet-archive-mcp-server.json) |
+| 2026-11-22 | [**Syracuse Company News**](https://github.com/1145-am/syracuse-mcp-server) · `io.github.1145-am/syracuse-mcp-server` | `B` | 86 | 4 | [json](registry/servers/io-github-1145-am-syracuse-mcp-server.json) |
+| 2026-11-22 | **ЦПО — оборудование для общепита и торговли, Владивосток и Хабаровск** · `ru.cpo-dv/catalog` | `A` | 88 | 5 | [json](registry/servers/ru-cpo-dv-catalog.json) |
+| 2026-11-22 | [**Kongus Site MCP Server**](https://github.com/Kongus/site) · `io.github.Kongus/site` | `B` | 85 | 7 | [json](registry/servers/io-github-kongus-site.json) |
+| 2026-11-22 | **Jason Lau Academy** · `academy.jasonlau/classes` | `A` | 92 | 6 | [json](registry/servers/academy-jasonlau-classes.json) |
+| 2026-11-22 | **AI for alle: priser og fakta om AI-værktøjer** · `dk.ai-foralle/ai-foralle` | `A+` | 98 | 6 | [json](registry/servers/dk-ai-foralle-ai-foralle.json) |
+| 2026-11-22 | [**OptimToken: AI and Compute Economics**](https://github.com/OptimNow/ai-pricing-hub-mcp) · `io.github.OptimNow/ai-pricing-hub` | `B` | 83 | 8 | [json](registry/servers/io-github-optimnow-ai-pricing-hub.json) |
 <!-- NEW_RELEASES_END -->
 
 ### Top Synced Servers
@@ -202,21 +214,21 @@ Explore the full interactive leaderboard with sorting, search, and tool inspecti
 <!-- LEADERBOARD_TOP_START -->
 | # | Server | Grade | TQI | Tools | Tokens/tool | Data |
 |---:|:---|:---:|---:|---:|---:|:---:|
-| 1 | **轻链查券｜多平台商品优惠查询** · `io.github.youxiage/qinglian-coupon` | `A+` | 96 | 1 | 57 | [json](registry/servers/io-github-youxiage-qinglian-coupon.json) |
-| 2 | **KovAPI Docs** · `com.kovapi/docs` | `A+` | 96 | 3 | 108 | [json](registry/servers/com-kovapi-docs.json) |
-| 3 | **Ahmed Shaikh's Blog** · `dev.ahmedshaikh/blog` | `A+` | 96 | 3 | 103 | [json](registry/servers/dev-ahmedshaikh-blog.json) |
-| 4 | **Wallet Doctor** · `com.manhourplan/wallet-doctor` | `A+` | 96 | 5 | 118 | [json](registry/servers/com-manhourplan-wallet-doctor.json) |
-| 5 | **トゥーンエル** · `com.tooneru/manga` | `A+` | 96 | 6 | 128 | [json](registry/servers/com-tooneru-manga.json) |
-| 6 | **Tally food nutrients** · `io.github.martindochamp/tally-foods` | `A+` | 96 | 2 | 136 | [json](registry/servers/io-github-martindochamp-tally-foods.json) |
-| 7 | [**PageDigest — Web Page Summarizer &amp; Structured Extractor**](https://github.com/SuBai520-QWQ/pagedigest) · `io.github.SuBai520-QWQ/pagedigest` | `A+` | 96 | 1 | 134 | [json](registry/servers/io-github-subai520-qwq-pagedigest.json) |
-| 8 | [**Alshhbaa Brassware — نحاسيات الشهباء**](https://github.com/Alshhbaa/alshhbaa-agent-kit) · `com.alshhbaa/server` | `A+` | 96 | 6 | 129 | [json](registry/servers/com-alshhbaa-server.json) |
-| 9 | [**Wisely Arcade Games**](https://github.com/SaqibNaseer404/wiselyarcade) · `io.github.SaqibNaseer404/wiselyarcade` | `A+` | 95 | 6 | 81 | [json](registry/servers/io-github-saqibnaseer404-wiselyarcade.json) |
-| 10 | **stash** · `org.duckdns.agentnotes/stash` | `A+` | 95 | 3 | 105 | [json](registry/servers/org-duckdns-agentnotes-stash.json) |
-| 11 | [**대전한콕 Daejeon Hankok**](https://github.com/iamhuman-cheolheelee/daejeon-hankok-mcp) · `com.ferrorium.daejeon/hankok` | `A+` | 95 | 11 | 124 | [json](registry/servers/com-ferrorium-daejeon-hankok.json) |
-| 12 | [**BPJ First-Party AI Tools**](https://github.com/f-tiger/agi-site) · `io.github.f-tiger/bpj-ai-tools` | `A+` | 95 | 500 | 116 | [json](registry/servers/io-github-f-tiger-bpj-ai-tools.json) |
-| 13 | [**Alshhbaa Brassware Store — نحاسيات الشهباء**](https://github.com/Alshhbaa/alshhbaa-agent-kit) · `com.alshhbaa.shop/server` | `A+` | 95 | 4 | 143 | [json](registry/servers/com-alshhbaa-shop-server.json) |
-| 14 | **SchedJoules Calendars** · `com.schedjoules/calendars` | `A+` | 95 | 3 | 121 | [json](registry/servers/com-schedjoules-calendars.json) |
-| 15 | **SchedJoules Calendars** · `io.github.schedjoules/calendars` | `A+` | 95 | 3 | 121 | [json](registry/servers/io-github-schedjoules-calendars.json) |
+| 1 | **トゥーンエル** · `com.tooneru/manga` | `A+` | 100 | 6 | 128 | [json](registry/servers/com-tooneru-manga.json) |
+| 2 | [**Startups Españolas press desk**](https://github.com/martinschenk/startups-espanolas-mcp) · `es.startups-espanolas/notas-de-prensa` | `A+` | 100 | 5 | 181 | [json](registry/servers/es-startups-espanolas-notas-de-prensa.json) |
+| 3 | **AI Verified** · `io.aiverified/verify-business` | `A+` | 100 | 1 | 162 | [json](registry/servers/io-aiverified-verify-business.json) |
+| 4 | [**Viventii Events, Leisure, POIs, Tickets &amp; Ticket Resale**](https://github.com/borsty2103/viventii-mcp) · `io.github.borsty2103/viventii-mcp` | `A+` | 100 | 16 | 183 | [json](registry/servers/io-github-borsty2103-viventii-mcp.json) |
+| 5 | [**Brazil DANFSe &amp; Tax Reform RTC \(x402\)**](https://github.com/brunopompeo1/brazil-ai-fiscal-apis-x402) · `io.github.brunopompeo1/br-danfse-rtc-x402` | `A+` | 100 | 2 | 946 | [json](registry/servers/io-github-brunopompeo1-br-danfse-rtc-x402.json) |
+| 6 | [**Moedux — Diagnóstico Financeiro**](https://github.com/jhonnysabino/moedux-agent-tools) · `io.github.jhonnysabino/moedux` | `A+` | 100 | 2 | 174 | [json](registry/servers/io-github-jhonnysabino-moedux.json) |
+| 7 | **Tally food nutrients** · `io.github.martindochamp/tally-foods` | `A+` | 100 | 2 | 136 | [json](registry/servers/io-github-martindochamp-tally-foods.json) |
+| 8 | [**Jobs Data MCP \(SteadyScrape\)**](https://github.com/steadyscrape/jobs-data-mcp) · `io.github.steadyscrape/jobs-data-mcp` | `A+` | 100 | 4 | 316 | [json](registry/servers/io-github-steadyscrape-jobs-data-mcp.json) |
+| 9 | [**PageDigest — Web Page Summarizer &amp; Structured Extractor**](https://github.com/SuBai520-QWQ/pagedigest) · `io.github.SuBai520-QWQ/pagedigest` | `A+` | 100 | 1 | 134 | [json](registry/servers/io-github-subai520-qwq-pagedigest.json) |
+| 10 | [**FilmCraft — Video Editing Assistant MCP**](https://github.com/yueliao11/mcp-servers) · `tech.filmcraft/video-editing-assistant` | `A+` | 100 | 3 | 148 | [json](registry/servers/tech-filmcraft-video-editing-assistant.json) |
+| 11 | **Verifera job search** · `uk.co.verifera/job-search` | `A+` | 100 | 1 | 324 | [json](registry/servers/uk-co-verifera-job-search.json) |
+| 12 | [**First names in Switzerland**](https://gitlab.com/opendata.ch/vornamen) · `ch.opendata/vornamen` | `A+` | 99 | 4 | 160 | [json](registry/servers/ch-opendata-vornamen.json) |
+| 13 | **KovAPI Docs** · `com.kovapi/docs` | `A+` | 99 | 3 | 108 | [json](registry/servers/com-kovapi-docs.json) |
+| 14 | **Ahmed Shaikh's Blog** · `dev.ahmedshaikh/blog` | `A+` | 99 | 3 | 103 | [json](registry/servers/dev-ahmedshaikh-blog.json) |
+| 15 | **KOREA WAVE NEWS** · `io.github.lifenplanner/koreawavenews` | `A+` | 99 | 9 | 143 | [json](registry/servers/io-github-lifenplanner-koreawavenews.json) |
 <!-- LEADERBOARD_TOP_END -->
 
 <!-- SYNC_INFO_START -->
