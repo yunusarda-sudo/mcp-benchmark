@@ -20,10 +20,10 @@
 
   // --- Security patterns (identical to src/rules/securityRules.ts) ---
   const DETECTION_CONTEXT = String.raw`(?:detect(?:s|ing|ion)?|catch(?:es|ing)?|flag(?:s|ging)?|scan(?:s|ning)?|block(?:s|ing)?|protect(?:s|ing)?\s+against|guard(?:s|ing)?\s+against|prevent(?:s|ing)?|identif(?:y|ies|ying)|look(?:s|ing)?\s+for|prompt[- ]injection|jailbreak|hijack)`;
-  const NEGATION_BEFORE = String.raw`(?<!\b(?:never|not|n['’]t|than|cannot|without)\s+(?:\w+\s+){0,2})`;
+  const NEGATION_BEFORE = String.raw`(?<!\b(?:never|not|n['’]t|cannot|without)\s+)`;
   const SECRET_NOUN = String.raw`(?<![\w-])(?:secrets?|credentials?|passwords?|(?:(?:api|access|auth|private|ssh)[ _-]?)?(?:keys?|tokens?)|env(?:ironment)?(?:\s+(?:vars?|variables|secrets?))?|\.env)(?![\w-])`;
   const SECRET_GAP = String.raw`[^\n.;()]{0,80}?`;
-  const EXTERNAL_DESTINATION = String.raw`(?:to|at|into|via)\s+(?:https?:\/\/|(?:an?\s+|the\s+|some\s+)?(?:external|remote|third[- ]party|attacker|unknown|untrusted|outside)\b|[\w-]+(?:\.[\w-]+)*\.(?:com|net|org|io|xyz|ru|cn|top|tk)\b)`;
+  const EXTERNAL_DESTINATION = String.raw`(?:to|at|into|via)\s+(?:https?:\/\/|(?:an?\s+|the\s+|some\s+)?(?:external|remote|third[- ]party|attacker|unknown|untrusted|outside)\b|(?:an?\s+|the\s+|some\s+|our\s+|my\s+)?(?:server|endpoint|webhook|url|host|address|domain|collector|ip)\b|\d{1,3}(?:\.\d{1,3}){3}\b|\[?[0-9a-f]{0,4}(?::[0-9a-f]{0,4}){2,7}\]?|[\w-]+(?:\.[\w-]+)+)`;
   const SECRET_DISCLOSURE_SOURCE = String.raw`${NEGATION_BEFORE}\b(?:(?:exfiltrate|leak|forward|transmit|email|upload|send|post|share|copy|steal|harvest)\b${SECRET_GAP}${SECRET_NOUN}${SECRET_GAP}\b${EXTERNAL_DESTINATION}|exfiltrate\b${SECRET_GAP}${SECRET_NOUN})`;
   const SILENT_ADVERB = String.raw`(?:silently|quietly|secretly|covertly|stealthily)`;
   const STEALTH_ADVERB = String.raw`(?:silently|secretly|covertly|stealthily)`;
@@ -33,14 +33,17 @@
     String.raw`\b(?:do|run|act|proceed|continue|execute)\s+(?:it\s+|this\s+|that\s+)?${SILENT_ADVERB}\b`,
     String.raw`\bwithout\s+(?:notifying|telling|informing|alerting|warning)\s+(?:the\s+|your\s+)?(?:user|human|owner)\b`,
     String.raw`\bwithout\s+(?:the\s+)?user(?:['’]s)?\s+(?:knowledge|consent|awareness)\b`,
+    String.raw`\b(?:delete|remove|erase|overwrite|send|upload|post|transmit|forward|share|pay|purchase|buy|transfer|install|execute|modify)\b[^.\n]{0,60}\bwithout\s+(?:asking|prompting|confirming\s+with|checking\s+with)\s+(?:the\s+|your\s+)?(?:user|human|owner)\b`,
   ].join('|');
-  const HIDDEN_ACTION_SOURCE = String.raw`\b(?:do\s+not|don['’]t|never)\s+(?:notify|tell|inform|warn|alert)\s+(?:the\s+|your\s+)?(?:user|human)\b(?=\s*(?:[.,;:!)]|$|\b(?:or|and)\b|\babout\s+(?:this|it|that|these|the\s+(?:action|call|request|change|data|operation|step|result))|\bthat\s+(?:you|this|the\s+(?:tool|action|call))\b))`;
+  // Concealment is about the action itself ("about it", "what this tool does"); plain
+  // accuracy rules ("never tell the user a job is booked unless ...") are not stealth.
+  const HIDDEN_ACTION_SOURCE = String.raw`\b(?:do\s+not|don['’]t|never)\s+(?:notify|tell|inform|warn|alert)\s+(?:the\s+|your\s+)?(?:user|human)\b(?=\s*(?:[.,;:!)]|$|\b(?:or|and|about|what|how|why|which|where|when)\b|\bthat\s+(?:you|this|the\s+(?:tool|action|call))\b))`;
 
   const PROMPT_INJECTION_PATTERNS = [
     {
       code: 'description.prompt-override',
       regex: new RegExp(
-        String.raw`(?<!\b${DETECTION_CONTEXT}\b[^.\n]{0,40})\b(?:ignore|override|bypass)\s+(?:all\s+)?(?:(?:previous|prior|system|chat|base)\s+)*(?:instructions|prompts|rules|context)`,
+        String.raw`(?<!\b${DETECTION_CONTEXT}\b[^.\n:]{0,40})\b(?:ignore|override|bypass)\s+(?:all\s+)?(?:(?:previous|prior|system|chat|base)\s+)*(?:instructions|prompts|rules|context)`,
         'i',
       ),
       severity: 'critical',
