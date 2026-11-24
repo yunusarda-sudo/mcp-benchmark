@@ -1,0 +1,792 @@
+{
+  "$schema": "../schema.json",
+  "name": "com.teppek/teppek",
+  "title": "Teppek",
+  "category": "AI, LLMs & Agents",
+  "description": "Agent-accessible map of global supply & demand: jobs, homes, cars & services your AI can act on",
+  "tools": [
+    {
+      "name": "search_listings",
+      "description": "Find live jobs, homes/rentals, vehicles, or local services NEAR a place or in a city/country on Teppek — use this for natural requests like \"jobs near me\", \"apartments in Berlin\", \"used cars under 10k in Madrid\", \"plumbers nearby\". Worldwide, with fresh, location-aware listings refreshed daily. For MEANING-based or fuzzy natural-language intent (not exact keywords or filters), use search_listings_by_meaning instead. Mechanics: search by vertical (career/real_estate/vehicle/service), role, text, price and a radius around a city (`place`, e.g. \"London\") or a lat/lon point (`near`). The `role` is the perspective you search AS and returns the COUNTERPARTY listings: to find JOB POSTINGS use role=\"career_seeker\" (NOT career_employer, which searches candidate CVs). Always send `role` with text_query: without it the call fails with an error, and vertical alone is not enough. country, category, place and near work without role; a call with none of text_query, country, category, place or near returns nothing. Real estate inventory is currently very limited, so an empty real_estate result does not mean the search failed. The response meta.total is the REAL match count (independent of limit); for a multi-word text_query it counts listings matching ANY of the words, so to count a whole occupation/category include its synonyms (e.g. \"waiter waitress server\"). Use the `country` field for country-scoped totals. NOTE: country-scoped browse currently works for the `career` vertical only — real_estate, vehicle and service must be searched by location — `place` (city name) or `near` {lat,lon,radius_km} (a country filter returns 0 for them). meta.ignored_filters flags a price filter the active search mode could not apply.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "vertical": {
+            "description": "Listing category: career (jobs and CVs), real_estate, vehicle or service. It does not replace `role`: a text_query still needs role. Example: \"vehicle\".",
+            "type": "string",
+            "enum": [
+              "career",
+              "real_estate",
+              "vehicle",
+              "service"
+            ]
+          },
+          "intent_type": {
+            "description": "Which side of the market to return: supply = things on offer (job postings, homes, vehicles, services), demand = people looking for them. Usually unnecessary when role is set. Example: \"supply\".",
+            "type": "string",
+            "enum": [
+              "supply",
+              "demand"
+            ]
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "career_employer",
+              "career_seeker",
+              "estate_buyer",
+              "estate_landlord",
+              "estate_renter",
+              "estate_seller",
+              "service_client",
+              "service_pro",
+              "vehicle_buyer",
+              "vehicle_letter",
+              "vehicle_renter",
+              "vehicle_seller"
+            ],
+            "description": "The perspective you search AS — results are the matching COUNTERPARTY listings, not your own side. To browse JOB POSTINGS use \"career_seeker\" (you act as a job seeker looking for jobs); \"career_employer\" instead searches candidate/CV listings. Likewise: estate_buyer → properties for sale, estate_renter → rentals, vehicle_buyer → vehicles for sale, vehicle_renter → vehicles for rent, service_client → service providers. REQUIRED whenever text_query is sent; also works with near."
+          },
+          "text_query": {
+            "description": "Keywords matched against listing text. Always send `role` with it: without role the search fails or returns nothing, and vertical alone is not enough. Several words match listings containing ANY of them. Example: \"toyota\".",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "country": {
+            "description": "Optional ISO-3166 alpha-2 country code (e.g. \"us\", \"gb\", \"de\") to scope results to one country and get a real total count for it. Career vertical only. Combine with role + text_query to count/list within a country (e.g. role:\"career_seeker\", country:\"de\", text_query:\"kellner\"); use country alone (no text_query) to get the total number of listings in that country.",
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 2
+          },
+          "category": {
+            "description": "Optional PRECISE occupation/category filter using the source category slug (e.g. \"hospitality-catering-jobs\" for waiters/chefs/bar, \"it-jobs\", \"retail-jobs\"). This is far more accurate than keyword text_query for counting an occupation. With no text_query, the response meta.total is the exact count for that category (optionally + country), and meta.categories lists the available category slugs with counts — call once with country alone to discover them.",
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 64
+          },
+          "place": {
+            "description": "City name to search around when you do not have coordinates, e.g. \"London\" or \"São Paulo\". The server converts it to the most populous city with that name and searches within 25 km; meta.resolved_place shows which city was used. If it picked the wrong city, or you need another radius, send `near` instead (near wins when both are sent). Example: \"Berlin\".",
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 100
+          },
+          "near": {
+            "description": "Radius search around a point, and the way to search real_estate, vehicle and service by location (or send `place` with a city name). Works without role or text_query. Example: { \"lat\": 48.85, \"lon\": 2.35, \"radius_km\": 25 }.",
+            "type": "object",
+            "properties": {
+              "lat": {
+                "type": "number",
+                "minimum": -90,
+                "maximum": 90,
+                "description": "Latitude in decimal degrees. Example: 48.85."
+              },
+              "lon": {
+                "type": "number",
+                "minimum": -180,
+                "maximum": 180,
+                "description": "Longitude in decimal degrees. Example: 2.35."
+              },
+              "radius_km": {
+                "default": 10,
+                "description": "Search radius in kilometres, up to 200. Default 10. Example: 25.",
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "maximum": 200
+              }
+            },
+            "required": [
+              "lat",
+              "lon"
+            ],
+            "additionalProperties": false
+          },
+          "price_min": {
+            "description": "Minimum price/salary. CURRENCY-NAIVE: compared as a raw number against the listing price without normalizing currencies, so scope with `country` (or a role/vertical) when mixing regions. If the response cannot apply it, price_min is listed in meta.ignored_filters. Example: 500.",
+            "type": "number",
+            "minimum": 0
+          },
+          "price_max": {
+            "description": "Maximum price/salary. Currency-naive raw-number compare (see price_min). If unapplied it appears in meta.ignored_filters. Example: 2000.",
+            "type": "number",
+            "minimum": 0
+          },
+          "sort_by": {
+            "description": "Optional ordering: \"price_asc\" = cheapest first, \"price_desc\" = most expensive first. Use price_asc for \"cheapest ...\" requests. Omit for the default order. Not applied to `near` searches. Currency-naive raw-number sort, so scope by vertical/country when mixing currencies.",
+            "type": "string",
+            "enum": [
+              "price_asc",
+              "price_desc"
+            ]
+          },
+          "limit": {
+            "default": 20,
+            "description": "Maximum results to return per page, 1-50. Default 20. Example: 10.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50
+          },
+          "offset": {
+            "default": 0,
+            "description": "How many results to skip, for paging, up to 1000. Default 0. Example: 20 returns the second page when limit is 20. meta.has_more says whether more results exist. Past 1000, narrow the search with filters.",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000
+          }
+        },
+        "additionalProperties": false,
+        "required": []
+      }
+    },
+    {
+      "name": "search_listings_by_meaning",
+      "description": "Search Teppek's live listings by MEANING (semantic search backed by a multilingual embedding index). Use it when the user describes what they want in natural language rather than exact keywords — e.g. \"outdoor jobs that don't need a degree\", \"affordable family cars that are good in snow\", \"a cosy studio close to the university\". Returns the closest-matching ACTIVE listings ranked by semantic similarity (each item carries a `score`). Complements search_listings: prefer search_listings for precise keyword/role/country/category/price filtering and exact counts; prefer search_listings_by_meaning when meaning, synonyms, or fuzzy intent matter more than literal terms. Optional `vertical` narrows to career/real_estate/vehicle/service; `place` (a city name) or `near` limits it to one area. Returns at most 20 results per call. Requires the user to be connected to Teppek (authenticated): an anonymous call returns an AUTH_REQUIRED error with an authorize_url.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "query": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 200,
+            "description": "What the user wants, described positively, without the place (e.g. \"waiter job in a restaurant\", \"entry-level job with on-the-job training\", \"cosy family flat near a park\"). Matched by MEANING, not exact keywords. Put the place in `place`, `near` or `country`, not here: a city name in the query does not restrict results. Negations (\"no degree\", \"not a chef\") are NOT understood here — phrase the wish positively and put unwanted words in `exclude`."
+          },
+          "vertical": {
+            "description": "Optional vertical filter (career | real_estate | vehicle | service) applied server-side to the active listings before they are returned.",
+            "type": "string",
+            "enum": [
+              "career",
+              "real_estate",
+              "vehicle",
+              "service"
+            ]
+          },
+          "place": {
+            "description": "City name to search around when you do not have coordinates, e.g. \"London\" or \"São Paulo\". The server converts it to the most populous city with that name and searches within 25 km; meta.resolved_place shows which city was used. If it picked the wrong city, or you need another radius, send `near` instead (near wins when both are sent). Example: \"Berlin\".",
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 100
+          },
+          "near": {
+            "description": "Only listings within radius_km of this point (or send `place` with a city name instead). Ranking by meaning happens inside that area, so \"waiter in Istanbul\" returns Istanbul listings only. Each result then carries distance_km. Example: { \"lat\": 41.01, \"lon\": 28.98, \"radius_km\": 30 }.",
+            "type": "object",
+            "properties": {
+              "lat": {
+                "type": "number",
+                "minimum": -90,
+                "maximum": 90,
+                "description": "Latitude in decimal degrees. Example: 48.85."
+              },
+              "lon": {
+                "type": "number",
+                "minimum": -180,
+                "maximum": 180,
+                "description": "Longitude in decimal degrees. Example: 2.35."
+              },
+              "radius_km": {
+                "default": 25,
+                "description": "Search radius in kilometres, up to 200. Default 25. Example: 30.",
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "maximum": 200
+              }
+            },
+            "required": [
+              "lat",
+              "lon"
+            ],
+            "additionalProperties": false
+          },
+          "country": {
+            "description": "Optional ISO-3166 alpha-2 country code (e.g. \"de\", \"gb\", \"us\") to rank only listings of that country. Known for imported jobs, US vehicles and service listings; listings posted directly on Teppek have no country, so for a city use `place` or `near` instead. Example: \"de\".",
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 2
+          },
+          "exclude": {
+            "description": "Words or phrases the user does NOT want. A listing whose title or description contains one is dropped, unless the word is negated there (\"no degree required\" is kept when excluding \"degree\"). Example for \"jobs that do not need a degree\": query \"entry-level job with training\", exclude [\"degree\", \"diploma\", \"bachelor\", \"PhD\"].",
+            "maxItems": 10,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 2,
+              "maxLength": 60
+            }
+          },
+          "limit": {
+            "default": 20,
+            "description": "Maximum results to return, 1-20. Default 20. Example: 10.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 20
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_listing",
+      "description": "Fetch the full detail of ONE Teppek listing by listing_id. Use it after search_listings or search_listings_by_meaning when the user picks a specific result and wants to see, summarize or compare it — e.g. \"what is the salary on the second job?\", \"compare these two flats\", \"tell me more about that car\". Do not use it to browse or count listings (use search_listings); you also do not need it just to show a result list, because search already returns the summary fields. Returns the listing object: id, title, description, price and currency (jobs also carry salary_min/salary_max), vertical, role, status, lat/lon and location_name, vertical-specific `attributes`, images, expires_at, deep_link (the contact or apply route) and the canonical teppek.com `url` the user can open. An unknown or removed id returns an error (\"Listing not found\") instead of a listing. Read-only and public — no authentication needed.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "listing_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "description": "Listing id, taken from the `id` field of search_listings, search_listings_by_meaning or list_my_listings results. Example: \"adzuna-us-5947308680\"."
+          }
+        },
+        "required": [
+          "listing_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "send_message",
+      "description": "START contact with the owner of a Teppek LISTING on the user's behalf (identified by the listing) — the primary FIRST-CONTACT path (there is no price-offer/accept/reject flow). Opens a private thread with the owner; contact routes through Teppek and never exposes raw personal details. To continue a thread that already EXISTS (you have a thread_id from list_conversations), use reply_to_conversation instead. External-feed listings (e.g. imported jobs) have no Teppek owner, so this returns a redirect to the external application URL instead of creating a thread. Requires the user to be connected to Teppek: an anonymous call returns an AUTH_REQUIRED error with an authorize_url — surface 'Connect with Teppek' to the user, then retry.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "listing_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "description": "Listing id, taken from the `id` field of search_listings, search_listings_by_meaning or list_my_listings results. Example: \"adzuna-us-5947308680\"."
+          },
+          "body": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000,
+            "description": "The message to send to the listing owner, up to 2000 characters. Contact routes through Teppek; raw personal details are never exposed. Example: \"Hello, can I view the flat this week?\""
+          }
+        },
+        "required": [
+          "listing_id",
+          "body"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "create_listing",
+      "description": "Publish a NEW listing on behalf of the user across any of the 4 verticals and 12 roles. Use it only when the user clearly asks to post something — sell or rent out an item or home, advertise a job, publish a CV, offer or request a service. Do not use it to change an existing listing (update_listing, update_listing_images, set_listing_status) or to look for listings (search_listings). Recommended order: get_entitlements → resolve the address to coordinates → optionally request_image_upload and upload each photo → create_listing. `location` must be coordinates ({ lat, lon }) — a free-text address is not accepted, so geocode it first. Publishing needs a free listing slot and may consume credits (included listings cost none); get_entitlements reports the slots, credit cost and balance. A reached limit makes this return an ACTIVE_LISTING_LIMIT_REACHED error carrying a pay_url. Held for AI moderation (status starts \"pending\"); any credits spent are refunded if rejected, EXCEPT for prohibited or spam content, which forfeits the credit. To attach photos, first call request_image_upload for each image, upload the bytes, and pass the returned keys in `images` — a key with no uploaded file fails with image_not_uploaded, and every image is AI-moderated with the text before going live. Requires the user to be connected to Teppek: an anonymous call returns an AUTH_REQUIRED error with an authorize_url — surface \"Connect with Teppek\" to the user, then retry.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "vertical": {
+            "type": "string",
+            "enum": [
+              "career",
+              "real_estate",
+              "vehicle",
+              "service"
+            ],
+            "description": "Listing category, which must match the role: career (jobs and CVs), real_estate, vehicle or service. Example: \"vehicle\"."
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "career_employer",
+              "career_seeker",
+              "estate_buyer",
+              "estate_landlord",
+              "estate_renter",
+              "estate_seller",
+              "service_client",
+              "service_pro",
+              "vehicle_buyer",
+              "vehicle_letter",
+              "vehicle_renter",
+              "vehicle_seller"
+            ],
+            "description": "The listing role — this alone fixes supply vs demand (do not send intent_type). vehicle_letter = you OWN the vehicle and are renting it OUT (lessor); for a user who WANTS to rent a vehicle use vehicle_renter. Likewise estate_landlord (renting out) vs estate_renter (wants to rent), estate_seller vs estate_buyer, career_employer (posting a job) vs career_seeker (a CV), service_pro (offering) vs service_client (wants a service)."
+          },
+          "title": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 200,
+            "description": "Short headline of the listing, 3-200 characters. Example: \"Two-bedroom flat near the river\"."
+          },
+          "price": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Asking price as a plain number in `currency`, with no separators. For a job, use the salary figure and put the range in details.salary_min and details.salary_max. Example: 950."
+          },
+          "currency": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 8,
+            "description": "ISO-4217 currency code matching the listing country (e.g. USD, EUR, GBP, TRY). Required — there is no default, to avoid silently mislabeling non-Turkish listings."
+          },
+          "location": {
+            "type": "object",
+            "properties": {
+              "lat": {
+                "type": "number",
+                "minimum": -90,
+                "maximum": 90,
+                "description": "Latitude in decimal degrees. Example: 48.85."
+              },
+              "lon": {
+                "type": "number",
+                "minimum": -180,
+                "maximum": 180,
+                "description": "Longitude in decimal degrees. Example: 2.35."
+              }
+            },
+            "required": [
+              "lat",
+              "lon"
+            ],
+            "additionalProperties": false,
+            "description": "Listing coordinates as { lat, lon }. A free-text address is NOT accepted — resolve it to coordinates before calling. Example: { \"lat\": 48.85, \"lon\": 2.35 }."
+          },
+          "description": {
+            "description": "Full listing text, up to 5000 characters. Facts that fit a `details` key belong in details as well. Example: \"Bright flat on the third floor, five minutes from the metro.\"",
+            "type": "string",
+            "maxLength": 5000
+          },
+          "details": {
+            "description": "Vertical-specific attributes. Only these keys for the listing's vertical are accepted, with these values; an unknown key or a value outside the listed options is rejected with an error, never dropped. They use the same keys and values as the teppek.com listing form, so the listing shows up under the same map filters. career: organization_name (text), salary_min (number), salary_max (number), empType (one of full_time|part_time|contract|internship|freelance|seasonal), workMode (one of onsite|hybrid|remote), level (one of intern|junior|mid|senior|lead|manager|director), experience (one of none|1-3|4-6|7-10|10+), education (one of any|high_school|associate|bachelor|master), sector (text), skills (text), languages (text). real_estate: transaction_type (sale|rent|hire), property_room_count (text), m2_gross (number), propType (one of apartment|house|land|commercial|other), areaNet (number), buildingAge (one of 0|1-5|6-10|11-20|21+), heating (one of combi|central|ac|floor|stove|none), furnished (one of yes|no), amenities (list of ac|builtin|fireplace|balcony|terrace|ensuite|dressing|steel_door|shutter|storage|accessible|pet_ok), nearby (list of hospital|metro|bus|school|university|mall|coast|park|central), deposit (number), dues (number), floor_number (number), is_student_friendly (boolean), is_credit_eligible (boolean), tapu_status (text). vehicle: transaction_type (sale|rent|hire), brand (text), model (text), vehicle_model_year (number), vehicle_mileage_km (number), body (one of sedan|hatchback|suv|wagon|coupe|truck|van|minivan|convertible|other), fuel (one of petrol|diesel|lpg|electric|hybrid), gear (one of manual|automatic), condition (one of new|used), seller (one of private|dealer|owner), features (list of sunroof|leather_seat|rear_camera|park_sensor|blind_spot|heated_seat|navigation|adaptive_cruise|cruise_control|abs_esp|lane_assist|led_headlight|keyless|auto_ac|power_windows), color (text), damage_status (text), daily_price (number), deposit (number). service: service_category (text), place (one of onsite|online|both), availability (one of same_day|appointment|weekday|weekend|24_7, offering side only), pricingType (one of hourly|fixed|after_survey|project|negotiable, offering side only), radius (one of 5|10|25|50|citywide, offering side only), exp (one of 1-3|4-9|10+, offering side only), features (list of free_survey|material_included|insured|contract|referenced|emergency|certified|guaranteed, offering side only). Example: { \"brand\": \"Toyota\", \"model\": \"Corolla\", \"vehicle_model_year\": 2021, \"vehicle_mileage_km\": 40000, \"fuel\": \"hybrid\", \"gear\": \"manual\", \"body\": \"sedan\", \"features\": [\"rear_camera\", \"navigation\"] }.",
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              ]
+            }
+          },
+          "images": {
+            "description": "Up to 6 image keys returned by request_image_upload, uploaded before this call. Example: [\"7c9e6679-7425-40de-944b-e07fc1f90ae7\"].",
+            "maxItems": 6,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            }
+          }
+        },
+        "required": [
+          "vertical",
+          "role",
+          "title",
+          "price",
+          "currency",
+          "location"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "request_image_upload",
+      "description": "Request a short-lived upload grant for ONE image file — step 1 of attaching a photo (any vertical/role). Use it when the user wants a photo on a new listing (then create_listing) or added to an existing one (then update_listing_images) — call it once per image, maximum 6 images per listing. Do not use it when you only have an image URL: it needs the raw file bytes (JPEG, PNG or WebP, up to 10 MB), and it attaches nothing by itself. Returns { key, upload_url, upload_token, headers_required }: PUT the raw image bytes to upload_url with exactly those headers, then pass the returned key in create_listing's `images` array or update_listing_images' `add` array. A key whose bytes were never uploaded fails later with image_not_uploaded. Images are AI-moderated for content safety before the listing goes live. Requires the user to be connected to Teppek (authenticated).",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "content_type": {
+            "type": "string",
+            "enum": [
+              "image/jpeg",
+              "image/png",
+              "image/webp"
+            ],
+            "description": "MIME type of the image file. Example: \"image/png\"."
+          },
+          "file_size": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 10485760,
+            "description": "Exact file size in bytes, at most 10485760 (10 MB). Example: 2097152 for a 2 MB file."
+          }
+        },
+        "required": [
+          "content_type",
+          "file_size"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "list_my_listings",
+      "description": "List the user's OWN listings (any status), newest first. Resolved from the authenticated agent key — only ever returns this user's listings. Use it when the user asks about their own ads — \"how are my listings doing?\", \"is my car ad live yet?\", \"why was my listing rejected?\" — and to look up the listing_id before update_listing, update_listing_images, set_listing_status, renew_listing or delete_listing. Filter with status: 'pending' = awaiting AI moderation, 'rejected' = declined, 'expired' = lapsed (renew it with renew_listing), 'hidden' = taken offline by the user, 'all' (default) = everything. Do not use it to search other people's listings (use search_listings). Returns { success, listings: [...] }, each with id, title, status, price, currency, vertical and the teppek.com url. Page with limit/offset.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "status": {
+            "default": "all",
+            "description": "Filter YOUR listings by moderation/lifecycle status. Use \"pending\" to see what is awaiting AI moderation, \"rejected\" for declined ones, \"all\" (default) for everything.",
+            "type": "string",
+            "enum": [
+              "active",
+              "pending",
+              "rejected",
+              "draft",
+              "sold",
+              "expired",
+              "hidden",
+              "all"
+            ]
+          },
+          "limit": {
+            "default": 20,
+            "description": "Maximum results to return per page, 1-50. Default 20. Example: 10.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50
+          },
+          "offset": {
+            "default": 0,
+            "description": "How many results to skip, for paging. Default 0. Example: 20 returns the second page when limit is 20.",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "additionalProperties": false,
+        "required": []
+      }
+    },
+    {
+      "name": "list_conversations",
+      "description": "List the user's OWN listing-message conversations — threads they started about someone's listing, and inquiries they received as a listing owner — newest first. Resolved from the authenticated agent key — only ever this user's threads. Use it when the user asks \"do I have new messages?\" or \"who replied about my flat?\", and before replying, to find the thread_id. It has no side effects (nothing is marked read), so prefer it over get_conversation when you only need an inbox overview or unread counts. Returns { threads: [...] }; each thread has id (the thread_id), listing_id, listing_title, counterpart_name, last_message_preview, last_message_at and viewer_state (unread_count, is_listing_owner, is_last_message_mine). Read a thread's full messages with get_conversation. Page with limit/offset.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "limit": {
+            "default": 20,
+            "description": "Maximum results to return per page, 1-50. Default 20. Example: 10.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50
+          },
+          "offset": {
+            "default": 0,
+            "description": "How many results to skip, for paging. Default 0. Example: 20 returns the second page when limit is 20.",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "additionalProperties": false,
+        "required": []
+      }
+    },
+    {
+      "name": "get_conversation",
+      "description": "Read ONE of the user's OWN message conversations by thread_id, including its messages. Use it when the user wants to read a specific conversation (\"what did the landlord say?\") or before writing a reply that depends on what was said. Side effect: incoming messages in the thread are marked read — for a quick inbox overview or unread counts use list_conversations instead, so messages the user has not seen stay unread. Returns { thread, messages: [...] }; each message has id, sender_name, body, created_at, read_at and is_mine (true = sent by the user). Only threads the authenticated user participates in are returned; any other thread_id returns an error. Get the thread_id from list_conversations, then answer with reply_to_conversation.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "thread_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "description": "Conversation id (a UUID), taken from list_conversations. Example: \"3f6c2a1e-8b4d-4c7a-9e21-5d0f7a6b1c34\"."
+          }
+        },
+        "required": [
+          "thread_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_entitlements",
+      "description": "Check whether the user can publish right now. Use it BEFORE create_listing, and whenever the user asks \"how many listings can I still post?\" or \"do I have enough credit?\". When you are about to publish, pass the `role` you will use in create_listing and read can_create_for_role — true means go ahead, false means show the user the pay_url instead of attempting the publish; omit `role` for a general overview. Always returns success, membership_key, included (true = listings are covered by the plan), current_active_listings, credit_cost (credits per listing; null when included), wallet_balance, can_pay_from_wallet, can_create_listing and pay_url (set only when the user cannot publish). Paid plans also return max_active_listings and remaining_slots (null = unlimited). The free tier instead caps supply and demand listings SEPARATELY and returns max_active_listings_per_intent, active_supply, active_demand, can_create_supply and can_create_demand — there, can_create_listing is true if EITHER side has room, which is why passing `role` matters: can_create_for_role answers for the side of that role only. Example: role=\"career_employer\" returning can_create_for_role=false with a pay_url means send the user to that link instead of attempting the publish.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "role": {
+            "description": "Optional. The role you are about to publish as — the same value you will pass to create_listing. When set, the response adds can_create_for_role for exactly that role. Example: \"career_employer\".",
+            "type": "string",
+            "enum": [
+              "career_employer",
+              "career_seeker",
+              "estate_buyer",
+              "estate_landlord",
+              "estate_renter",
+              "estate_seller",
+              "service_client",
+              "service_pro",
+              "vehicle_buyer",
+              "vehicle_letter",
+              "vehicle_renter",
+              "vehicle_seller"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "required": []
+      }
+    },
+    {
+      "name": "update_listing",
+      "description": "Edit fields (title, description, price, currency, location, details) on one of the USER'S OWN listings, identified by listing_id. Use it when the user wants to correct or change an existing listing — \"drop the price to 900\", \"fix the typo in the title\", \"the flat now has 3 rooms\". Do not use it for photos (update_listing_images), for marking sold or hiding (set_listing_status), for extending the expiry (renew_listing), or to change vertical/intent_type/role — those are fixed, so publish a new listing instead. Only the owner can edit. Editing is free (no credit charge). Price/currency-only edits stay live; changing the title, description, location or details re-triggers AI moderation: the listing returns to 'pending' and is offline until cleared — tell the user this before editing a live listing. Returns { success, listing } with the updated listing and its new status.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "listing_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "description": "Listing id, taken from the `id` field of search_listings, search_listings_by_meaning or list_my_listings results. Example: \"adzuna-us-5947308680\"."
+          },
+          "title": {
+            "description": "New headline, 3-200 characters. Returns the listing to \"pending\". Example: \"Two-bedroom flat near the river\".",
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 200
+          },
+          "description": {
+            "description": "New full listing text, up to 5000 characters. Returns the listing to \"pending\". Example: \"Bright flat on the third floor, five minutes from the metro.\"",
+            "type": "string",
+            "maxLength": 5000
+          },
+          "price": {
+            "description": "New asking price as a plain number. To change a salary range use details.salary_min and details.salary_max. Example: 950.",
+            "type": "number",
+            "minimum": 0
+          },
+          "currency": {
+            "description": "New ISO-4217 currency code. Example: \"EUR\".",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 8
+          },
+          "location": {
+            "description": "New listing coordinates { lat, lon }. Moving a listing re-triggers AI moderation — it returns to \"pending\" until cleared. Example: { \"lat\": 48.85, \"lon\": 2.35 }.",
+            "type": "object",
+            "properties": {
+              "lat": {
+                "type": "number",
+                "minimum": -90,
+                "maximum": 90,
+                "description": "Latitude in decimal degrees. Example: 48.85."
+              },
+              "lon": {
+                "type": "number",
+                "minimum": -180,
+                "maximum": 180,
+                "description": "Longitude in decimal degrees. Example: 2.35."
+              }
+            },
+            "required": [
+              "lat",
+              "lon"
+            ],
+            "additionalProperties": false
+          },
+          "details": {
+            "description": "Vertical-specific attributes to change; keys you leave out keep their current value. Only these keys for the listing's vertical are accepted, with these values; an unknown key or a value outside the listed options is rejected with an error, never dropped. They use the same keys and values as the teppek.com listing form, so the listing shows up under the same map filters. career: organization_name (text), salary_min (number), salary_max (number), empType (one of full_time|part_time|contract|internship|freelance|seasonal), workMode (one of onsite|hybrid|remote), level (one of intern|junior|mid|senior|lead|manager|director), experience (one of none|1-3|4-6|7-10|10+), education (one of any|high_school|associate|bachelor|master), sector (text), skills (text), languages (text). real_estate: property_room_count (text), m2_gross (number), propType (one of apartment|house|land|commercial|other), areaNet (number), buildingAge (one of 0|1-5|6-10|11-20|21+), heating (one of combi|central|ac|floor|stove|none), furnished (one of yes|no), amenities (list of ac|builtin|fireplace|balcony|terrace|ensuite|dressing|steel_door|shutter|storage|accessible|pet_ok), nearby (list of hospital|metro|bus|school|university|mall|coast|park|central), deposit (number), dues (number), floor_number (number), is_student_friendly (boolean), is_credit_eligible (boolean), tapu_status (text). vehicle: brand (text), model (text), vehicle_model_year (number), vehicle_mileage_km (number), body (one of sedan|hatchback|suv|wagon|coupe|truck|van|minivan|convertible|other), fuel (one of petrol|diesel|lpg|electric|hybrid), gear (one of manual|automatic), condition (one of new|used), seller (one of private|dealer|owner), features (list of sunroof|leather_seat|rear_camera|park_sensor|blind_spot|heated_seat|navigation|adaptive_cruise|cruise_control|abs_esp|lane_assist|led_headlight|keyless|auto_ac|power_windows), color (text), damage_status (text), daily_price (number), deposit (number). service: service_category (text), place (one of onsite|online|both), availability (one of same_day|appointment|weekday|weekend|24_7, offering side only), pricingType (one of hourly|fixed|after_survey|project|negotiable, offering side only), radius (one of 5|10|25|50|citywide, offering side only), exp (one of 1-3|4-9|10+, offering side only), features (list of free_survey|material_included|insured|contract|referenced|emergency|certified|guaranteed, offering side only). Any details edit returns the listing to \"pending\", so it goes offline until AI moderation clears it. Example: { \"m2_gross\": 90, \"furnished\": \"yes\" }.",
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              ]
+            }
+          }
+        },
+        "required": [
+          "listing_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "delete_listing",
+      "description": "Delete (soft-delete) one of the USER'S OWN listings by listing_id: it leaves the marketplace and cannot be restored through these tools. Use it ONLY when the user clearly asks to delete the listing. If they say \"take it down\", \"pause it\" or \"I sold it\", use set_listing_status (hidden or sold) instead — that is reversible. Ask for confirmation when the request is ambiguous. Only the owner can delete. No credit is refunded — the listing was already published. Returns { success: true } when the listing was deleted.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "listing_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "description": "Listing id, taken from the `id` field of search_listings, search_listings_by_meaning or list_my_listings results. Example: \"adzuna-us-5947308680\"."
+          }
+        },
+        "required": [
+          "listing_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "set_listing_status",
+      "description": "Set the lifecycle status of one of the USER'S OWN listings — the reversible alternative to delete_listing. Use status='sold' when the user says the item is sold, the job is filled or the home is let; 'hidden' to take a live listing offline for a while (\"pause my ad for a week\"); 'active' to bring a hidden listing back. Do not use it to extend an expired listing (use renew_listing), to edit content (update_listing), or to force a pending or rejected listing live: moderation states (pending/rejected) cannot be set, and 'active' only works on a listing that was previously approved and is currently hidden. Free — no credit charge. Returns { success, listing } with the listing's new status.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "listing_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "description": "Listing id, taken from the `id` field of search_listings, search_listings_by_meaning or list_my_listings results. Example: \"adzuna-us-5947308680\"."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "hidden",
+              "sold"
+            ],
+            "description": "sold = mark the listing sold/closed; hidden = temporarily take a live listing offline; active = re-show a listing that is currently hidden (only works if it was previously approved). Cannot set moderation states."
+          }
+        },
+        "required": [
+          "listing_id",
+          "status"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "renew_listing",
+      "description": "Update the expiry of one of the USER'S OWN listings (renew it): the listing runs for another 30 days from now (native listings lapse ~30 days after posting). Use it when the user wants to keep an ad running (\"extend my listing\", \"my ad expired, put it back\") or when list_my_listings shows it as expired. Renewing an expired listing returns it to active. Do not use it on a pending, rejected, sold or draft listing — the call fails: a pending one only needs moderation to finish, a rejected one needs its content changed with update_listing, and a sold one is closed. Free — no credit charge. Returns { success, listing } with the renewed listing.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "listing_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "description": "Listing id, taken from the `id` field of search_listings, search_listings_by_meaning or list_my_listings results. Example: \"adzuna-us-5947308680\"."
+          }
+        },
+        "required": [
+          "listing_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "reply_to_conversation",
+      "description": "Reply in an EXISTING message thread by thread_id — the message goes to the other participant. Use this to follow up in a conversation that already exists, whether the user is the listing owner answering an inquiry or the inquirer following up — e.g. \"tell the buyer the car is still available\" or \"ask the landlord if I can view it on Saturday\". For the FIRST message to a listing found in search (you have a listing_id but no thread yet), use send_message instead. Contact routes through Teppek; raw personal details are never exposed. Find thread_id via list_conversations / get_conversation. Returns { thread, message }: the message just sent (id, body, created_at) and the updated thread. Requires the user to be connected to Teppek (authenticated); the body limit is 2000 characters, and a sent message cannot be undone.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "thread_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "description": "Conversation id (a UUID), taken from list_conversations. Example: \"3f6c2a1e-8b4d-4c7a-9e21-5d0f7a6b1c34\"."
+          },
+          "body": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000,
+            "description": "The reply to post into the conversation, up to 2000 characters. Contact routes through Teppek; raw personal details are never exposed. Example: \"That time works for me.\""
+          }
+        },
+        "required": [
+          "thread_id",
+          "body"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "update_listing_images",
+      "description": "Add and/or remove photos on one of the USER'S OWN existing listings (max 6 total). Use it when the user wants to add, replace or remove photos on a listing that already exists — to replace a photo, remove the old key and add the new one in the same call. Do not use it while publishing a new listing (pass images to create_listing instead) or to change text fields (update_listing). First call request_image_upload for each new image and upload the bytes, then pass the returned keys in `add`; a key with no uploaded file fails with image_not_uploaded. Adding any image re-triggers AI moderation — the listing returns to 'pending' until the new images are cleared. Removing images leaves a live listing live; on a pending or rejected listing it requests a new moderation verdict. Free (no credit). Returns { success, listing } with the updated listing and its status.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "listing_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "description": "Listing id, taken from the `id` field of search_listings, search_listings_by_meaning or list_my_listings results. Example: \"adzuna-us-5947308680\"."
+          },
+          "add": {
+            "description": "Image keys from request_image_upload to attach (upload the bytes first). Each newly-added image is AI-moderated with the listing, so the listing returns to \"pending\" until cleared. Max 6 images total on a listing. Example: [\"7c9e6679-7425-40de-944b-e07fc1f90ae7\"].",
+            "maxItems": 6,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            }
+          },
+          "remove": {
+            "description": "Image keys currently on the listing to detach. Removing alone does not trigger moderation. Example: [\"7c9e6679-7425-40de-944b-e07fc1f90ae7\"].",
+            "maxItems": 6,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            }
+          }
+        },
+        "required": [
+          "listing_id"
+        ],
+        "additionalProperties": false
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "com.teppek/teppek",
+    "version": "1.5.0",
+    "remoteUrl": "https://mcp.teppek.com/mcp",
+    "publishedAt": "2026-11-24T08:01:33.597608Z",
+    "fetchedAt": "2026-11-24T12:15:48.059Z",
+    "toolsSha256": "ee8e5ab3662fd45b3dbde9ff92753a3578ed7a68d0d129fd5d710c33f6291a6c"
+  }
+}

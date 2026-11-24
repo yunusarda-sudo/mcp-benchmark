@@ -1,0 +1,658 @@
+{
+  "$schema": "../schema.json",
+  "name": "io.github.cyanheads/pubchem-mcp-server",
+  "category": "Developer Tools & DevOps",
+  "description": "Search PubChem compounds, properties, safety data, bioactivity, and cross-references.",
+  "repository": "https://github.com/cyanheads/pubchem-mcp-server",
+  "tools": [
+    {
+      "name": "pubchem_search_compounds",
+      "description": "Search PubChem for chemical compounds by identifier (name, SMILES, InChI, or InChIKey, up to 25 per call), molecular formula in Hill notation, substructure or superstructure containment, 2D Tanimoto similarity, the compounds a bioassay (AID) found active or tested, or an accurate mass or molecular weight range. Returns a page of CIDs, each similarity hit with its Tanimoto score — reach matches past maxResults with offset. Optionally hydrate results with properties to avoid a follow-up pubchem_get_compound_details call.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "searchType": {
+            "type": "string",
+            "enum": [
+              "identifier",
+              "formula",
+              "substructure",
+              "superstructure",
+              "similarity",
+              "assay",
+              "mass"
+            ],
+            "description": "Search strategy; each mode needs its own fields. \"identifier\": name/SMILES/InChI/InChIKey lookup — requires identifierType and identifiers. \"formula\": molecular formula — requires formula. \"substructure\": find compounds containing the query as a substructure. \"superstructure\": find compounds that are themselves substructures of the query. \"similarity\": 2D Tanimoto similarity to the query, each hit with its score — hits come in PubChem's order, not ranked by score, so raise threshold to narrow to closer analogs. substructure, superstructure, and similarity require query and queryType. \"assay\": compounds tested in a PubChem bioassay — requires aid; activeOnly (default true) keeps only the compounds the assay marked active. \"mass\": compounds whose monoisotopic mass, exact mass, or molecular weight lies in an inclusive range — requires massType, massMin, and massMax; matches come in PubChem's order, not ranked by closeness to a target mass."
+          },
+          "identifierType": {
+            "description": "Required for identifier search. Type of chemical identifier: \"name\", \"smiles\", \"inchi\" (a full InChI string, case-sensitive), or \"inchikey\".",
+            "type": "string",
+            "enum": [
+              "name",
+              "smiles",
+              "inchi",
+              "inchikey"
+            ]
+          },
+          "identifiers": {
+            "description": "Required for identifier search. Array of identifiers to resolve. The per-call cap is 25: the first 25 are looked up, and any past that (up to 1000 in all) are returned in unprocessed, in input order, and reported in cappedInputs. Examples: [\"aspirin\", \"ibuprofen\"] for name, [\"CC(=O)OC1=CC=CC=C1C(=O)O\"] for SMILES, [\"InChI=1S/C9H8O4/c1-6(10)13-8-5-3-2-4-7(8)9(11)12/h2-5H,1H3,(H,11,12)\"] for inchi (sent exactly as written, case kept), [\"BSYNRYMUTXBXSQ-UHFFFAOYSA-N\"] for inchikey (27-char block format; uppercased before lookup, any case accepted).",
+            "minItems": 1,
+            "maxItems": 1000,
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "formula": {
+            "description": "Required for formula search. Molecular formula in Hill notation (e.g. \"C6H12O6\", \"CaH2O2\").",
+            "type": "string"
+          },
+          "allowOtherElements": {
+            "default": false,
+            "description": "Formula search only. When true, includes compounds with additional elements beyond the formula.",
+            "type": "boolean"
+          },
+          "query": {
+            "description": "Required for substructure/superstructure/similarity searches. A SMILES string (e.g. \"CC(=O)O\") or PubChem CID as a string from 1 to 2147483647 (e.g. \"2244\").",
+            "type": "string"
+          },
+          "queryType": {
+            "description": "Required for structure/similarity searches. Format of the query: \"smiles\" or \"cid\".",
+            "type": "string",
+            "enum": [
+              "smiles",
+              "cid"
+            ]
+          },
+          "threshold": {
+            "default": 90,
+            "description": "Similarity search only. Minimum Tanimoto similarity (70-100). 90+ for close analogs, 70-80 for scaffold hops. Hits come in PubChem's order, not ranked by score, so raising threshold is how to narrow a page to closer analogs. 100 means a fingerprint identical to the query's, not an identical compound: isotopologues and some positional isomers match at 100. Default: 90.",
+            "type": "number",
+            "minimum": 70,
+            "maximum": 100
+          },
+          "aid": {
+            "description": "Required for assay search. PubChem Assay ID (AID) whose compounds to list, from 1 to 2147483647, e.g. 1000. Find AIDs for a biological target with pubchem_search_assays.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "activeOnly": {
+            "default": true,
+            "description": "Assay search only. When true (default), lists only the compounds the assay marked active; false lists every compound it tested.",
+            "type": "boolean"
+          },
+          "massType": {
+            "description": "Required for mass search. The mass that massMin and massMax bound: \"monoisotopic_mass\" (from each element's most abundant isotope; the usual high-resolution MS target), \"exact_mass\" (the most likely isotopic composition, which gives the most intense peak; differs from monoisotopic_mass for compounds rich in Cl or Br and for molecules of about 90 or more carbons), or \"molecular_weight\" (isotope-averaged, in g/mol).",
+            "type": "string",
+            "enum": [
+              "monoisotopic_mass",
+              "exact_mass",
+              "molecular_weight"
+            ]
+          },
+          "massMin": {
+            "description": "Required for mass search. Lower bound of the mass window, inclusive, in daltons (g/mol for molecular_weight): 0 or more, and no greater than massMax. E.g. 180.063.",
+            "type": "number",
+            "minimum": 0
+          },
+          "massMax": {
+            "description": "Required for mass search. Upper bound of the mass window, inclusive, in daltons (g/mol for molecular_weight); equal to massMin for one exact value. E.g. 180.064. PubChem counts at most 1000000 matches in a window and can time out on one hundreds of Da wide; narrow the window if either happens.",
+            "type": "number",
+            "minimum": 0
+          },
+          "offset": {
+            "default": 0,
+            "description": "Zero-based index of the first CID to return. Pass the nextOffset from a previous call to read the following page. Identifier lookups resolve every match up front, so paging them is free, and assay and mass searches fetch only the requested page, so all three page to the end of their matches; a mass search reaches the first 1000000, the most PubChem counts. Formula, substructure, superstructure, and similarity searches have to ask PubChem for offset + maxResults records to reach a page, so deep pages cost progressively more upstream: those four accept an offset up to 10000. Default: 0.",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "maxResults": {
+            "default": 20,
+            "description": "Maximum CIDs to return per page. The per-call cap is 200: a larger value (up to 1000) returns a page of 200 and is reported in cappedInputs. Use offset to reach matches past this page. Default: 20.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000
+          },
+          "properties": {
+            "description": "Optional: fetch these properties for each result, avoiding a follow-up details call. E.g. [\"MolecularFormula\", \"MolecularWeight\", \"CanonicalSMILES\"].",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "MolecularFormula",
+                "MolecularWeight",
+                "CanonicalSMILES",
+                "IsomericSMILES",
+                "InChI",
+                "InChIKey",
+                "IUPACName",
+                "Title",
+                "XLogP",
+                "ExactMass",
+                "MonoisotopicMass",
+                "TPSA",
+                "Complexity",
+                "Charge",
+                "HBondDonorCount",
+                "HBondAcceptorCount",
+                "RotatableBondCount",
+                "HeavyAtomCount",
+                "IsotopeAtomCount",
+                "AtomStereoCount",
+                "DefinedAtomStereoCount",
+                "UndefinedAtomStereoCount",
+                "BondStereoCount",
+                "DefinedBondStereoCount",
+                "UndefinedBondStereoCount",
+                "CovalentUnitCount",
+                "Volume3D"
+              ]
+            }
+          }
+        },
+        "required": [
+          "searchType"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "pubchem_get_compound_details",
+      "description": "Get detailed compound information by CID. Returns physicochemical properties (molecular weight, SMILES, InChIKey, XLogP, TPSA, etc.), optionally with a textual description (pharmacology, mechanism, therapeutic use), known synonyms, drug-likeness assessment (Lipinski/Veber rules), and/or pharmacological classification (FDA classes, MeSH classes, ATC codes). Fetches up to 100 CIDs per call; CIDs past that are returned in unprocessed for a follow-up call.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "cids": {
+            "description": "PubChem Compound IDs to fetch. The per-call cap is 100: the first 100 are fetched, and any past that (up to 1000 in all) are returned in unprocessed, in input order, and reported in cappedInputs. Resolve from names/SMILES with pubchem_search_compounds.",
+            "minItems": 1,
+            "maxItems": 1000,
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            }
+          },
+          "properties": {
+            "description": "Properties to retrieve. Defaults to a core set: Title (PubChem's display name: the common name when the record has one, otherwise often the IUPAC name or a depositor ID; absent on some records), MolecularFormula, MolecularWeight, IUPACName, CanonicalSMILES, IsomericSMILES, InChIKey, XLogP, TPSA, HBondDonorCount, HBondAcceptorCount, RotatableBondCount, HeavyAtomCount, Charge, Complexity.",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "MolecularFormula",
+                "MolecularWeight",
+                "CanonicalSMILES",
+                "IsomericSMILES",
+                "InChI",
+                "InChIKey",
+                "IUPACName",
+                "Title",
+                "XLogP",
+                "ExactMass",
+                "MonoisotopicMass",
+                "TPSA",
+                "Complexity",
+                "Charge",
+                "HBondDonorCount",
+                "HBondAcceptorCount",
+                "RotatableBondCount",
+                "HeavyAtomCount",
+                "IsotopeAtomCount",
+                "AtomStereoCount",
+                "DefinedAtomStereoCount",
+                "UndefinedAtomStereoCount",
+                "BondStereoCount",
+                "DefinedBondStereoCount",
+                "UndefinedBondStereoCount",
+                "CovalentUnitCount",
+                "Volume3D"
+              ]
+            }
+          },
+          "includeDescription": {
+            "default": false,
+            "description": "Include textual descriptions (pharmacology, mechanism, therapeutic use) attributed by source. Well-studied compounds have many overlapping summaries — paged via descriptionOffset/maxDescriptions. Fetched only for the first 10 CIDs in the batch; remaining CIDs return without descriptions and are listed in the response's skippedCids.",
+            "type": "boolean"
+          },
+          "descriptionOffset": {
+            "default": 0,
+            "description": "Zero-based index of the first description to return within each compound's description list. The same offset is applied to every compound in the batch. Pass the nextDescriptionOffset from a previous call to read the following page. Default: 0.",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "maxDescriptions": {
+            "default": 3,
+            "description": "Max number of distinct description entries per compound per page. The per-call cap is 20: a larger value (up to 1000) returns 20 per compound and is reported in cappedInputs. PubChem returns near-duplicate summaries from many depositors; duplicates are collapsed before this cap applies. Default: 3.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000
+          },
+          "includeSynonyms": {
+            "default": false,
+            "description": "Fetch known names and synonyms (trade names, systematic names, registry numbers), paged via synonymOffset/maxSynonyms. Fetched for every found CID in the batch. Slower for large CID lists.",
+            "type": "boolean"
+          },
+          "synonymOffset": {
+            "default": 0,
+            "description": "Zero-based index of the first synonym to return within each compound's synonym list. The same offset is applied to every compound in the batch. Pass the nextSynonymOffset from a previous call to read the following page. Default: 0.",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "maxSynonyms": {
+            "default": 20,
+            "description": "Max synonyms returned per compound per page. The per-call cap is 100: a larger value (up to 1000) returns 100 per compound and is reported in cappedInputs. PubChem lists hundreds for common drugs; use synonymOffset to reach the ones past this page. Default: 20.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000
+          },
+          "includeDrugLikeness": {
+            "default": false,
+            "description": "Compute drug-likeness assessment: Lipinski Rule of Five (MW, XLogP, HBD, HBA) and Veber rules (TPSA, rotatable bonds). Computed from the returned properties, so it adds no latency.",
+            "type": "boolean"
+          },
+          "includeClassification": {
+            "default": false,
+            "description": "Include pharmacological classification: FDA Established Pharmacologic Classes, mechanisms of action, MeSH classes, and ATC codes. Fetched only for the first 10 CIDs in the batch; remaining CIDs return without classification and are listed in the response's skippedCids.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "cids"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "pubchem_get_compound_image",
+      "description": "Fetch a 2D structure diagram (PNG image) for a compound by CID.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "cid": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647,
+            "description": "PubChem Compound ID. Resolve from name/SMILES with pubchem_search_compounds."
+          },
+          "size": {
+            "default": "large",
+            "description": "Image size: \"small\" (100x100) or \"large\" (300x300). Default: \"large\".",
+            "type": "string",
+            "enum": [
+              "small",
+              "large"
+            ]
+          }
+        },
+        "required": [
+          "cid"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "pubchem_get_compound_3d_structure",
+      "description": "Get one 3D conformer of a compound — atomic coordinates and bonds — for one CID: its default conformer, or the one conformerId names. format=\"json\" (default) returns atoms and bonds parsed into structured fields; format=\"sdf\" returns the raw V2000 SDF text for passthrough to docking, rendering, or conformer tools. Optionally lists the compound's other conformer IDs, each one a value for conformerId. Not every compound has computed 3D coordinates (large molecules, mixtures, and some salts do not).",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "cid": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647,
+            "description": "PubChem Compound ID. Resolve from name/SMILES with pubchem_search_compounds."
+          },
+          "conformerId": {
+            "description": "Fetch this conformer of the compound instead of its default: a conformer ID from alternateConformerIds (includeAlternateConformerIds: true), 16 hexadecimal digits whose first 8 are the CID in hexadecimal (e.g. \"000008C40000000B\" for CID 2244). Either case is accepted. Omit, or leave blank, for the default conformer.",
+            "type": "string"
+          },
+          "format": {
+            "default": "json",
+            "description": "Output format. \"json\" (default) returns parsed atoms and bonds. \"sdf\" returns the raw V2000 SDF text for passthrough to other tools.",
+            "type": "string",
+            "enum": [
+              "sdf",
+              "json"
+            ]
+          },
+          "includeAlternateConformerIds": {
+            "default": false,
+            "description": "List the IDs of the compound's other computed conformers, each one a value for conformerId. Slower than the default response. Default: false.",
+            "type": "boolean"
+          },
+          "maxAtoms": {
+            "description": "Cap the atoms returned in the format=\"json\" preview. atomCount always reports the full total; omitted rows are disclosed via the truncated/shownAtoms enrichment. Defaults to the first 200 atoms.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "maxBonds": {
+            "description": "Cap the bonds returned in the format=\"json\" preview. bondCount always reports the full total; omitted rows are disclosed via the truncated/shownBonds enrichment. Defaults to the first 200 bonds.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "includeRawSdf": {
+            "default": false,
+            "description": "For format=\"sdf\", return the complete raw V2000 SDF even when it exceeds the safe line cap. Default false: an SDF longer than 500 lines is line-capped with disclosure. No effect when format=\"json\".",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "cid"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "pubchem_get_compound_xrefs",
+      "description": "Get external database cross-references for a compound: PubMed citations, patent IDs, gene associations, CAS and EC numbers with the number of source records that deposited each, other registry numbers, and taxonomy IDs. Results are paged per type — capped at maxPerType with the total count reported; reach the IDs past a page with offset. PubMed IDs come highest (most recently assigned) first and the other numeric types in ascending order; CAS and EC come most-attested first; the other string IDs keep PubChem's order. A type that fails to load is named in failedTypes while the others still return; the call fails only when a type fails and no type other than ProteinGI (which PubChem no longer serves) loads.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "cid": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647,
+            "description": "PubChem Compound ID. Resolve from name/SMILES with pubchem_search_compounds."
+          },
+          "xrefTypes": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "RegistryID",
+                "RN",
+                "PubMedID",
+                "PatentID",
+                "GeneID",
+                "ProteinGI",
+                "TaxonomyID",
+                "CAS",
+                "EC"
+              ]
+            },
+            "description": "Cross-reference types to retrieve. String IDs: CAS (the CAS Registry Numbers deposited for this compound, most-attested first, each with the number of source records that deposited it — the first is the value most source records agree on), EC (European Community numbers, ordered and counted the same way), RN (every registry number PubChem associates with the record, unranked: the CAS number alongside deprecated and related CAS RNs, CAS RNs of other substances mapped to the structure, and EC numbers), RegistryID (DSSTox/EPA registry numbers), PatentID. Numeric IDs: PubMedID, GeneID (NCBI Gene — use it for gene/protein associations), ProteinGI (legacy NCBI Protein GI; PubChem currently returns no data for it, so use GeneID instead), TaxonomyID."
+          },
+          "offset": {
+            "default": 0,
+            "description": "Zero-based index of the first ID to return within each xref type. The same offset is applied to every requested type. Pass the nextOffset from a previous call to read the following page. Default: 0.",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "maxPerType": {
+            "default": 50,
+            "description": "Max IDs to return per xref type per page. The per-call cap is 500: a larger value (up to 1000) returns 500 per type and is reported in cappedInputs. A compound may have thousands of PubMed references; use offset to reach the ones past this page. Total count always reported. Default: 50.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000
+          }
+        },
+        "required": [
+          "cid",
+          "xrefTypes"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "pubchem_get_compound_safety",
+      "description": "Get GHS (Globally Harmonized System) hazard classification and safety data for one or more compounds by CID. Returns signal word, pictograms, hazard statements (H-codes), and precautionary statements (P-codes) per compound, merged across sources, plus each source's own classification — its signal word, pictograms, H-codes with ECHA notifier agreement percentages, and notification counts — since sources often disagree. Reports ECHA \"Not Classified\" verdicts as their own status.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "cids": {
+            "description": "PubChem Compound IDs to fetch safety data for. The per-call cap is 25: the first 25 are looked up, and any past that (up to 1000 in all) are returned in unprocessed, in input order, and reported in cappedInputs. Resolve from names/SMILES with pubchem_search_compounds.",
+            "minItems": 1,
+            "maxItems": 1000,
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            }
+          }
+        },
+        "required": [
+          "cids"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "pubchem_get_bioactivity",
+      "description": "Get a compound's bioactivity profile: which assays tested it, activity outcomes (Active/Inactive/Inconclusive), target identifiers (NCBI Gene ID, UniProt/GenBank accession), quantitative values (IC50, EC50, Ki, etc.), each assay's type (confirmatory, screening, summary, other), and the PubMed IDs it cites. Filter by outcome, a specific molecular target (NCBI Gene ID or protein accession), assay type, and/or activity name (e.g. IC50) to focus the profile, and rank by potency within the named measurements — e.g. \"is this compound active against target T in confirmatory assays?\" or \"what is its lowest IC50 against T?\".",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "cid": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647,
+            "description": "PubChem Compound ID. Resolve from name/SMILES with pubchem_search_compounds."
+          },
+          "outcomeFilter": {
+            "default": "all",
+            "description": "Filter by activity outcome against each assay's reported target: the target a target filter matched, else the first target the assay lists. For a multi-target assay, outcomes against its other targets (in otherTargets) do not count. \"active\" keeps assays where that outcome is Active — most useful for understanding biological profile. Default: \"all\".",
+            "type": "string",
+            "enum": [
+              "active",
+              "inactive",
+              "all"
+            ]
+          },
+          "targetGeneId": {
+            "description": "Filter to assays against this NCBI Gene ID (1 to 2147483647), including assays recorded only under a protein accession this compound's assay table pairs with the Gene ID (e.g. 5742 also reaches rows carrying only P23219 when another row pairs the two). Obtain Gene IDs from the GeneID:N in a pubchem_get_compound_interactions target entry's partner (kinds: [\"target\"]) or the targetGeneId field of a result here without a target filter (rows from untargeted screens carry none). Combine with outcomeFilter=\"active\" to answer \"is this compound active against target T?\".",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "targetAccession": {
+            "description": "Filter to assays against this target protein accession (UniProt/RefSeq/GenBank/PDB chain), e.g. \"P35354\", including assays recorded only under a Gene ID or another accession this compound's assay table pairs with it. Uppercased before matching; a PDB chain ID (the \"A\" in \"1ZHH_A\") is kept as given. With targetGeneId, both must name the same target — when the table ties them to different targets, nothing matches. Obtain accessions from an assay's targets in pubchem_get_summary (entityType \"assay\"), the accession:X in a pubchem_get_compound_interactions target entry's partner, or the targetAccession field of a result here without a target filter.",
+            "type": "string"
+          },
+          "assayType": {
+            "description": "Keep only assays of these types: \"confirmatory\" (dose-response and other follow-up assays), \"screening\" (primary high-throughput screens), \"summary\" (records summarizing a project's assays), \"other\". Matched against PubChem's Assay Type regardless of case; an assay with no recorded type matches none. Combines with outcomeFilter and the target filters — an assay must pass all of them. Omit to keep every type.",
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "confirmatory",
+                "screening",
+                "summary",
+                "other"
+              ]
+            }
+          },
+          "activityName": {
+            "description": "Keep only assays whose reported target has an activity value with one of these measurement names (e.g. [\"IC50\"], [\"Ki\", \"Kd\"]), and narrow that target's activityValues to the matching values; otherTargets are left as they are. Names match whole and regardless of case (\"ic50\" matches \"IC50\", not \"IC50 relative\"); a value with no name never matches; blank entries are ignored. Applied after the outcome, target, and assay-type filters, so filteredCount and paging count only the assays it keeps.",
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "sort": {
+            "default": "table",
+            "description": "\"table\" (default) keeps PubChem's assay order (by AID). \"potency\" orders assays by their lowest matching activity value, ascending (most potent first), ties to the lower AID; every value in a compound's table shares one unit (uM). \"potency\" requires activityName: the value column also holds non-potency measurements (Cmax, solubility, rate constants, unnamed values), so a name-blind order would rank them as potencies.",
+            "type": "string",
+            "enum": [
+              "table",
+              "potency"
+            ]
+          },
+          "offset": {
+            "default": 0,
+            "description": "Zero-based index of the first assay to return, applied after every filter and the sort order. Pass the nextOffset from a previous call to read the following page. Default: 0.",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "maxResults": {
+            "default": 20,
+            "description": "Max assay results to return per page. The per-call cap is 100: a larger value (up to 1000) returns a page of 100 and is reported in cappedInputs. Well-studied compounds have thousands of records; use offset to reach the ones past this page. Default: 20.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000
+          }
+        },
+        "required": [
+          "cid"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "pubchem_get_compound_interactions",
+      "description": "Get a compound's interaction data: drug-food interactions, and the molecular targets its bioassays name — one entry per target as kinds defines it, with its assay counts by outcome and most potent active value, Active targets first, most potent first. Each entry carries its originating source. Results are paged per kind, with the record total and the next offset reported for each. Drug-food coverage is richest for approved drugs; target covers any compound PubChem has assay data for, and pubchem_get_bioactivity lists one target's assays when given the entry's GeneID or accession. Drug-drug interactions (DrugBank) are unavailable while PubChem's SDQ service refuses automated requests: an explicit drug-drug request is reported in failedKinds while the other kinds still return.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "cid": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647,
+            "description": "PubChem Compound ID. Resolve from name/SMILES with pubchem_search_compounds."
+          },
+          "kinds": {
+            "default": [
+              "drug-food"
+            ],
+            "description": "Interaction kinds to fetch. \"drug-food\" (dietary interactions, from PUG View), \"target\" (molecular targets from the compound's assay summary: one entry per Gene ID with the accessions the table pairs with it, and one per identifier it never pairs, so a Gene ID and an accession that no row pairs are separate entries even when they name the same protein), \"drug-drug\" (interactions with other drugs, from PubChem's SDQ service, which refuses automated requests, so it is reported in failedKinds). Default: [\"drug-food\"].",
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "drug-drug",
+                "drug-food",
+                "target"
+              ]
+            }
+          },
+          "offset": {
+            "default": 0,
+            "description": "Zero-based start position within each requested kind, counted in records (molecular targets, for target) rather than returned entries. The same offset applies to every kind in the call, and the kinds advance at different rates — when paging past the first page, request one kind per call and pass that kind's nextOffset. Default: 0.",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2147483646
+          },
+          "maxEntries": {
+            "default": 10,
+            "description": "Max entries per kind per page. The per-call cap is 50: a larger value (up to 1000) reads a page of 50 per kind and is reported in cappedInputs. Well-studied drugs have a long tail of interactions; use offset to reach the ones past this page. Default: 10.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000
+          }
+        },
+        "required": [
+          "cid"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "pubchem_search_assays",
+      "description": "Find PubChem bioassays associated with a biological target. Search by gene symbol (e.g. \"EGFR\"), protein name, NCBI Gene ID, or UniProt accession. Returns a page of assay IDs (AIDs) — page past maxResults with offset — which can be explored further with pubchem_get_summary.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "targetType": {
+            "type": "string",
+            "enum": [
+              "genesymbol",
+              "proteinname",
+              "geneid",
+              "proteinaccession"
+            ],
+            "description": "Target identifier type. \"genesymbol\" and \"proteinname\" accept text names; a genesymbol matches the symbol case-insensitively across species, so a human symbol also returns assays on other species' orthologs. \"geneid\" accepts NCBI Gene IDs. \"proteinaccession\" accepts UniProt accessions. \"geneid\" and \"proteinaccession\" each pin one protein, but return overlapping, different assay sets for it, since PubChem records some assays under only one of the two identifiers; for a complete list for one protein, union both."
+          },
+          "targetQuery": {
+            "type": "string",
+            "description": "Target identifier. Examples: \"EGFR\" (genesymbol), \"Epidermal growth factor receptor\" (proteinname), \"1956\" (geneid), \"P00533\" (proteinaccession; uppercased before lookup, except a PDB chain ID such as the \"A\" in \"1ZHH_A\", which is kept as given)."
+          },
+          "offset": {
+            "default": 0,
+            "description": "Zero-based index of the first AID to return. Pass the nextOffset from a previous call to read the following page. Default: 0.",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "maxResults": {
+            "default": 50,
+            "description": "Max AIDs to return per page. The per-call cap is 200: a larger value (up to 1000) returns a page of 200 and is reported in cappedInputs. Popular targets may have thousands of assays; use offset to reach the ones past this page. Default: 50.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000
+          }
+        },
+        "required": [
+          "targetType",
+          "targetQuery"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "pubchem_get_summary",
+      "description": "Get descriptive summaries for PubChem entities by ID. Supports assays (AID), genes (Gene ID), proteins (UniProt accession), and taxonomy (Tax ID). Up to 10 per call; identifiers past that are returned in unprocessed for a follow-up call.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "entityType": {
+            "type": "string",
+            "enum": [
+              "assay",
+              "gene",
+              "protein",
+              "taxonomy"
+            ],
+            "description": "Entity type. Determines ID format and returned fields."
+          },
+          "identifiers": {
+            "minItems": 1,
+            "maxItems": 1000,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "description": "Entity identifier, or several joined with commas."
+            },
+            "description": "Entity identifiers. A comma-joined string is split into one identifier per piece, with whitespace trimmed. The per-call cap is 10 pieces: the first 10 are looked up, and any past that are returned in unprocessed, in input order, and reported in cappedInputs. More than 1000 pieces in all fails the call. ID form depends on entityType:\n- assay: AID, a positive integer, e.g. [\"1000\"]\n- gene: NCBI Gene ID, a positive integer, e.g. [\"1956\"]\n- protein: UniProt accession, e.g. [\"P00533\"]\n- taxonomy: NCBI Taxonomy ID, a positive integer, e.g. [\"9606\"]\nFor assay, gene, and taxonomy, a piece that is not a positive integer up to 2147483647 written in digits is marked invalid and not looked up."
+          }
+        },
+        "required": [
+          "entityType",
+          "identifiers"
+        ],
+        "additionalProperties": false
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "io.github.cyanheads/pubchem-mcp-server",
+    "version": "0.9.0",
+    "remoteUrl": "https://pubchem.caseyjhand.com/mcp",
+    "publishedAt": "2026-11-24T09:39:46.563642Z",
+    "fetchedAt": "2026-11-24T12:15:48.059Z",
+    "toolsSha256": "f9317ac68ec0336491a1211ffa7969fc2d5d1cc10ff0630eceab538a09385f02"
+  }
+}

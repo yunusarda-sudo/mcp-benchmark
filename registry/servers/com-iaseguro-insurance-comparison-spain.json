@@ -1,0 +1,556 @@
+{
+  "$schema": "../schema.json",
+  "name": "com.iaseguro/insurance-comparison-spain",
+  "title": "IAseguro: comparador de seguros en España",
+  "category": "Vector DBs & AI Search",
+  "description": "Compare insurance in Spain across 10 lines: prices and coverage. Read-only, no account needed.",
+  "tools": [
+    {
+      "name": "cotizar_vida",
+      "description": "Compara el precio del seguro de vida riesgo (capital por fallecimiento) en España entre varias aseguradoras con los datos del usuario. Úsala cuando pregunten cuánto cuesta un seguro de vida o cuál es el más barato. Si solo preguntan qué cubre, usa consultar_coberturas (line \"vida\"); para pagar el entierro, cotizar_decesos. Si es para una hipoteca, usa como capital la deuda pendiente. Cada rider encarece la prima: añádelo solo si lo piden. profession hoy no cambia la estimación: no la preguntes. Las compañías que no aseguran ese caso no aparecen, las que no dan precio online salen como sin_precio (con teléfono o enlace) y las que fallan van en aseguradorasSinRespuesta. Un precio estimado no vincula: lo confirma la compañía. Si falta un dato o no es válido, devuelve isError e indica cuál. No contrata ni pide nombre, DNI, teléfono ni email.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "birthDate": {
+            "type": "string",
+            "description": "Fecha de nacimiento en formato YYYY-MM-DD (ej. 1990-05-15)."
+          },
+          "smoker": {
+            "type": "string",
+            "enum": [
+              "si",
+              "no"
+            ],
+            "description": "\"si\" si la persona fuma, \"no\" si no fuma."
+          },
+          "postalCode": {
+            "type": "string",
+            "description": "Código postal español de 5 dígitos (ej. 28015)."
+          },
+          "capital": {
+            "type": "string",
+            "description": "Capital asegurado en euros como texto, ej. \"100000\" (entre 10000 y 2000000)."
+          },
+          "profession": {
+            "type": "string",
+            "description": "Profesión del solicitante (opcional)."
+          },
+          "riders": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "disability",
+                "serious-illness",
+                "double-accident"
+              ]
+            },
+            "description": "Coberturas adicionales opcionales: disability (invalidez), serious-illness (enfermedades graves), double-accident (doble capital por accidente)."
+          }
+        },
+        "required": [
+          "birthDate",
+          "smoker",
+          "postalCode",
+          "capital"
+        ]
+      }
+    },
+    {
+      "name": "cotizar_salud",
+      "description": "Compara el precio del seguro de salud privado en España entre varias aseguradoras con los datos del usuario. Úsala cuando pregunten cuánto cuesta un seguro de salud para una persona o una familia. Si solo preguntan qué cubre, usa consultar_coberturas (line \"salud\"); para elegir por preferencias sin dar edad, recomendar_salud. Devuelve las 15 ofertas más baratas que cumplen las preferencias; si ninguna las cumple, ignora las preferencias. additionalAges suma al precio a cada asegurado más. No pidas datos médicos: no se usan. Las compañías que no aseguran ese caso no aparecen, las que no dan precio online salen como sin_precio (con teléfono o enlace) y las que fallan van en aseguradorasSinRespuesta. Un precio estimado no vincula: lo confirma la compañía. Si falta un dato o no es válido, devuelve isError e indica cuál. No contrata ni pide nombre, DNI, teléfono ni email.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "birthDate": {
+            "type": "string",
+            "description": "Fecha de nacimiento del titular en formato YYYY-MM-DD (ej. 1990-05-15)."
+          },
+          "postalCode": {
+            "type": "string",
+            "description": "Código postal español de 5 dígitos (ej. 28015)."
+          },
+          "additionalAges": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 120
+            },
+            "description": "Edades del resto de asegurados (pareja, hijos), sin el titular. Ej. [38, 6]."
+          },
+          "modality": {
+            "type": "string",
+            "enum": [
+              "cuadro-medico",
+              "reembolso",
+              "mixta"
+            ],
+            "description": "Cuadro médico (red de centros), reembolso (eliges médico) o mixta. Vacío si les da igual."
+          },
+          "maternity": {
+            "type": "string",
+            "enum": [
+              "si",
+              "no"
+            ],
+            "description": "\"si\" si quieren cobertura de maternidad."
+          },
+          "dental": {
+            "type": "string",
+            "enum": [
+              "si",
+              "no"
+            ],
+            "description": "\"si\" si quieren cobertura dental."
+          },
+          "noCopay": {
+            "type": "string",
+            "enum": [
+              "si",
+              "no"
+            ],
+            "description": "\"si\" si quieren póliza sin copago por acto médico."
+          }
+        },
+        "required": [
+          "birthDate",
+          "postalCode"
+        ]
+      }
+    },
+    {
+      "name": "recomendar_salud",
+      "description": "Recomienda hasta 4 seguros de salud privados en España según las preferencias del usuario, con un precio \"desde\". Úsala cuando quieran elegir un seguro de salud y no den la edad; para el precio con su edad, cotizar_salud. Si preguntan qué cubre un producto ya elegido, usa consultar_coberturas (line \"salud\"). Necesita modality o al menos un \"si\"; los \"no\" no cuentan. Sin ninguna, no da error: devuelve en mensaje qué preguntar. Si ningún producto cumple todo, devuelve los más cercanos y lo indica en advertencias. El \"desde\" es una estimación por persona y mes para el perfil más joven: a más edad, más precio. No pide edad ni datos médicos y no contrata.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "modality": {
+            "type": "string",
+            "enum": [
+              "cuadro-medico",
+              "reembolso",
+              "mixta"
+            ],
+            "description": "Preferencia: cuadro-medico (red concertada), reembolso (libre elección de médico) o mixta."
+          },
+          "maternity": {
+            "type": "string",
+            "enum": [
+              "si",
+              "no"
+            ],
+            "description": "\"si\" si necesita cobertura de maternidad/parto."
+          },
+          "dental": {
+            "type": "string",
+            "enum": [
+              "si",
+              "no"
+            ],
+            "description": "\"si\" si quiere cobertura dental."
+          },
+          "noCopay": {
+            "type": "string",
+            "enum": [
+              "si",
+              "no"
+            ],
+            "description": "\"si\" si prefiere póliza sin copago por acto médico."
+          }
+        }
+      }
+    },
+    {
+      "name": "cotizar_coche",
+      "description": "Compara el precio del seguro de coche en España entre varias aseguradoras con los datos del usuario. Úsala cuando pregunten cuánto cuesta asegurar un coche. Si solo preguntan qué cubre, usa consultar_coberturas (line \"coche\"); para motos, cotizar_moto. Usa los datos del conductor habitual; con menos de 18 años no hay precios. power afina el precio en todas las modalidades; value, solo en las de todo riesgo. Si no los saben, omítelos. Si dudan de modalidad, llama una vez por cada una. Las compañías que no aseguran ese caso no aparecen, las que no dan precio online salen como sin_precio (con teléfono o enlace) y las que fallan van en aseguradorasSinRespuesta. Un precio estimado no vincula: lo confirma la compañía. Si falta un dato o no es válido, devuelve isError e indica cuál. No contrata ni pide nombre, DNI, teléfono ni email.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "birthDate": {
+            "type": "string",
+            "description": "Fecha de nacimiento del conductor en formato YYYY-MM-DD (ej. 1990-05-15)."
+          },
+          "postalCode": {
+            "type": "string",
+            "description": "Código postal español de 5 dígitos donde se guarda el coche (ej. 28015)."
+          },
+          "licenseYears": {
+            "type": "string",
+            "description": "Años con el carnet de conducir, como texto (ej. \"8\"; \"0\" si es novel; de 0 a 80)."
+          },
+          "coverageType": {
+            "type": "string",
+            "enum": [
+              "terceros",
+              "terceros-ampliado",
+              "todo-riesgo-franquicia",
+              "todo-riesgo"
+            ],
+            "description": "Modalidad: terceros (mínimo legal), terceros-ampliado (+ lunas, robo e incendio), todo-riesgo-franquicia, todo-riesgo (sin franquicia)."
+          },
+          "make": {
+            "type": "string",
+            "description": "Marca del coche (ej. \"Seat\", \"Volkswagen\")."
+          },
+          "model": {
+            "type": "string",
+            "description": "Modelo del coche (opcional, ej. \"León\")."
+          },
+          "year": {
+            "type": "string",
+            "description": "Año de matriculación como texto (ej. \"2018\")."
+          },
+          "value": {
+            "type": "string",
+            "description": "Valor de mercado del coche en euros (opcional; útil en todo riesgo), ej. \"15000\"."
+          },
+          "power": {
+            "type": "string",
+            "description": "Potencia en CV (opcional), ej. \"110\"."
+          }
+        },
+        "required": [
+          "birthDate",
+          "postalCode",
+          "licenseYears",
+          "coverageType",
+          "make",
+          "year"
+        ]
+      }
+    },
+    {
+      "name": "cotizar_hogar",
+      "description": "Compara el precio del seguro de hogar en España entre varias aseguradoras con los datos del usuario. Úsala cuando pregunten cuánto cuesta asegurar la vivienda donde viven, en propiedad o de alquiler. Si solo preguntan qué cubre, usa consultar_coberturas (line \"hogar\"); para daños a terceros sin asegurar la vivienda, cotizar_rc. Con ownership \"inquilino\" el continente no se asegura y continenteValue se ignora. Sin valores de continente o contenido, se estiman con surfaceM2, así que no hace falta preguntarlos. Las compañías que no aseguran ese caso no aparecen, las que no dan precio online salen como sin_precio (con teléfono o enlace) y las que fallan van en aseguradorasSinRespuesta. Un precio estimado no vincula: lo confirma la compañía. Si falta un dato o no es válido, devuelve isError e indica cuál. No contrata ni pide nombre, DNI, teléfono ni email.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "propertyType": {
+            "type": "string",
+            "enum": [
+              "piso",
+              "casa"
+            ],
+            "description": "Tipo de vivienda: \"piso\" (apartamento) o \"casa\" (chalet/unifamiliar)."
+          },
+          "ownership": {
+            "type": "string",
+            "enum": [
+              "propietario",
+              "inquilino"
+            ],
+            "description": "\"propietario\" si es el dueño (asegura estructura + contenido) o \"inquilino\" si vive de alquiler (solo contenido)."
+          },
+          "surfaceM2": {
+            "type": "string",
+            "description": "Superficie construida en m², como texto (ej. \"90\")."
+          },
+          "postalCode": {
+            "type": "string",
+            "description": "Código postal español de 5 dígitos de la vivienda (ej. 28015)."
+          },
+          "level": {
+            "type": "string",
+            "enum": [
+              "esencial",
+              "completo",
+              "premium"
+            ],
+            "description": "Nivel: esencial (incendio, agua, RC), completo (+ robo, asistencia, cristales), premium (+ todo riesgo accidental)."
+          },
+          "yearBuilt": {
+            "type": "string",
+            "description": "Año de construcción (opcional), ej. \"1995\"."
+          },
+          "continenteValue": {
+            "type": "string",
+            "description": "Valor de la estructura en euros (opcional; se estima por m²), ej. \"90000\"."
+          },
+          "contenidoValue": {
+            "type": "string",
+            "description": "Valor de los enseres en euros (opcional; se estima por m²), ej. \"30000\"."
+          }
+        },
+        "required": [
+          "propertyType",
+          "ownership",
+          "surfaceM2",
+          "postalCode",
+          "level"
+        ]
+      }
+    },
+    {
+      "name": "cotizar_decesos",
+      "description": "Compara el precio del seguro de decesos (gastos de entierro y trámites) en España entre varias aseguradoras con los datos del usuario. Úsala cuando pregunten cuánto cuesta un seguro de decesos. Si solo preguntan qué cubre, usa consultar_coberturas (line \"decesos\"); para dejar dinero a la familia, cotizar_vida. premiumType cambia mucho el precio: ante la duda, llama con las dos y compara. Deja capital vacío salvo que sepan el coste del entierro: 5000 sirve de referencia. Las compañías que no aseguran ese caso no aparecen, las que no dan precio online salen como sin_precio (con teléfono o enlace) y las que fallan van en aseguradorasSinRespuesta. Un precio estimado no vincula: lo confirma la compañía. Si falta un dato o no es válido, devuelve isError e indica cuál. No contrata ni pide nombre, DNI, teléfono ni email.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "birthDate": {
+            "type": "string",
+            "description": "Fecha de nacimiento en formato YYYY-MM-DD (ej. 1965-05-15)."
+          },
+          "postalCode": {
+            "type": "string",
+            "description": "Código postal español de 5 dígitos (ej. 28015)."
+          },
+          "premiumType": {
+            "type": "string",
+            "enum": [
+              "nivelada",
+              "natural"
+            ],
+            "description": "Tipo de prima: nivelada (cuota constante toda la vida, lo más habitual) o natural (empieza más barata y sube con la edad)."
+          },
+          "capital": {
+            "type": "string",
+            "description": "Capital de servicios en euros como texto, ej. \"5000\" (entre 3000 y 30000; por defecto 5000)."
+          }
+        },
+        "required": [
+          "birthDate",
+          "postalCode",
+          "premiumType"
+        ]
+      }
+    },
+    {
+      "name": "cotizar_viaje",
+      "description": "Compara el precio del seguro de viaje en España entre varias aseguradoras con los datos del usuario. Úsala cuando pregunten cuánto cuesta asegurar un viaje o todos los del año. Si solo preguntan qué cubre, usa consultar_coberturas (line \"viaje\"). durationDays es obligatorio con tripType \"puntual\" y se ignora con \"anual\". El precio ya incluye a todos los travelers y, en puntual, es el total del viaje; en anual es mensual y cubre los viajes del año. Si visitan varias zonas, usa la más amplia. Las compañías que no aseguran ese caso no aparecen, las que no dan precio online salen como sin_precio (con teléfono o enlace) y las que fallan van en aseguradorasSinRespuesta. Un precio estimado no vincula: lo confirma la compañía. Si falta un dato o no es válido, devuelve isError e indica cuál. No contrata ni pide nombre, DNI, teléfono ni email.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "destinationZone": {
+            "type": "string",
+            "enum": [
+              "espana",
+              "europa",
+              "mundo",
+              "mundo-eeuu"
+            ],
+            "description": "Zona de destino: espana (nacional), europa, mundo (resto salvo EE. UU./Canadá/Japón) o mundo-eeuu (incluye EE. UU./Canadá/Japón, sanidad más cara)."
+          },
+          "tripType": {
+            "type": "string",
+            "enum": [
+              "puntual",
+              "anual"
+            ],
+            "description": "puntual (un viaje) o anual (multiviaje, varios viajes al año)."
+          },
+          "durationDays": {
+            "type": "string",
+            "description": "Días de viaje como texto, ej. \"10\" (obligatorio en viaje puntual)."
+          },
+          "level": {
+            "type": "string",
+            "enum": [
+              "basico",
+              "completo",
+              "premium"
+            ],
+            "description": "Nivel: basico (asistencia médica + equipaje), completo (+ cancelación y más límite médico), premium (límites altos, deportes, preexistencias)."
+          },
+          "travelers": {
+            "type": "string",
+            "description": "Número de viajeros asegurados como texto (ej. \"2\"; por defecto 1)."
+          }
+        },
+        "required": [
+          "destinationZone",
+          "tripType",
+          "level"
+        ]
+      }
+    },
+    {
+      "name": "cotizar_mascota",
+      "description": "Compara el precio del seguro de un perro o un gato en España entre varias aseguradoras con los datos del usuario. Úsala cuando pregunten cuánto cuesta asegurar a su mascota. Si solo preguntan qué cubre, usa consultar_coberturas (line \"mascota\"); para la responsabilidad civil de la familia, cotizar_rc. dangerousBreed solo cuenta en perros y encarece la prima. Cada compañía tiene una edad máxima de alta, así que con mascotas mayores quedan pocas ofertas. Si solo quieren cubrir daños a terceros, usa level \"responsabilidad-civil\". Las compañías que no aseguran ese caso no aparecen, las que no dan precio online salen como sin_precio (con teléfono o enlace) y las que fallan van en aseguradorasSinRespuesta. Un precio estimado no vincula: lo confirma la compañía. Si falta un dato o no es válido, devuelve isError e indica cuál. No contrata ni pide nombre, DNI, teléfono ni email.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "species": {
+            "type": "string",
+            "enum": [
+              "perro",
+              "gato"
+            ],
+            "description": "Especie de la mascota."
+          },
+          "ageYears": {
+            "type": "string",
+            "description": "Edad de la mascota en años como texto, ej. \"3\" (0 si es cachorro de meses)."
+          },
+          "level": {
+            "type": "string",
+            "enum": [
+              "responsabilidad-civil",
+              "completo",
+              "premium"
+            ],
+            "description": "Nivel: responsabilidad-civil (solo daños a terceros), completo (+ veterinario) o premium (+ vacunas y revisiones)."
+          },
+          "dangerousBreed": {
+            "type": "string",
+            "enum": [
+              "si",
+              "no"
+            ],
+            "description": "\"si\" si es un perro de raza potencialmente peligrosa (PPP)."
+          }
+        },
+        "required": [
+          "species",
+          "ageYears",
+          "level"
+        ]
+      }
+    },
+    {
+      "name": "cotizar_moto",
+      "description": "Compara el precio del seguro de moto o ciclomotor en España entre varias aseguradoras con los datos del usuario. Úsala cuando pregunten cuánto cuesta asegurar una moto. Si solo preguntan qué cubre, usa consultar_coberturas (line \"moto\"); para coches, cotizar_coche, y para patinetes eléctricos, cotizar_patinete. licenseYears cuenta el carnet de moto, no el de coche. cc admite de 49 a 1500; las motos eléctricas, sin cilindrada, no se cotizan. Las compañías que no aseguran ese caso no aparecen, las que no dan precio online salen como sin_precio (con teléfono o enlace) y las que fallan van en aseguradorasSinRespuesta. Un precio estimado no vincula: lo confirma la compañía. Si falta un dato o no es válido, devuelve isError e indica cuál. No contrata ni pide nombre, DNI, teléfono ni email.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "coverageType": {
+            "type": "string",
+            "enum": [
+              "terceros",
+              "terceros-ampliado",
+              "todo-riesgo-franquicia",
+              "todo-riesgo"
+            ],
+            "description": "Modalidad: terceros (mínimo legal), terceros-ampliado (+ robo e incendio), todo-riesgo-franquicia o todo-riesgo."
+          },
+          "birthDate": {
+            "type": "string",
+            "description": "Fecha de nacimiento del conductor en formato YYYY-MM-DD (ej. 1990-05-15)."
+          },
+          "licenseYears": {
+            "type": "string",
+            "description": "Años con el carnet de moto, como texto (ej. \"5\")."
+          },
+          "postalCode": {
+            "type": "string",
+            "description": "Código postal español de 5 dígitos donde duerme la moto (ej. 28015)."
+          },
+          "cc": {
+            "type": "string",
+            "description": "Cilindrada en cc como texto (ej. \"125\", \"500\")."
+          }
+        },
+        "required": [
+          "coverageType",
+          "birthDate",
+          "licenseYears",
+          "postalCode",
+          "cc"
+        ]
+      }
+    },
+    {
+      "name": "cotizar_patinete",
+      "description": "Compara el precio del seguro de patinete eléctrico en España entre varias aseguradoras con los datos del usuario. Úsala cuando pregunten cuánto cuesta asegurar un patinete. Si solo preguntan qué cubre, usa consultar_coberturas (line \"patinete\"); para motos y ciclomotores, cotizar_moto. value solo influye con level \"completo\"; sin él se usa un valor medio. No hace falta la edad ni el código postal. Las compañías que no aseguran ese caso no aparecen, las que no dan precio online salen como sin_precio (con teléfono o enlace) y las que fallan van en aseguradorasSinRespuesta. Un precio estimado no vincula: lo confirma la compañía. Si falta un dato o no es válido, devuelve isError e indica cuál. No contrata ni pide nombre, DNI, teléfono ni email.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "level": {
+            "type": "string",
+            "enum": [
+              "responsabilidad-civil",
+              "completo"
+            ],
+            "description": "responsabilidad-civil (solo RC) o completo (RC + robo y daños)."
+          },
+          "value": {
+            "type": "string",
+            "description": "Valor del patinete en euros (opcional), ej. \"600\"."
+          }
+        },
+        "required": [
+          "level"
+        ]
+      }
+    },
+    {
+      "name": "cotizar_rc",
+      "description": "Compara el precio del seguro de responsabilidad civil particular (daños a terceros en la vida privada) en España entre varias aseguradoras con los datos del usuario. Úsala cuando pregunten cuánto cuesta un seguro de responsabilidad civil. Si solo preguntan qué cubre, usa consultar_coberturas (line \"rc\"); si el daño lo causa un vehículo o una mascota, cotizar_coche, cotizar_moto, cotizar_patinete o cotizar_mascota. Con familia o convivientes, scope \"familiar\". Si no saben qué capital elegir, usa 150000 como referencia. No cubre la actividad profesional. Las compañías que no aseguran ese caso no aparecen, las que no dan precio online salen como sin_precio (con teléfono o enlace) y las que fallan van en aseguradorasSinRespuesta. Un precio estimado no vincula: lo confirma la compañía. Si falta un dato o no es válido, devuelve isError e indica cuál. No contrata ni pide nombre, DNI, teléfono ni email.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "scope": {
+            "type": "string",
+            "enum": [
+              "individual",
+              "familiar"
+            ],
+            "description": "individual (titular) o familiar (toda la unidad familiar)."
+          },
+          "capital": {
+            "type": "string",
+            "description": "Capital asegurado en euros como texto (ej. \"150000\"; entre 50000 y 1000000)."
+          }
+        },
+        "required": [
+          "scope",
+          "capital"
+        ]
+      }
+    },
+    {
+      "name": "consultar_coberturas",
+      "description": "Explica qué cubren los seguros de una línea en España, producto a producto, con un precio \"desde\" orientativo. Úsala cuando pregunten qué cubre o qué incluye un seguro, o para comparar las coberturas de dos compañías (una llamada por compañía). Para un precio con los datos del usuario, usa cotizar_<línea>; para elegir seguro de salud, recomendar_salud o cotizar_salud. insurer busca por parte del nombre, sin distinguir mayúsculas ni tildes. Si insurer o product no casan con nada, no da error: productos llega vacío y mensaje lista las aseguradoras disponibles. Devuelve como mucho 6 productos y no avisa si hay más, así que acota con insurer. No pide datos del usuario.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "line": {
+            "type": "string",
+            "enum": [
+              "vida",
+              "salud",
+              "coche",
+              "hogar",
+              "decesos",
+              "viaje",
+              "mascota",
+              "moto",
+              "patinete",
+              "rc"
+            ],
+            "description": "Línea de seguro. mascota = perros y gatos; patinete = eléctrico; rc = responsabilidad civil particular."
+          },
+          "insurer": {
+            "type": "string",
+            "description": "Aseguradora, ej. \"MAPFRE\", \"Línea Directa\", \"Sanitas\". Sin ella, productos de varias."
+          },
+          "product": {
+            "type": "string",
+            "description": "Producto concreto, ej. \"Plena\". Solo se usa con line \"salud\"; en las demás se ignora."
+          }
+        },
+        "required": [
+          "line"
+        ]
+      }
+    },
+    {
+      "name": "consultar_disponibilidad",
+      "description": "Lista las líneas de seguro que IAseguro compara en España y, para cada una, si está disponible, qué tool la cotiza y qué datos exige. Úsala solo si no sabes si una línea existe o qué preguntar; si ya la conoces, llama directamente a cotizar_<línea>, recomendar_salud o consultar_coberturas. No devuelve precios ni coberturas. Si una línea sale con disponible false, no la cotices y dilo. La lista es igual para todos y cambia poco: basta una llamada por conversación.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "com.iaseguro/insurance-comparison-spain",
+    "version": "0.3.0",
+    "remoteUrl": "https://mcp.iaseguro.com/mcp/agentes",
+    "publishedAt": "2026-11-24T09:06:27.955668Z",
+    "fetchedAt": "2026-11-24T12:15:48.059Z",
+    "toolsSha256": "533949ac67faa5b3a9d148e22f34b40fc4aa81ff13a6e383e184be5eadb0031a"
+  }
+}

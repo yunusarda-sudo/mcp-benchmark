@@ -4,7 +4,7 @@
 
 [![npm version](https://img.shields.io/npm/v/mcp-benchmark.svg)](https://www.npmjs.com/package/mcp-benchmark)
 [![CI](https://github.com/yunusarda-sudo/mcp-benchmark/actions/workflows/ci.yml/badge.svg)](https://github.com/yunusarda-sudo/mcp-benchmark/actions/workflows/ci.yml)
-[![MCP Registry Servers](https://img.shields.io/badge/MCP_Registry-854_Servers-blueviolet)](LEADERBOARD.md)
+[![MCP Registry Servers](https://img.shields.io/badge/MCP_Registry-1408_Servers-blueviolet)](LEADERBOARD.md)
 [![Web Playground](https://img.shields.io/badge/Web_Playground-Live-10b981)](https://yunusarda-sudo.github.io/mcp-benchmark/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
@@ -197,16 +197,16 @@ Explore the full interactive leaderboard with sorting, search, and tool inspecti
 <!-- NEW_RELEASES_START -->
 | Published | Server | Grade | TQI | Tools | Data |
 |:---|:---|:---:|---:|---:|:---:|
-| 2026-11-22 | **Zapmatte Green Screen Remover** · `com.zapmatte/green-screen-remover` | `A` | 90 | 6 | [json](registry/servers/com-zapmatte-green-screen-remover.json) |
-| 2026-11-22 | [**GoldSeam**](https://github.com/AcademyOne-Inc/GoldSeam) · `com.ksaworks/goldseam` | `B` | 84 | 115 | [json](registry/servers/com-ksaworks-goldseam.json) |
-| 2026-11-22 | [**Charmotion**](https://github.com/charmotion/charmotion-mcp) · `app.charmotion/charmotion` | `B` | 87 | 16 | [json](registry/servers/app-charmotion-charmotion.json) |
-| 2026-11-22 | [**io.github.cyanheads/internet-archive-mcp-server**](https://github.com/cyanheads/internet-archive-mcp-server) | `B` | 81 | 5 | [json](registry/servers/io-github-cyanheads-internet-archive-mcp-server.json) |
-| 2026-11-22 | [**Syracuse Company News**](https://github.com/1145-am/syracuse-mcp-server) · `io.github.1145-am/syracuse-mcp-server` | `B` | 86 | 4 | [json](registry/servers/io-github-1145-am-syracuse-mcp-server.json) |
-| 2026-11-22 | **ЦПО — оборудование для общепита и торговли, Владивосток и Хабаровск** · `ru.cpo-dv/catalog` | `A` | 88 | 5 | [json](registry/servers/ru-cpo-dv-catalog.json) |
-| 2026-11-22 | [**Kongus Site MCP Server**](https://github.com/Kongus/site) · `io.github.Kongus/site` | `B` | 85 | 7 | [json](registry/servers/io-github-kongus-site.json) |
-| 2026-11-22 | **Jason Lau Academy** · `academy.jasonlau/classes` | `A` | 92 | 6 | [json](registry/servers/academy-jasonlau-classes.json) |
-| 2026-11-22 | **AI for alle: priser og fakta om AI-værktøjer** · `dk.ai-foralle/ai-foralle` | `A+` | 98 | 6 | [json](registry/servers/dk-ai-foralle-ai-foralle.json) |
-| 2026-11-22 | [**OptimToken: AI and Compute Economics**](https://github.com/OptimNow/ai-pricing-hub-mcp) · `io.github.OptimNow/ai-pricing-hub` | `B` | 83 | 8 | [json](registry/servers/io-github-optimnow-ai-pricing-hub.json) |
+| 2026-11-24 | **Shopproof EU shop rules** · `app.shopproof/rules` | `A+` | 95 | 8 | [json](registry/servers/app-shopproof-rules.json) |
+| 2026-11-24 | [**cuttingfloor**](https://github.com/Mvp2o-ai/cuttingfloor) · `io.github.Mvp2o-ai/cuttingfloor` | `A` | 89 | 77 | [json](registry/servers/io-github-mvp2o-ai-cuttingfloor.json) |
+| 2026-11-24 | **io.github.zz959397ghb/zzm49** | `A` | 88 | 2 | [json](registry/servers/io-github-zz959397ghb-zzm49.json) |
+| 2026-11-24 | [**Polradar**](https://github.com/bluetouff/polradar) · `io.github.bluetouff/polradar` | `A` | 94 | 5 | [json](registry/servers/io-github-bluetouff-polradar.json) |
+| 2026-11-24 | [**Unique.domains**](https://github.com/UniqueDomains/mcp-server) · `domains.unique/mcp-server` | `A+` | 96 | 51 | [json](registry/servers/domains-unique-mcp-server.json) |
+| 2026-11-24 | [**borbur.net salary, tax and visa calculators**](https://github.com/Borbur14/spain-salary-calculator-2026) · `net.borbur/salary-calculators` | `A` | 93 | 26 | [json](registry/servers/net-borbur-salary-calculators.json) |
+| 2026-11-24 | **Procvičky.cz – pracovní listy** · `cz.procvicky/pracovni-listy` | `A+` | 99 | 3 | [json](registry/servers/cz-procvicky-pracovni-listy.json) |
+| 2026-11-24 | **Hotels &amp; Coast** · `com.hotelsandcoast/stays` | `B` | 86 | 21 | [json](registry/servers/com-hotelsandcoast-stays.json) |
+| 2026-11-24 | **Cars &amp; Coast** · `com.carsandcoast/coast` | `B` | 87 | 22 | [json](registry/servers/com-carsandcoast-coast.json) |
+| 2026-11-24 | **Wallace's Line — wildlife sighting chances** · `com.wallacesline/wildlife` | `A+` | 97 | 6 | [json](registry/servers/com-wallacesline-wildlife.json) |
 <!-- NEW_RELEASES_END -->
 
 ### Top Synced Servers
@@ -214,26 +214,26 @@ Explore the full interactive leaderboard with sorting, search, and tool inspecti
 <!-- LEADERBOARD_TOP_START -->
 | # | Server | Grade | TQI | Tools | Tokens/tool | Data |
 |---:|:---|:---:|---:|---:|---:|:---:|
-| 1 | **トゥーンエル** · `com.tooneru/manga` | `A+` | 100 | 6 | 128 | [json](registry/servers/com-tooneru-manga.json) |
-| 2 | [**Startups Españolas press desk**](https://github.com/martinschenk/startups-espanolas-mcp) · `es.startups-espanolas/notas-de-prensa` | `A+` | 100 | 5 | 181 | [json](registry/servers/es-startups-espanolas-notas-de-prensa.json) |
-| 3 | **AI Verified** · `io.aiverified/verify-business` | `A+` | 100 | 1 | 162 | [json](registry/servers/io-aiverified-verify-business.json) |
-| 4 | [**Viventii Events, Leisure, POIs, Tickets &amp; Ticket Resale**](https://github.com/borsty2103/viventii-mcp) · `io.github.borsty2103/viventii-mcp` | `A+` | 100 | 16 | 183 | [json](registry/servers/io-github-borsty2103-viventii-mcp.json) |
-| 5 | [**Brazil DANFSe &amp; Tax Reform RTC \(x402\)**](https://github.com/brunopompeo1/brazil-ai-fiscal-apis-x402) · `io.github.brunopompeo1/br-danfse-rtc-x402` | `A+` | 100 | 2 | 946 | [json](registry/servers/io-github-brunopompeo1-br-danfse-rtc-x402.json) |
-| 6 | [**Moedux — Diagnóstico Financeiro**](https://github.com/jhonnysabino/moedux-agent-tools) · `io.github.jhonnysabino/moedux` | `A+` | 100 | 2 | 174 | [json](registry/servers/io-github-jhonnysabino-moedux.json) |
-| 7 | **Tally food nutrients** · `io.github.martindochamp/tally-foods` | `A+` | 100 | 2 | 136 | [json](registry/servers/io-github-martindochamp-tally-foods.json) |
-| 8 | [**Jobs Data MCP \(SteadyScrape\)**](https://github.com/steadyscrape/jobs-data-mcp) · `io.github.steadyscrape/jobs-data-mcp` | `A+` | 100 | 4 | 316 | [json](registry/servers/io-github-steadyscrape-jobs-data-mcp.json) |
-| 9 | [**PageDigest — Web Page Summarizer &amp; Structured Extractor**](https://github.com/SuBai520-QWQ/pagedigest) · `io.github.SuBai520-QWQ/pagedigest` | `A+` | 100 | 1 | 134 | [json](registry/servers/io-github-subai520-qwq-pagedigest.json) |
-| 10 | [**FilmCraft — Video Editing Assistant MCP**](https://github.com/yueliao11/mcp-servers) · `tech.filmcraft/video-editing-assistant` | `A+` | 100 | 3 | 148 | [json](registry/servers/tech-filmcraft-video-editing-assistant.json) |
-| 11 | **Verifera job search** · `uk.co.verifera/job-search` | `A+` | 100 | 1 | 324 | [json](registry/servers/uk-co-verifera-job-search.json) |
-| 12 | [**First names in Switzerland**](https://gitlab.com/opendata.ch/vornamen) · `ch.opendata/vornamen` | `A+` | 99 | 4 | 160 | [json](registry/servers/ch-opendata-vornamen.json) |
-| 13 | **KovAPI Docs** · `com.kovapi/docs` | `A+` | 99 | 3 | 108 | [json](registry/servers/com-kovapi-docs.json) |
-| 14 | **Ahmed Shaikh's Blog** · `dev.ahmedshaikh/blog` | `A+` | 99 | 3 | 103 | [json](registry/servers/dev-ahmedshaikh-blog.json) |
-| 15 | **KOREA WAVE NEWS** · `io.github.lifenplanner/koreawavenews` | `A+` | 99 | 9 | 143 | [json](registry/servers/io-github-lifenplanner-koreawavenews.json) |
+| 1 | **ae.brainy/brainy-48** | `A+` | 100 | 4 | 185 | [json](registry/servers/ae-brainy-brainy-48.json) |
+| 2 | **Injection Check** · `com.injectioncheck/injectioncheck` | `A+` | 100 | 1 | 197 | [json](registry/servers/com-injectioncheck-injectioncheck.json) |
+| 3 | **トゥーンエル** · `com.tooneru/manga` | `A+` | 100 | 6 | 128 | [json](registry/servers/com-tooneru-manga.json) |
+| 4 | [**Startups Españolas press desk**](https://github.com/martinschenk/startups-espanolas-mcp) · `es.startups-espanolas/notas-de-prensa` | `A+` | 100 | 5 | 181 | [json](registry/servers/es-startups-espanolas-notas-de-prensa.json) |
+| 5 | **AI Verified** · `io.aiverified/verify-business` | `A+` | 100 | 1 | 162 | [json](registry/servers/io-aiverified-verify-business.json) |
+| 6 | [**Viventii Events, Leisure, POIs, Tickets &amp; Ticket Resale**](https://github.com/borsty2103/viventii-mcp) · `io.github.borsty2103/viventii-mcp` | `A+` | 100 | 16 | 183 | [json](registry/servers/io-github-borsty2103-viventii-mcp.json) |
+| 7 | [**Brazil DANFSe &amp; Tax Reform RTC \(x402\)**](https://github.com/brunopompeo1/brazil-ai-fiscal-apis-x402) · `io.github.brunopompeo1/br-danfse-rtc-x402` | `A+` | 100 | 2 | 946 | [json](registry/servers/io-github-brunopompeo1-br-danfse-rtc-x402.json) |
+| 8 | **Tally food nutrients** · `io.github.martindochamp/tally-foods` | `A+` | 100 | 2 | 136 | [json](registry/servers/io-github-martindochamp-tally-foods.json) |
+| 9 | [**Jobs Data MCP \(SteadyScrape\)**](https://github.com/steadyscrape/jobs-data-mcp) · `io.github.steadyscrape/jobs-data-mcp` | `A+` | 100 | 4 | 316 | [json](registry/servers/io-github-steadyscrape-jobs-data-mcp.json) |
+| 10 | [**PageDigest — Web Page Summarizer &amp; Structured Extractor**](https://github.com/SuBai520-QWQ/pagedigest) · `io.github.SuBai520-QWQ/pagedigest` | `A+` | 100 | 1 | 134 | [json](registry/servers/io-github-subai520-qwq-pagedigest.json) |
+| 11 | [**TimeTrex MCP by usefulapi**](https://github.com/m190/usefulapi-mcp) · `io.usefulapi/timetrex` | `A+` | 100 | 4 | 177 | [json](registry/servers/io-usefulapi-timetrex.json) |
+| 12 | [**FilmCraft — Video Editing Assistant MCP**](https://github.com/yueliao11/mcp-servers) · `tech.filmcraft/video-editing-assistant` | `A+` | 100 | 3 | 148 | [json](registry/servers/tech-filmcraft-video-editing-assistant.json) |
+| 13 | **Verifera job search** · `uk.co.verifera/job-search` | `A+` | 100 | 1 | 324 | [json](registry/servers/uk-co-verifera-job-search.json) |
+| 14 | [**First names in Switzerland**](https://gitlab.com/opendata.ch/vornamen) · `ch.opendata/vornamen` | `A+` | 99 | 4 | 160 | [json](registry/servers/ch-opendata-vornamen.json) |
+| 15 | [**AL-KARA Cosmetics &amp; GCC Store MCP Server**](https://github.com/attaristnboli-a11y/alkara-store-mcp) · `com.alkaratr/store-mcp` | `A+` | 99 | 4 | 153 | [json](registry/servers/com-alkaratr-store-mcp.json) |
 <!-- LEADERBOARD_TOP_END -->
 
 <!-- SYNC_INFO_START -->
-**854 servers · 13722 tools · last sync 2026-11-22.**
-Last run: 70058 registry entries scanned, 41951 auth-free remote candidates, 891 returned tools, 597 required authentication, 12 failed (probe cap reached).
+**1408 servers · 22392 tools · last sync 2026-11-24.**
+Last run: 72593 registry entries scanned, 43255 auth-free remote candidates, 751 returned tools, 454 required authentication, 295 failed (probe cap reached).
 Probed newest first by registry publish date, at most 1500 per run and at most 3 listed servers per operator (registrable domain of the remote host).
 <!-- SYNC_INFO_END -->
 

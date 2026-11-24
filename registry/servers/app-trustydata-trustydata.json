@@ -1,0 +1,878 @@
+{
+  "$schema": "../schema.json",
+  "name": "app.trustydata/trustydata",
+  "title": "TrustyData",
+  "category": "Communication & Alerting",
+  "description": "French addresses, geocoding, routing, companies, catchment stats & email checks (BAN, INSEE, OSM).",
+  "repository": "https://github.com/htristram/trustydata-mcp-server",
+  "tools": [
+    {
+      "name": "verify_address",
+      "description": "Vérifie et normalise une adresse française contre le référentiel géographique officiel (BAN). Renvoie un verdict (match_exact, match_probable, aucun_match) et l'adresse canonique, déjà découpée en trois lignes postales prêtes à écrire (`ligne_voie`, `ligne_complement`, `ligne_commune`) — à utiliser telles quelles plutôt que de recomposer l'adresse. Selon le plan : coordonnées GPS + Lambert 93 (Starter+), code IRIS (Growth+), statistiques INSEE Filosofi du carreau 200 m dans `statistical_grid` : population, répartition par tranches d'âge (0-3 à 80+), ménages, pauvreté, niveau de vie, époque de construction des logements Couverture : France uniquement, outre-mer compris. Pour une adresse dans un autre pays, n'appelle pas cet outil (l'appel serait compté et ne rendrait rien d'utile) : dis que la couverture est la France. (Business). Plan minimum : Discovery. Une adresse par appel.",
+      "inputSchema": {
+        "properties": {
+          "address": {
+            "description": "Adresse postale française en texte libre, telle que saisie (fautes, abréviations et accents manquants tolérés).",
+            "type": "string"
+          },
+          "max_results": {
+            "default": 5,
+            "description": "Nombre maximal de candidats renvoyés (défaut 5).",
+            "type": "integer"
+          },
+          "details": {
+            "default": true,
+            "description": "Inclure les blocs détaillés (position GPS et Lambert 93, IRIS, grille statistique — selon le plan). Défaut vrai.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "address"
+        ],
+        "type": "object",
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "search_address",
+      "description": "Recherche des adresses françaises à partir d'un texte libre (même partiel) et renvoie des candidats classés par pertinence (score 0-1). Pour confirmer UNE adresse précise, préfère verify_address. Chaque candidat porte les trois lignes postales prêtes à écrire (`ligne_voie`, `ligne_complement`, `ligne_commune`). Enrichissements selon le plan (mêmes paliers que verify_address, dont `statistical_grid` Filosofi en Couverture : France uniquement, outre-mer compris. Pour une adresse dans un autre pays, n'appelle pas cet outil (l'appel serait compté et ne rendrait rien d'utile) : dis que la couverture est la France. Business). Plan minimum : Discovery.",
+      "inputSchema": {
+        "properties": {
+          "query": {
+            "description": "Début d'adresse ou adresse partielle à compléter (numéro, voie, commune…).",
+            "type": "string"
+          },
+          "limit": {
+            "default": 10,
+            "description": "Nombre maximal de résultats (défaut 10).",
+            "type": "integer"
+          },
+          "details": {
+            "default": true,
+            "description": "Inclure les blocs détaillés (position GPS et Lambert 93, IRIS, grille statistique — selon le plan). Défaut vrai.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "type": "object",
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_address_details",
+      "description": "Récupère le détail complet d'une adresse via son identifiant (id renvoyé par search_address ou verify_address). Outil de drill-down : les détails sont déjà inclus inline par les deux autres outils. Plan minimum : Discovery.",
+      "inputSchema": {
+        "properties": {
+          "address_id": {
+            "description": "Identifiant d'adresse (champ `id`) renvoyé par verify_address ou search_address.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "address_id"
+        ],
+        "type": "object",
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "search_nearby",
+      "description": "Recherche les adresses du référentiel officiel (BAN) situées dans un rayon de `radius_m` mètres (1 à 50 000) autour d'un point central, triées par distance croissante. Le point central est SOIT une adresse libre (`address`), SOIT un couple `lat`+`lon` WGS84 — jamais les deux. Une adresse libre est résolue comme verify_address et renvoyée dans `point_central.adresse_resolue`. Chaque résultat porte `distance_m` (mètres, à vol d'oiseau) et les enrichissements du plan (mêmes paliers que verify_address, dont `statistical_grid` Filosofi en Business). Pagination : passer `offset=pagination.next_offset` pour charger la page suivante (null = fin de parcours) ; `pagination.total_estime` est une estimation ; si `pagination.tronque` vaut true, le cap de 5000 adresses est atteint — réduire le rayon pour l'exhaustivité. Plan minimum : Growth.",
+      "inputSchema": {
+        "properties": {
+          "radius_m": {
+            "description": "Rayon de recherche en mètres autour du centre.",
+            "type": "integer"
+          },
+          "address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Centre par adresse libre (un nom de commune suffit). Exclusif de `lat`/`lon`."
+          },
+          "lat": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Latitude WGS84 du centre, avec `lon` et sans `address`."
+          },
+          "lon": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Longitude WGS84 du centre, avec `lat` et sans `address`."
+          },
+          "limit": {
+            "default": 10,
+            "description": "Nombre de résultats par page (défaut 10, plafond 50).",
+            "type": "integer"
+          },
+          "offset": {
+            "default": 0,
+            "description": "Décalage de pagination : reprendre à `pagination.next_offset` de la réponse précédente.",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "radius_m"
+        ],
+        "type": "object",
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "search_company",
+      "description": "Recherche des entreprises et des établissements français dans la base SIRENE (INSEE), par nom, SIREN, SIRET, ville, code postal, code NAF, ou par proximité géographique. IMPORTANT : un résultat est TOUJOURS un ÉTABLISSEMENT (un SIRET), jamais une entreprise — même groupé par entreprise, où le SIREN est représenté par son meilleur établissement (le siège de préférence). 3 établissements d'un même SIREN ne font donc pas « 3 entreprises trouvées ». Par défaut, un résultat par entreprise si `query` est fourni, un résultat par établissement en recherche par proximité ou par `siren` ; force ce comportement avec `group_by_company`. `classement_pertinence` se lit avant de présenter un « meilleur match » : à false (listing simple ou tri par distance), le premier résultat n'est PAS le plus probable. Un résultat `diffusible: false` a ses nom et adresse masqués par l'INSEE — c'est la loi, pas une donnée manquante, et rien ne s'y complète de mémoire. Une liste vide fait autorité : aucune entreprise ne correspond. La fiche complète s'obtient ensuite via get_company_details. Cet outil ne renvoie aucun dirigeant, et le nom d'un dirigeant n'est pas un critère de recherche. Il ne sert pas à constituer une liste de personnes à démarcher : devant une telle demande, n'ouvre pas les fiches une à une pour en tirer des noms — dis-le et propose la fiche d'une entreprise nommée. Plan minimum : Discovery — la recherche par proximité (lat/lon/radius_m) nécessite le plan Growth.",
+      "inputSchema": {
+        "properties": {
+          "query": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Nom, dénomination, sigle ou enseigne ; un SIREN (9 chiffres) ou un SIRET (14 chiffres) donne une correspondance exacte."
+          },
+          "address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Filtre sur la voie (recherche floue) ; exige `query`."
+          },
+          "city": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Filtre sur la commune (recherche floue) ; exige `query`."
+          },
+          "postal_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Filtre : code postal exact."
+          },
+          "naf_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Filtre : code NAF/APE de l'activité, ex. `62.02A`."
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Filtre : `active` (établissement en activité) ou `closed` (fermé)."
+          },
+          "siren": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Tous les établissements d'une unité légale (SIREN, 9 chiffres)."
+          },
+          "lat": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Recherche par proximité (plan Growth) : latitude WGS84 du centre, avec `lon` et `radius_m`."
+          },
+          "lon": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Longitude WGS84 du centre de la recherche par proximité, avec `lat` et `radius_m`."
+          },
+          "radius_m": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Rayon en mètres autour du centre (jusqu'à 50 km) ; plan Growth."
+          },
+          "group_by_company": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Vrai : un résultat par entreprise (son meilleur établissement, le siège de préférence) ; faux : un par établissement. Absent : défaut de l'API selon la recherche."
+          },
+          "page": {
+            "default": 1,
+            "description": "Numéro de page, à partir de 1.",
+            "type": "integer"
+          },
+          "per_page": {
+            "default": 10,
+            "description": "Résultats par page (défaut 10, plafond 25).",
+            "type": "integer"
+          }
+        },
+        "type": "object",
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_company_details",
+      "description": "Fiche détaillée d'une entreprise ou d'un établissement français (base SIRENE). Un seul identifiant, deux usages : un SIRET (14 chiffres) renvoie la fiche de CET établissement ; un SIREN (9 chiffres) renvoie celle du SIÈGE de l'entreprise. Structure de la réponse : la racine décrit l'ÉTABLISSEMENT (adresse, activité, effectif, état, conventions collectives applicables à CE site) et le bloc `unite_legale` décrit l'ENTREPRISE (identité, dirigeants, chiffre d'affaires, TVA). Le niveau de détail dépend du plan : géolocalisation et TVA en Starter, dirigeants et conventions collectives en Growth, finances et procédures collectives en Business. Un champ ABSENT n'est pas une donnée inexistante : il peut relever d'un palier supérieur — son absence ne prouve pas l'inexistence de la donnée. Les dirigeants sont des données personnelles issues du Registre National des Entreprises (INPI) ; chacun porte `opposition_prospection` — `true` = cette personne s'est opposée à l'usage de ses données à des fins de prospection commerciale, `false` = pas d'opposition enregistrée, `null` = non renseigné (à ne pas lire comme `false`). C'est le SEUL endroit où cette information est servie. `false` n'est ni un consentement ni une autorisation de démarchage, et la réponse le rappelle dans `unite_legale.avis_dirigeants`. Cet outil renseigne sur UNE entreprise nommée : n'enchaîne pas les fiches pour constituer une liste de dirigeants à contacter, et ne complète pas un dirigeant par des coordonnées trouvées ailleurs. Plan minimum : Discovery.",
+      "inputSchema": {
+        "properties": {
+          "company_id": {
+            "description": "SIRET (14 chiffres) de l'établissement, ou SIREN (9 chiffres) pour le siège de l'entreprise.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "company_id"
+        ],
+        "type": "object",
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "verify_email",
+      "description": "Dit si une adresse e-mail a des chances de servir, sans rien lui envoyer. Deux questions : le domaine peut-il recevoir du courrier (DNS, serveur de messagerie ; `domain.mail_provider` nomme qui reçoit le courrier quand il est reconnu), et l'adresse est-elle d'un genre peu utile (adresse de rôle comme contact@, adresse jetable, no-reply, relais de confidentialité — des drapeaux séparés dans `classification`). Cet outil ne se connecte à AUCUNE boîte aux lettres : il ne sait pas si la boîte existe, et `mailbox_verified` vaut toujours `false`. Ne dis jamais qu'une adresse est « valide », « vérifiée » ou qu'elle « existe » ; dis qu'elle est utilisable, à risque ou inutilisable, au sens du verdict. Seul un message auquel la personne répond prouve qu'une boîte est lue. `verdict` se lit en premier : `utilisable` (le domaine peut recevoir et aucun signal ne pèse assez pour en douter — rien de plus) ; `risque` (le domaine peut recevoir, mais un signal pèse : adresse de rôle technique comme postmaster@ (une adresse de rôle générique seule, contact@, reste `utilisable`), domaine parqué, filtre qui exige une confirmation de l'expéditeur, plateforme d'envoi automatique, domaine sans serveur de messagerie déclaré…) ; `inutilisable` (syntaxe refusée, domaine qui ne peut pas recevoir, adresse jetable ou no-reply) ; `inconnu` (le DNS n'a pas répondu à temps : ce n'est PAS un refus, ne le présente jamais comme `inutilisable`, et propose de réessayer plus tard). `reasons[]` donne les raisons du verdict (`code`, `severity`, `detail`) : cite-les pour expliquer, la liste des codes est ouverte. `did_you_mean` est une adresse PROPOSÉE quand la saisie ressemble à une faute de frappe (gmail.con) : montre-la à l'utilisateur et laisse-le décider ; ne la substitue jamais à l'adresse saisie, et ne la soumets pas à sa place sans le dire. Le verdict porte toujours sur l'adresse saisie. `unread_probability` (0 à 1) et `score` (0 à 100, plus il est haut, mieux c'est) sont une estimation de départ pour trier des adresses, pas une mesure : ne les présente jamais comme un taux constaté. Ils valent `null` quand le verdict est `inconnu`. Une adresse par appel, et chaque appel est compté, quel que soit le verdict, `inconnu` compris. Devant une liste d'adresses, annonce le nombre d'appels que cela représente avant de les enchaîner. Aucune limite géographique : une adresse sur un domaine étranger se soumet comme une autre. Plan minimum : Starter. Cet outil n'est pas ouvert pendant le Pass Zones.",
+      "inputSchema": {
+        "properties": {
+          "email": {
+            "description": "Adresse e-mail à contrôler, telle que saisie (chevrons, `mailto:` et ponctuation autour sont tolérés). Une seule adresse.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "email"
+        ],
+        "type": "object",
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "search_locality",
+      "description": "Recherche ET liste des communes françaises. Deux usages : (1) retrouver une commune précise par nom, code postal ou code INSEE (renseigne `query`) ; (2) LISTER/FILTRER les communes d'un département ou d'une région, avec une fourchette de population optionnelle — `query` est alors inutile. Exemple : « communes du Pas-de-Calais de plus de 100 000 habitants » → department_code=[\"62\"], population_min=100000. Préfère `department_code` (ex. \"62\") au nom ; les noms de département sont normalisés automatiquement (\"Pas-de-Calais\", \"Val-d'Oise\"… sont acceptés). Renvoie code INSEE, code postal, population et — selon le plan/details — altitude, densité, surface, département et région. Plan minimum : Discovery.",
+      "inputSchema": {
+        "properties": {
+          "query": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Nom de commune, code postal ou code INSEE, complet ou partiel. Optionnel si un filtre est donné."
+          },
+          "postal_code": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Filtre : codes postaux (liste)."
+          },
+          "department_code": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Filtre : codes de département (liste, ex. `62`, `2A`). À préférer au nom."
+          },
+          "department_name": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Filtre : noms de département (liste ; orthographe normalisée automatiquement)."
+          },
+          "region_code": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Filtre : codes de région (liste)."
+          },
+          "region_name": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Filtre : noms de région (liste)."
+          },
+          "population_min": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Filtre : population minimale (habitants)."
+          },
+          "population_max": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Filtre : population maximale (habitants)."
+          },
+          "limit": {
+            "default": 20,
+            "description": "Nombre maximal de résultats (défaut 20).",
+            "type": "integer"
+          },
+          "details": {
+            "default": true,
+            "description": "Inclure les détails de chaque commune (codes, population, coordonnées). Défaut vrai.",
+            "type": "boolean"
+          }
+        },
+        "type": "object",
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "route_matrix",
+      "description": "Calcule une matrice de distances et durées entre N origines et M destinations (jusqu'à 25×25) sur le réseau France (OpenStreetMap), au choix en voiture, à pied ou à vélo. Sans géométrie ni consignes : pour un itinéraire détaillé, utilise compute_route. Mode de déplacement : `car` (voiture, défaut), `walking` (à pied) ou `cycling` (à vélo). Les valeurs du contrat d'API (`auto`, `pieton`, `velo`) sont acceptées telles quelles. ⚠️ La matrice plafonne à 1 500 km en voiture et à 200 km à pied comme à vélo — des limites plus basses que compute_route (5 000 / 250 / 500 km) : un trajet que compute_route accepte peut être refusé ici, en 422. Plan minimum : Growth. Mention OSM ODbL obligatoire.",
+      "inputSchema": {
+        "properties": {
+          "origins": {
+            "description": "Points de départ (1 à 25), chacun une adresse libre OU un couple `lat`/`lon`.",
+            "items": {
+              "description": "A ``RoutePoint`` is EITHER a free-text ``address`` OR a ``lat``/``lon`` couple\n(mutually exclusive), mirroring trusty-service's ``RouteEndpointInput``.",
+              "properties": {
+                "address": {
+                  "anyOf": [
+                    {
+                      "minLength": 4,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null,
+                  "description": "Adresse libre (XOR lat/lon)."
+                },
+                "lat": {
+                  "anyOf": [
+                    {
+                      "maximum": 90,
+                      "minimum": -90,
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null,
+                  "description": "Latitude WGS84, avec `lon` (XOR address)."
+                },
+                "lon": {
+                  "anyOf": [
+                    {
+                      "maximum": 180,
+                      "minimum": -180,
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null,
+                  "description": "Longitude WGS84, avec `lat` (XOR address)."
+                }
+              },
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "destinations": {
+            "description": "Points d'arrivée (1 à 25), même forme.",
+            "items": {
+              "description": "A ``RoutePoint`` is EITHER a free-text ``address`` OR a ``lat``/``lon`` couple\n(mutually exclusive), mirroring trusty-service's ``RouteEndpointInput``.",
+              "properties": {
+                "address": {
+                  "anyOf": [
+                    {
+                      "minLength": 4,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null,
+                  "description": "Adresse libre (XOR lat/lon)."
+                },
+                "lat": {
+                  "anyOf": [
+                    {
+                      "maximum": 90,
+                      "minimum": -90,
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null,
+                  "description": "Latitude WGS84, avec `lon` (XOR address)."
+                },
+                "lon": {
+                  "anyOf": [
+                    {
+                      "maximum": 180,
+                      "minimum": -180,
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null,
+                  "description": "Longitude WGS84, avec `lat` (XOR address)."
+                }
+              },
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "mode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Mode de déplacement : `car` (défaut), `walking` ou `cycling`."
+          }
+        },
+        "required": [
+          "origins",
+          "destinations"
+        ],
+        "type": "object",
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "compute_route",
+      "description": "Calcule un itinéraire complet entre une origine et une destination sur le réseau France (OpenStreetMap), au choix en voiture, à pied ou à vélo : distance, durée, étapes de navigation en français, boîte englobante et géométrie encodée (polyline6). Mode de déplacement : `car` (voiture, défaut), `walking` (à pied) ou `cycling` (à vélo). Les valeurs du contrat d'API (`auto`, `pieton`, `velo`) sont acceptées telles quelles. Les consignes suivent le mode — « Conduisez… », « Marchez… », « Pédalez… » — et la réponse renvoie le `mode` utilisé : une durée n'est interprétable qu'accompagnée du mode qui l'a produite. ⚠️ Chaque mode a sa distance maximale : 5 000 km en voiture, 500 km à vélo, 250 km à pied ; au-delà la réponse est un 422 explicite, pas une panne. Pour de simples distances en masse, préfère route_matrix. Plan minimum : Business. Mention OSM ODbL obligatoire.",
+      "inputSchema": {
+        "properties": {
+          "origin": {
+            "description": "Point de départ : adresse libre OU couple `lat`/`lon`.",
+            "properties": {
+              "address": {
+                "anyOf": [
+                  {
+                    "minLength": 4,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Adresse libre (XOR lat/lon)."
+              },
+              "lat": {
+                "anyOf": [
+                  {
+                    "maximum": 90,
+                    "minimum": -90,
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Latitude WGS84, avec `lon` (XOR address)."
+              },
+              "lon": {
+                "anyOf": [
+                  {
+                    "maximum": 180,
+                    "minimum": -180,
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Longitude WGS84, avec `lat` (XOR address)."
+              }
+            },
+            "type": "object"
+          },
+          "destination": {
+            "description": "Point d'arrivée : adresse libre OU couple `lat`/`lon`.",
+            "properties": {
+              "address": {
+                "anyOf": [
+                  {
+                    "minLength": 4,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Adresse libre (XOR lat/lon)."
+              },
+              "lat": {
+                "anyOf": [
+                  {
+                    "maximum": 90,
+                    "minimum": -90,
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Latitude WGS84, avec `lon` (XOR address)."
+              },
+              "lon": {
+                "anyOf": [
+                  {
+                    "maximum": 180,
+                    "minimum": -180,
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Longitude WGS84, avec `lat` (XOR address)."
+              }
+            },
+            "type": "object"
+          },
+          "mode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Mode de déplacement : `car` (défaut), `walking` ou `cycling`."
+          }
+        },
+        "required": [
+          "origin",
+          "destination"
+        ],
+        "type": "object",
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "zone_compare",
+      "description": "Compare de 2 à 10 zones de chalandise en un seul appel et mesure leur cannibalisation. Pour chaque zone, rend exactement ce que `zone_stats` rend (`population`, `menages`, `niveau_de_vie_moyen`, `ages`, `sexe`, `menages_profil`, `logements`, `csp`, `potentiel_depense`, `immobilier`, `activites`, `defaillances`, `carreaux`, `source`, `attribution` — voir cet outil pour le sens de chaque bloc), plus `id` et `exclusif` : la population, les ménages et le potentiel que la zone est SEULE à couvrir, calculés comme « la zone moins l'union de toutes les autres » — jamais « total moins les paires », qui à trois zones et plus retrancherait deux fois un triple recouvrement ; `exclusif.part_population` en pour cent de la population de la zone. Entre zones : `chevauchements`, une entrée par paire qui se recouvre (population, ménages et potentiel comptés deux fois ; une paire disjointe n'apparaît pas), et `classement`, tous les identifiants triés sur `rank_by` décroissant : `population` (défaut), `exclusive_population`, `theoretical_potential` ou `exclusive_potential` — ces deux derniers exigent `coefficient`. Chaque élément de `zones` se décrit comme sur `zone_stats` : un centre (`address`, un nom de commune suffit, OU `lat`+`lon` WGS84, jamais les deux) et UNE portée, soit `minutes` (1 à 30) avec `mode` `car` (défaut), `walking` ou `cycling` et, en voiture, `traffic` `free` (défaut) ou `peak` (heure de pointe du matin, vitesses modélisées, pas de trafic temps réel — refusé à pied et à vélo, et pouvant répondre « indisponible » si la plateforme ne l'a pas encore ouvert), soit `radius_km` (1 à 50) à vol d'oiseau ; plus un `id` optionnel (1 à 40 caractères, lettres, chiffres, `_`, `-`, unique dans l'appel) repris dans la réponse, le classement et les erreurs — sans `id`, la position à partir de 1. `reference` : `france` (défaut) ou `department` — UN réglage pour TROIS blocs : l'`indice` de chaque poste CSP, celui de chaque poste d'`activites` et celui de `defaillances` sont alors rapportés au département qui pèse le plus dans la zone (`csp.reference.code`, `activites.reference.code`, `defaillances.reference.code`, et leurs libellés respectifs `csp.reference.libelle` / `activites.reference.libelle` / `defaillances.reference.libelle`, `null` en référence France). `coefficient` (0 exclu à 1) : la part du revenu disponible que le secteur capte, appliquée à toutes les zones, à leurs exclusifs et aux paires ; il déclenche `potentiel_theorique` = revenu disponible estimé × coefficient — une estimation, un potentiel théorique, pas une prévision de chiffre d'affaires ; sans coefficient il vaut `null`, une valeur qui ne s'invente pas. Le guide « Zone de chalandise » donne des repères par fonction de consommation (restauration ≈ 0,048). La CSP est elle aussi une estimation : aucun indice n'est exploitable sur une zone dont `csp.fiabilite.indices_fiables` est faux. Comme sur `zone_stats`, un poste dont la part est inférieure à `csp.fiabilite.part_min` (0,5 %) rend `indice: null` — un refus de servir, pas une donnée manquante ; `effectif` et `part` restent valides — ne jamais reconstituer l'indice à partir de leur rapport avec `reference_part` non plus. `reference_part` donne la part du même poste sur la référence : citer les deux parts côte à côte plutôt qu'un écart — un indice de 82 est un écart de 18 %, pas de 18 points. Le bloc `activites` est rendu pour chaque zone, identique à celui de `zone_stats` : c'est un PLANCHER d'établissements actifs et géolocalisés — ne jamais le présenter comme exhaustif, ni appeler ces établissements des concurrents ; d'une zone à l'autre, comparer les `indice` plutôt que les effectifs, le sous-compte s'y annulant en grande partie. Chaque zone porte aussi `defaillances` (procédures collectives, un PLANCHER ; arrêts d'activité, un PLAFOND), comme sur `zone_stats` ; `fiabilite.procedures_sous_declarees` vrai : le département dominant d'une zone publie très peu de procédures au BODACC depuis 2022 (Bas-Rhin, codes dans `fiabilite.departements_sous_declares`) — les procédures y sont sous-comptées, `taux_defaillance`, `indice` et `evolution_defaillances_pct` ne sont pas servis : dire que les procédures collectives ne sont pas publiées de façon complète pour ce territoire, jamais un taux ; les arrêts d'activité se lisent. `exclusif` et `chevauchements` ne portent PAS d'établissements ni de `defaillances` : population, ménages et potentiel seulement. Une zone inatteignable (isochrone sans contour) rend des zéros, n'entre dans aucune paire et se classe dernière ; plafond de surface 10 000 km² par zone. Plan minimum : Growth, ou Pass Zones ; un appel compté quel que soit le nombre de zones ; dix isochrones prennent une à deux secondes. `attribution` accompagne tout chiffre cité (INSEE Filosofi et Recensement de la population ; IGN Contours IRIS ; SIRENE (INSEE) pour les établissements des blocs `activites` et `defaillances`, BODACC (DILA) pour les procédures collectives ; DGFiP DVF pour les prix immobiliers ; OpenStreetMap ODbL dès qu'une zone est une isochrone).",
+      "inputSchema": {
+        "properties": {
+          "zones": {
+            "description": "De 2 à 10 zones, chacune avec les arguments de zone_stats (centre + `minutes` ou `radius_km`) et un `id` optionnel.",
+            "items": {
+              "description": "Une zone de `zone_compare` : les arguments de `zone_stats`, plus un `id`.\n\nVolontairement SANS validateur de portée : le corps REST d'une zone est\nplat, et trusty-service porte déjà la règle « une seule portée » avec ses\ncodes (`portee_ambigue`, `portee_manquante`, `mode_sans_duree`,\n`circulation_sans_duree`, `circulation_mode_incompatible`,\n`identifiant_invalide`), rendus avec l'identifiant de la zone en cause.\nLes recopier ici les ferait vivre à deux endroits. `RoutePoint` valide son\nXOR parce que son corps REST a deux formes ; ce n'est pas le cas ici.\n\nSeuls `lat`/`lon` gardent une borne (`ge`/`le`) : les limites WGS84 sont\nun fait géographique recopié de `RoutePoint`, pas une règle produit ;\n`minutes` et `radius_km` partent hors borne jusqu'au 422 de l'API.",
+              "properties": {
+                "id": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null,
+                  "description": "Identifiant repris dans la réponse et les erreurs (1 à 40 caractères, lettres, chiffres, `_`, `-`, unique). Sans lui : la position à partir de 1."
+                },
+                "address": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null,
+                  "description": "Centre par adresse libre — un nom de commune suffit. Exclusif de lat/lon."
+                },
+                "lat": {
+                  "anyOf": [
+                    {
+                      "maximum": 90,
+                      "minimum": -90,
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null,
+                  "description": "Latitude WGS84 du centre, avec `lon` et sans `address`."
+                },
+                "lon": {
+                  "anyOf": [
+                    {
+                      "maximum": 180,
+                      "minimum": -180,
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null,
+                  "description": "Longitude WGS84 du centre, avec `lat` et sans `address`."
+                },
+                "minutes": {
+                  "anyOf": [
+                    {
+                      "type": "integer"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null,
+                  "description": "Portée isochrone : minutes de trajet depuis le centre (1 à 30). Exclusif de radius_km."
+                },
+                "mode": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null,
+                  "description": "`car` (défaut), `walking` ou `cycling` — avec `minutes` seulement."
+                },
+                "traffic": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null,
+                  "description": "`free` (défaut) ou `peak` — avec `minutes` et `mode: car` seulement."
+                },
+                "radius_km": {
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null,
+                  "description": "Portée rayon à vol d'oiseau, en km (1 à 50). Exclusif de minutes."
+                }
+              },
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "rank_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Critère du classement : `population` (défaut), `exclusive_population`, `theoretical_potential` ou `exclusive_potential` — ces deux derniers exigent `coefficient`."
+          },
+          "reference": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Référentiel des indices de chaque zone — UN réglage pour TROIS blocs, `csp`, `activites` et `defaillances` : `france` (défaut) ou `department`."
+          },
+          "coefficient": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Part du revenu disponible que le secteur capte (0 exclu à 1), appliquée à toutes les zones, exclusifs et paires ; requis par les critères de potentiel."
+          }
+        },
+        "required": [
+          "zones"
+        ],
+        "type": "object",
+        "additionalProperties": false
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "app.trustydata/trustydata",
+    "version": "1.7.0",
+    "remoteUrl": "https://mcp.trustydata.app/mcp",
+    "publishedAt": "2026-11-23T22:17:28.810462Z",
+    "fetchedAt": "2026-11-24T12:15:48.059Z",
+    "toolsSha256": "1fb96bccea1186c15eac02bacb227906a186435131ca0548249c9be0c22018cc"
+  }
+}

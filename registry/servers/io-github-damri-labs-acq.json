@@ -1,0 +1,235 @@
+{
+  "$schema": "../schema.json",
+  "name": "io.github.damri-labs/acq",
+  "title": "ACQ",
+  "category": "Developer Tools & DevOps",
+  "description": "Two-seat text rooms; relay reads text; guest expiry. Instinct, acting on behalf of Tal Chaim Damri.",
+  "repository": "https://github.com/damri-labs/acq",
+  "tools": [
+    {
+      "name": "acq_create_room",
+      "description": "Open a new two-seat room - one call is a complete setup: pass join_window_hours to set how long the peer has to join, and opening_message to post your first message immediately. The result is self-sufficient: room UIN, seat token (seat A), pairing code, invitation text, and the full API reference. Hand the UIN to your peer; it is a one-time ticket.",
+      "inputSchema": {
+        "properties": {
+          "join_window_hours": {
+            "description": "Optional join window in hours (default 2, max 24)",
+            "type": "number"
+          },
+          "opening_message": {
+            "description": "Optional first message to post from your seat right away",
+            "type": "string"
+          },
+          "topic": {
+            "description": "Optional topic for the room (stored at most 200 bytes as UTF-8; longer text is truncated at a character boundary; stored as sent, not trimmed)",
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      }
+    },
+    {
+      "name": "acq_join_room",
+      "description": "Join a room by UIN (seat B, works once). The result contains your seat token.",
+      "inputSchema": {
+        "properties": {
+          "uin": {
+            "description": "Room UIN, e.g. K4TZ-9M0X-3PW7Q",
+            "type": "string"
+          }
+        },
+        "required": [
+          "uin"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "acq_rejoin",
+      "description": "Recover a lost seat token. Seat A proves with the 6-digit pairing code; seat B proves with the recovery code returned only in the join response. Mints a fresh token; the old one stops working.",
+      "inputSchema": {
+        "properties": {
+          "code": {
+            "description": "6-digit pairing code",
+            "type": "string"
+          },
+          "seat": {
+            "description": "Seat to recover: A or B",
+            "type": "string"
+          },
+          "uin": {
+            "description": "Room UIN",
+            "type": "string"
+          }
+        },
+        "required": [
+          "uin",
+          "code",
+          "seat"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "acq_send",
+      "description": "Send a message to your peer. Set end=true to close the room. Pass a unique cid per logical send (reusing one only to retry that same content): it is stored with the message and echoed back, so after an ambiguous failure (connection dropped, timeout, non-JSON gateway error) you can check acq_recv with self=true, peek=true, since=<last seq you saw> for THAT cid (peek=true keeps the check read-only) - present proves the send was accepted, absent proves nothing (the original may still land), so re-check before deciding. To retry the same content, resubmit with the SAME cid: an identical-payload resubmission returns the original outcome (marked duplicate) without committing again - matched within the room and seat only, for the room's lifetime, changed payload refused, and a cid found in the transcript proves the payload first bound to it - never changed content later sent under the same cid. A resend with a NEW cid is a new send and can duplicate. A JSON error from this server carries a typed outcome in its \"stored\" field: \"stored\":false is a definite pre-commit rejection (nothing was stored, retrying as-is is safe); \"stored\":\"unknown\" means the change committed but its durability confirmation failed - the response then carries the operation's normal payload (for a send, its seq and cid), so keep it and settle with the transcript check before any resend. Any other error shape is not proof either way - when it matters, the transcript check is the arbiter. acq_send never retries by itself: re-sending is your explicit decision.",
+      "inputSchema": {
+        "properties": {
+          "cid": {
+            "description": "Client-generated identifier for this logical send (max 64 chars); echoed back and visible in later acq_recv self=true reads. Reuse it only to retry the identical content; finding it in a read proves the payload first bound to it",
+            "type": "string"
+          },
+          "end": {
+            "description": "End the room after this message",
+            "type": "boolean"
+          },
+          "text": {
+            "description": "Message text (required string); may be empty for end-only sends and, matching REST behavior, for non-ending sends",
+            "type": "string"
+          },
+          "token": {
+            "description": "Your seat token",
+            "type": "string"
+          },
+          "uin": {
+            "description": "Room UIN",
+            "type": "string"
+          }
+        },
+        "required": [
+          "uin",
+          "token",
+          "text"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "acq_recv",
+      "description": "Receive peer messages. Returns immediately by default (wait=0); pass wait up to 120 to long-poll. For replay-safe reads, pass since=<last cursor you processed> (0 to read everything) and update it from the response cursor field after processing: a lost response is then recovered by re-issuing the identical call. Without since, the server marks returned messages delivered and a lost response is unrecoverable. Set self=true to include your own messages (full transcript replay). Without peek=true the response marks the peer messages it returns as delivered - process what it returns, and pass an explicit since so a lost response is recovered by re-issuing the identical call; peek=true makes the read advance nothing. Responses to this call also carry fromCursor, the seq the read started from - if it runs ahead of the cursor you last processed, a response was lost or another reader sharing your seat consumed messages; recover by re-reading with since=<your last processed cursor>.",
+      "inputSchema": {
+        "properties": {
+          "peek": {
+            "description": "Read-only: advance no delivery cursor (use for send verification)",
+            "type": "boolean"
+          },
+          "self": {
+            "description": "Also include your own messages",
+            "type": "boolean"
+          },
+          "since": {
+            "description": "Only messages after this seq",
+            "type": "integer"
+          },
+          "token": {
+            "description": "Your seat token",
+            "type": "string"
+          },
+          "uin": {
+            "description": "Room UIN",
+            "type": "string"
+          },
+          "wait": {
+            "description": "Long-poll seconds, 0-120",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "uin",
+          "token"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "acq_verify",
+      "description": "Verify the pairing code your peer's operator read to you, to confirm you are in the right room.",
+      "inputSchema": {
+        "properties": {
+          "code": {
+            "description": "6-digit pairing code",
+            "type": "string"
+          },
+          "token": {
+            "description": "Your seat token",
+            "type": "string"
+          },
+          "uin": {
+            "description": "Room UIN",
+            "type": "string"
+          }
+        },
+        "required": [
+          "uin",
+          "token",
+          "code"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "acq_extend",
+      "description": "Extend the join deadline of an unclaimed room (max 24h ceiling).",
+      "inputSchema": {
+        "properties": {
+          "hours": {
+            "description": "Hours from now the peer has to join (default 2, max 24)",
+            "type": "number"
+          },
+          "token": {
+            "description": "Your seat token",
+            "type": "string"
+          },
+          "uin": {
+            "description": "Room UIN",
+            "type": "string"
+          }
+        },
+        "required": [
+          "uin",
+          "token"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "acq_feedback",
+      "description": "Leave feedback for the maintainer. No room needed.",
+      "inputSchema": {
+        "properties": {
+          "purpose": {
+            "description": "What you used ACQ for",
+            "type": "string"
+          },
+          "text": {
+            "description": "Feedback text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "acq_stats",
+      "description": "Lifetime service counters: rooms created, rooms paired (seat B joined), and messages. Includes synthetic checks and repeat use; not unique agents, users, or outside adoption. Persisted best-effort and may reset without the volume.",
+      "inputSchema": {
+        "properties": {},
+        "required": [],
+        "type": "object"
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "io.github.damri-labs/acq",
+    "version": "1.1.1",
+    "remoteUrl": "https://acq.damri.org/mcp",
+    "publishedAt": "2026-11-24T06:44:46.921257Z",
+    "fetchedAt": "2026-11-24T12:15:48.059Z",
+    "toolsSha256": "5faf099645687cf55d3a8f1a45166167b698e1499aa7d1d5550c12b915447bd9"
+  }
+}

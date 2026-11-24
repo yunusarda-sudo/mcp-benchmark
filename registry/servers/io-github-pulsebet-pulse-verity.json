@@ -1,0 +1,766 @@
+{
+  "$schema": "../schema.json",
+  "name": "io.github.PulseBet/pulse-verity",
+  "title": "Pulse Verity",
+  "category": "AI, LLMs & Agents",
+  "description": "Signed Bitcoin and crypto prices for AI agents: multi-exchange prices anyone can verify offline.",
+  "repository": "https://github.com/PulseBet/pulse-verity",
+  "tools": [
+    {
+      "name": "get_index_price",
+      "description": "Get a current signed crypto index price from /api/index/v1/price. Returns symbol, price, optional priceText, at, grade, signature, kid and sig. Preserve priceText exactly for verify_print. Optional tier, confidence, dispersionBps, interval, sources, engine and cadence describe the observation; they are not covered by the v1 signature, and the v2 block signs them with the price. Pass the whole print, v2 included, to verify_print. Coverage changes: use list_index_assets to discover assets. A stale or unavailable response means no current price, never zero.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "symbol": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20,
+            "pattern": "^[A-Za-z0-9]+$",
+            "description": "Crypto ticker symbol, e.g. BTC, ETH, SOL"
+          }
+        },
+        "required": [
+          "symbol"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "get_index_batch",
+      "description": "Read signed prices for up to 100 symbols per request; this account's plan may allow fewer (get_account_status reports batchMaxSymbols). One /api/index/v1/batch request returns observations with individually signed successful rows and per-symbol errors for unavailable rows. A request over the plan's limit is refused with code TOO_MANY_SYMBOLS: split it. Verify each successful row with verify_print; the v2 block on each row signs its quality fields, while the surrounding batch metadata is not signed. No automatic retries.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "symbols": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 20,
+              "pattern": "^[A-Za-z0-9]+$",
+              "description": "Crypto ticker symbol, e.g. BTC, ETH, SOL"
+            },
+            "minItems": 1,
+            "maxItems": 100,
+            "description": "Crypto ticker symbols to price, 1 to 100 (your plan may allow fewer), e.g. [\"BTC\", \"ETH\"]"
+          }
+        },
+        "required": [
+          "symbols"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "list_index_assets",
+      "description": "Read one bounded page from /api/index/v1/verity/catalog. Discover crypto symbols and their current coverage status and measured cadence. Catalog rows, prices and metadata are unsigned: use get_index_price or get_index_batch for signed receipts. Availability changes; total is a catalog count, not a count of fresh prices. No automatic pagination.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "description": "Rows per page, 1 to 100; 50 when omitted. A plan may return fewer: use count and offset."
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100000,
+            "default": 0,
+            "description": "Rows to skip before this page, for paging; 0 when omitted"
+          },
+          "band": {
+            "type": "string",
+            "enum": [
+              "real-time",
+              "five-second",
+              "ten-second",
+              "slow",
+              "unavailable"
+            ],
+            "description": "Only assets in this measured update cadence band"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "consensus",
+              "blended",
+              "indicative",
+              "insufficient-coverage",
+              "venue-disagreement",
+              "unconvertible-quote",
+              "stale",
+              "kernel-rejected"
+            ],
+            "description": "Only assets with this coverage status"
+          }
+        },
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "get_recorded_print",
+      "description": "Get the recorded signed index print nearest a requested time from /api/index/v1/print. Accepts ISO-8601 or epoch milliseconds. Check deltaMs: it is the distance between your requested time and the sampled print. Sampling and retention are bounded; a recorded print need not equal a separate live read. qualityRecorded says whether its quality fields were stored when it was recorded (prints from 1 Oct 2026). Preserve priceText, kid and the v2 block when present for verify_print. deltaMs is not signed. Formerly named get_settlement_print; calls under that name still work.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "symbol": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20,
+            "pattern": "^[A-Za-z0-9]+$",
+            "description": "Crypto ticker symbol, e.g. BTC, ETH, SOL"
+          },
+          "at": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40,
+            "pattern": "^[^\\x00-\\x1f\\x7f\\u0085\\u2028\\u2029]+$",
+            "description": "The moment to look up: ISO-8601 (e.g. 2026-11-11T17:00:00Z) or epoch milliseconds"
+          }
+        },
+        "required": [
+          "symbol",
+          "at"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "verify_print",
+      "description": "Verify a signed print locally with ECDSA P-256/SHA-256. Canonical bytes are pulse-index-v1\\n<symbol>\\n<priceText or String(price)>\\n<at>\\n<grade>. The public key ring is read from /api/index/v1/pubkey, cached for five minutes and refreshed at most once per 30 seconds on a failed check. A supplied kid selects only that exact key; old prints without kid are tried against the bounded published ring. valid=true authenticates only the canonical price fields, not kid, sig, quality, cadence, timestamps outside at, or other metadata. When the print carries a v2 block (pulse-index-v2), it is verified too: v2.valid=true means the signature over v2.canonical is valid AND every signed line (sources, tier, confidence, dispersionBps, interval, cadence, engine, price and the rest) matches the supplied fields; v2.signedFields are the signed values and v2.mismatches names any field that differs. recordValid=true and verificationScope=full-record require BOTH price and complete v2 record verification. metadataSigned equals recordValid. Require recordValid before trusting quality fields. A v1-only print has scope price-only, never verified metadata. Neither signature proves freshness or settlement suitability; indicative data must not be used for settlement. An invalid signature can mean an altered print or a key no longer published; it does not by itself prove tampering.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "symbol": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20,
+            "pattern": "^[A-Za-z0-9]+$",
+            "description": "Crypto ticker symbol, e.g. BTC, ETH, SOL"
+          },
+          "price": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "pattern": "^[+-]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:[eE][+-]?\\d+)?$"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "description": "Price from the print, unchanged (text or number)"
+          },
+          "priceText": {
+            "$ref": "#/properties/price/anyOf/0",
+            "description": "Exact signed price text, when provided by the API; preserve unchanged"
+          },
+          "at": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40,
+            "pattern": "^[^\\x00-\\x1f\\x7f\\u0085\\u2028\\u2029]+$",
+            "description": "Timestamp from the print, unchanged"
+          },
+          "grade": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20,
+            "pattern": "^[^\\x00-\\x1f\\x7f\\u0085\\u2028\\u2029]+$",
+            "description": "Quality grade from the print, unchanged, e.g. consensus"
+          },
+          "signature": {
+            "type": "string",
+            "minLength": 88,
+            "maxLength": 88,
+            "pattern": "^[A-Za-z0-9+/]{86}==$",
+            "description": "ECDSA P-256 signature in base64"
+          },
+          "kid": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9._:-]{1,64}$",
+            "description": "Signing key identifier, when provided by the API"
+          },
+          "sig": {
+            "type": "string",
+            "const": "pulse-index-v1",
+            "description": "Signature version from the print (pulse-index-v1), when provided"
+          },
+          "kind": {
+            "type": "string",
+            "const": "daily-close",
+            "description": "Print kind from the print, when provided (daily-close for a daily close)"
+          },
+          "assetId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 160,
+                "pattern": "^[^\\x00-\\x1f\\x7f\\u0085\\u2028\\u2029]+$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Asset identifier from the print, unchanged, when provided"
+          },
+          "closeDay": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "UTC day of a daily close (YYYY-MM-DD), from the print, when provided"
+          },
+          "engine": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64,
+                "pattern": "^[^\\x00-\\x1f\\x7f\\u0085\\u2028\\u2029]+$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Pricing engine label from the print, unchanged, when provided"
+          },
+          "sources": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Number of exchanges that contributed, from the print, when provided"
+          },
+          "tier": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 20,
+                "pattern": "^[^\\x00-\\x1f\\x7f\\u0085\\u2028\\u2029]+$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Coverage tier from the print, unchanged, when provided"
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Confidence score from the print, unchanged, when provided"
+          },
+          "dispersionBps": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Spread between contributing exchanges in basis points, from the print, when provided"
+          },
+          "interval": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "lower": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Lower bound of the price interval, from the print"
+                  },
+                  "upper": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Upper bound of the price interval, from the print"
+                  }
+                },
+                "required": [
+                  "lower",
+                  "upper"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Price interval from the print, unchanged, when provided"
+          },
+          "cadence": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "band": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 40,
+                        "pattern": "^[^\\x00-\\x1f\\x7f\\u0085\\u2028\\u2029]+$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Update cadence band, from the print"
+                  },
+                  "calculatedAgeMs": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Age of the calculation in milliseconds, from the print"
+                  },
+                  "newestSourceAgeMs": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Age of the newest exchange quote in milliseconds, from the print"
+                  },
+                  "oldestSourceAgeMs": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Age of the oldest exchange quote in milliseconds, from the print"
+                  },
+                  "p50UpdateMs": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Median time between updates in milliseconds, from the print"
+                  },
+                  "p95UpdateMs": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "95th percentile time between updates in milliseconds, from the print"
+                  }
+                },
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Cadence block from the print, unchanged, when provided"
+          },
+          "licence": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 60,
+                "pattern": "^[^\\x00-\\x1f\\x7f\\u0085\\u2028\\u2029]+$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Plan licence from the print, unchanged, when provided (a signed v2 line on prints requested with licence=1)"
+          },
+          "v2": {
+            "type": "object",
+            "properties": {
+              "sig": {
+                "type": "string",
+                "const": "pulse-index-v2",
+                "description": "v2 signature version (pulse-index-v2), from the print"
+              },
+              "canonical": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 8192,
+                "description": "The exact signed string from the print, unchanged"
+              },
+              "signature": {
+                "type": "string",
+                "minLength": 88,
+                "maxLength": 88,
+                "pattern": "^[A-Za-z0-9+/]{86}==$",
+                "description": "v2 ECDSA P-256 signature in base64, from the print"
+              },
+              "kid": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9._:-]{1,64}$",
+                "description": "v2 signing key identifier, from the print"
+              }
+            },
+            "required": [
+              "sig",
+              "canonical",
+              "signature",
+              "kid"
+            ],
+            "additionalProperties": false,
+            "description": "The v2 block from the print, unchanged: it signs the whole record, quality fields included"
+          }
+        },
+        "required": [
+          "symbol",
+          "price",
+          "at",
+          "grade",
+          "signature"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "get_account_status",
+      "description": "Read this connection's Pulse Verity plan and usage from /api/index/v1/account: plan, used (calls counted this UTC month), limit, remaining, resetAt, perMinute, batchMaxSymbols, capacityAction and upgradeUrl (the plans page). The monthly allowance is account-wide: every key and connected app on the account shares it. perMinute applies to each key. This call does not count toward the allowance.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "get_index_history",
+      "description": "Read price history for one crypto symbol from /api/index/v1/history: candles (open, high, low, close) at 1m, 5m, 1h or 1d, with period metrics and pagination. dataset=verified (default) is built from prints Pulse signed live; reconstructed is rebuilt history at 1h or 1d and was not signed at the historical time. The account's plan sets whether history is included and how far back a request reaches: rangeClamped says the window was shortened, and historyLimit names the plan when the plan did it. Each call counts as one API call. For the next page pass pagination.nextCursor as cursor with the same symbol, dataset and interval. Signed rows (verifiedObservations) are returned only with includeSignedRows=true; each verifies with verify_print. Candles and metrics are not signed. An empty page means no recorded history in that window, never a zero price.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "symbol": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20,
+            "pattern": "^[A-Za-z0-9]+$",
+            "description": "Crypto ticker symbol, e.g. BTC"
+          },
+          "dataset": {
+            "type": "string",
+            "enum": [
+              "verified",
+              "reconstructed"
+            ],
+            "description": "verified (default): built from prints Pulse signed live. reconstructed: rebuilt hourly and daily history, not signed at the historical time; interval 1h or 1d only."
+          },
+          "interval": {
+            "type": "string",
+            "enum": [
+              "1m",
+              "5m",
+              "1h",
+              "1d"
+            ],
+            "description": "Candle width; 1h when omitted."
+          },
+          "from": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40,
+            "pattern": "^[^\\x00-\\x1f\\x7f\\u0085\\u2028\\u2029]+$",
+            "description": "Start, ISO-8601 or epoch milliseconds (13 digits); 30 days before `to` when omitted. The plan may shorten it."
+          },
+          "to": {
+            "$ref": "#/properties/from",
+            "description": "End, ISO-8601 or epoch milliseconds (13 digits); now when omitted."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000,
+            "description": "Underlying points per page, 1 to 1000; 500 when omitted."
+          },
+          "cursor": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "pagination.nextCursor from the previous page, unchanged."
+          },
+          "assetId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "^[A-Za-z0-9:._-]+$",
+            "description": "Canonical asset id, when a ticker names more than one asset."
+          },
+          "includeSignedRows": {
+            "type": "boolean",
+            "description": "Include verifiedObservations, each a signed row verify_print checks (verified dataset only). Off by default to keep pages small."
+          }
+        },
+        "required": [
+          "symbol"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "get_upgrade_options",
+      "description": "List the Pulse Verity plans with their limits and prices, and the prepaid call packs and extra stream connections while each is on sale, each with a portal link. Read-only; does not count toward the allowance. The current plan is marked when the account is on that plan's terms (currentPlan shows the account's own limits either way), and when a recent plan refusal is known (or reason is given) the smallest plan, add-on or pack that fixes it is recommended. A link opens the portal, which shows the item, price and terms; the account holder completes payment on Stripe. Nothing is bought by this tool or by opening a link.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "enum": [
+              "MONTHLY_LIMIT",
+              "RATE_LIMITED",
+              "TOO_MANY_SYMBOLS",
+              "BATCH_TOO_LARGE",
+              "RESEARCH_NOT_INCLUDED",
+              "SYMBOL_LIMIT",
+              "SOURCE_HEALTH_NOT_INCLUDED",
+              "WEBHOOKS_NOT_INCLUDED",
+              "STREAM_NOT_INCLUDED",
+              "CONNECTION_LIMIT",
+              "KEY_LIMIT",
+              "HISTORY_WINDOW"
+            ],
+            "description": "A refusal code this connection received, e.g. TOO_MANY_SYMBOLS or MONTHLY_LIMIT, when it is not the most recent one."
+          },
+          "dataset": {
+            "type": "string",
+            "enum": [
+              "verified",
+              "reconstructed"
+            ],
+            "description": "For HISTORY_WINDOW: the history dataset that was shortened; verified (the get_index_history default) when omitted."
+          },
+          "feature": {
+            "type": "string",
+            "enum": [
+              "history",
+              "research-tools"
+            ],
+            "description": "For RESEARCH_NOT_INCLUDED: history when get_index_history was refused, research-tools for compare or metadata; when omitted, the plan that includes both."
+          }
+        },
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "submit_verity_feedback",
+      "description": "Write one structured bug, missing capability, or data quality report for private human triage. Only submit when the user requests reporting; do not include keys, passwords, transcripts or attachments. For a price problem, add quote: the price, at and source exactly as you received them, and grade, signature and kid from the print when you have it; with a signature the server checks the quote against Verity's published keys, so triage can tell a real Verity print from an altered or foreign one. Returns a durable receipt and duplicate flag, not a promise of a fix. No code or production behavior changes automatically. Status is available with the same account at GET /api/index/v1/feedback/<id>.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "category": {
+            "type": "string",
+            "enum": [
+              "bug",
+              "missing_capability",
+              "data_quality"
+            ],
+            "description": "Kind of report: bug, missing_capability or data_quality"
+          },
+          "surface": {
+            "type": "string",
+            "enum": [
+              "get_index_price",
+              "get_index_batch",
+              "list_index_assets",
+              "get_recorded_print",
+              "get_settlement_print",
+              "verify_print",
+              "/api/index/v1/price",
+              "/api/index/v1/batch",
+              "/api/index/v1/print",
+              "/api/index/v1/verity/catalog",
+              "/api/index/v1/pubkey",
+              "/api/index/v1/sample",
+              "/api/index/v1/history",
+              "/api/index/v1/metadata",
+              "/api/index/v1/research/compare",
+              "/api/index/v1/source-health",
+              "/api/index/v1/verity/price",
+              "/api/index/v1/verity/batch",
+              "/api/index/mcp"
+            ],
+            "description": "The tool or API route the report is about"
+          },
+          "symbol": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 48,
+            "pattern": "^[A-Za-z0-9._:/-]+$",
+            "description": "Crypto ticker the report is about, when there is one"
+          },
+          "requestId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 96,
+            "pattern": "^[A-Za-z0-9._:-]+$",
+            "description": "requestId from the response you are reporting, when you have it"
+          },
+          "observedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When you saw the problem (ISO-8601 with offset)"
+          },
+          "expected": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 1200,
+            "description": "What you expected to happen"
+          },
+          "actual": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 1200,
+            "description": "What actually happened"
+          },
+          "reproduction": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 3,
+              "maxLength": 500
+            },
+            "minItems": 1,
+            "maxItems": 6,
+            "description": "Steps to reproduce, 1 to 6 short lines"
+          },
+          "quote": {
+            "type": "object",
+            "properties": {
+              "price": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 40,
+                    "pattern": "^[0-9][0-9.eE+-]*$"
+                  },
+                  {
+                    "type": "number",
+                    "exclusiveMinimum": 0
+                  }
+                ],
+                "description": "The price exactly as you received it"
+              },
+              "at": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 40,
+                "description": "The price timestamp exactly as you received it (ISO-8601)"
+              },
+              "source": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 80,
+                "pattern": "^[A-Za-z0-9 ._:/()-]+$",
+                "description": "Where the price came from: a tool, a route, or the print source label"
+              },
+              "grade": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 40,
+                "pattern": "^[a-z-]+$",
+                "description": "Grade from the print, when you have it"
+              },
+              "signature": {
+                "type": "string",
+                "minLength": 88,
+                "maxLength": 88,
+                "pattern": "^[A-Za-z0-9+/]{86}==$",
+                "description": "Signature from the print in base64, when you have it"
+              },
+              "kid": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9._:-]{1,64}$",
+                "description": "Signing key identifier from the print, when you have it"
+              }
+            },
+            "required": [
+              "price",
+              "at"
+            ],
+            "additionalProperties": false,
+            "description": "For a price problem: the price, at and source exactly as received, plus grade, signature and kid when you have them"
+          }
+        },
+        "required": [
+          "category",
+          "surface",
+          "expected",
+          "actual",
+          "reproduction"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "io.github.PulseBet/pulse-verity",
+    "version": "1.3.8",
+    "remoteUrl": "https://mcp.thepulse.markets/api/index/mcp",
+    "publishedAt": "2026-11-23T22:09:11.030866Z",
+    "fetchedAt": "2026-11-24T12:15:48.059Z",
+    "toolsSha256": "bb2b6ca9e1a9958b58956974b0cd2035ae0796761a0df0d8a6ac691db2825b1c"
+  }
+}

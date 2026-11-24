@@ -1,0 +1,345 @@
+{
+  "$schema": "../schema.json",
+  "name": "io.github.sathya-sankaran/bharatlas-mcp",
+  "title": "bharatlas",
+  "category": "Developer Tools & DevOps",
+  "description": "Query India's open geo data, and author collect maps: register a link, moderate, publish.",
+  "repository": "https://github.com/urbanmorph/geodata",
+  "tools": [
+    {
+      "name": "list_layers",
+      "description": "List available geo layers. Use to discover what data bharatlas has. Returns layer IDs, names, row counts, categories, realm (below, ground or air) and, for the layers the point lookups read, `lookups` ({ground: section, surface: section}: the section of ground_at or surface_at that reads the layer). Filter by category (boundaries, city-wards, environment, water, agriculture, transport, etc.), realm, admin level (state, district, block, village, etc.), source, or text search.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "category": {
+            "type": "string",
+            "description": "Filter by category: boundaries, city-wards, people, environment, water, agriculture, transport, infrastructure, health-edu, economy"
+          },
+          "level": {
+            "type": "string",
+            "description": "Filter by admin level: state, district, subdistrict, block, village, etc."
+          },
+          "source": {
+            "type": "string",
+            "description": "Filter by data source: LGD, SOI, Bhuvan, OpenCity, DataMeet, etc."
+          },
+          "realm": {
+            "type": "string",
+            "enum": [
+              "below",
+              "ground",
+              "air"
+            ],
+            "description": "Filter by realm: below (rocks, faults, minerals, aquifers, groundwater), ground (boundaries, wards, rivers, forests, roads, places), air (cyclone tracks)"
+          },
+          "q": {
+            "type": "string",
+            "description": "Text search across layer IDs, sources, and descriptions"
+          },
+          "limit": {
+            "type": "number",
+            "description": "Max results (default 20)"
+          },
+          "offset": {
+            "type": "number",
+            "description": "Skip N results for pagination"
+          }
+        }
+      }
+    },
+    {
+      "name": "get_layer_schema",
+      "description": "Get column names, types, and values for a layer (all of them for a column with at most 20; distinct_count; up to 50 values with row counts). Use BEFORE querying to discover what columns exist and what values they contain. Essential for knowing the right column names for filters.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "layer_id": {
+            "type": "string",
+            "description": "Layer ID (e.g. lgd_states, airports, soi_forests, wards_chennai)"
+          }
+        },
+        "required": [
+          "layer_id"
+        ]
+      }
+    },
+    {
+      "name": "query_layer",
+      "description": "Query a layer's data with filters and grouping. Reads the parquet file at runtime. Supports: select specific columns, filter by column values, group by a column to get counts, and sum numeric columns per group (e.g. roll block areas up to district totals). Use get_layer_schema first to discover column names. Examples: 'airports in Karnataka' -> where: {state: 'Karnataka'}, 'forest types' -> group_by: 'type', 'health facilities in Bihar' -> where: {state: 'BIHAR'}, select: ['name', 'type'].",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "layer_id": {
+            "type": "string",
+            "description": "Layer ID to query"
+          },
+          "select": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Column names to return. Omit for all non-geometry columns."
+          },
+          "where": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Filter conditions as {column: value} pairs. Exact, case-insensitive match on flat columns (not partial). Values may contain commas."
+          },
+          "group_by": {
+            "type": "string",
+            "description": "Column to group by. Returns {value: count} instead of rows."
+          },
+          "sum": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Numeric columns to total per group (requires group_by). Adds {sums: {group: {col: total}}}. Use this to roll finer units up, e.g. block-level areas to district totals. Shares/percentages are not additive: sum the area columns and recompute shares."
+          },
+          "limit": {
+            "type": "number",
+            "description": "Max rows (default 100, max 1000)"
+          },
+          "include_centroid": {
+            "type": "boolean",
+            "description": "Include _lat/_lng centroid coordinates (defaults to true). Set false to exclude."
+          }
+        },
+        "required": [
+          "layer_id"
+        ]
+      }
+    },
+    {
+      "name": "locate",
+      "description": "Given a latitude/longitude, find which administrative boundaries, zones, and regions contain that point. Returns state, district, subdistrict, block, parliament/assembly constituency, pincode, seismic zone, high court jurisdiction, the municipal ward (for the 30+ cities with ward layers), and more. The 'where am I?' tool. Also accepts specific layer IDs to check.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "lat": {
+            "type": "number",
+            "description": "Latitude (6 to 38, India bounding box)"
+          },
+          "lng": {
+            "type": "number",
+            "description": "Longitude (68 to 98, India bounding box)"
+          },
+          "layers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Specific layer IDs to check. Omit to use the default: 13 essential admin/zone layers PLUS the city ward layer(s) covering the point (for the 30+ cities with ward layers). Passing this replaces the default entirely (no ward auto-include)."
+          }
+        },
+        "required": [
+          "lat",
+          "lng"
+        ]
+      }
+    },
+    {
+      "name": "nearby",
+      "description": "Find features from a layer that are near a given point, nearest first, within radius_km. Works for points, polygons and lines: points are measured to the point, lines and polygons to the nearest part of their shape (0 inside a polygon; `_distance_to` says which). Returns the true count within the radius plus the nearest `limit`. Example: 'reservoirs near Bengaluru' -> layer_id: 'wris_reservoirs', lat: 12.97, lng: 77.59, radius_km: 50.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "layer_id": {
+            "type": "string",
+            "description": "Layer to search for nearby features"
+          },
+          "lat": {
+            "type": "number",
+            "description": "Center point latitude"
+          },
+          "lng": {
+            "type": "number",
+            "description": "Center point longitude"
+          },
+          "radius_km": {
+            "type": "number",
+            "description": "Search radius in kilometres (default 25, max 200)"
+          },
+          "limit": {
+            "type": "number",
+            "description": "Max results (default 20)"
+          }
+        },
+        "required": [
+          "layer_id",
+          "lat",
+          "lng"
+        ]
+      }
+    },
+    {
+      "name": "ground_at",
+      "description": "What is below a point, in one call: seismic zone, nearest active faults, lineaments and recorded earthquakes, rock type (GSI lithology) and landform, aquifer, a permeability class (GLHYMPS, global and coarse), nearby groundwater wells, soil at 0-5, 5-15 and 15-30 cm (ISRIC SoilGrids 2.0: clay, sand, silt, pH, organic carbon, bulk density, CEC, nitrogen, WRB soil group) and the nearest Soil Health Card sample, ground subsidence (cm/yr) in megacities, and tunnels, buried pipelines and cables, mines and caves nearby. Returns a one-line `summary` plus `sections`, each layer with its credit, licence (non-commercial ones flagged) and status (found, none_within_radius, or not_covered where the layer does not reach the point); layers that could not be read are listed in `unavailable`. Example: 'what is under this plot in Delhi?' -> lat: 28.525, lng: 77.085. For a narrow question pass sections (or layers) so ground_at reads only those: one section takes about 0.1 to 0.3 s, against up to 3 s for everything, and the answer is only what was asked ('what seismic zone is this?' -> sections: [\"seismic\"]; 'is the groundwater safe here?' -> sections: [\"groundwater\"]; 'soil at this farm' -> sections: [\"soil\"]). For a broad one ('what is at this point?', a site screening) pass neither and it reads everything. list_layers and get_layer_detail say which section reads a layer (lookups); an unknown section, or a layer the tool does not read, is an error naming the valid ones.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "lat": {
+            "type": "number",
+            "description": "Latitude (6 to 38, India bounding box)"
+          },
+          "lng": {
+            "type": "number",
+            "description": "Longitude (68 to 98, India bounding box)"
+          },
+          "open_only": {
+            "type": "boolean",
+            "description": "true leaves out the non-commercial layers (for commercial use); default false"
+          },
+          "sections": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "seismic",
+                "geology",
+                "resources",
+                "groundwater",
+                "soil",
+                "subsidence",
+                "underground",
+                "watershed"
+              ]
+            },
+            "description": "Read only these sections (an array, or one comma-separated string); default all"
+          },
+          "layers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Read only these layers (ids, e.g. soilgrids (the SoilGrids raster), seismic_zones, cgwb_aquifers), as well as any sections asked; default all"
+          }
+        },
+        "required": [
+          "lat",
+          "lng"
+        ]
+      }
+    },
+    {
+      "name": "surface_at",
+      "description": "What is on the ground at a point, in one call: the admin units, ward and pincode; land cover, elevation and slope, population density and block land use; climate zones; the river basin, nearest river, water body, dam and wetland, and flood history; hazards (seismic zone, landslides, cyclone tracks, coastal regulation zone); forests and protected areas with the nearest one; the nearest highway, railway and metro station, airport and bus stop; the nearest hospital (three sources) and school, and places within 1 km; the nearest power line, power plant and water-supply facility; distance to India's outline. Returns a one-line `summary` and `sections`, each with its credit, licence, scale, vintage and status; for the air above the point, `air` points to the mugilu MCP's conditions_at. Example: 'what is around this plot in Kolkata?' -> lat: 22.57, lng: 88.36. For a narrow question pass sections (or layers) so surface_at reads only those: one section takes about 0.1 to 0.3 s, against up to 3 s for everything, and the answer is only what was asked ('which ward is this?' -> sections: [\"place\"]; 'nearest railway station' -> layers: [\"ir_stations\"]; 'how high is it?' -> layers: [\"dem\"]). For a broad one ('what is at this point?', a site screening) pass neither and it reads everything. list_layers and get_layer_detail say which section reads a layer (lookups); an unknown section, or a layer the tool does not read, is an error naming the valid ones.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "lat": {
+            "type": "number",
+            "description": "Latitude (6 to 38, India bounding box)"
+          },
+          "lng": {
+            "type": "number",
+            "description": "Longitude (68 to 98, India bounding box)"
+          },
+          "open_only": {
+            "type": "boolean",
+            "description": "true leaves out the non-commercial layers (for commercial use); default false"
+          },
+          "sections": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "place",
+                "land",
+                "climate",
+                "water",
+                "hazards",
+                "protected",
+                "access",
+                "services",
+                "infrastructure"
+              ]
+            },
+            "description": "Read only these sections (an array, or one comma-separated string); default all"
+          },
+          "layers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Read only these layers (ids, e.g. dem, worldcover and worldpop (the rasters), ir_stations, gs_highways, or a ward layer such as wards_chennai), as well as any sections asked; default all"
+          }
+        },
+        "required": [
+          "lat",
+          "lng"
+        ]
+      }
+    },
+    {
+      "name": "list_categories",
+      "description": "List all data categories with layer counts.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "get_layer_detail",
+      "description": "Get full metadata for a single layer: download URLs (parquet, pmtiles, geojson, kml, shapefile), attribution, license, feature count, level metadata, realm (below, ground or air), `lookups` (the section of ground_at or surface_at that reads it, if any), and versions (the dated releases to cite).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "layer_id": {
+            "type": "string",
+            "description": "Layer ID"
+          }
+        },
+        "required": [
+          "layer_id"
+        ]
+      }
+    },
+    {
+      "name": "list_submissions",
+      "description": "List community-submitted geo layers. These are user-contributed datasets under open licenses. Filter by category or search by name.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "q": {
+            "type": "string",
+            "description": "Search name and description"
+          },
+          "category": {
+            "type": "string",
+            "description": "Filter by category"
+          },
+          "sort": {
+            "type": "string",
+            "enum": [
+              "recent",
+              "useful"
+            ],
+            "description": "Sort order (default: recent)"
+          },
+          "limit": {
+            "type": "number",
+            "description": "Max results (default 20)"
+          },
+          "offset": {
+            "type": "number",
+            "description": "Pagination offset"
+          }
+        }
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "io.github.sathya-sankaran/bharatlas-mcp",
+    "version": "1.8.0",
+    "remoteUrl": "https://bharatlas.com/mcp",
+    "publishedAt": "2026-11-24T09:34:32.123286Z",
+    "fetchedAt": "2026-11-24T12:15:48.059Z",
+    "toolsSha256": "9947b3fb53d1fbba443fe9c4a4d9e80d2aed84657ccc8cdc3e4fd38eea406293"
+  }
+}

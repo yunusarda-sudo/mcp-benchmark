@@ -1,0 +1,1941 @@
+{
+  "$schema": "../schema.json",
+  "name": "io.github.pain2hustle/cloudflare-ops-mcp",
+  "title": "AMH Cloudflare Ops MCP by WT",
+  "category": "AI, LLMs & Agents",
+  "description": "Approval-gated Cloudflare ops for agents: DNS, email auth, Pages, cache, Turnstile, tokens.",
+  "repository": "https://github.com/pain2hustle/cloudflare-ops-mcp",
+  "tools": [
+    {
+      "name": "scan_zone",
+      "description": "Read-only snapshot of a domain's Cloudflare zone: all DNS records plus parsed SPF, DMARC, BIMI, and Email Routing status. Never writes.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "domain": {
+            "type": "string",
+            "description": "Domain to scan, e.g. example.com"
+          }
+        },
+        "required": [
+          "domain"
+        ]
+      }
+    },
+    {
+      "name": "plan_email_auth",
+      "description": "Analyze a domain's email authentication (SPF/DKIM/DMARC/BIMI/routing) and report what is missing or misconfigured, with the exact records to add. Never writes.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "domain": {
+            "type": "string",
+            "description": "Domain to analyze"
+          },
+          "inbox": {
+            "type": "string",
+            "description": "Where DMARC aggregate reports should go, e.g. you@gmail.com"
+          }
+        },
+        "required": [
+          "domain"
+        ]
+      }
+    },
+    {
+      "name": "verify_domain",
+      "description": "Re-scan a domain and return a pass/fail checklist: SPF, DMARC present + enforced, MX, Email Routing, BIMI, DKIM count. Never writes.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "domain": {
+            "type": "string",
+            "description": "Domain or zone name, for example example.com."
+          }
+        },
+        "required": [
+          "domain"
+        ]
+      }
+    },
+    {
+      "name": "apply_dns_record",
+      "description": "Upsert a single DNS record (create if absent, update if content differs, no-op if identical). DRY-RUN by default — returns the planned diff and writes nothing unless apply=true. Never deletes.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "domain": {
+            "type": "string",
+            "description": "Domain or zone name, for example example.com."
+          },
+          "type": {
+            "type": "string",
+            "description": "TXT, CNAME, MX, A, AAAA…"
+          },
+          "name": {
+            "type": "string",
+            "description": "Record name, e.g. @, _dmarc, default._bimi"
+          },
+          "content": {
+            "type": "string",
+            "description": "Record value"
+          },
+          "priority": {
+            "type": "number",
+            "description": "MX priority (MX only)"
+          },
+          "proxied": {
+            "type": "boolean",
+            "description": "Proxy the record through Cloudflare (orange cloud)."
+          },
+          "apply": {
+            "type": "boolean",
+            "description": "Set true to actually write. Default false = dry-run."
+          }
+        },
+        "required": [
+          "domain",
+          "type",
+          "name",
+          "content"
+        ]
+      }
+    },
+    {
+      "name": "delete_dns_record",
+      "description": "Delete exactly one DNS record after a fresh lookup. Requires domain, exact record_id, matching expected_name, and confirm=true. Refuses by default and never deletes by name alone.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "domain": {
+            "type": "string",
+            "description": "Zone name, e.g. example.com"
+          },
+          "record_id": {
+            "type": "string",
+            "description": "Exact DNS record id returned by scan_zone"
+          },
+          "expected_name": {
+            "type": "string",
+            "description": "Exact hostname expected for that record id"
+          },
+          "confirm": {
+            "type": "boolean",
+            "description": "Must be true to perform the deletion"
+          }
+        },
+        "required": [
+          "domain",
+          "record_id",
+          "expected_name",
+          "confirm"
+        ]
+      }
+    },
+    {
+      "name": "set_dmarc_policy",
+      "description": "Change the _dmarc policy (none|quarantine|reject), preserving other tags. DRY-RUN by default — returns the before/after diff and writes nothing unless apply=true.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "domain": {
+            "type": "string",
+            "description": "Domain or zone name, for example example.com."
+          },
+          "policy": {
+            "type": "string",
+            "enum": [
+              "none",
+              "quarantine",
+              "reject"
+            ],
+            "description": "DMARC policy: none (monitor), quarantine or reject."
+          },
+          "rua": {
+            "type": "string",
+            "description": "Optional aggregate-report mailbox, e.g. mailto:you@gmail.com"
+          },
+          "pct": {
+            "type": "number",
+            "description": "Optional rollout percentage 1-100"
+          },
+          "apply": {
+            "type": "boolean",
+            "description": "Default false = dry-run."
+          }
+        },
+        "required": [
+          "domain",
+          "policy"
+        ]
+      }
+    },
+    {
+      "name": "setup_bimi",
+      "description": "Create/update the default._bimi TXT record pointing at a logo SVG. REFUSES to write when DMARC is p=none (unless force=true) because BIMI won't be honored without enforced DMARC. DRY-RUN by default.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "domain": {
+            "type": "string",
+            "description": "Domain or zone name, for example example.com."
+          },
+          "logo": {
+            "type": "string",
+            "description": "HTTPS URL to an SVG Tiny-PS logo"
+          },
+          "vmc": {
+            "type": "string",
+            "description": "Optional Verified Mark Certificate PEM URL"
+          },
+          "apply": {
+            "type": "boolean",
+            "description": "Default false = dry-run."
+          },
+          "force": {
+            "type": "boolean",
+            "description": "Override the DMARC precondition (not recommended)."
+          }
+        },
+        "required": [
+          "domain",
+          "logo"
+        ]
+      }
+    },
+    {
+      "name": "setup_email_routing",
+      "description": "Enable Cloudflare Email Routing and create forward rules (+ optional catch-all). Cloudflare auto-adds the MX/SPF records. DRY-RUN by default. Destination addresses must be verified by their owner via Cloudflare's email.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "domain": {
+            "type": "string",
+            "description": "Domain or zone name, for example example.com."
+          },
+          "forwards": {
+            "type": "array",
+            "description": "Rules: { address, to } forwards to an email address, or { address, worker } routes to a Cloudflare Email Worker (no destination verification needed). e.g. { address: 'hello@example.com', to: 'you@gmail.com' } or { address: 'bot@example.com', worker: 'my-email-worker' }",
+            "items": {
+              "type": "object",
+              "properties": {
+                "address": {
+                  "type": "string"
+                },
+                "to": {
+                  "type": "string"
+                },
+                "worker": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "address"
+              ]
+            }
+          },
+          "catch_all": {
+            "type": "string",
+            "description": "Optional catch-all destination address"
+          },
+          "apply": {
+            "type": "boolean",
+            "description": "Default false = dry-run."
+          },
+          "force": {
+            "type": "boolean",
+            "description": "Create rules even to unverified destinations (not recommended — they stay disabled)."
+          }
+        },
+        "required": [
+          "domain"
+        ]
+      }
+    },
+    {
+      "name": "pages_cutover",
+      "description": "Plan or apply a Cloudflare Pages DNS cutover. Deletes only conflicting apex/www A/AAAA/CNAME records and www NS delegations, then creates proxied CNAMEs to the Pages target. DRY-RUN by default; writes only when apply=true.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "domain": {
+            "type": "string",
+            "description": "Root zone, e.g. example.com"
+          },
+          "target": {
+            "type": "string",
+            "description": "Pages hostname, normally project.pages.dev"
+          },
+          "include_www": {
+            "type": "boolean",
+            "description": "Also cut over www. Default true."
+          },
+          "include_wildcard": {
+            "type": "boolean",
+            "description": "Also remove conflicting wildcard records. Default false."
+          },
+          "apply": {
+            "type": "boolean",
+            "description": "Default false = dry-run."
+          }
+        },
+        "required": [
+          "domain",
+          "target"
+        ]
+      }
+    },
+    {
+      "name": "purge_cache",
+      "description": "Purge Cloudflare's cache for a zone — the whole zone (default) or specific URLs. DRY-RUN by default: returns the scope and purges NOTHING unless apply=true. Needs a token with Zone > Cache Purge.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "domain": {
+            "type": "string",
+            "description": "Zone, e.g. example.com"
+          },
+          "everything": {
+            "type": "boolean",
+            "description": "Purge the whole zone cache (default when no urls given)."
+          },
+          "urls": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Specific absolute URLs to purge (max 30)."
+          },
+          "apply": {
+            "type": "boolean",
+            "description": "Default false = dry-run."
+          }
+        },
+        "required": [
+          "domain"
+        ]
+      }
+    },
+    {
+      "name": "create_turnstile_widget",
+      "description": "Plan or create a Cloudflare Turnstile widget for a domain. DRY-RUN by default; creates the widget only when apply=true. Returns the public sitekey and one-time secret when applied.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "domain": {
+            "type": "string",
+            "description": "Primary zone/domain, e.g. example.com"
+          },
+          "name": {
+            "type": "string",
+            "description": "Optional widget display name."
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "managed",
+              "non-interactive",
+              "invisible"
+            ],
+            "description": "Turnstile mode. Default managed."
+          },
+          "extra_domains": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Additional hostnames allowed to use this widget."
+          },
+          "apply": {
+            "type": "boolean",
+            "description": "Default false = dry-run."
+          }
+        },
+        "required": [
+          "domain"
+        ]
+      }
+    },
+    {
+      "name": "mint_scoped_token",
+      "description": "Mint a narrow, auto-expiring Cloudflare API token for ONE zone (presets: zone-read, dns-zone, cache-purge; default 1h TTL). The vending machine for least-privilege agent work: hand a cheap agent a key that can't hurt anything and dies on its own. DRY-RUN by default — returns the exact policy JSON; mints nothing unless apply=true. Needs a bootstrap token with 'API Tokens Write'. There is deliberately NO super/account-wide preset.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "domain": {
+            "type": "string",
+            "description": "Zone the token is confined to, e.g. example.com"
+          },
+          "preset": {
+            "type": "string",
+            "enum": [
+              "zone-read",
+              "dns-zone",
+              "cache-purge"
+            ],
+            "description": "Permission preset. Default dns-zone."
+          },
+          "extra_groups": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Additional Cloudflare permission-group NAMES (still zone-scoped)."
+          },
+          "ttl_seconds": {
+            "type": "number",
+            "description": "Lifetime in seconds. Default 3600; capped at 86400 unless confirm_long=true."
+          },
+          "confirm_long": {
+            "type": "boolean",
+            "description": "Required to exceed the 24h TTL cap."
+          },
+          "name": {
+            "type": "string",
+            "description": "Optional token label for the CF dashboard."
+          },
+          "keep_days": {
+            "type": "number",
+            "description": "How many days this token may sit unused before the auditor revokes it (1-365). Default = token_audit_settings unused_days."
+          },
+          "apply": {
+            "type": "boolean",
+            "description": "Default false = dry-run."
+          }
+        },
+        "required": [
+          "domain"
+        ]
+      }
+    },
+    {
+      "name": "list_tokens",
+      "description": "List API tokens on the connected user: id, name, status, expiry, and whether cfops minted them. NEVER returns token values (Cloudflare only shows those once, at mint). Read-only.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "revoke_token",
+      "description": "Revoke an API token by id (e.g. a minted task-token you're done with early). DRY-RUN by default; deletes nothing unless apply=true.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "token_id": {
+            "type": "string",
+            "description": "Token id from list_tokens."
+          },
+          "apply": {
+            "type": "boolean",
+            "description": "Default false = dry-run."
+          }
+        },
+        "required": [
+          "token_id"
+        ]
+      }
+    },
+    {
+      "name": "who_serves_domain",
+      "description": "Answer 'what is ACTUALLY serving this domain?': zone → Worker routes, Worker custom domains, and Pages projects that claim it, with a warning when multiple products fight over it. Read-only.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "domain": {
+            "type": "string",
+            "description": "Hostname or zone, e.g. app.example.com"
+          }
+        },
+        "required": [
+          "domain"
+        ]
+      }
+    },
+    {
+      "name": "account_doctor",
+      "description": "Diagnose the token/account situation: accounts visible to this token, whether the expected account is among them (wrong-token detection), and SAME-NAME Pages projects across accounts — the decoy that silently eats deploys. Read-only.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "expected_account_id": {
+            "type": "string",
+            "description": "Account id deploys are SUPPOSED to target."
+          }
+        }
+      }
+    },
+    {
+      "name": "pages_branch_check",
+      "description": "Compare a Pages project's production branch against the branch you're about to deploy — catches the silent 'git says master, project says main, every deploy lands on a preview' failure. Read-only.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "account_id": {
+            "type": "string",
+            "description": "Account that owns the Pages project."
+          },
+          "project": {
+            "type": "string",
+            "description": "Pages project name."
+          },
+          "git_branch": {
+            "type": "string",
+            "description": "Branch you intend to deploy; enables the match/mismatch verdict."
+          }
+        },
+        "required": [
+          "account_id",
+          "project"
+        ]
+      }
+    },
+    {
+      "name": "walo_diagnostic_repair",
+      "description": "Owner-only fixed diagnostic repair for walo-mcp and localops-whatsapp-bridge in Austin Doors. Inspect returns source/config hashes and rollback version without values or source. Stage uploads only embedded reviewed edits; deploy requires staged verification. Status and guarded rollback are limited to this one-time repair. Also permits the separately approved fixed tenant-1 sender-cache inspection/correction and fixed owner-only read-only notification probe installation. Includes the fixed seven-day tenant-1-owner session-receipt revision and bounded read of its sanitized records. No arbitrary source, generic execution, new credentials, database routes or messages.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "script",
+          "action",
+          "_approved"
+        ],
+        "properties": {
+          "script": {
+            "type": "string",
+            "enum": [
+              "walo-mcp",
+              "localops-whatsapp-bridge"
+            ],
+            "description": "Name of the Worker script."
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "inspect",
+              "stage",
+              "verify",
+              "deploy",
+              "status",
+              "rollback",
+              "sender_cache_inspect",
+              "sender_cache_apply",
+              "sender_cache_verify",
+              "probe_inspect",
+              "probe_stage",
+              "probe_deploy",
+              "probe_status",
+              "probe_routes",
+              "key_inspect",
+              "key_apply",
+              "key_status",
+              "receipt_inspect",
+              "receipt_stage",
+              "receipt_verify",
+              "receipt_deploy",
+              "receipt_status",
+              "receipt_rollback",
+              "receipt_read"
+            ],
+            "description": "Which step to run; see the allowed values. Inspect/status steps are read-only."
+          },
+          "expected_snapshot_sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "description": "SHA-256 of the snapshot you inspected; the call refuses if live has changed since."
+          },
+          "candidate_sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "description": "SHA-256 of the staged candidate; must match before verify/deploy."
+          },
+          "confirm": {
+            "type": "boolean",
+            "description": "Must be true to run a step that changes anything."
+          },
+          "_approved": {
+            "type": "boolean",
+            "description": "Set true only after the owner approved this exact change. Without it the tool refuses or stays read-only."
+          }
+        }
+      }
+    },
+    {
+      "name": "apiary_cache_repair",
+      "description": "Owner-only, one-time fixed Apiary HEAD/empty-cache repair. snapshot returns a private gzip backup; stage uploads the embedded reviewed patch without deploying; deploy requires verified local-preview source hash; status/rollback are limited to this operation. No arbitrary code, account, resource, cache deletion or credential changes.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "inspect",
+              "snapshot",
+              "stage",
+              "restage",
+              "verify",
+              "deploy",
+              "status",
+              "rollback"
+            ],
+            "default": "snapshot",
+            "description": "Which step to run; see the allowed values. Inspect/status steps are read-only."
+          },
+          "expected_snapshot_sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "description": "SHA-256 of the snapshot you inspected; the call refuses if live has changed since."
+          },
+          "backup_sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "description": "SHA-256 of the backup taken by the snapshot step; must match before restore."
+          },
+          "local_preview_source_sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "description": "SHA-256 of the locally previewed source; must match the staged copy."
+          },
+          "confirm": {
+            "type": "boolean",
+            "description": "Must be true to run a step that changes anything."
+          },
+          "_approved": {
+            "type": "boolean",
+            "description": "Set true only after the owner approved this exact change. Without it the tool refuses or stays read-only."
+          }
+        }
+      }
+    },
+    {
+      "name": "apiary_worker_deployments",
+      "description": "Read active deployment and recent deployment history for apiary-bee on Austin Doors. First item serves traffic. Past versions are rollback candidates, not validated rollbacks.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "_approved": {
+            "type": "boolean",
+            "description": "Set true only after the owner approved this exact change. Without it the tool refuses or stays read-only."
+          }
+        }
+      }
+    },
+    {
+      "name": "apiary_worker_version",
+      "description": "Read only version identity, script etag, runtime compatibility and binding names/types for one apiary-bee version. Never returns values, source code or secrets.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "version_id": {
+            "type": "string",
+            "pattern": "^[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}$",
+            "description": "Worker version id."
+          },
+          "_approved": {
+            "type": "boolean",
+            "description": "Set true only after the owner approved this exact change. Without it the tool refuses or stays read-only."
+          }
+        },
+        "required": [
+          "version_id"
+        ]
+      }
+    },
+    {
+      "name": "apiary_r2_objects_list",
+      "description": "One metadata-only page from apiary-reading-html, fixed community/reading/ prefix. Follow every next_cursor until page_exhausted; this call never proves the entire inventory complete.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "cursor": {
+            "type": "string",
+            "maxLength": 8192,
+            "description": "Pagination cursor returned by the previous call."
+          },
+          "per_page": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000,
+            "default": 1000,
+            "description": "Items per page."
+          },
+          "_approved": {
+            "type": "boolean",
+            "description": "Set true only after the owner approved this exact change. Without it the tool refuses or stays read-only."
+          }
+        }
+      }
+    },
+    {
+      "name": "pages_deploy",
+      "description": "Deploy a COMPLETE built static site to a Cloudflare Pages project through the API (like `wrangler pages deploy`, no PC needed). Dry-run by default; apply=true uploads and deploys. branch = production branch goes LIVE; any other branch is a preview URL. A deploy replaces the whole site, so send every file. To change only a few files on a live site use pages_patch (or pass patch=true with edits [{path,find,replace}] here). Static only (no functions/). artificialmindhive production is refused.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "account": {
+            "type": "string",
+            "description": "amh (pain2hustle1), doors (austinsdoors1), artificialmindhive, servicepricer (souljaboy.app), kodak (kodakblack.app), or an account id"
+          },
+          "project": {
+            "type": "string",
+            "description": "Cloudflare Pages project name."
+          },
+          "branch": {
+            "type": "string",
+            "description": "default = production branch"
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "content": {
+                  "type": "string",
+                  "description": "text file contents"
+                },
+                "content_base64": {
+                  "type": "string",
+                  "description": "binary file contents"
+                }
+              },
+              "required": [
+                "path"
+              ]
+            },
+            "description": "Files to write: [{path, content}] (content as text or base64)."
+          },
+          "commit_message": {
+            "type": "string",
+            "description": "Message recorded on the deployment."
+          },
+          "commit_hash": {
+            "type": "string",
+            "description": "Git commit hash recorded on the Pages deployment."
+          },
+          "apply": {
+            "type": "boolean",
+            "description": "false (default) returns a dry-run diff only; true makes the change."
+          }
+        },
+        "required": [
+          "account",
+          "project",
+          "files"
+        ]
+      }
+    },
+    {
+      "name": "pages_list_deployments",
+      "description": "List recent deployments of a Pages project, marking the one serving production. Read-only.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "account": {
+            "type": "string",
+            "description": "Cloudflare account alias to act on (for example amh, doors, servicepricer, kodak). Defaults to the hub's main account."
+          },
+          "project": {
+            "type": "string",
+            "description": "Cloudflare Pages project name."
+          },
+          "limit": {
+            "type": "number",
+            "description": "Maximum number of items to return."
+          }
+        },
+        "required": [
+          "account",
+          "project"
+        ]
+      }
+    },
+    {
+      "name": "pages_get_deployment",
+      "description": "Details of one Pages deployment: url, branch, stages, commit message. Pass path (+ optional find) to read that file's RAW live text instead. Read-only.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "account": {
+            "type": "string",
+            "description": "Cloudflare account alias to act on (for example amh, doors, servicepricer, kodak). Defaults to the hub's main account."
+          },
+          "project": {
+            "type": "string",
+            "description": "Cloudflare Pages project name."
+          },
+          "deployment_id": {
+            "type": "string",
+            "description": "Cloudflare Pages deployment id."
+          }
+        },
+        "required": [
+          "account",
+          "project",
+          "deployment_id"
+        ]
+      }
+    },
+    {
+      "name": "pages_rollback",
+      "description": "Put a past production deployment back live. Dry-run by default; apply=true rolls back. artificialmindhive needs force=true plus a note.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "account": {
+            "type": "string",
+            "description": "Cloudflare account alias to act on (for example amh, doors, servicepricer, kodak). Defaults to the hub's main account."
+          },
+          "project": {
+            "type": "string",
+            "description": "Cloudflare Pages project name."
+          },
+          "deployment_id": {
+            "type": "string",
+            "description": "Cloudflare Pages deployment id."
+          },
+          "apply": {
+            "type": "boolean",
+            "description": "false (default) returns a dry-run diff only; true makes the change."
+          },
+          "force": {
+            "type": "boolean",
+            "description": "Skip the safety check that would otherwise refuse this call. Use with care."
+          },
+          "note": {
+            "type": "string",
+            "description": "Free-text note saved with the rollback in the audit log."
+          }
+        },
+        "required": [
+          "account",
+          "project",
+          "deployment_id"
+        ]
+      }
+    },
+    {
+      "name": "wrangler_doctor",
+      "description": "One-call health check: Pages projects (with production branch + domains) and Workers on both accounts, plus live vs latest deployment for one project. Read-only.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "account": {
+            "type": "string",
+            "description": "Cloudflare account alias to act on (for example amh, doors, servicepricer, kodak). Defaults to the hub's main account."
+          },
+          "project": {
+            "type": "string",
+            "description": "Cloudflare Pages project name."
+          }
+        }
+      }
+    },
+    {
+      "name": "pages_read_file",
+      "description": "Read the RAW text of one file exactly as the live production deployment serves it (no summarizer, no proxy). Use find to get the exact snippet(s) around a string; else returns content in chunks (offset/length). Read-only.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "account": {
+            "type": "string",
+            "description": "Cloudflare account alias to act on (for example amh, doors, servicepricer, kodak). Defaults to the hub's main account."
+          },
+          "project": {
+            "type": "string",
+            "description": "Cloudflare Pages project name."
+          },
+          "path": {
+            "type": "string",
+            "description": "e.g. insights.html"
+          },
+          "find": {
+            "type": "string",
+            "description": "Text to search for; returns the matching excerpt instead of the whole file."
+          },
+          "around": {
+            "type": "number",
+            "description": "chars of context each side (default 300)"
+          },
+          "offset": {
+            "type": "number",
+            "description": "Start position (characters or lines) for paging through a file."
+          },
+          "length": {
+            "type": "number",
+            "description": "Maximum number of characters or lines to return."
+          }
+        },
+        "required": [
+          "account",
+          "project",
+          "path"
+        ]
+      }
+    },
+    {
+      "name": "pages_patch",
+      "description": "Change ONLY a few files on a live Pages site (no PC, no full file set). Best: edits [{path, find, replace}] — the hub fetches the live file, replaces the exact text (must match once), and deploys. Or files [{path, content}] for whole changed files. The hub copies the live deployment's file list, swaps in the changes (and removes any in delete), keeps _redirects/_headers, and deploys. Every other file stays exactly as live. Dry-run by default; apply=true deploys. branch = production branch goes LIVE, any other = preview. Returns rollback_hint. Sites with server code (artificialmindhive) re-attach the owner-saved worker bundle and get a title + API health check after deploy, with automatic rollback on failure.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "account": {
+            "type": "string",
+            "description": "amh (pain2hustle1), doors (austinsdoors1), artificialmindhive, servicepricer (souljaboy.app), or kodak (kodakblack.app)"
+          },
+          "project": {
+            "type": "string",
+            "description": "Cloudflare Pages project name."
+          },
+          "branch": {
+            "type": "string",
+            "description": "default = production branch (LIVE)"
+          },
+          "edits": {
+            "type": "array",
+            "description": "exact find/replace on live files",
+            "items": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "find": {
+                  "type": "string"
+                },
+                "replace": {
+                  "type": "string"
+                },
+                "count": {
+                  "type": "number",
+                  "description": "expected matches, default 1"
+                }
+              },
+              "required": [
+                "path",
+                "find",
+                "replace"
+              ]
+            }
+          },
+          "files": {
+            "type": "array",
+            "description": "ONLY the changed/new files",
+            "items": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "content": {
+                  "type": "string"
+                },
+                "content_base64": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "path"
+              ]
+            }
+          },
+          "delete": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "paths to remove from the site"
+          },
+          "commit_message": {
+            "type": "string",
+            "description": "Message recorded on the deployment."
+          },
+          "apply": {
+            "type": "boolean",
+            "description": "false (default) returns a dry-run diff only; true makes the change."
+          },
+          "no_redirects": {
+            "type": "boolean",
+            "description": "Do not touch the _redirects file."
+          }
+        },
+        "required": [
+          "account",
+          "project"
+        ]
+      }
+    },
+    {
+      "name": "pages_special_files",
+      "description": "Read (no args besides account/project) or save the hub's copy of a project's _redirects/_headers, which pages_patch re-sends on every patch.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "account": {
+            "type": "string",
+            "description": "Cloudflare account alias to act on (for example amh, doors, servicepricer, kodak). Defaults to the hub's main account."
+          },
+          "project": {
+            "type": "string",
+            "description": "Cloudflare Pages project name."
+          },
+          "_redirects": {
+            "type": "string",
+            "description": "Full new contents of the Pages _redirects file."
+          },
+          "_headers": {
+            "type": "string",
+            "description": "Full new contents of the Pages _headers file."
+          }
+        },
+        "required": [
+          "account",
+          "project"
+        ]
+      }
+    },
+    {
+      "name": "repo_list",
+      "description": "List Austin's GitHub repos (pain2hustle/* and pain2hustle1/*): default branch, last push, private flag. Optional q filters by name/description. No PC needed.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "q": {
+            "type": "string",
+            "description": "Filter repositories by name."
+          }
+        }
+      }
+    },
+    {
+      "name": "repo_read",
+      "description": "Read a file (raw text) or list a folder from a pain2hustle repo at a branch/ref. Use find (+around) to get exact snippets, or offset/length for big files. No PC needed.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "repo": {
+            "type": "string",
+            "description": "pain2hustle/<name>, pain2hustle1/<name>, or <name> (= pain2hustle)"
+          },
+          "path": {
+            "type": "string",
+            "description": "File path inside the repository or site."
+          },
+          "ref": {
+            "type": "string",
+            "description": "Git branch, tag or commit to read from. Defaults to the default branch."
+          },
+          "find": {
+            "type": "string",
+            "description": "Text to search for; returns the matching excerpt instead of the whole file."
+          },
+          "around": {
+            "type": "number",
+            "description": "Line number to centre the returned excerpt on."
+          },
+          "offset": {
+            "type": "number",
+            "description": "Start position (characters or lines) for paging through a file."
+          },
+          "length": {
+            "type": "number",
+            "description": "Maximum number of characters or lines to return."
+          }
+        },
+        "required": [
+          "repo"
+        ]
+      }
+    },
+    {
+      "name": "repo_search",
+      "description": "Search code inside one pain2hustle repo (GitHub code search). Returns matching file paths.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "repo": {
+            "type": "string",
+            "description": "GitHub repository as owner/name."
+          },
+          "query": {
+            "type": "string",
+            "description": "Search text."
+          }
+        },
+        "required": [
+          "repo",
+          "query"
+        ]
+      }
+    },
+    {
+      "name": "repo_commit_push",
+      "description": "Commit to a grok/<name> (or agent/<name>) branch on GitHub in ONE commit, no PC. Branch is created from the default branch if new. files [{path, content, encoding?:'base64', delete?:true}] and/or edits [{path, find, replace}] applied to the branch's current file. Never touches the default branch, never force-pushes, never writes .github/.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "repo": {
+            "type": "string",
+            "description": "GitHub repository as owner/name."
+          },
+          "branch": {
+            "type": "string",
+            "description": "grok/<short-name>"
+          },
+          "message": {
+            "type": "string",
+            "description": "Commit message."
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "content": {
+                  "type": "string"
+                },
+                "encoding": {
+                  "type": "string",
+                  "enum": [
+                    "utf8",
+                    "base64"
+                  ]
+                },
+                "delete": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "path"
+              ]
+            },
+            "description": "Files to write: [{path, content}] (content as text or base64)."
+          },
+          "edits": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "find": {
+                  "type": "string"
+                },
+                "replace": {
+                  "type": "string"
+                },
+                "count": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "path",
+                "find",
+                "replace"
+              ]
+            },
+            "description": "List of {path, old, new} text replacements to apply."
+          },
+          "author": {
+            "type": "string",
+            "description": "Commit author shown in git history (name, not a credential)."
+          }
+        },
+        "required": [
+          "repo",
+          "branch",
+          "message"
+        ]
+      }
+    },
+    {
+      "name": "repo_open_pr",
+      "description": "Open (or find) a pull request from a grok/<name> branch into the default branch so Austin can review and merge.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "repo": {
+            "type": "string",
+            "description": "GitHub repository as owner/name."
+          },
+          "branch": {
+            "type": "string",
+            "description": "Git branch name."
+          },
+          "title": {
+            "type": "string",
+            "description": "Pull request title."
+          },
+          "body": {
+            "type": "string",
+            "description": "Pull request description (Markdown)."
+          }
+        },
+        "required": [
+          "repo",
+          "branch",
+          "title"
+        ]
+      }
+    },
+    {
+      "name": "repo_merge_pr",
+      "description": "Merge an open grok/* or agent/* pull request into the default branch (normal merge commit, history kept, no force). Refused if the PR touches .github/.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "repo": {
+            "type": "string",
+            "description": "GitHub repository as owner/name."
+          },
+          "number": {
+            "type": "number",
+            "description": "Pull request number."
+          },
+          "branch": {
+            "type": "string",
+            "description": "or give the PR's branch"
+          }
+        },
+        "required": [
+          "repo"
+        ]
+      }
+    },
+    {
+      "name": "site_views",
+      "description": "READ-ONLY traffic for one of Austin's domains from Cloudflare analytics: requests, page views and unique visitors for today, the last 7 days or the last 30 days, plus the period before it to compare, and a per-day list. Counts include bots unless noted. Use it for 'how many views on X'.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "domain": {
+            "type": "string",
+            "description": "e.g. servicepricer.app or amhagentbook.com"
+          },
+          "period": {
+            "type": "string",
+            "enum": [
+              "today",
+              "week",
+              "month"
+            ],
+            "description": "default week"
+          }
+        },
+        "required": [
+          "domain"
+        ]
+      }
+    },
+    {
+      "name": "pages_create_project",
+      "description": "Create a NEW Cloudflare Pages project (empty site at <name>.pages.dev). Dry-run unless apply=true. Then use pages_deploy to put files on it and pages_add_domain for a custom domain.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "account": {
+            "type": "string",
+            "description": "amh (pain2hustle1), doors (austinsdoors1), artificialmindhive, servicepricer (souljaboy.app), or kodak (kodakblack.app)"
+          },
+          "name": {
+            "type": "string",
+            "description": "lowercase letters, digits, dashes"
+          },
+          "production_branch": {
+            "type": "string",
+            "description": "default main"
+          },
+          "apply": {
+            "type": "boolean",
+            "description": "false (default) returns a dry-run diff only; true makes the change."
+          }
+        },
+        "required": [
+          "account",
+          "name"
+        ]
+      }
+    },
+    {
+      "name": "pages_add_domain",
+      "description": "Attach a custom domain (e.g. tacos.com or www.tacos.com) to a Pages project, or show the status of its domains. If the domain's zone is on the same Cloudflare account, Cloudflare sets up DNS itself; otherwise the result says what record to add. Dry-run unless apply=true.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "account": {
+            "type": "string",
+            "description": "amh (pain2hustle1), doors (austinsdoors1), artificialmindhive, servicepricer (souljaboy.app), or kodak (kodakblack.app)"
+          },
+          "project": {
+            "type": "string",
+            "description": "Cloudflare Pages project name."
+          },
+          "domain": {
+            "type": "string",
+            "description": "omit to just list the project's domains"
+          },
+          "apply": {
+            "type": "boolean",
+            "description": "false (default) returns a dry-run diff only; true makes the change."
+          }
+        },
+        "required": [
+          "account",
+          "project"
+        ]
+      }
+    },
+    {
+      "name": "worker_deploy",
+      "description": "Deploy a small Cloudflare Worker (one ES-module file, export default { fetch }) next to a site, e.g. an AI chat endpoint or a form handler. Optional bindings: ai=true gives env.AI (Workers AI, e.g. env.AI.run('@cf/moonshotai/kimi-k2.6', {messages})), d1=[{binding, database_id}] gives env.<binding>, vars={NAME:'value'}. Publishes at <name>.<account>.workers.dev. Refuses to overwrite any Worker the hub didn't create (Austin's existing workers are safe). Dry-run unless apply=true. Remember the account's free AI allowance is shared: add a rate limit to anything public.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "account": {
+            "type": "string",
+            "description": "amh (pain2hustle1), doors (austinsdoors1), artificialmindhive, servicepricer (souljaboy.app), or kodak (kodakblack.app)"
+          },
+          "name": {
+            "type": "string",
+            "description": "Name of the Worker or database to create."
+          },
+          "code": {
+            "type": "string",
+            "description": "the module source"
+          },
+          "ai": {
+            "type": "boolean",
+            "description": "Bind Workers AI to the Worker as env.AI."
+          },
+          "d1": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "binding": {
+                  "type": "string"
+                },
+                "database_id": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "binding",
+                "database_id"
+              ]
+            },
+            "description": "D1 bindings to attach: [{binding, database_id}]."
+          },
+          "vars": {
+            "type": "object",
+            "description": "Plain-text environment variables to set on the Worker."
+          },
+          "compatibility_date": {
+            "type": "string",
+            "description": "Workers compatibility date, YYYY-MM-DD."
+          },
+          "apply": {
+            "type": "boolean",
+            "description": "false (default) returns a dry-run diff only; true makes the change."
+          }
+        },
+        "required": [
+          "account",
+          "name",
+          "code"
+        ]
+      }
+    },
+    {
+      "name": "d1_create",
+      "description": "Create a new D1 database (or list existing ones when name is omitted). Dry-run unless apply=true.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "account": {
+            "type": "string",
+            "description": "amh (pain2hustle1), doors (austinsdoors1), artificialmindhive, servicepricer (souljaboy.app), or kodak (kodakblack.app)"
+          },
+          "name": {
+            "type": "string",
+            "description": "Name of the Worker or database to create."
+          },
+          "apply": {
+            "type": "boolean",
+            "description": "false (default) returns a dry-run diff only; true makes the change."
+          }
+        },
+        "required": [
+          "account"
+        ]
+      }
+    },
+    {
+      "name": "d1_query",
+      "description": "READ-ONLY SQL on a D1 database (SELECT / WITH / PRAGMA / EXPLAIN only). database = name or id. Returns rows.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "account": {
+            "type": "string",
+            "description": "amh (pain2hustle1), doors (austinsdoors1), artificialmindhive, servicepricer (souljaboy.app), or kodak (kodakblack.app)"
+          },
+          "database": {
+            "type": "string",
+            "description": "D1 database name or id."
+          },
+          "sql": {
+            "type": "string",
+            "description": "SQL statement to run."
+          },
+          "params": {
+            "type": "array",
+            "description": "Positional bind values for ? placeholders in the SQL."
+          }
+        },
+        "required": [
+          "account",
+          "database",
+          "sql"
+        ]
+      }
+    },
+    {
+      "name": "d1_exec",
+      "description": "WRITE SQL on a D1 database (CREATE TABLE, INSERT, UPDATE, DELETE...). Dry-run unless apply=true; Austin must approve writes. DROP of a table needs force=true.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "account": {
+            "type": "string",
+            "description": "amh (pain2hustle1), doors (austinsdoors1), artificialmindhive, servicepricer (souljaboy.app), or kodak (kodakblack.app)"
+          },
+          "database": {
+            "type": "string",
+            "description": "D1 database name or id."
+          },
+          "sql": {
+            "type": "string",
+            "description": "SQL statement to run."
+          },
+          "params": {
+            "type": "array",
+            "description": "Positional bind values for ? placeholders in the SQL."
+          },
+          "apply": {
+            "type": "boolean",
+            "description": "false (default) returns a dry-run diff only; true makes the change."
+          },
+          "force": {
+            "type": "boolean",
+            "description": "Skip the safety check that would otherwise refuse this call. Use with care."
+          }
+        },
+        "required": [
+          "account",
+          "database",
+          "sql"
+        ]
+      }
+    },
+    {
+      "name": "my_tasks",
+      "description": "Check your inbox: open tasks for you (or for 'any'). Run this when Austin says 'check your inbox'. Then claim_task → do the work → finish_task.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "agent": {
+            "type": "string",
+            "description": "your name: grok, claude, jubber, codex"
+          },
+          "include_done": {
+            "type": "boolean",
+            "description": "Also return finished tasks."
+          }
+        },
+        "required": [
+          "agent"
+        ]
+      }
+    },
+    {
+      "name": "post_task",
+      "description": "Give a task to another agent (or yourself later) on the shared AMH agent board. to: grok | claude | jubber | codex | owner (Austin) | any.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "to": {
+            "type": "string",
+            "description": "Agent the task is for."
+          },
+          "text": {
+            "type": "string",
+            "description": "Task text for the receiving agent."
+          },
+          "from": {
+            "type": "string",
+            "description": "your name"
+          },
+          "notify": {
+            "type": "boolean",
+            "description": "WhatsApp-ping Austin when it's finished (default true)"
+          }
+        },
+        "required": [
+          "to",
+          "text",
+          "from"
+        ]
+      }
+    },
+    {
+      "name": "claim_task",
+      "description": "Claim an inbox task before working on it, so no other agent does it twice.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Task id."
+          },
+          "agent": {
+            "type": "string",
+            "description": "Name of the agent claiming or finishing the task."
+          }
+        },
+        "required": [
+          "id",
+          "agent"
+        ]
+      }
+    },
+    {
+      "name": "finish_task",
+      "description": "Mark an inbox task done (or failed=true) with a short result: what you did, links, deployment ids. Pings Austin on WhatsApp if the task asked for it.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Task id."
+          },
+          "agent": {
+            "type": "string",
+            "description": "Name of the agent claiming or finishing the task."
+          },
+          "result": {
+            "type": "string",
+            "description": "What was done, for the task record."
+          },
+          "failed": {
+            "type": "boolean",
+            "description": "true if the task could not be completed."
+          }
+        },
+        "required": [
+          "id",
+          "agent",
+          "result"
+        ]
+      }
+    },
+    {
+      "name": "list_tasks",
+      "description": "The whole agent board: every task, optionally by status (open/claimed/done/failed) or by who it's for.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "description": "Filter tasks by status."
+          },
+          "to": {
+            "type": "string",
+            "description": "Agent the task is for."
+          },
+          "limit": {
+            "type": "number",
+            "description": "Maximum number of items to return."
+          }
+        }
+      }
+    },
+    {
+      "name": "cancel_task",
+      "description": "Cancel an open or claimed task.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Task id."
+          },
+          "reason": {
+            "type": "string",
+            "description": "Why the task is being cancelled."
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    },
+    {
+      "name": "worker_patch_grant",
+      "description": "Step 1 of landing server code on an allow-listed Worker (amh-site-revival-proxy, wp-test): get a single-use grant for this exact patch (expires in 10 min). Same script/edits/request_id go to worker_patch.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "script": {
+            "type": "string",
+            "description": "Name of the Worker script."
+          },
+          "request_id": {
+            "type": "string",
+            "description": "unique, a-z0-9-, 8-80"
+          },
+          "edits": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "find": {
+                  "type": "string"
+                },
+                "replace": {
+                  "type": "string"
+                },
+                "count": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "find",
+                "replace"
+              ]
+            },
+            "description": "List of {path, old, new} text replacements to apply."
+          }
+        },
+        "required": [
+          "script",
+          "request_id",
+          "edits"
+        ]
+      }
+    },
+    {
+      "name": "worker_patch",
+      "description": "Step 2: land the patch. dry_run:true shows what would change and uses nothing. Live code must equal the latest version and the repo file, or it refuses. Checks the new version on its preview URL, goes live, checks live, rolls back by itself on failure, syncs the repo. Same request_id again returns the first receipt.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "grant": {
+            "type": "string",
+            "description": "Single-use grant id from worker_patch_grant."
+          },
+          "script": {
+            "type": "string",
+            "description": "Name of the Worker script."
+          },
+          "request_id": {
+            "type": "string",
+            "description": "Patch request id returned by an earlier call."
+          },
+          "edits": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            },
+            "description": "List of {path, old, new} text replacements to apply."
+          },
+          "base_version": {
+            "type": "string",
+            "description": "optional: the live version you read; refuses if it changed"
+          },
+          "dry_run": {
+            "type": "boolean",
+            "description": "true returns what would change without applying it."
+          }
+        },
+        "required": [
+          "grant",
+          "script",
+          "request_id",
+          "edits"
+        ]
+      }
+    },
+    {
+      "name": "worker_patch_sync",
+      "description": "Owner: put the repo's main file for an allow-listed Worker live exactly as written (preview check, live check, rollback). Needed once, or after someone deployed another way. dry_run defaults to true.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "script": {
+            "type": "string",
+            "description": "Name of the Worker script."
+          },
+          "dry_run": {
+            "type": "boolean",
+            "description": "true returns what would change without applying it."
+          }
+        },
+        "required": [
+          "script"
+        ]
+      }
+    },
+    {
+      "name": "worker_patch_status",
+      "description": "Receipt for a worker_patch request id (state, versions, checks, rollback, repo commit).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "request_id": {
+            "type": "string",
+            "description": "Patch request id returned by an earlier call."
+          }
+        },
+        "required": [
+          "request_id"
+        ]
+      }
+    },
+    {
+      "name": "site_gate_pass",
+      "description": "Owner/agent: get past a password-gated site (souljaboy). Returns the gate code to type in a browser and a Cookie header for fetches. With path, fetches that page behind the gate and returns status, title and text.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "site": {
+            "type": "string",
+            "enum": [
+              "souljaboy"
+            ],
+            "description": "Site to issue a gate pass for."
+          },
+          "path": {
+            "type": "string",
+            "description": "optional, e.g. / or /rapper-university/"
+          }
+        },
+        "required": [
+          "site"
+        ]
+      }
+    },
+    {
+      "name": "soulja_artist_access",
+      "description": "Owner/agent, read-only: receipt for souljaboy.app artist sites. Rule: <name>.souljaboy.app -> Pages project <name>-souljaboy (one label; not apex or reserved: www, e40, 40water, artist, thizzler, atmosphere, stones-throw, hieroglyphics, sari, site1, mail, api, mcp, admin; never a name bound to another project or with a different DNS record). Confirms the account that owns the zone, the hub credential's Pages/DNS permissions, the mapping and state (project, binding, DNS) of the first five artists plus any hostname you pass, and the exact deploy calls. Changes nothing.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "hostname": {
+            "type": "string",
+            "description": "optional extra hostname to check, e.g. mozzy.souljaboy.app"
+          }
+        }
+      }
+    },
+    {
+      "name": "email_austin",
+      "description": "Email Austin a result: a short note, a link (preview URL, PR, file), or a report. Plain text; keep it short and put links on their own lines. Use it when Austin says 'email me', or to deliver something that does not fit WhatsApp. Owner/agent keys only.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "subject": {
+            "type": "string",
+            "description": "short subject, no prefix needed"
+          },
+          "text": {
+            "type": "string",
+            "description": "the body, plain text (max 20k chars)"
+          },
+          "link": {
+            "type": "string",
+            "description": "optional URL put on its own line at the end"
+          },
+          "from_agent": {
+            "type": "string",
+            "description": "your name, e.g. grok, codex, claude, jubber"
+          },
+          "html": {
+            "type": "string",
+            "description": "optional HTML body (text is still required)"
+          }
+        },
+        "required": [
+          "subject",
+          "text"
+        ]
+      }
+    },
+    {
+      "name": "token_audit_settings",
+      "description": "Read or change the token auditor: unused_days = how long a hub-minted (cfops) token may sit unused before it is revoked (default 7). Admin keys can change it.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "unused_days": {
+            "type": "number",
+            "description": "1-365; omit to just read"
+          }
+        }
+      }
+    },
+    {
+      "name": "agent_research_start",
+      "description": "Delegate a bounded research, verification, zero-AI site-health, UI, Cloudflare diagnosis, inventory, data review, missed-items, or revision-proposal job to the private AMH WT coordinator. Returns immediately with job and memory hashes; the configured free lane or explicitly enabled paid K2 lane runs durably in the background.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "agent_name": {
+            "type": "string",
+            "description": "Friendly reusable name shown in the console, terminal, logs, and handoffs."
+          },
+          "template_id": {
+            "type": "string",
+            "enum": [
+              "web_research",
+              "secondary_dive",
+              "citation_verify",
+              "ui_playwright",
+              "site_health",
+              "cloudflare_diagnose",
+              "cloudflare_inventory",
+              "data_query_review",
+              "config_compare",
+              "missed_items",
+              "revision_proposal",
+              "security_review"
+            ],
+            "description": "Research template to run."
+          },
+          "objective": {
+            "type": "string",
+            "description": "Exact bounded task and evidence required."
+          },
+          "allowed_domains": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Explicit domains the crawler may access."
+          },
+          "urls": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "HTTPS seed URLs inside the allowlist."
+          },
+          "context": {
+            "type": "string",
+            "description": "Only compact relevant context; never secrets."
+          },
+          "expected_text": {
+            "type": "string",
+            "description": "Optional short marker required by the zero-AI site-health check to catch a 200 response serving the wrong page."
+          },
+          "schedule": {
+            "type": "object",
+            "properties": {
+              "enabled": {
+                "type": "boolean"
+              },
+              "every_minutes": {
+                "type": "number"
+              }
+            },
+            "description": "Optional repeat schedule for the job, for example {every_minutes}."
+          }
+        },
+        "required": [
+          "template_id",
+          "objective"
+        ]
+      }
+    },
+    {
+      "name": "agent_research_status",
+      "description": "Read one delegated job, including its redacted timeline, sources, primary result, independent verifier result, gaps, and candidate revisions.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "description": "Research job id returned by agent_research_start."
+          }
+        },
+        "required": [
+          "job_id"
+        ]
+      }
+    },
+    {
+      "name": "agent_research_list",
+      "description": "List recent delegated jobs for this authenticated user. Read-only and tenant-isolated.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "agent_briefing",
+      "description": "Return the Continuity Keeper's current compact project briefing and memory hash: active platform, target, blocker, keep/archive/drop guidance, and next safe step.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "agent_control",
+      "description": "Safely pause or resume new agent work, cancel a queued/running job at its next phase boundary, force read-only mode, or run retention cleanup. Models cannot disable read-only mode.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "pause",
+              "resume",
+              "cancel_job",
+              "readonly_on",
+              "retention_sweep"
+            ],
+            "description": "Which step to run; see the allowed values. Inspect/status steps are read-only."
+          },
+          "job_id": {
+            "type": "string",
+            "description": "Required for cancel_job."
+          }
+        },
+        "required": [
+          "action"
+        ]
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "io.github.pain2hustle/cloudflare-ops-mcp",
+    "version": "0.15.6",
+    "remoteUrl": "https://mcp.artificialmindhive.com/mcp",
+    "publishedAt": "2026-11-23T22:02:22.32253Z",
+    "fetchedAt": "2026-11-24T12:15:48.059Z",
+    "toolsSha256": "0318be11bbe6fe0e3867f53c646027595aee6c3c3d5df39aceb6be1160d0b20f"
+  }
+}

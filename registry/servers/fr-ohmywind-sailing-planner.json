@@ -1,0 +1,134 @@
+{
+  "$schema": "../schema.json",
+  "name": "fr.ohmywind/sailing-planner",
+  "title": "OhMyWind",
+  "category": "Other",
+  "description": "Sailing passage planner for any coast, with high-precision tides on the French Atlantic.",
+  "repository": "https://github.com/qdonnars/ohmywind",
+  "tools": [
+    {
+      "name": "read_me",
+      "description": "Return OhMyWind's calculation methodology as Markdown.\n\n        Call this when the user asks how passage timing, complexity, or\n        boat speed are computed (e.g. \"comment c'est calculé ?\",\n        \"what assumptions does the model use?\", \"is tacking modelled?\").\n\n        The returned text covers: polar lookup, default efficiency 0.75,\n        VMG / tacking correction, wave derate, single-pass timing,\n        compare-windows mode semantics, regional defaults, wind against\n        current, short-period chop, what is intentionally not modelled, and\n        the data attributions.\n        ",
+      "inputSchema": {
+        "properties": {},
+        "title": "read_meArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "list_boat_archetypes",
+      "description": "List the boat archetypes with descriptive metadata.\n\n        The LLM (or user) maps a commercial model (e.g. \"Sun Odyssey 32\") to one\n        of these archetypes from the metadata — there is no server-side mapping.\n        ``voile_aviron_16ft`` is for open sail-and-oar dinghies only (no cabin,\n        rowed as well as sailed); a small cabin cruiser maps to ``cruiser_20ft``.\n        ",
+      "inputSchema": {
+        "properties": {},
+        "title": "list_boat_archetypesArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "get_marine_forecast",
+      "description": "Wind, sea, and where it matters current and tide, at one point.\n\n        For the questions about a place rather than a passage: how hard it\n        blows at Groix this afternoon, when the thermal breeze fills in, when\n        the mistral eases, whether the models agree, what the swell does at a\n        harbour entrance tonight.\n\n        Args:\n            lat: latitude in degrees.\n            lon: longitude in degrees.\n            start: ISO-8601 datetime with the user's UTC offset (e.g.\n                \"2026-05-01T08:00:00+02:00\"). Every time in the answer comes\n                back in that offset.\n            end: ISO-8601 datetime, timezone-aware.\n            models: optional list of model names. Leave it unset for the\n                automatic choice: AROME (1.3 km) wherever it reaches the\n                window, and the next model that reaches its end when the\n                window runs past two days. Name several models (``[\"arome\",\n                \"icon_eu\", \"ecmwf\", \"gfs\"]``) only when the user asks whether\n                the models agree: each one costs a request.\n\n        Returns hourly ``wind`` per model (speed, direction it comes from,\n        gusts, in knots), ``sea`` (wave height, period, direction), and, only\n        where they are material, ``current`` (speed in knots, direction it\n        flows to, from a tidal atlas where one covers the point) and ``tide``\n        (height around mean sea level: read the range and the times of high\n        and low water from it, not a depth over chart datum). Each series is\n        a table: ``columns`` names the fields once, each of ``rows`` is one\n        hour. Also ``openwind_url``, the OhMyWind map centred on the point.\n\n        No widget comes with this tool. The values are a model forecast,\n        not a measurement of what is blowing right now.\n\n        Pass a point at sea. Open-Meteo Marine answers from the nearest sea\n        cell: a few kilometres inland the ``sea`` values are the open coast's\n        (Guipavas, inland of Brest, gets the waves of the rade), further\n        inland they come back null, the ``sea`` array present and empty of\n        information rather than absent. Wind is always the point's own.\n\n        Note: the first request after inactivity may incur ~5s of cold-start.\n\n        ",
+      "inputSchema": {
+        "properties": {
+          "lat": {
+            "title": "Lat",
+            "type": "number"
+          },
+          "lon": {
+            "title": "Lon",
+            "type": "number"
+          },
+          "start": {
+            "title": "Start",
+            "type": "string"
+          },
+          "end": {
+            "title": "End",
+            "type": "string"
+          },
+          "models": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Models"
+          }
+        },
+        "required": [
+          "lat",
+          "lon",
+          "start",
+          "end"
+        ],
+        "title": "get_marine_forecastArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "get_tidal_stream",
+      "description": "The tidal stream and the tide at one point, from the tidal atlases alone.\n\n        For the questions about a pass or a harbour entrance: when to be at\n        the Raz de Sein to carry the stream, when the Fromveur turns, how\n        hard it runs at Port-Navalo tomorrow, when high water is at Chausey.\n        Costs no weather request: harmonic predictions from the atlases this\n        server ships (SHOM, MARC and others), the same ones ``plan_passage``\n        applies leg by leg.\n\n        Args:\n            lat: latitude in degrees, at sea, in the pass itself.\n            lon: longitude in degrees.\n            start: ISO-8601 datetime with the user's UTC offset; every time\n                in the answer comes back in that offset.\n            end: ISO-8601 datetime, timezone-aware. At most 400 steps.\n            heading_deg: optional course through the point (true degrees,\n                the direction you head to). With it, each step gets\n                ``along_kn`` (positive: the stream carries you, negative: it\n                stems you) and the answer lists the ``favourable`` and\n                ``adverse`` windows.\n            step_minutes: 5 to 180, default 30.\n\n        Returns ``covered``, ``source``, ``confidence``, ``points`` (a table:\n        ``columns`` time, ``speed_kn``, ``direction_to_deg`` it flows to,\n        ``along_kn``, ``height_m`` around mean sea level; one row per step),\n        ``slack`` (the moments the stream nearly\n        stops), ``high_waters`` / ``low_waters``, ``favourable`` /\n        ``adverse`` when a heading is given, ``tide_coefficient`` (French\n        national coefficient, Brest, on French atlases), a ``warning`` when\n        the atlas does not resolve the pass, and ``openwind_url``.\n\n        Outside every atlas (most of the Mediterranean, the open sea)\n        ``covered`` is false; ``get_marine_forecast`` returns the global\n        model's current there, where it matters.\n\n        Astronomical tide only: no surge, no wind-driven current. The windows\n        are facts about the stream, not a recommendation: weigh them against\n        the wind (``get_marine_forecast``) and the whole passage\n        (``plan_passage``). No widget comes with this tool.\n        ",
+      "inputSchema": {
+        "properties": {
+          "lat": {
+            "title": "Lat",
+            "type": "number"
+          },
+          "lon": {
+            "title": "Lon",
+            "type": "number"
+          },
+          "start": {
+            "title": "Start",
+            "type": "string"
+          },
+          "end": {
+            "title": "End",
+            "type": "string"
+          },
+          "heading_deg": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Heading Deg"
+          },
+          "step_minutes": {
+            "default": 30,
+            "title": "Step Minutes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "lat",
+          "lon",
+          "start",
+          "end"
+        ],
+        "title": "get_tidal_streamArguments",
+        "type": "object"
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "fr.ohmywind/sailing-planner",
+    "version": "1.15.0",
+    "remoteUrl": "https://mcp.ohmywind.fr/mcp",
+    "publishedAt": "2026-11-24T10:48:36.466266Z",
+    "fetchedAt": "2026-11-24T12:15:48.059Z",
+    "toolsSha256": "c3f4837181129c98f5f4222fabba3afb1c7f33bec12b7e7202dbc4710bd3eab4"
+  }
+}

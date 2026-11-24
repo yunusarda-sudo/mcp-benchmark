@@ -1,0 +1,712 @@
+{
+  "$schema": "../schema.json",
+  "name": "com.holdingsintel/mcp",
+  "title": "HoldingsIntel",
+  "category": "Other",
+  "description": "Hedge fund 13F holdings, insider trades, activist stakes and Congress trades, in one Verdict.",
+  "repository": "https://github.com/holdingsintel/holdingsintel-mcp",
+  "tools": [
+    {
+      "name": "analyze_stock",
+      "description": "Returns the Smart Money Verdict for a single stock: a synthesized signal from 13F institutional positioning, Form 4 insider trades, 13D/13G activist filings, and STOCK Act congressional trades.\n\nWHEN TO USE: User asks about an individual stock's institutional positioning, smart money sentiment, hedge fund activity, insider buying/selling, or recent moves.\nExamples:\n  - \"Is smart money buying NVDA?\"\n  - \"What do hedge funds think about META?\"\n  - \"Has anyone famous been accumulating AAPL?\"\n  - \"Show me institutional activity on TSLA\"\n\nIDENTITY: Exact CUSIPs resolve directly (including explicit aliases). A ticker that maps to multiple canonical securities returns candidates instead of choosing one; retry with an exact CUSIP.\n\nWHEN NOT TO USE:\n  - Use find_signals when the user is screening across multiple stocks (\"show me stocks where smart money is bullish\")\n  - Use analyze_fund when the subject is a fund/hedge fund, not a stock\n  - Use search_securities first for a company name or ambiguous identifier, then pass its ticker/CUSIP here\n\nRETURNS: Resolved security identity and listing-status detail, verdict label and confidence, four source-specific signals, the exact 13F quarter and per-stream disclosure-through dates, top holders, recent institutional moves, and the latest fetched Congress, OGE executive, Form 4, and 13D/G evidence. Reported-symbol-only evidence is labeled and remains visible but never affects the CUSIP-scoped score.\n\nCITE: When you present these results, link `web_url` (the page with the full view) and cite record-level `source_url` filing or disclosure links when present.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "ticker_or_cusip": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20,
+            "pattern": "^[A-Za-z0-9./\\-]+$"
+          }
+        },
+        "required": [
+          "ticker_or_cusip"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "analyze_fund",
+      "description": "Returns a filing-bound hedge-fund profile with current rating, DNA, and tracked-holdings in-profit enrichment when available.\n\nWHEN TO USE: User asks about a specific hedge fund's profile, performance, investing style, or recent disclosed moves.\nExamples:\n  - \"How is Renaissance Technologies performing?\"\n  - \"What's Berkshire Hathaway's investing archetype?\"\n  - \"What did Bridgewater buy last quarter?\"\n\nWHEN NOT TO USE:\n  - Use analyze_stock when the subject is a stock, not a fund\n  - Use compare_funds to compare multiple funds\n  - Use get_fund_holdings for all disclosed positions currently processed for the fund\n\nRETURNS: One filing-bound portfolio quarter with compact component-filing sources, AUM, position count, and moves; the quarter's biggest moves as one sentence (quarter_summary) and as rows with company names (quarter_moves: ranked by value_moved_usd, the dollars traded at the filing's values, one row per company; options are sized by the value of the shares they cover and read by those shares; options_now names puts or calls held beside a stock move; move new_listing is a stake in a security new to the market, an IPO or a spinoff, never called a buy; portfolio percentages are shares of filing_value_usd), the answer the fund page gives; aum_usd as the size to quote (value_basis \"stocks\" when options make up 5% or more of the filing: an option row is reported at the value of the shares it covers, so aum_usd is then the stocks and filing_value_usd the filing total; prev_aum_usd is the same size the quarter before); plus explicitly scoped current all-history rating, DNA, and tracked-holdings in-profit share when available. The performance estimate covers qualifying disclosed holdings, excludes exited and unpriceable positions, and is not a fund return. Missing enrichments are identified in data_status.\n\nCITE: When you present these results, link `web_url` (the page with the full view) and cite record-level `source_url` filing or disclosure links when present.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "cik_or_name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "quarter": {
+            "type": "string",
+            "pattern": "^\\d{4}-Q[1-4]$"
+          }
+        },
+        "required": [
+          "cik_or_name"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "find_signals",
+      "description": "Screens for stocks or fund moves matching a signal type. Use this when the user wants a list, not a single stock.\n\nWHEN TO USE: User asks for a screen, list, or \"what's interesting right now\". Types:\n  - convergence: stocks with institutional coverage where 2+ available filing-source signals align\n  - conviction: highest-conviction recent moves\n  - double_downs: positions increased while price fell\n  - new_positions: fresh entries this quarter\n  - smart_money_buying: stocks with strictly positive conviction-weighted institutional sentiment\n  - early_birds: first-mover funds discovering new positions\n\nExamples:\n  - \"Show me stocks where smart money is converging\"\n  - \"What are the highest conviction buys this quarter?\"\n  - \"Which funds are doubling down into price weakness?\"\n\nWHEN NOT TO USE:\n  - Use analyze_stock when the user names a specific stock\n\nPARAMETERS: sector applies only to convergence; quarter is unavailable for convergence and otherwise defaults to the newest default-ready 13F quarter; min_score is unavailable for early_birds. smart_money_buying always requires conviction_weighted_sentiment > 0, even when min_score is omitted or zero. Unsupported combinations are rejected, never ignored.\n\nRETURNS: A cursor-paginated ranked list with the relevant score and source metrics, a filing period for quarter-bound types, and an exact total when the underlying dataset supports one. Convergence is a mixed-source snapshot; because its backing view exposes no exact common data-through date, provenance returns null and data_status states that limitation.\n\nCITE: When you present these results, link `web_url` (the page with the full view) and cite record-level `source_url` filing or disclosure links when present.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "convergence",
+              "conviction",
+              "double_downs",
+              "new_positions",
+              "smart_money_buying",
+              "early_birds"
+            ],
+            "description": "Signal taxonomy; convergence includes only aligned 2+ source composites with institutional coverage, and smart_money_buying requires conviction_weighted_sentiment > 0."
+          },
+          "sector": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 50,
+            "pattern": "^[A-Za-z0-9 &/\\-]+$"
+          },
+          "min_score": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "quarter": {
+            "type": "string",
+            "pattern": "^\\d{4}-Q[1-4]$"
+          },
+          "limit": {
+            "default": 5,
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "cursor": {
+            "type": "string",
+            "maxLength": 500
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "additionalProperties": false,
+        "allOf": [
+          {
+            "if": {
+              "required": [
+                "sector"
+              ]
+            },
+            "then": {
+              "properties": {
+                "type": {
+                  "const": "convergence"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "required": [
+                "quarter"
+              ]
+            },
+            "then": {
+              "properties": {
+                "type": {
+                  "not": {
+                    "const": "convergence"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "required": [
+                "min_score"
+              ]
+            },
+            "then": {
+              "properties": {
+                "type": {
+                  "not": {
+                    "const": "early_birds"
+                  }
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "compare_funds",
+      "description": "Side-by-side comparison of 2-3 hedge funds on one real common 13F quarter: holding overlap (Jaccard similarity), DNA similarity, ratings, win rates, and common holdings.\n\nWHEN TO USE: User wants to compare hedge funds head-to-head.\nExamples:\n  - \"Compare Berkshire and Pershing Square\"\n  - \"How similar are Renaissance and Two Sigma?\"\n  - \"How do these funds' current disclosed holdings and research scores compare?\"\n\nWHEN NOT TO USE:\n  - Use analyze_fund when the user is asking about a single fund (no comparison needed)\n  - Use search_filers only to discover candidates or resolve an ambiguous fund name; compare_funds resolves ordinary names directly\n\nPARAMETERS: Supports 2 or 3 funds depending on the account's comparison allowance. Requests above the current allowance return access_limited without changing the input.\n\nRETURNS: The common portfolio quarter, per-fund component-filing sources, overlap matrix, explicitly scoped DNA/performance, ratings + AUM, the top 10 stocks held by 2+ compared funds, and the exact common-holding count. Missing enrichments are identified in data_status.\n\nCITE: When you present these results, link `web_url` (the page with the full view) and cite record-level `source_url` filing or disclosure links when present.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "funds": {
+            "minItems": 2,
+            "maxItems": 3,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            }
+          },
+          "quarter": {
+            "type": "string",
+            "pattern": "^\\d{4}-Q[1-4]$"
+          }
+        },
+        "required": [
+          "funds"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "clone_fund",
+      "description": "Backtests a disclosed hedge-fund cloning strategy across completed 13F disclosure intervals without look-ahead.\n\nWHEN TO USE: User wants to know how a fund-cloning strategy would have performed.\nExamples:\n  - \"Backtest cloning Renaissance's top 10 since 2023\"\n  - \"What's the return on copying Pershing Square's portfolio?\"\n  - \"How would I have done following Buffett's top 5?\"\n\nPARAMETERS:\n  - top_n: 5, 10, or 20 positions (default 5)\n  - rank_by: conviction or weight\n  - scenario: all / new_only / double_downs / high_conviction (default all)\n  - start_quarter: optional historical start quarter (defaults to the account's available history window)\n\nParameters or history ranges outside the current account's allowance return access_limited and are never rewritten.\n\nRETURNS: Requested and effective history bounds, any quarter excluded because its effective disclosure left no positive holding interval, compact available/returned history scope, source-check time, filing-date methodology, disclosure dates, paired-position and used-SPY price-date ranges, complete-basket interval and cumulative returns, matching-date SPY comparisons, price coverage, and explicitly scoped summary statistics. A partial basket never becomes a headline return: its normalized priced-subset estimate is reported only when at least one position is paired, compounded results stay null, and data_status identifies the root gap.\n\nCITE: When you present these results, link `web_url` (the page with the full view) and cite record-level `source_url` filing or disclosure links when present.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "cik_or_name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "top_n": {
+            "default": 5,
+            "anyOf": [
+              {
+                "type": "number",
+                "const": 5
+              },
+              {
+                "type": "number",
+                "const": 10
+              },
+              {
+                "type": "number",
+                "const": 20
+              }
+            ]
+          },
+          "rank_by": {
+            "default": "conviction",
+            "type": "string",
+            "enum": [
+              "conviction",
+              "weight"
+            ]
+          },
+          "scenario": {
+            "default": "all",
+            "type": "string",
+            "enum": [
+              "all",
+              "new_only",
+              "double_downs",
+              "high_conviction"
+            ]
+          },
+          "start_quarter": {
+            "type": "string",
+            "pattern": "^\\d{4}-Q[1-4]$"
+          }
+        },
+        "required": [
+          "cik_or_name"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "search_filers",
+      "description": "Searches funds by name and returns canonical CIKs for discovery or disambiguation.\n\nWHEN TO USE: The user asks to find funds, a partial name may match several funds, or a workflow specifically needs a canonical CIK.\nExamples:\n  - \"Find funds with Pershing in the name\"\n  - \"Which Renaissance filer did you mean?\"\n\nWHEN NOT TO USE:\n  - Call analyze_fund or clone_fund directly for an ordinary fund name; those tools resolve names themselves\n  - Call compare_funds directly for ordinary fund names\n\nRETURNS: Up to the requested limit (maximum 10) of matching funds, each with CIK + name + AUM + star rating.\n\nCITE: When you present these results, link `web_url` (the page with the full view) and cite record-level `source_url` filing or disclosure links when present.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "limit": {
+            "default": 5,
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "search_securities",
+      "description": "Searches stocks by ticker or company name and returns canonical security identities.\n\nWHEN TO USE: The user asks to find stocks, a company name is ambiguous, or a workflow specifically needs the canonical CUSIP.\n\nWHEN NOT TO USE:\n  - Call analyze_stock directly for an ordinary ticker or CUSIP\n  - Use find_signals when screening across stocks rather than resolving a single name\n\nRETURNS: Up to the requested limit (maximum 10) of matching securities, each with CUSIP + ticker + issuer + sector + listing status.\n\nCITE: When you present these results, link `web_url` (the page with the full view) and cite record-level `source_url` filing or disclosure links when present.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "limit": {
+            "default": 5,
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "list_quarters",
+      "description": "Returns every processed 13F quarter with reported and prior-quarter filer counts, a default_ready selection heuristic, and whether the current caller can access that quarter. It never labels a quarter complete. latest is the newest default-ready quarter; latest_reported is the newest quarter with any processed filing. If the index cannot be loaded, returns source_unavailable rather than a successful empty result.\n\nWHEN TO USE: When you need to know which quarters can be passed as the optional 'quarter' parameter to other tools. Returns quickly; safe to call once per session.\n\nCITE: When you present these results, link `web_url` (the page with the full view) and cite record-level `source_url` filing or disclosure links when present.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_congress_trades",
+      "description": "Returns official financial disclosures from Congress and the OGE executive-branch feed. It defaults to Congress; branch selects Congress, executive, or both. Optionally filter by one stock or one official filer.\n\nWHEN TO USE: User asks what Congress, a senator, a representative, or an executive-branch official disclosed buying or selling.\nExamples:\n  - \"What stocks did Nancy Pelosi trade?\"\n  - \"What did Donald Trump disclose trading?\"\n  - \"Has any member of Congress bought NVDA?\"\n  - \"Show me recent congressional purchases\"\n\nPARAMETERS:\n  - ticker_or_cusip or member: optional identity filter; provide at most one. member resolves only against the selected branch; ambiguous names return candidates\n  - branch: congress (default), executive (OGE), or all official disclosures\n  - direction: optional buy, sell, or other filter\n  - filed_from / filed_to: optional inclusive disclosure-date range (YYYY-MM-DD); filed_from must be on or before filed_to\n  - limit / cursor: page size and opaque continuation cursor; an explicit limit above the caller's tier fails rather than being changed\n\nWHEN NOT TO USE:\n  - Use analyze_politician for one member's full profile + trading performance\n  - Use analyze_stock for the synthesized smart-money verdict on a stock\n\nRETURNS: Cursor-paginated House, Senate, and/or OGE disclosures (selected by branch) with canonical ticker and CUSIP when verified, the ticker printed in the official disclosure as separate source evidence, filer, chamber, native transaction type, buy/sell/other direction, dollar range, dates, instrument details, and source link. An unresolved official ticker is returned as disclosed_ticker while ticker and security_cusip remain null.\n\nCITE: When you present these results, link `web_url` (the page with the full view) and cite record-level `source_url` filing or disclosure links when present.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "ticker_or_cusip": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20,
+            "pattern": "^[A-Za-z0-9./\\-]+$"
+          },
+          "member": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "branch": {
+            "default": "congress",
+            "type": "string",
+            "enum": [
+              "congress",
+              "executive",
+              "all"
+            ]
+          },
+          "direction": {
+            "type": "string",
+            "enum": [
+              "buy",
+              "sell",
+              "other"
+            ]
+          },
+          "filed_from": {
+            "type": "string",
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+          },
+          "filed_to": {
+            "type": "string",
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50
+          },
+          "cursor": {
+            "type": "string",
+            "maxLength": 500
+          }
+        },
+        "additionalProperties": false,
+        "not": {
+          "anyOf": [
+            {
+              "required": [
+                "ticker_or_cusip",
+                "member"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "analyze_politician",
+      "description": "Returns a single politician's profile, trading performance, and notable trades, based on their official financial disclosures.\n\nWHEN TO USE: User asks how a specific member of Congress has performed as a trader, or wants their profile and recent activity.\nExamples:\n  - \"How good a trader is Nancy Pelosi?\"\n  - \"What's Dan Crenshaw's track record?\"\n  - \"Show me Tommy Tuberville's profile and recent trades\"\n\nPARAMETERS:\n  - member: the politician's name (fuzzy-matched; an ambiguous name returns candidate matches to disambiguate)\n\nWHEN NOT TO USE:\n  - Use get_congress_trades for a flat list of trades by stock or by member\n  - Use analyze_stock for the synthesized smart-money verdict on a stock\n\nRETURNS: Member profile (party, chamber, state), performance (estimated return %, SPY benchmark %, win rate, annualized return %), and a list of notable trades.\n\nCITE: When you present these results, link `web_url` (the page with the full view) and cite record-level `source_url` filing or disclosure links when present.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "member": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          }
+        },
+        "required": [
+          "member"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_insider_trades",
+      "description": "Returns completed current corporate-insider non-derivative Form 4 transactions filed since August 24, 2026. With no identity filter, returns the global recent-filing feed; optionally filter by one stock or one insider.\n\nWHEN TO USE: User asks whether insiders are buying or selling a stock, or wants a specific executive's trades.\nExamples:\n  - \"Are insiders buying NVDA?\"\n  - \"Show recent open-market insider purchases\"\n\nPARAMETERS:\n  - ticker_or_cusip or insider_name: optional, at most one. Ticker collisions return candidates; retry with an exact CUSIP\n  - direction: optional buy, sell or other\n  - trade_class: optional open_market, placement, grant_like or other\n  - filed_from / filed_to: optional inclusive SEC filing dates (YYYY-MM-DD) from 2026-08-24, earlier ones fail; filed_from must be on or before filed_to\n  - limit / cursor: page size and cursor; a limit above the caller's tier fails, never shrinks\n\nWHEN NOT TO USE:\n  - Use analyze_stock for the stock's Smart Money Verdict, which already folds insiders in\n  - Use get_activist_stakes for 5%+ ownership stake filings\n\nRETURNS: Cursor-paginated Form 4 records, common and non-common, each with transaction code, direction, security, every reporting owner and role, shares, price, value and its basis, post-transaction ownership, amendment status, dates, filing identifiers and source link. Joint filings, including accessions split at EDGAR's reporting-person limit, appear once per transaction with all owners; an incomplete split group fails visibly. Only P/S common-equity codes feed conviction scoring. Stock filters add issuer-ticker rows not yet linked to a CUSIP (cusip null, noted in data_status). With a stock or insider filter, unavailable_filings lists in-scope filings whose share count the SEC document leaves unreadable, each with date, detail and SEC link; empty for the global feed.\n\nCITE: When you present these results, link `web_url` (the page with the full view) and cite record-level `source_url` filing or disclosure links when present.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "ticker_or_cusip": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20,
+            "pattern": "^[A-Za-z0-9./\\-]+$"
+          },
+          "insider_name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "direction": {
+            "type": "string",
+            "enum": [
+              "buy",
+              "sell",
+              "other"
+            ]
+          },
+          "trade_class": {
+            "type": "string",
+            "enum": [
+              "open_market",
+              "placement",
+              "grant_like",
+              "other"
+            ]
+          },
+          "filed_from": {
+            "type": "string",
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+          },
+          "filed_to": {
+            "type": "string",
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50
+          },
+          "cursor": {
+            "type": "string",
+            "maxLength": 500
+          }
+        },
+        "additionalProperties": false,
+        "not": {
+          "anyOf": [
+            {
+              "required": [
+                "ticker_or_cusip",
+                "insider_name"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "get_activist_stakes",
+      "description": "Returns SEC Schedule 13D/13G large-ownership filings. With no identity filter, returns the global recent-filing feed; optionally filter by one stock or one filer.\n\nWHEN TO USE: User asks who has taken a big stake in a company, or whether an activist investor is involved.\nExamples:\n  - \"Who has a 5%+ stake in Tesla?\"\n  - \"Is there an activist investor in NVDA?\"\n  - \"Show recent active 13D/13G stakes\"\n\nPARAMETERS:\n  - ticker_or_cusip or filer: optional identity filter; provide at most one. Ticker collisions return candidates; use an exact CUSIP to disambiguate\n  - classification: optional active, passive, structural, or unknown filter\n  - filed_from / filed_to: optional inclusive SEC filing-date range (YYYY-MM-DD); filed_from must be on or before filed_to\n  - limit / cursor: page size and opaque continuation cursor; an explicit limit above the caller's tier fails rather than being changed\n\nThe result preserves unknown structural classifications instead of converting them to passive.\n\nWHEN NOT TO USE:\n  - Use get_insider_trades for officer/director Form 4 trades\n  - Use analyze_stock for the synthesized smart-money verdict\n\nRETURNS: Cursor-paginated stakes with canonical and source-reported security identity, filer, current and previous ownership, voting power, classification, form, stated purpose, filing identifiers, and source link. Stock filters include exact-CUSIP rows plus official subject-ticker evidence not yet linked to a CUSIP; those rows return cusip null and data_status identifies the limitation.\n\nCITE: When you present these results, link `web_url` (the page with the full view) and cite record-level `source_url` filing or disclosure links when present.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "ticker_or_cusip": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20,
+            "pattern": "^[A-Za-z0-9./\\-]+$"
+          },
+          "filer": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "classification": {
+            "type": "string",
+            "enum": [
+              "active",
+              "passive",
+              "structural",
+              "unknown"
+            ]
+          },
+          "filed_from": {
+            "type": "string",
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+          },
+          "filed_to": {
+            "type": "string",
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50
+          },
+          "cursor": {
+            "type": "string",
+            "maxLength": 500
+          }
+        },
+        "additionalProperties": false,
+        "not": {
+          "anyOf": [
+            {
+              "required": [
+                "ticker_or_cusip",
+                "filer"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "get_fund_holdings",
+      "description": "Returns all disclosed positions currently processed for a hedge fund and quarter, paginated.\n\nWHEN TO USE: User wants every currently processed disclosed position for a fund, not just the headline moves or rating.\nExamples:\n  - \"List everything Berkshire Hathaway holds\"\n  - \"Show me Pershing Square's full portfolio\"\n  - \"What are all of Bridgewater's positions?\"\n\nPARAMETERS:\n  - cik_or_name: a CIK (e.g. \"0001067983\") or fund name (fuzzy-matched)\n  - quarter: optional quarter (default: latest available)\n  - limit: positions per page; an unsupported tier limit returns access_limited without changing the input\n  - cursor: pass back the previous response's next_cursor to fetch the next page\n\nWHEN NOT TO USE:\n  - Use analyze_fund for the rating, DNA archetype, and headline moves (not the full holdings list)\n  - Use compare_funds to compare portfolios across funds\n\nRETURNS: Fund and filing context plus cursor-paginated filing-native positions, including security listing status/detail, shares/value/weight, prior-position deltas, conviction, filing-period and current price dates/sources, cost basis, P&L, and price-data-through. Missing optional price or metadata fields are identified in data_status.\n\nCITE: When you present these results, link `web_url` (the page with the full view) and cite record-level `source_url` filing or disclosure links when present.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "cik_or_name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "quarter": {
+            "type": "string",
+            "pattern": "^\\d{4}-Q[1-4]$"
+          },
+          "instrument_type": {
+            "default": "all",
+            "type": "string",
+            "enum": [
+              "stocks",
+              "options",
+              "bonds",
+              "all"
+            ]
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50
+          },
+          "cursor": {
+            "type": "string",
+            "maxLength": 500
+          }
+        },
+        "required": [
+          "cik_or_name"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_stock_holders",
+      "description": "Returns every available active cash-equity 13F holder position for one stock and one quarter, using cursor pagination.\n\nWHEN TO USE: The user asks who owns a stock, which institutions hold it, how large each disclosed position is, or wants all currently processed holders for a quarter.\n\nPARAMETERS:\n  - ticker_or_cusip: one ticker or exact CUSIP\n  - quarter: required YYYY-QN filing quarter\n  - cursor: pass the previous next_cursor to continue\n\nFor a documented common-share exchange, use the ticker for the fund’s combined holding or an exact CUSIP for the shares filed under that identifier. A line’s change is null when it cannot be attributed to that line. Share classes remain distinct. Ticker collisions across unrelated issuers require an exact CUSIP. security.scoped_cusips lists the identifiers used and security.resolved_cusip supplies listing status. Results include positive positions only.\n\nWHEN NOT TO USE:\n  - Use get_13f_activity for new, increased, decreased, or exited positions\n  - Use get_fund_holdings for one fund's full portfolio\n\nRETURNS: Resolved security identity and listing-status detail plus deterministically paginated holder positions with fund identity, shares, value, portfolio weight, change, conviction, nullable valuation/cost/P&L estimates, and page-scoped price coverage. No source-wide total is claimed.\n\nCITE: When you present these results, link `web_url` (the page with the full view) and cite record-level `source_url` filing or disclosure links when present.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "ticker_or_cusip": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20,
+            "pattern": "^[A-Za-z0-9./\\-]+$"
+          },
+          "quarter": {
+            "type": "string",
+            "pattern": "^\\d{4}-Q[1-4]$"
+          },
+          "limit": {
+            "default": 5,
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "cursor": {
+            "type": "string",
+            "maxLength": 500
+          }
+        },
+        "required": [
+          "ticker_or_cusip",
+          "quarter"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_13f_activity",
+      "description": "Returns every available changed 13F position for exactly one fund or one stock in one quarter, using cursor pagination.\n\nWHEN TO USE: The user asks what a fund bought, added to, trimmed, or exited; or which institutions changed a named stock position.\n\nPARAMETERS:\n  - provide exactly one of cik_or_name or ticker_or_cusip\n  - quarter: required YYYY-QN filing quarter\n  - change_types: any unique subset of new, increased, decreased, exited, initial (default: the four changes)\n  - instrument_type: stocks, options, bonds, or all\n  - cursor: pass the previous next_cursor to continue\n\nFilters apply before pagination. For a documented exchange, either common-share CUSIP returns changes in the whole common-share position for that quarter. subject.security.common_share_comparison_cusip identifies it. An exact CUSIP keeps options scoped to that identifier. Use get_stock_holders to see shares as filed under each identifier. Ticker collisions across unrelated issuers require an exact CUSIP. Changes compare reported quarter-end positions. Initial identifies the fund’s first quarter on file and appears only when requested.\n\nWHEN NOT TO USE:\n  - Use get_stock_holders for all active owners of one stock, including unchanged positions\n  - Use get_fund_holdings for all currently processed positions in a fund's portfolio, including unchanged positions\n\nRETURNS: Deterministically paginated filing-derived changes with fund and security identity, current/prior position values, deltas, conviction, and quarter-end price provenance. No source-wide total is claimed.\n\nCITE: When you present these results, link `web_url` (the page with the full view) and cite record-level `source_url` filing or disclosure links when present.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "cik_or_name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "ticker_or_cusip": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20,
+            "pattern": "^[A-Za-z0-9./\\-]+$"
+          },
+          "quarter": {
+            "type": "string",
+            "pattern": "^\\d{4}-Q[1-4]$"
+          },
+          "change_types": {
+            "default": [
+              "new",
+              "increased",
+              "decreased",
+              "exited"
+            ],
+            "minItems": 1,
+            "maxItems": 5,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "new",
+                "increased",
+                "decreased",
+                "exited",
+                "initial"
+              ],
+              "description": "'initial' (requested explicitly, never a default): the fund's first quarter on file, a holding with no previous quarter to compare (never a buy)."
+            },
+            "uniqueItems": true
+          },
+          "instrument_type": {
+            "default": "all",
+            "type": "string",
+            "enum": [
+              "stocks",
+              "options",
+              "bonds",
+              "all"
+            ]
+          },
+          "limit": {
+            "default": 5,
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "cursor": {
+            "type": "string",
+            "maxLength": 500
+          }
+        },
+        "required": [
+          "quarter"
+        ],
+        "additionalProperties": false,
+        "oneOf": [
+          {
+            "required": [
+              "cik_or_name"
+            ],
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "ticker_or_cusip"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "required": [
+              "ticker_or_cusip"
+            ],
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "cik_or_name"
+                  ]
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "get_my_mcp_status",
+      "description": "Returns the current caller's authentication method, access status, and exact daily MCP quota usage. This read-only status check does not consume daily quota. Anonymous callers receive quota=null; it never exposes keys, payment details, or another user's account.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "com.holdingsintel/mcp",
+    "version": "2.1.0",
+    "remoteUrl": "https://mcp.holdingsintel.com/mcp",
+    "publishedAt": "2026-11-23T19:45:16.109961Z",
+    "fetchedAt": "2026-11-24T12:15:48.059Z",
+    "toolsSha256": "bd36f9c15ebc19cd56d50183720f596147ad6b849f3bf33ddee9457012f4817f"
+  }
+}

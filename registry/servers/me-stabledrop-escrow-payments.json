@@ -1,0 +1,286 @@
+{
+  "$schema": "../schema.json",
+  "name": "me.stabledrop/escrow-payments",
+  "title": "Stabledrop escrow payments",
+  "category": "Finance, Crypto & Web3",
+  "description": "Stablecoin escrow payments the buyer can dispute, with a signed receipt. Pay a wallet or an email.",
+  "repository": "https://github.com/conduit-ucpi/ap2service",
+  "tools": [
+    {
+      "name": "read_published_page",
+      "description": "Read one of the published pages, for answering questions about how any of this works.\n\nUse it rather than guessing. What the fees are, how a dispute is decided and who decides it,\nwhat a buyer is agreeing to — all of it is written down, and none of it is safe to invent.\n\n    how-it-works         How an protected payment works, start to finish\n    faq                  Common questions about protected payments, fees, disputes and timing\n    arbitration-policy   How a dispute is decided, by whom, and on what evidence\n    terms-of-service     The terms a buyer and seller are agreeing to\n    privacy-policy       What is collected and why\n    plugins              The WordPress and Shopify integrations\n    home                 What the product is and who it is for",
+      "inputSchema": {
+        "properties": {
+          "page": {
+            "description": "Which page: how-it-works, faq, arbitration-policy, terms-of-service, privacy-policy, plugins or home.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "page"
+        ],
+        "type": "object",
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "prepare_escrow_payment",
+      "description": "Work out where a payment must go, before anybody signs or sends anything.\n\n`seller` and `nominal_buyer` may each be a wallet address OR AN EMAIL ADDRESS — an email is\nconverted to the wallet that person owns, so you never need to know a wallet to use this.\n\nThe parties are checked against the sanctions lists before an address is given. If any of\nthem is listed the answer is `error: sanctioned_party` with no address, and the payment\ncannot be made through this service. The same answer comes back for terms whose payment\ncontract was already refused on sanctions grounds when its money arrived: its address is not\nhanded out again. If the check cannot be done right now the answer is\n`error: service_unavailable` with `retryable: true` and no address; try again shortly.\n\nReturns the payment address these terms produce, and TWO ways to fund it. Both end at the\nsame address holding the same money; they differ only in who sends the transaction.\n\n**Transfer it yourself.** Send the tokens to the address from any wallet — a browser\nwallet, a hardware wallet, an exchange withdrawal. Nothing to sign for us, and no `payer`\nneeded, because the payment contract never asks who paid: it reads its own balance. Then call\n`settle_escrow_payment` with no signature and we create the payment contract around what is there.\n\n**Or let us relay it.** Pass `payer` and this returns an EIP-3009 authorization for them to\nsign. We broadcast it and pay the gas, so **the payer needs no gas at all**. This is the\nonly one an agent can complete unattended, and the only one that needs a key anywhere.\n\nEither way the address is the same, because it is a pure function of the terms. That is\nalso what makes the relayed form safe: the payer signs `to` as part of the authorization,\ncommitting to every term at once — alter any of them afterwards and the address moves and\nthe signature stops matching.\n\n`amount` is in the TOKEN's base units (1 USDC = 1000000), because that exact figure is one\nof the terms the address derives from.\n\n`expiry_timestamp` is an absolute Unix time — when the dispute window closes. `0` settles\ninstantly with no recourse. There is no default: \"instant, deliberately\" and \"nobody said\"\nare different, and a caller must not discover afterwards which one they got.\n\n`nominal_buyer` is who may dispute and receives a refund. For an agentic payment this should\nbe the PERSON, not the agent — they are the one who will later read a report and decide\nwhether to object.\n\n**`seller` and `nominal_buyer` may each be a wallet address OR an email address.** An email\nresolves to the wallet Privy holds for that person — made for them if they have never\nlogged in — and the same email always resolves to the same wallet, so the address derived\nhere is the one `settle_escrow_payment` derives too. The resolved wallets come back under\n`parties`. A seller given by email is paid into that wallet; they sign in with the email to\nreach it.\n\n`external_id` keeps two otherwise-identical payments apart, and is one of the terms the\naddress derives from. **Leave it out and a unique one is generated.** That is the right\ndefault: two payments matching in seller, amount, maturity and buyer would otherwise derive\nto the SAME address, and funding the second sends money into the first payment contract — recoverable\nonly after that one is claimed, and only to ITS buyer.\n\n⚠️ PASS BACK THE `external_id` THIS RETURNS, not the one you sent. A generated one is only\n   knowable from the result, and settle derives the address again from whatever it is given:\n   a different id is a different address, and the money is at this one.\n\nSupply your own for the opposite behaviour — a checkout hash gives \"one checkout, one\npayment contract\", so re-presenting the same purchase returns the same address rather than a second.\n\n`description` is what the payment is FOR, in the buyer's own words — ask them for it rather\nthan defaulting. It is what they will be looking at in the dashboard weeks later deciding\nwhether to dispute, and \"Protected payment\" tells them nothing about which one this was. It\ndoes not affect the address, so it can be set freely here.\n\n`brand` is the white-label partner the payment is being made under, if any (the `?b=` id,\ne.g. `escrow-me`). It is recorded on the contract for attribution only: it does not affect\nthe address, and a malformed one is ignored rather than refused.\n\n`product_name` is what is being bought, shown on both parties' dashboards. Display only, like\n`brand`. A seller or nominal buyer given by email is recorded with that email as well, so the\npayment contract shows to them the way a request made on the site does.\n\n⚠️ 1 to 160 characters. Longer is refused HERE rather than at the chain, where the check\n   happens after the money has already moved.\n\n`arbiter` is who decides a dispute. Leave it out for the default arbiter, which is almost\nalways right. It is one of the terms the address derives from, so pass the same value to\n`settle_escrow_payment`.",
+      "inputSchema": {
+        "properties": {
+          "seller": {
+            "description": "Who gets paid: a wallet address (0x…) OR an email address. An email is converted to the wallet that person owns, created for them if they have never signed in; the same email always gives the same wallet.",
+            "type": "string"
+          },
+          "amount": {
+            "description": "How much, in the token's base units: 1 USDC = 1000000, so 25 USDC is 25000000. One of the terms the payment address derives from.",
+            "type": "integer"
+          },
+          "expiry_timestamp": {
+            "description": "When the dispute window closes, as an absolute Unix time in seconds, e.g. 1764547200. 0 settles instantly with no recourse. There is no default.",
+            "type": "integer"
+          },
+          "nominal_buyer": {
+            "description": "Who may dispute and receives any refund — the PERSON, not the agent: a wallet address (0x…) OR an email address. An email is converted to that person's wallet, created for them if they have never signed in.",
+            "type": "string"
+          },
+          "external_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Your own id for this payment, e.g. a checkout hash, so re-presenting the same purchase derives the same address. Omit and a unique one is generated; pass back the value this returns."
+          },
+          "payer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Wallet address (0x…) that will sign an EIP-3009 authorization for us to relay, gas-free. Omit when the payer transfers the tokens to the address themselves."
+          },
+          "token_symbol": {
+            "default": "USDC",
+            "description": "The token to pay in, e.g. USDC. Must be one the service supports.",
+            "type": "string"
+          },
+          "description": {
+            "default": "Protected payment",
+            "description": "What the payment is for, in the buyer's own words, 1 to 160 characters, e.g. 'Logo design, final files'. Shown on the dashboard; does not affect the address.",
+            "type": "string"
+          },
+          "brand": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "The white-label partner the payment is made under, if any: the site's `?b=` id, e.g. escrow-me. Attribution only; does not affect the address."
+          },
+          "product_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "What is being bought, e.g. 'Blue ceramic vase'. Shown on both parties' dashboards; display only."
+          },
+          "arbiter": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Wallet address (0x…) of who decides a dispute. Omit for the default arbiter. One of the terms the address derives from, so pass the same value to both tools."
+          }
+        },
+        "required": [
+          "seller",
+          "amount",
+          "expiry_timestamp",
+          "nominal_buyer"
+        ],
+        "type": "object",
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "settle_escrow_payment",
+      "description": "Create the payment contract around the money and return a signed receipt.\n\n`seller` and `nominal_buyer` may be wallet addresses OR EMAIL ADDRESSES, exactly as in\n`prepare_escrow_payment`; an email converts to the same wallet it did there.\n\nWorks both ways, and which one runs is decided by whether you pass a signature:\n\n**Already transferred it yourself** — omit `authorization` and `signature`. We check the\naddress holds the amount and build the payment contract around what is there. If the transfer has not\narrived it says so, and nothing is spent finding out.\n\n**Want us to relay it** — pass the payer's `authorization` and `signature`. We broadcast it\nand pay the gas, so the payer needs none. This process holds no key and signs nothing; it\nis handed a signature and carries it.\n\nPass the terms exactly as they were prepared. They ARE the payment contract's address, so a single\naltered figure moves it — and with a signature, stops matching what the payer signed.\n\n`seller` and `nominal_buyer` may be wallet addresses or email addresses, as in\n`prepare_escrow_payment`; an email resolves to the same wallet it did there.\n\n⚠️ `external_id` MUST BE THE ONE `prepare_escrow_payment` RETURNED. It generates one when\n   you leave it out, and that generated value is only knowable from its result — send a\n   different one and this derives a different address, while the money is at the first.\n\n⚠️ `error: sanctioned_party` IS FINAL. A party scored above 0 on the sanctions check when the\n   money arrived (or the payment contract was refused before): the money is frozen at its\n   address, and nothing more may be paid into it. Do not retry and do not offer to pay again.\n\n⚠️ The receipt reports what the seller will actually RECEIVE in `token_amount`, with the\n   platform fee named beside it. That is less than the amount authorised, and the two\n   reconcile: token_amount + creator_fee = amount.\n\n`brand` is the white-label partner, as in `prepare_escrow_payment`: attribution only, and\nignored when malformed.\n\n`arbiter`, when one was passed to `prepare_escrow_payment`, must be passed here too: it is a\nterm, and leaving it out derives the default arbiter's address instead.",
+      "inputSchema": {
+        "properties": {
+          "seller": {
+            "description": "Who gets paid: a wallet address (0x…) OR an email address. An email is converted to the wallet that person owns, created for them if they have never signed in; the same email always gives the same wallet.",
+            "type": "string"
+          },
+          "amount": {
+            "description": "How much, in the token's base units: 1 USDC = 1000000, so 25 USDC is 25000000. One of the terms the payment address derives from.",
+            "type": "integer"
+          },
+          "expiry_timestamp": {
+            "description": "When the dispute window closes, as an absolute Unix time in seconds, e.g. 1764547200. 0 settles instantly with no recourse. There is no default.",
+            "type": "integer"
+          },
+          "external_id": {
+            "description": "The external_id prepare_escrow_payment returned, exactly. A different id derives a different address while the money sits at the first.",
+            "type": "string"
+          },
+          "nominal_buyer": {
+            "description": "Who may dispute and receives any refund — the PERSON, not the agent: a wallet address (0x…) OR an email address. An email is converted to that person's wallet, created for them if they have never signed in.",
+            "type": "string"
+          },
+          "authorization": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "The EIP-3009 authorization object prepare_escrow_payment returned for the payer, unchanged. Omit when the payer transferred the tokens themselves."
+          },
+          "signature": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "The payer's hex signature (0x…) over that authorization. Omit together with `authorization`."
+          },
+          "token_symbol": {
+            "default": "USDC",
+            "description": "The token to pay in, e.g. USDC. Must be one the service supports.",
+            "type": "string"
+          },
+          "description": {
+            "default": "Protected payment",
+            "description": "What the payment is for, in the buyer's own words, 1 to 160 characters, e.g. 'Logo design, final files'. Shown on the dashboard; does not affect the address.",
+            "type": "string"
+          },
+          "brand": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "The white-label partner the payment is made under, if any: the site's `?b=` id, e.g. escrow-me. Attribution only; does not affect the address."
+          },
+          "arbiter": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Wallet address (0x…) of who decides a dispute. Omit for the default arbiter. One of the terms the address derives from, so pass the same value to both tools."
+          }
+        },
+        "required": [
+          "seller",
+          "amount",
+          "expiry_timestamp",
+          "external_id",
+          "nominal_buyer"
+        ],
+        "type": "object",
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "payment_qr",
+      "description": "A scannable code for a payment request, so nobody retypes an address.\n\nPass the `payment_uri` from `prepare_escrow_payment`. Returns a QR a phone wallet can scan,\nwith the token, network, destination and amount already in it.\n\nOr pass its `share_with_payer.pay_link`, for a code that opens the payment on the site\ninstead — what to hand someone who is being asked to pay, as the site's own requests do.\n\n⚠️ A SEPARATE TOOL RATHER THAN PART OF `prepare`, because the two have different audiences.\n   `prepare` answers a machine and has to stay parseable; an image in its result would make\n   the structured fields something a client has to dig for. A person who needs the code asks\n   for it.\n\n⚠️ AND IT ENCODES THE URI, NOT THE BARE ADDRESS. A QR holding only an address leaves the\n   amount and the token to be entered by hand, which is the part worth removing — a payment contract\n   funded with the wrong figure is not the payment contract these terms derive to, and the money sits\n   at an address nothing can deploy to.",
+      "inputSchema": {
+        "properties": {
+          "payment_uri": {
+            "description": "The `payment_uri` prepare_escrow_payment returned, for a code a wallet scans; or its `share_with_payer.pay_link`, for a code that opens the payment page.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "payment_uri"
+        ],
+        "type": "object",
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "check_escrow_payment",
+      "description": "What has happened to a settled payment, from the `status_url` on its receipt.",
+      "inputSchema": {
+        "properties": {
+          "status_url": {
+            "description": "The `status_url` on the receipt settle_escrow_payment returned, as is.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status_url"
+        ],
+        "type": "object",
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "verify_escrow_receipt",
+      "description": "Check a receipt's signature against the key its issuer publishes.\n\n⚠️ THE KEY IS FETCHED FROM THE RECEIPT'S OWN `iss`, NOT FROM WHOEVER HANDED IT OVER.\n   Otherwise anything that can serve a receipt can also serve the key that vouches for it,\n   and the signature stops meaning anything.\n\nUse this on receipts from anywhere, including ones this server did not produce.",
+      "inputSchema": {
+        "properties": {
+          "payment_receipt": {
+            "description": "The receipt as a compact JWS string (header.payload.signature), e.g. the `payment_receipt` settle_escrow_payment returned, or one from anywhere else.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "payment_receipt"
+        ],
+        "type": "object",
+        "additionalProperties": false
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "me.stabledrop/escrow-payments",
+    "version": "15.0.2",
+    "remoteUrl": "https://api.stabledrop.me/api/ap2/mcp",
+    "publishedAt": "2026-11-23T18:12:24.077255Z",
+    "fetchedAt": "2026-11-24T12:15:48.059Z",
+    "toolsSha256": "27893f88ce8278b1f15bbb91e9f542e6c15b3b9ed3d4d3d1c770bc287c5427a3"
+  }
+}

@@ -1,545 +1,665 @@
 {
- "$schema": "../schema.json",
- "name": "xyz.quantumatlas/x402-payment-hub",
- "title": "Quantum Atlas Stripe X402 Agent Payment Hub",
- "category": "AI, LLMs & Agents",
- "description": "Stripe-powered HTTP 402 agent payment hub: spend keys, subagent caps, approvals & 25+ paid tools.",
- "tools": [
-  {
-   "name": "x402_list_capabilities",
-   "description": "List all priced HTTP 402 capabilities, exact USD rates, per-capability JSON input_schema, example_arguments, capability lanes, free discovery tools, and Stripe spend-key payment rules. Use this first to discover valid capability_id values and exact argument schemas before calling x402_quote_plan or x402_execute_capability (pass capability_id to inspect a single capability cleanly). Do not use this to verify live ledger availability (use x402_check_health) or compute multi-item totals (use x402_quote_plan). Requires no authentication, incurs no charge, and never mutates state.",
-   "inputSchema": {
-    "$schema": "http://json-schema.org/draft-07/schema#",
-    "type": "object",
-    "properties": {
-     "lane": {
-      "type": "string",
-      "enum": [
-       "live_data",
-       "studio_audio",
-       "switchboard",
-       "member_tools",
-       "live_broadcast"
-      ],
-      "description": "Optional capability lane filter: live_data (maritime/harbor/parking oracles), studio_audio (GPU stem separation), switchboard (11-language voice/broadcast), member_tools (KB/co-creation), or live_broadcast."
-     },
-     "capability_id": {
-      "description": "Optional specific capability_id or route key to inspect (e.g. \"reality_harbor_state\", \"audio_visual_isolate\", or \"POST /switchboard/chunk\") when retrieving its exact input_schema and example_arguments without loading all 25 capabilities.",
-      "type": "string",
-      "minLength": 1,
-      "maxLength": 160
-     }
-    },
-    "additionalProperties": false
-   }
-  },
-  {
-   "name": "x402_check_health",
-   "description": "Probe live readiness of the Stripe X402 Agent Payment Hub and verify connectivity to its backing Stripe credit ledger. Use this before starting an autonomous workflow or when diagnosing 503 errors; do not use it to browse capability rates (use x402_list_capabilities) or read an account balance (use x402_get_account). Requires no authentication, incurs no charge, and returns ok=false (HTTP 503) if the backing credit ledger is unreachable.",
-   "inputSchema": {
-    "$schema": "http://json-schema.org/draft-07/schema#",
-    "type": "object",
-    "properties": {},
-    "additionalProperties": false
-   }
-  },
-  {
-   "name": "x402_quote_plan",
-   "description": "Calculate exact USD cost for 1 to 25 HTTP 402 capabilities and evaluate whether a Stripe spend key can auto-execute within balance, per-call caps, daily/total budgets, and route allowlists. Use this before x402_execute_capability to verify total cost and detect when x402_request_approval or x402_create_checkout is needed; do not use this to browse available tools (use x402_list_capabilities) or run a paid capability (use x402_execute_capability). Free and read-only (never charges credit); returns payment_assistant.human_approval_required=true and recommended Stripe pack amounts when funds or policy caps block execution. Subject to 120 req/min/IP rate limiting.",
-   "inputSchema": {
-    "$schema": "http://json-schema.org/draft-07/schema#",
-    "type": "object",
-    "properties": {
-     "items": {
-      "minItems": 1,
-      "maxItems": 25,
-      "type": "array",
-      "items": {
-       "type": "object",
-       "properties": {
-        "capability_id": {
-         "type": "string",
-         "minLength": 1,
-         "maxLength": 160,
-         "description": "Capability identifier or route key from x402_list_capabilities (e.g. \"reality_harbor_state\", \"audio_visual_isolate\", \"POST /switchboard/chunk\", or \"/kb/search\")."
-        },
-        "quantity": {
-         "description": "Integer number of calls to quote for this capability (1 to 1000; defaults to 1).",
-         "type": "integer",
-         "minimum": 1,
-         "maximum": 1000
-        },
-        "order": {
-         "description": "Optional request payload required only for dynamically quoted routes such as POST /switchboard/chunk (e.g. {\"text\": \"Hello harbor.\", \"languages\": [\"es-US\", \"ja-JP\"]}).",
-         "type": "object",
-         "propertyNames": {
-          "type": "string"
-         },
-         "additionalProperties": {}
-        }
-       },
-       "required": [
-        "capability_id"
-       ],
-       "additionalProperties": false,
-       "description": "One priced capability line item to include in the quote calculation."
-      },
-      "description": "Ordered list of 1 to 25 capability line items to price and policy-check together."
-     },
-     "spend_key": {
-      "type": "string",
-      "pattern": "^sbk_[A-Za-z0-9_-]{32,96}$",
-      "description": "Stripe-funded master or delegated subagent spend key (format: sbk_<43+ chars>). Optional when the caller supplies the x-atlas-spend-key HTTP header."
-     }
-    },
-    "required": [
-     "items"
-    ],
-    "additionalProperties": false
-   }
-  },
-  {
-   "name": "x402_execute_capability",
-   "description": "Execute one priced HTTP 402 capability through the Stripe X402 Hub, debiting exact USD cents from a prepaid spend key and returning the upstream payload, credit receipt, and Ed25519 cryptographic execution attestation. Use this only after confirming capability_id via x402_list_capabilities and verifying pricing via x402_quote_plan; do not use this for price quotes (use x402_quote_plan). Charges prepaid USD credit (pass max_spend_cents as a hard caller ceiling and idempotency_key for safe retries); failed upstream calls (HTTP >= 400) automatically refund credit and restore delegate budgets. Pass approval_id (sba_*) after x402_decide_approval approves an over-cap request. Returns 401/402/403 if the key is missing, underfunded, frozen, or over policy cap.",
-   "inputSchema": {
-    "$schema": "http://json-schema.org/draft-07/schema#",
-    "type": "object",
-    "properties": {
-     "capability_id": {
-      "type": "string",
-      "minLength": 1,
-      "maxLength": 160,
-      "description": "Priced capability identifier or route from x402_list_capabilities to execute (e.g. \"reality_harbor_state\", \"kb_search\", or \"POST /switchboard/chunk\")."
-     },
-     "arguments": {
-      "description": "JSON input arguments expected by the target capability (e.g. {\"destination\": \"annapolis\"} for reality_harbor_state or {\"query\": \"city dock\"} for kb_search).",
-      "type": "object",
-      "propertyNames": {
-       "type": "string"
-      },
-      "additionalProperties": {}
-     },
-     "max_spend_cents": {
-      "description": "Hard client-side spend ceiling in USD cents (e.g. 50 = $0.50). If the live capability price exceeds this value, execution aborts with HTTP 403 before any debit occurs.",
-      "type": "integer",
-      "minimum": 1,
-      "maximum": 100000000
-     },
-     "idempotency_key": {
-      "description": "Stripe-standard idempotency key (8-128 chars, e.g. \"run-2026-11-22-harbor-01\") ensuring retries reuse the exact original reservation without double-charging.",
-      "type": "string",
-      "pattern": "^[A-Za-z0-9._:-]{8,128}$"
-     },
-     "approval_id": {
-      "type": "string",
-      "pattern": "^sba_[a-f0-9]{16}$",
-      "description": "Single-use human spend escalation approval ticket identifier returned by x402_request_approval (format: sba_<16 hex chars>, e.g. sba_aabbccddeeff0011)."
-     },
-     "spend_key": {
-      "type": "string",
-      "pattern": "^sbk_[A-Za-z0-9_-]{32,96}$",
-      "description": "Stripe-funded master or delegated subagent spend key (format: sbk_<43+ chars>). Optional when the caller supplies the x-atlas-spend-key HTTP header."
-     }
-    },
-    "required": [
-     "capability_id"
-    ],
-    "additionalProperties": false
-   }
-  },
-  {
-   "name": "x402_get_account",
-   "description": "Read current prepaid USD balance, key role (master vs delegate), emergency freeze status, active delegated subagent keys, pending escalation approvals, and recent spend orders. Use this for live operational status checks and to locate delegate_id (sbd_*) or pending approval_id (sba_*) records; do not use this for double-entry financial reconciliation or date-range exports (use x402_export_statement) or per-call policy preflight (use x402_quote_plan). Free and read-only; requires a valid master or delegated sbk_* spend key (returns HTTP 401 if missing, invalid, or revoked; 120 req/min/IP limit).",
-   "inputSchema": {
-    "$schema": "http://json-schema.org/draft-07/schema#",
-    "type": "object",
-    "properties": {
-     "spend_key": {
-      "type": "string",
-      "pattern": "^sbk_[A-Za-z0-9_-]{32,96}$",
-      "description": "Stripe-funded master or delegated subagent spend key (format: sbk_<43+ chars>). Optional when the caller supplies the x-atlas-spend-key HTTP header."
-     }
-    },
-    "additionalProperties": false
-   }
-  },
-  {
-   "name": "x402_create_checkout",
-   "description": "Create a hosted Stripe Checkout session ($10, $25, $100, $250, or $500 prepaid USD credit pack via card, Apple Pay, Google Pay, or Link — zero crypto required) to fund a new or existing master spend key. Use this when provisioning a brand-new account or topping up a low balance reported by x402_get_account or x402_quote_plan; do not use this to check balances (use x402_get_account) or mint child keys (use x402_issue_delegate_key). Opens an external Stripe Checkout URL without charging until a human completes payment. Omit spend_key to create a new master account, or pass a master sbk_* key to top up; delegated subagent keys are rejected with HTTP 403.",
-   "inputSchema": {
-    "$schema": "http://json-schema.org/draft-07/schema#",
-    "type": "object",
-    "properties": {
-     "amount_cents": {
-      "anyOf": [
-       {
-        "type": "number",
-        "const": 1000
-       },
-       {
-        "type": "number",
-        "const": 2500
-       },
-       {
-        "type": "number",
-        "const": 10000
-       },
-       {
-        "type": "number",
-        "const": 25000
-       },
-       {
-        "type": "number",
-        "const": 50000
-       }
-      ],
-      "description": "Prepaid Stripe credit pack size in USD cents: 1000 ($10), 2500 ($25), 10000 ($100), 25000 ($250), or 50000 ($500)."
-     },
-     "return_surface": {
-      "description": "Web console surface to redirect the operator to after Stripe Checkout finishes: \"x402\" (default, quantumatlas.xyz/x402/), \"developers\", or \"app\".",
-      "type": "string",
-      "enum": [
-       "x402",
-       "developers",
-       "app"
-      ]
-     },
-     "spend_key": {
-      "type": "string",
-      "pattern": "^sbk_[A-Za-z0-9_-]{32,96}$",
-      "description": "Master Stripe account spend key (format: sbk_<43+ chars>). Delegated subagent keys are rejected with HTTP 403. Optional if supplied via the x-atlas-spend-key HTTP header."
-     }
-    },
-    "required": [
-     "amount_cents"
-    ],
-    "additionalProperties": false
-   }
-  },
-  {
-   "name": "x402_issue_delegate_key",
-   "description": "Mint a new budget-capped, route-scoped, expiring delegated spend key (sbk_*) for a subagent or automated workflow backed by your master Stripe account. Use this to provision least-privilege spending credentials for a new subagent; do not use this to adjust limits on an existing key (use x402_update_delegate_key) or disable a key (use x402_revoke_delegate_key). Requires a master sbk_* spend key (delegated keys receive HTTP 403). Returns the secret child spend key exactly once — persist it in a secret store because later x402_get_account calls return only masked hints.",
-   "inputSchema": {
-    "$schema": "http://json-schema.org/draft-07/schema#",
-    "type": "object",
-    "properties": {
-     "label": {
-      "type": "string",
-      "minLength": 1,
-      "maxLength": 80,
-      "description": "Human-readable label identifying the subagent or workflow (1-80 chars, e.g. \"harbor-monitor-agent\")."
-     },
-     "agent_id": {
-      "description": "Optional stable machine agent identifier recorded on spend audit rows (e.g. \"agent.cursor.prod-01\").",
-      "type": "string",
-      "minLength": 1,
-      "maxLength": 80
-     },
-     "max_order_cents": {
-      "description": "Maximum USD cents allowed on any single capability call (e.g. 50 = $0.50). Omit for no per-call limit.",
-      "type": "integer",
-      "minimum": 1,
-      "maximum": 100000000
-     },
-     "daily_budget_cents": {
-      "description": "Rolling UTC-day spend cap in USD cents (e.g. 500 = $5.00/day). Omit for no daily cap.",
-      "type": "integer",
-      "minimum": 1,
-      "maximum": 100000000
-     },
-     "total_budget_cents": {
-      "description": "Lifetime cumulative spend cap in USD cents across the key lifespan (e.g. 2500 = $25.00 total). Omit for no lifetime cap.",
-      "type": "integer",
-      "minimum": 1,
-      "maximum": 100000000
-     },
-     "allowed_routes": {
-      "maxItems": 64,
-      "type": "array",
-      "items": {
-       "type": "string",
-       "minLength": 1,
-       "maxLength": 160
-      },
-      "description": "Route allowlist patterns restricting which capabilities the delegated key may invoke (supports exact routes like \"POST /kb/search\" or prefix wildcards like \"GET /reality/*\"). Omit or pass [] to allow all hub capabilities."
-     },
-     "ttl_hours": {
-      "description": "Key expiration window in hours from issuance (1 to 8760 hours = 1 year). Omit for non-expiring until revoked.",
-      "type": "integer",
-      "minimum": 1,
-      "maximum": 8760
-     },
-     "spend_key": {
-      "type": "string",
-      "pattern": "^sbk_[A-Za-z0-9_-]{32,96}$",
-      "description": "Master Stripe account spend key (format: sbk_<43+ chars>). Delegated subagent keys are rejected with HTTP 403. Optional if supplied via the x-atlas-spend-key HTTP header."
-     }
-    },
-    "required": [
-     "label"
-    ],
-    "additionalProperties": false
-   }
-  },
-  {
-   "name": "x402_update_delegate_key",
-   "description": "Modify standing spend limits, route allowlist, or label on an active delegated subagent key (sbd_*) live without rotating its secret. Use this to tighten or expand ongoing budgets for an existing subagent; do not use this to mint a new key (use x402_issue_delegate_key), grant a single-use exception (use x402_decide_approval), or permanently disable a key (use x402_revoke_delegate_key). Requires a master sbk_* spend key; idempotent for identical policy payloads. Returns HTTP 403 for delegated callers and HTTP 404 if delegate_id is unknown.",
-   "inputSchema": {
-    "$schema": "http://json-schema.org/draft-07/schema#",
-    "type": "object",
-    "properties": {
-     "delegate_id": {
-      "type": "string",
-      "pattern": "^sbd_[a-f0-9]{16}$",
-      "description": "Unique delegated subagent key identifier returned by x402_issue_delegate_key or x402_get_account (format: sbd_<16 hex chars>, e.g. sbd_1122334455667788)."
-     },
-     "label": {
-      "description": "Updated human-readable label for the delegated subagent key.",
-      "type": "string",
-      "minLength": 1,
-      "maxLength": 80
-     },
-     "max_order_cents": {
-      "description": "Updated per-call spend cap in USD cents, or null to clear the per-call cap.",
-      "anyOf": [
-       {
-        "type": "integer",
-        "minimum": 1,
-        "maximum": 100000000
-       },
-       {
-        "type": "null"
-       }
-      ]
-     },
-     "daily_budget_cents": {
-      "description": "Updated UTC daily budget cap in USD cents, or null to clear the daily cap.",
-      "anyOf": [
-       {
-        "type": "integer",
-        "minimum": 1,
-        "maximum": 100000000
-       },
-       {
-        "type": "null"
-       }
-      ]
-     },
-     "total_budget_cents": {
-      "description": "Updated lifetime cumulative cap in USD cents, or null to clear the lifetime cap.",
-      "anyOf": [
-       {
-        "type": "integer",
-        "minimum": 1,
-        "maximum": 100000000
-       },
-       {
-        "type": "null"
-       }
-      ]
-     },
-     "allowed_routes": {
-      "maxItems": 64,
-      "type": "array",
-      "items": {
-       "type": "string",
-       "minLength": 1,
-       "maxLength": 160
-      },
-      "description": "Route allowlist patterns restricting which capabilities the delegated key may invoke (supports exact routes like \"POST /kb/search\" or prefix wildcards like \"GET /reality/*\"). Omit or pass [] to allow all hub capabilities."
-     },
-     "spend_key": {
-      "type": "string",
-      "pattern": "^sbk_[A-Za-z0-9_-]{32,96}$",
-      "description": "Master Stripe account spend key (format: sbk_<43+ chars>). Delegated subagent keys are rejected with HTTP 403. Optional if supplied via the x-atlas-spend-key HTTP header."
-     }
-    },
-    "required": [
-     "delegate_id"
-    ],
-    "additionalProperties": false
-   }
-  },
-  {
-   "name": "x402_revoke_delegate_key",
-   "description": "Permanently revoke one delegated subagent spend key by delegate_id (sbd_*), or revoke every active delegated key across the account when revoke_all=true. Use this immediately to disable a compromised, retired, or runaway subagent; do not use this for a temporary reversible pause across the whole account (use x402_set_account_freeze) or to adjust caps (use x402_update_delegate_key). Destructive and irreversible: revoked keys immediately fail with HTTP 401 and cannot be reactivated. Requires a master sbk_* spend key; provide either delegate_id (single key) or revoke_all=true (entire swarm).",
-   "inputSchema": {
-    "$schema": "http://json-schema.org/draft-07/schema#",
-    "type": "object",
-    "properties": {
-     "delegate_id": {
-      "type": "string",
-      "pattern": "^sbd_[a-f0-9]{16}$",
-      "description": "Unique delegated subagent key identifier returned by x402_issue_delegate_key or x402_get_account (format: sbd_<16 hex chars>, e.g. sbd_1122334455667788)."
-     },
-     "revoke_all": {
-      "description": "Set true to execute the emergency swarm kill switch revoking EVERY active delegated subagent key on the account (omit delegate_id when true).",
-      "type": "boolean"
-     },
-     "reason": {
-      "description": "Optional audit-log reason for revocation (e.g. \"key_rotated\" or \"compromised_worker\").",
-      "type": "string",
-      "maxLength": 160
-     },
-     "spend_key": {
-      "type": "string",
-      "pattern": "^sbk_[A-Za-z0-9_-]{32,96}$",
-      "description": "Master Stripe account spend key (format: sbk_<43+ chars>). Delegated subagent keys are rejected with HTTP 403. Optional if supplied via the x-atlas-spend-key HTTP header."
-     }
-    },
-    "additionalProperties": false
-   }
-  },
-  {
-   "name": "x402_request_approval",
-   "description": "Create a pending single-use human escalation ticket (sba_*) when a delegated subagent needs one-time permission to exceed its standing per-call cap, budget, or route allowlist. Use this after x402_quote_plan returns human_approval_required=true on a delegated key; do not use this to approve/deny tickets (use x402_decide_approval) or permanently raise standing caps (use x402_update_delegate_key). Free and non-charging; requires a valid sbk_* spend key. Once approved by the master operator via x402_decide_approval, pass the returned approval_id to x402_execute_capability within 15 minutes.",
-   "inputSchema": {
-    "$schema": "http://json-schema.org/draft-07/schema#",
-    "type": "object",
-    "properties": {
-     "capability_id": {
-      "type": "string",
-      "minLength": 1,
-      "maxLength": 160,
-      "description": "Target capability_id or route key requiring one-time over-cap execution (e.g. \"audio_visual_isolate\" or \"POST /audio/visual-isolate\")."
-     },
-     "cents": {
-      "description": "Exact USD cent amount requested for approval (optional for fixed-SKU capabilities where the hub auto-resolves the exact price).",
-      "type": "integer",
-      "minimum": 1,
-      "maximum": 100000000
-     },
-     "justification": {
-      "type": "string",
-      "minLength": 1,
-      "maxLength": 280,
-      "description": "Concise human-readable reason explaining why this one-time spend exception is required (shown to the operator in the /x402/ approval queue)."
-     },
-     "ttl_minutes": {
-      "description": "Minutes the pending ticket remains open awaiting operator decision (1 to 1440; defaults to 60 minutes).",
-      "type": "integer",
-      "minimum": 1,
-      "maximum": 1440
-     },
-     "spend_key": {
-      "type": "string",
-      "pattern": "^sbk_[A-Za-z0-9_-]{32,96}$",
-      "description": "Stripe-funded master or delegated subagent spend key (format: sbk_<43+ chars>). Optional when the caller supplies the x-atlas-spend-key HTTP header."
-     }
-    },
-    "required": [
-     "capability_id",
-     "justification"
-    ],
-    "additionalProperties": false
-   }
-  },
-  {
-   "name": "x402_decide_approval",
-   "description": "Approve once (15-minute single-use redemption window) or deny a pending subagent spend escalation ticket (sba_*). Use this as the master account operator after reviewing pending tickets via x402_get_account; do not use this to open a new escalation ticket (use x402_request_approval) or permanently change a subagent policy (use x402_update_delegate_key). Requires a master sbk_* spend key (delegated keys receive HTTP 403). Approved tickets bind exact principal, route, and cent amount and are atomically consumed on first spend to prevent replay (returns 404/409/410 if missing, already decided, or expired).",
-   "inputSchema": {
-    "$schema": "http://json-schema.org/draft-07/schema#",
-    "type": "object",
-    "properties": {
-     "approval_id": {
-      "type": "string",
-      "pattern": "^sba_[a-f0-9]{16}$",
-      "description": "Single-use human spend escalation approval ticket identifier returned by x402_request_approval (format: sba_<16 hex chars>, e.g. sba_aabbccddeeff0011)."
-     },
-     "decision": {
-      "type": "string",
-      "enum": [
-       "approve",
-       "deny"
-      ],
-      "description": "Operator decision: \"approve\" grants a single-use 15-minute execution pass; \"deny\" permanently rejects the escalation ticket."
-     },
-     "note": {
-      "description": "Optional operator audit note recorded with the approval or denial decision.",
-      "type": "string",
-      "maxLength": 240
-     },
-     "spend_key": {
-      "type": "string",
-      "pattern": "^sbk_[A-Za-z0-9_-]{32,96}$",
-      "description": "Master Stripe account spend key (format: sbk_<43+ chars>). Delegated subagent keys are rejected with HTTP 403. Optional if supplied via the x-atlas-spend-key HTTP header."
-     }
-    },
-    "required": [
-     "approval_id",
-     "decision"
-    ],
-    "additionalProperties": false
-   }
-  },
-  {
-   "name": "x402_set_account_freeze",
-   "description": "Emergency kill switch that immediately freezes (frozen=true) or unfreezes (frozen=false) all capability spends across the master account and every delegated subagent key. Use this to pause all spending immediately during an incident while preserving keys for later resumption; do not use this to permanently destroy individual subagent keys (use x402_revoke_delegate_key). High-impact and reversible: while frozen, every spend attempt fails closed with HTTP 403 account_frozen. Requires a master sbk_* spend key (delegated keys receive HTTP 403).",
-   "inputSchema": {
-    "$schema": "http://json-schema.org/draft-07/schema#",
-    "type": "object",
-    "properties": {
-     "frozen": {
-      "type": "boolean",
-      "description": "Set true to immediately halt all master and subagent spends across the account, or false to lift the freeze and resume spending."
-     },
-     "reason": {
-      "description": "Optional incident or operator audit reason recorded on the account freeze state (e.g. \"anomaly_investigation\").",
-      "type": "string",
-      "maxLength": 160
-     },
-     "spend_key": {
-      "type": "string",
-      "pattern": "^sbk_[A-Za-z0-9_-]{32,96}$",
-      "description": "Master Stripe account spend key (format: sbk_<43+ chars>). Delegated subagent keys are rejected with HTTP 403. Optional if supplied via the x-atlas-spend-key HTTP header."
-     }
-    },
-    "required": [
-     "frozen"
-    ],
-    "additionalProperties": false
-   }
-  },
-  {
-   "name": "x402_export_statement",
-   "description": "Export a double-entry reconciled enterprise financial statement covering Stripe credit top-ups, capability spends, automatic upstream refunds, delegate attribution, and a tamper-evident SHA-256 checksum (statement_sha256). Use this for accounting audits, reconciliation checks, and per-subagent spend reporting; do not use this for a lightweight live balance or active-key lookup (use x402_get_account). Free and read-only; requires a valid sbk_* spend key (delegated keys receive only rows attributed to their own delegate_id). Subject to 120 req/min/IP rate limiting.",
-   "inputSchema": {
-    "$schema": "http://json-schema.org/draft-07/schema#",
-    "type": "object",
-    "properties": {
-     "start_date": {
-      "type": "string",
-      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
-      "description": "UTC calendar date in ISO-8601 YYYY-MM-DD format (e.g. 2026-11-22)."
-     },
-     "end_date": {
-      "type": "string",
-      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
-      "description": "UTC calendar date in ISO-8601 YYYY-MM-DD format (e.g. 2026-11-22)."
-     },
-     "delegate_id": {
-      "type": "string",
-      "pattern": "^sbd_[a-f0-9]{16}$",
-      "description": "Unique delegated subagent key identifier returned by x402_issue_delegate_key or x402_get_account (format: sbd_<16 hex chars>, e.g. sbd_1122334455667788)."
-     },
-     "spend_key": {
-      "type": "string",
-      "pattern": "^sbk_[A-Za-z0-9_-]{32,96}$",
-      "description": "Stripe-funded master or delegated subagent spend key (format: sbk_<43+ chars>). Optional when the caller supplies the x-atlas-spend-key HTTP header."
-     }
-    },
-    "additionalProperties": false
-   }
-  }
- ],
- "source": {
-  "type": "registry",
-  "registry": "registry.modelcontextprotocol.io",
+  "$schema": "../schema.json",
   "name": "xyz.quantumatlas/x402-payment-hub",
-  "version": "1.2.0",
-  "remoteUrl": "https://x402.quantumatlas.xyz/x402/center/mcp",
-  "publishedAt": "2026-11-22T09:23:07.008234Z",
-  "fetchedAt": "2026-11-22T12:49:37.224Z",
-  "toolsSha256": "0f07f7c8803b136653a18170556b2fdfa19ca5b617cf2f7f36308970b94909c5"
- }
+  "title": "Quantum Atlas Stripe X402 Agent Payment Hub",
+  "category": "AI, LLMs & Agents",
+  "description": "Stripe HTTP 402 payment hub: $1-$500 keys, OAuth 2.1 subagents, approvals & Ed25519 receipts.",
+  "tools": [
+    {
+      "name": "x402_list_capabilities",
+      "description": "Browse priced HTTP 402 capabilities, USD rates, and input schemas. Use this first to find capability_id values; do not use for dry-runs (x402_preview_capability), ledger probes (x402_check_health), or multi-item pricing (x402_quote_plan).\nParameters: omit filters for a compact ~5KB index (94% fewer tokens), pass lane to scope, or pass capability_id / include_schemas=true for full JSON schemas.\nBehavior: no auth, zero charge; returns one unpaginated compact index (~30 capabilities, 6 lanes), cached 30s.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "lane": {
+            "type": "string",
+            "enum": [
+              "live_data",
+              "studio_audio",
+              "switchboard",
+              "member_tools",
+              "live_broadcast",
+              "destination_hubs",
+              "reality_clearing"
+            ],
+            "description": "Optional capability lane filter: live_data (maritime/harbor/parking oracles), studio_audio (GPU stem separation), switchboard (11-language voice/broadcast), member_tools (KB/co-creation), live_broadcast, destination_hubs (Global Food & Hyperlocal Compliance Hubs), or reality_clearing (Proof-of-Reality Clearinghouse & Optical Corroboration)."
+          },
+          "capability_id": {
+            "description": "Optional specific capability_id or route key to inspect (e.g. \"reality_harbor_state\", \"audio_visual_isolate\", or \"POST /switchboard/chunk\") with its full input_schema and example_arguments.",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160
+          },
+          "include_schemas": {
+            "description": "Optional boolean; omit or false (default) for a compact ~5KB index, or pass true to embed full JSON input_schema and example_arguments for every returned capability.",
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "x402_check_health",
+      "description": "Probe live readiness of the Stripe X402 Payment Hub and its backing Stripe credit ledger. Use this before autonomous workflows or when diagnosing 503 errors; do not use to browse rates (x402_list_capabilities) or read an account balance (x402_get_account).\nBehavior: no auth, zero charge, no-store; ok=true requires both hub catalog and credit ledger reachable (<1s typical; 8s ledger timeout fails closed with HTTP 503 and stripe_credit_ledger.reachable=false).",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "x402_preview_capability",
+      "description": "Dry-run any priced HTTP 402 capability against deterministic sandbox fixtures with live production pricing. Use this to test schemas at zero cost before funding; do not use for live data (x402_execute_capability) or multi-item quotes (x402_quote_plan).\nParameters: capability_id accepts tool slug, \"METHOD /path\", or \"/path\"; omitting arguments injects curated defaults (used_example_defaults=true), whereas supplying any arguments object runs strict production validators without fallback.\nBehavior: no auth, zero charge, zero GPU compute; returns sandbox=true fixture, HTTP 422 invalid args, HTTP 404 unknown capability, 120 req/min/IP.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "capability_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160,
+            "description": "Priced capability_id or route key from x402_list_capabilities to dry-run (e.g. \"reality_harbor_state\", \"kb_search\", or \"POST /switchboard/chunk\")."
+          },
+          "arguments": {
+            "description": "Optional JSON arguments matching the capability input_schema. Omit to auto-fill valid example defaults; pass custom fields to verify 422 validation.",
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {}
+          }
+        },
+        "required": [
+          "capability_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "x402_quote_plan",
+      "description": "Price 1 to 25 HTTP 402 capabilities and optionally check balance, freeze state, and cumulative delegate caps. Use this before executing to verify total cost or detect approval/top-up needs; do not use to browse schemas (x402_list_capabilities), dry-run (x402_preview_capability), or execute (x402_execute_capability).\nParameters: omit spend_key and x-atlas-spend-key header for rate-only math, or supply either (mismatch -> HTTP 400) to evaluate cumulative policy.\nBehavior: zero charge; atomic validation — any unknown capability (HTTP 404) or invalid order (HTTP 400) aborts the whole quote; HTTP 401 invalid key, HTTP 503 ledger down, 120 req/min/IP.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "items": {
+            "minItems": 1,
+            "maxItems": 25,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "capability_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 160,
+                  "description": "Capability identifier or route key from x402_list_capabilities (e.g. \"reality_harbor_state\", \"audio_visual_isolate\", \"POST /switchboard/chunk\", or \"/kb/search\")."
+                },
+                "quantity": {
+                  "description": "Integer number of calls to quote for this capability (1 to 1000; defaults to 1).",
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 1000
+                },
+                "order": {
+                  "description": "Optional request payload required only for dynamically quoted routes such as POST /switchboard/chunk (e.g. {\"text\": \"Hello harbor.\", \"languages\": [\"es-US\", \"ja-JP\"]}).",
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {}
+                }
+              },
+              "required": [
+                "capability_id"
+              ],
+              "additionalProperties": false,
+              "description": "One priced capability line item to include in the quote calculation."
+            },
+            "description": "Ordered list of 1 to 25 capability line items to price and policy-check together."
+          },
+          "spend_key": {
+            "type": "string",
+            "pattern": "^sbk_[A-Za-z0-9_-]{32,96}$",
+            "description": "Stripe-funded master or delegated subagent spend key (format: sbk_<43+ chars>). Optional when the caller supplies the x-atlas-spend-key HTTP header."
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "x402_execute_capability",
+      "description": "Execute one live HTTP 402 capability via Stripe credit or Base USDC x402 v2, returning output, receipt, and Ed25519 attestation. Use this after verifying schemas and cost; do not use for free dry-runs (x402_preview_capability) or pricing (x402_quote_plan).\nParameters: supply spend_key/header or payment_signature/PAYMENT-SIGNATURE; pass flat fields in arguments (or {order} on dynamic routes); max_spend_cents aborts pre-debit above ceiling.\nBehavior: reusing idempotency_key replays the receipt (mutated args return HTTP 409). Upstream HTTP >= 400 auto-refunds 100%; returns HTTP 401/402/403/404 on auth, balance, policy, or route errors.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "capability_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160,
+            "description": "Priced capability identifier or route from x402_list_capabilities to execute (e.g. \"reality_harbor_state\", \"kb_search\", or \"POST /switchboard/chunk\")."
+          },
+          "arguments": {
+            "description": "JSON input arguments expected by the target capability (e.g. {\"destination\": \"annapolis\"} for reality_harbor_state or {\"query\": \"city dock\"} for kb_search).",
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {}
+          },
+          "max_spend_cents": {
+            "description": "Hard client-side spend ceiling in USD cents (e.g. 50 = $0.50). If the live capability price exceeds this value, execution aborts with HTTP 403 before any debit occurs.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100000000
+          },
+          "idempotency_key": {
+            "description": "Stripe-standard idempotency key (8-128 chars, e.g. \"run-2026-11-22-harbor-01\") ensuring retries reuse the exact original reservation without double-charging.",
+            "type": "string",
+            "pattern": "^[A-Za-z0-9._:-]{8,128}$"
+          },
+          "approval_id": {
+            "type": "string",
+            "pattern": "^sba_[a-f0-9]{16}$",
+            "description": "Single-use human spend escalation approval ticket identifier returned by x402_request_approval (format: sba_<16 hex chars>, e.g. sba_aabbccddeeff0011)."
+          },
+          "spend_key": {
+            "type": "string",
+            "pattern": "^sbk_[A-Za-z0-9_-]{32,96}$",
+            "description": "Stripe-funded master or delegated subagent spend key (format: sbk_<43+ chars>). Optional when the caller supplies the x-atlas-spend-key HTTP header."
+          },
+          "payment_signature": {
+            "description": "Optional Base USDC x402 v2 PAYMENT-SIGNATURE header value for direct on-chain settlement when executing without a Stripe sbk_* spend key.",
+            "type": "string",
+            "minLength": 16,
+            "maxLength": 16384
+          },
+          "builder_code": {
+            "description": "Optional ERC-8021 partner builder attribution code (2-64 chars, e.g. \"glama\" or \"codex\") for disclosed partner revenue share.",
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9._-]{1,63}$"
+          }
+        },
+        "required": [
+          "capability_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "x402_get_account",
+      "description": "Read live Stripe X402 account status: balance, freeze state, pending checkouts, approvals, and recent orders. Use this for a full account overview; do not use to filter delegated keys alone (x402_list_delegate_keys), export statements (x402_export_statement), or quote calls (x402_quote_plan).\nParameters: supply spend_key or x-atlas-spend-key header (mismatch -> HTTP 400); master sees all state, delegate sees own scope.\nBehavior: zero charge; master reads poll open Stripe checkouts so settled top-ups appear immediately. HTTP 401 invalid/revoked key, 120 req/min/IP.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "spend_key": {
+            "type": "string",
+            "pattern": "^sbk_[A-Za-z0-9_-]{32,96}$",
+            "description": "Stripe-funded master or delegated subagent spend key (format: sbk_<43+ chars>). Optional when the caller supplies the x-atlas-spend-key HTTP header."
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "x402_create_checkout",
+      "description": "Create a hosted Stripe Checkout session ($1-$500 USD via Apple Pay, Google Pay, Link, or card) to fund a master sbk_* spend key, or claim a trial key ($0 when enabled). Use this to provision or top up an account; do not use for balances (x402_get_account) or subagents (x402_issue_delegate_key).\nParameters: pass amount_cents (100=$1, 200=$2, 500=$5, 1000=$10, 2500=$25, 5000=$50, 10000=$100, 25000=$250, 50000=$500; or 0 if trial grants enabled); omit spend_key for a new key.\nBehavior: Stripe sessions expire after 31 min (max 3 open returns 409 checkout_already_open); credits settle ~4s post-payment; delegates return HTTP 403.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "amount_cents": {
+            "anyOf": [
+              {
+                "type": "number",
+                "const": 0
+              },
+              {
+                "type": "number",
+                "const": 100
+              },
+              {
+                "type": "number",
+                "const": 200
+              },
+              {
+                "type": "number",
+                "const": 500
+              },
+              {
+                "type": "number",
+                "const": 1000
+              },
+              {
+                "type": "number",
+                "const": 2500
+              },
+              {
+                "type": "number",
+                "const": 5000
+              },
+              {
+                "type": "number",
+                "const": 10000
+              },
+              {
+                "type": "number",
+                "const": 25000
+              },
+              {
+                "type": "number",
+                "const": 50000
+              }
+            ],
+            "description": "Credit pack in USD cents: 100 ($1 starter), 200 ($2), 500 ($5), 1000 ($10), 2500 ($25), 5000 ($50), 10000 ($100), 25000 ($250), 50000 ($500), or 0 (bounded trial grant when enabled)."
+          },
+          "agent_id": {
+            "description": "Optional autonomous agent identifier used for Zero-PII anti-Sybil hashing when claiming an amount_cents=0 promotional trial grant.",
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 120
+          },
+          "return_surface": {
+            "description": "Web surface to redirect the operator to after Stripe Checkout finishes: \"x402\" (default), \"pay\" (Express Pay live balance poller), \"developers\", or \"app\".",
+            "type": "string",
+            "enum": [
+              "x402",
+              "pay",
+              "developers",
+              "app"
+            ]
+          },
+          "spend_key": {
+            "type": "string",
+            "pattern": "^sbk_[A-Za-z0-9_-]{32,96}$",
+            "description": "Master Stripe account spend key (format: sbk_<43+ chars>). Delegated subagent keys are rejected with HTTP 403. Optional if supplied via the x-atlas-spend-key HTTP header."
+          }
+        },
+        "required": [
+          "amount_cents"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "x402_list_delegate_keys",
+      "description": "List delegated subagent policy records (sbd_* IDs governing sbk_* spend keys) with caps, allowlists, expiry, and live spend usage. Use this to audit subagents or check the 50-active-key limit; do not use for account state (x402_get_account) or statements (x402_export_statement).\nParameters: status=\"active\" requires non-revoked + unexpired ttl_hours; \"expired\" matches unrevoked keys past ttl_hours; supply spend_key/header (mismatch -> HTTP 400; delegate sees only itself).\nBehavior: zero charge; unpaginated newest-first list (<= 50 active plus history), HTTP 401 invalid/revoked key, 120 req/min/IP.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "status": {
+            "description": "Optional lifecycle status filter: \"all\" (default, every key), \"active\" (non-revoked and unexpired), \"revoked\", or \"expired\".",
+            "type": "string",
+            "enum": [
+              "all",
+              "active",
+              "revoked",
+              "expired"
+            ]
+          },
+          "spend_key": {
+            "type": "string",
+            "pattern": "^sbk_[A-Za-z0-9_-]{32,96}$",
+            "description": "Stripe-funded master or delegated subagent spend key (format: sbk_<43+ chars>). Optional when the caller supplies the x-atlas-spend-key HTTP header."
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "x402_issue_delegate_key",
+      "description": "Mint a budget-capped, route-scoped, expiring delegated subagent spend key backed by your master account. Use this to provision a new subagent; do not use to list keys (x402_list_delegate_keys), edit caps (x402_update_delegate_key), or revoke keys (x402_revoke_delegate_key).\nParameters: supply master spend_key or x-atlas-spend-key header (mismatch -> HTTP 400); omitted caps remain unlimited up to master balance.\nBehavior: non-idempotent — check x402_list_delegate_keys before retrying timeouts. Plaintext spend_key is shown once; limit 50 active keys/account (HTTP 429), HTTP 403 for delegates, 120 req/min/IP.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80,
+            "description": "Human-readable label identifying the subagent or workflow (1-80 chars, e.g. \"harbor-monitor-agent\")."
+          },
+          "agent_id": {
+            "description": "Optional stable machine agent identifier recorded on spend audit rows (e.g. \"agent.cursor.prod-01\").",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "max_order_cents": {
+            "description": "Maximum USD cents allowed on any single capability call (e.g. 50 = $0.50). Omit for no per-call limit.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100000000
+          },
+          "daily_budget_cents": {
+            "description": "Rolling UTC-day spend cap in USD cents (e.g. 500 = $5.00/day). Omit for no daily cap.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100000000
+          },
+          "total_budget_cents": {
+            "description": "Lifetime cumulative spend cap in USD cents across the key lifespan (e.g. 2500 = $25.00 total). Omit for no lifetime cap.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100000000
+          },
+          "allowed_routes": {
+            "maxItems": 64,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 160
+            },
+            "description": "Route allowlist patterns restricting which capabilities the delegated key may invoke (supports exact routes like \"POST /kb/search\" or prefix wildcards like \"GET /reality/*\"). Omit or pass [] to allow all hub capabilities."
+          },
+          "ttl_hours": {
+            "description": "Key expiration window in hours from issuance (1 to 8760 hours = 1 year; defaults to 168 hours = 7 days when omitted).",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 8760
+          },
+          "spend_key": {
+            "type": "string",
+            "pattern": "^sbk_[A-Za-z0-9_-]{32,96}$",
+            "description": "Master Stripe account spend key (format: sbk_<43+ chars>). Delegated subagent keys are rejected with HTTP 403. Optional if supplied via the x-atlas-spend-key HTTP header."
+          }
+        },
+        "required": [
+          "label"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "x402_update_delegate_key",
+      "description": "Modify standing spend caps, route allowlist, or label on an active delegated key without rotating its secret. Use this to adjust ongoing subagent budgets; do not use to mint keys (x402_issue_delegate_key), decide one-time approvals (x402_decide_approval), or disable keys (x402_revoke_delegate_key).\nParameters: omitted fields stay unchanged, null clears a cap, and allowed_routes=[] permits all routes; supply master spend_key or header (conflicting values return HTTP 400).\nBehavior: zero charge; updates apply immediately without resetting cumulative spend counters; returns HTTP 403 for delegates, HTTP 404 unknown ID, and HTTP 401 if revoked.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "delegate_id": {
+            "type": "string",
+            "pattern": "^sbd_[a-f0-9]{16}$",
+            "description": "Unique delegated subagent key identifier returned by x402_issue_delegate_key or x402_get_account (format: sbd_<16 hex chars>, e.g. sbd_1122334455667788)."
+          },
+          "label": {
+            "description": "Updated human-readable label for the delegated subagent key.",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "max_order_cents": {
+            "description": "Updated per-call spend cap in USD cents, or null to clear the per-call cap.",
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 100000000
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "daily_budget_cents": {
+            "description": "Updated UTC daily budget cap in USD cents, or null to clear the daily cap.",
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 100000000
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "total_budget_cents": {
+            "description": "Updated lifetime cumulative cap in USD cents, or null to clear the lifetime cap.",
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 100000000
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "allowed_routes": {
+            "maxItems": 64,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 160
+            },
+            "description": "Route allowlist patterns restricting which capabilities the delegated key may invoke (supports exact routes like \"POST /kb/search\" or prefix wildcards like \"GET /reality/*\"). Omit or pass [] to allow all hub capabilities."
+          },
+          "spend_key": {
+            "type": "string",
+            "pattern": "^sbk_[A-Za-z0-9_-]{32,96}$",
+            "description": "Master Stripe account spend key (format: sbk_<43+ chars>). Delegated subagent keys are rejected with HTTP 403. Optional if supplied via the x-atlas-spend-key HTTP header."
+          }
+        },
+        "required": [
+          "delegate_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "x402_revoke_delegate_key",
+      "description": "Permanently revoke one delegated key by delegate_id, or all active delegated keys when revoke_all=true. Use this to disable compromised or retired subagents; do not use for a temporary whole-account pause (x402_set_account_freeze) or cap edits (x402_update_delegate_key).\nParameters: pass delegate_id or revoke_all=true (revoke_all takes precedence if both set); supply master spend_key/header (mismatch -> HTTP 400).\nBehavior: irreversible — revoked keys immediately fail HTTP 401. Safe to retry (already-revoked or 0 active return HTTP 200); HTTP 403 delegates, HTTP 404 unknown.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "delegate_id": {
+            "type": "string",
+            "pattern": "^sbd_[a-f0-9]{16}$",
+            "description": "Unique delegated subagent key identifier returned by x402_issue_delegate_key or x402_get_account (format: sbd_<16 hex chars>, e.g. sbd_1122334455667788)."
+          },
+          "revoke_all": {
+            "description": "Set true to execute the emergency swarm kill switch revoking EVERY active delegated subagent key on the account (omit delegate_id when true).",
+            "type": "boolean"
+          },
+          "reason": {
+            "description": "Optional audit-log reason recorded on swarm revocations when revoke_all=true (e.g. \"key_rotated\" or \"compromised_worker\").",
+            "type": "string",
+            "maxLength": 160
+          },
+          "spend_key": {
+            "type": "string",
+            "pattern": "^sbk_[A-Za-z0-9_-]{32,96}$",
+            "description": "Master Stripe account spend key (format: sbk_<43+ chars>). Delegated subagent keys are rejected with HTTP 403. Optional if supplied via the x-atlas-spend-key HTTP header."
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "x402_request_approval",
+      "description": "Open a pending single-use escalation ticket (sba_*) when a delegated subagent needs one-time permission beyond standing caps or routes. Use this after x402_quote_plan flags human_approval_required=true; do not use to decide tickets (x402_decide_approval) or edit caps (x402_update_delegate_key).\nParameters: omit cents on fixed-SKU routes to auto-resolve price, or pass cents on dynamic routes; ttl_minutes sets pending decision window (default 30m, separate from 15m execution pass); supply spend_key/header (mismatch -> HTTP 400).\nBehavior: zero charge, non-idempotent (max 50 pending/account -> HTTP 429); HTTP 401 invalid key, HTTP 404 unknown capability.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "capability_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160,
+            "description": "Target capability_id or route key requiring one-time over-cap execution (e.g. \"audio_visual_isolate\" or \"POST /audio/visual-isolate\")."
+          },
+          "cents": {
+            "description": "Exact USD cent amount requested for approval (optional for fixed-SKU capabilities where the hub auto-resolves the exact price).",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100000000
+          },
+          "justification": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 280,
+            "description": "Concise human-readable reason explaining why this one-time spend exception is required (shown to the operator in the /x402/ approval queue)."
+          },
+          "ttl_minutes": {
+            "description": "Minutes the pending ticket remains open awaiting operator decision (1 to 1440; defaults to 30 minutes when omitted).",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1440
+          },
+          "spend_key": {
+            "type": "string",
+            "pattern": "^sbk_[A-Za-z0-9_-]{32,96}$",
+            "description": "Stripe-funded master or delegated subagent spend key (format: sbk_<43+ chars>). Optional when the caller supplies the x-atlas-spend-key HTTP header."
+          }
+        },
+        "required": [
+          "capability_id",
+          "justification"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "x402_decide_approval",
+      "description": "Approve once (15-min single-use pass bound to principal, route, and cent amount) or permanently deny a pending escalation ticket. Use this as master operator after checking x402_get_account; do not use to open tickets (x402_request_approval) or edit standing caps (x402_update_delegate_key).\nParameters: supply master spend_key or x-atlas-spend-key header (conflicting values return HTTP 400); optional note records an operator audit memo.\nBehavior: zero charge, final and non-idempotent (re-deciding returns HTTP 409 approval_not_pending); approved passes consume atomically on first spend; returns HTTP 403 for delegates, HTTP 404 unknown, and HTTP 410 expired.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "approval_id": {
+            "type": "string",
+            "pattern": "^sba_[a-f0-9]{16}$",
+            "description": "Single-use human spend escalation approval ticket identifier returned by x402_request_approval (format: sba_<16 hex chars>, e.g. sba_aabbccddeeff0011)."
+          },
+          "decision": {
+            "type": "string",
+            "enum": [
+              "approve",
+              "deny"
+            ],
+            "description": "Operator decision: \"approve\" grants a single-use 15-minute execution pass; \"deny\" permanently rejects the escalation ticket."
+          },
+          "note": {
+            "description": "Optional operator audit note recorded as decision_note with the approval or denial decision.",
+            "type": "string",
+            "maxLength": 240
+          },
+          "spend_key": {
+            "type": "string",
+            "pattern": "^sbk_[A-Za-z0-9_-]{32,96}$",
+            "description": "Master Stripe account spend key (format: sbk_<43+ chars>). Delegated subagent keys are rejected with HTTP 403. Optional if supplied via the x-atlas-spend-key HTTP header."
+          }
+        },
+        "required": [
+          "approval_id",
+          "decision"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "x402_set_account_freeze",
+      "description": "Toggle the account-wide emergency spend freeze across the master key and every delegated subagent key simultaneously. Use this to halt all spending during an incident or isolate a compromised root master key; do not use to permanently disable individual subagents (x402_revoke_delegate_key).\nParameters: frozen=true records reason (default \"operator_freeze\"), whereas frozen=false clears frozen_reason; supply master spend_key or header (conflicting values return HTTP 400).\nBehavior: zero charge, idempotent target state; frozen accounts block paid calls with HTTP 403 account_frozen while read/audit tools stay active; returns HTTP 403 for delegates and HTTP 401 invalid key.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "frozen": {
+            "type": "boolean",
+            "description": "Set true to immediately halt all master and subagent spends across the account, or false to lift the freeze and resume spending."
+          },
+          "reason": {
+            "description": "Optional incident or operator audit reason recorded on the account freeze state (e.g. \"anomaly_investigation\").",
+            "type": "string",
+            "maxLength": 160
+          },
+          "spend_key": {
+            "type": "string",
+            "pattern": "^sbk_[A-Za-z0-9_-]{32,96}$",
+            "description": "Master Stripe account spend key (format: sbk_<43+ chars>). Delegated subagent keys are rejected with HTTP 403. Optional if supplied via the x-atlas-spend-key HTTP header."
+          }
+        },
+        "required": [
+          "frozen"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "x402_export_statement",
+      "description": "Export a double-entry reconciled financial statement and paginated order ledger with SHA-256 checksum covering Stripe top-ups, spends, and refunds. Use this for order history pagination and accounting audits; do not use for live balances (x402_get_account) or active key caps (x402_list_delegate_keys).\nParameters: start_date/end_date (inclusive UTC), entry_type, delegate_id, and limit/offset slice rows[] while reconciliation verifies the full ledger; supply spend_key or header (conflicting values return HTTP 400).\nBehavior: zero charge, 120 req/min/IP; returns statement_sha256 plus total_matching_rows for pagination, or HTTP 401 on invalid/revoked key.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "start_date": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "description": "UTC calendar date in ISO-8601 YYYY-MM-DD format (e.g. 2026-11-22)."
+          },
+          "end_date": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "description": "UTC calendar date in ISO-8601 YYYY-MM-DD format (e.g. 2026-11-22)."
+          },
+          "delegate_id": {
+            "type": "string",
+            "pattern": "^sbd_[a-f0-9]{16}$",
+            "description": "Unique delegated subagent key identifier returned by x402_issue_delegate_key or x402_get_account (format: sbd_<16 hex chars>, e.g. sbd_1122334455667788)."
+          },
+          "entry_type": {
+            "description": "Optional ledger row type filter: \"all\" (default), \"spend\" (paid capability orders), \"topup\" (Stripe credits), or \"refund\".",
+            "type": "string",
+            "enum": [
+              "all",
+              "spend",
+              "topup",
+              "refund"
+            ]
+          },
+          "limit": {
+            "description": "Optional page size capping returned rows[] (1 to 500; omit to return all matching rows).",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 500
+          },
+          "offset": {
+            "description": "Optional zero-based row offset for paginating order history when paired with limit.",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100000
+          },
+          "spend_key": {
+            "type": "string",
+            "pattern": "^sbk_[A-Za-z0-9_-]{32,96}$",
+            "description": "Stripe-funded master or delegated subagent spend key (format: sbk_<43+ chars>). Optional when the caller supplies the x-atlas-spend-key HTTP header."
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "xyz.quantumatlas/x402-payment-hub",
+    "version": "1.3.0",
+    "remoteUrl": "https://x402.quantumatlas.xyz/x402/center/mcp",
+    "publishedAt": "2026-11-24T09:06:50.724565Z",
+    "fetchedAt": "2026-11-24T12:15:48.059Z",
+    "toolsSha256": "ba1ef82abbaf55075d439b93a51a15cddd82a9a315f7e24b3fe3e57b9ef9c435"
+  }
 }

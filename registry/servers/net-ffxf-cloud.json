@@ -1,0 +1,2296 @@
+{
+  "$schema": "../schema.json",
+  "name": "net.ffxf/cloud",
+  "title": "FFxF",
+  "category": "Databases & Storage",
+  "description": "Create and manage VMs, managed databases, firewalls and load balancers in Montréal, Canada.",
+  "tools": [
+    {
+      "name": "list_regions",
+      "description": "Where machines can run. Public, no key needed.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "list_plans",
+      "description": "Plans with their resources and prices (hourly and monthly, in CAD). Public, no key needed.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "region": {
+            "description": "Keep only plans offered in this region.",
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "list_images",
+      "description": "Operating systems and ready-to-use application images. The slug is what create_vm expects. Public, no key needed.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "region": {
+            "description": "Keep only images offered in this region (slug from list_regions).",
+            "type": "string"
+          },
+          "plan": {
+            "description": "Keep only images that fit this plan.",
+            "type": "string"
+          },
+          "category": {
+            "description": "linux, windows, bsd or app.",
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "get_account",
+      "description": "Credit balance, hourly burn rate and runway, quota and budget caps. Scope: billing.read.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "list_vms",
+      "description": "The account's machines with their status, addresses and billing. Scope: vms.read.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "status": {
+            "description": "e.g. running, stopped, provisioning.",
+            "type": "string"
+          },
+          "region": {
+            "description": "Keep only machines in this region (slug from list_regions).",
+            "type": "string"
+          },
+          "billing": {
+            "description": "Keep only machines billed this way.",
+            "type": "string",
+            "enum": [
+              "hourly",
+              "monthly"
+            ]
+          },
+          "cursor": {
+            "description": "next_cursor from the previous page.",
+            "type": "string"
+          },
+          "limit": {
+            "description": "Machines per page. Default 50.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          }
+        }
+      }
+    },
+    {
+      "name": "get_vm",
+      "description": "One machine: status, IPv4, IPv6 /64, specs, traffic (Internet only, this traffic month: used_gb, limit_gb, period_ends_at), billing, suspension. Scope: vms.read.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "vm": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Machine id, as returned by list_vms or create_vm."
+          }
+        },
+        "required": [
+          "vm"
+        ]
+      }
+    },
+    {
+      "name": "get_vm_metrics",
+      "description": "CPU, memory, disk and network as measured from outside the machine. Scope: vms.read.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "vm": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Machine id, as returned by list_vms or create_vm."
+          },
+          "timeframe": {
+            "description": "Period covered, ending now. Default hour.",
+            "type": "string",
+            "enum": [
+              "hour",
+              "day",
+              "week",
+              "month"
+            ]
+          }
+        },
+        "required": [
+          "vm"
+        ]
+      }
+    },
+    {
+      "name": "estimate_vm",
+      "description": "Runs every check of create_vm and prices it, without creating anything: would_succeed, hourly rate, monthly price, credit required. Call it before create_vm. Scope: vms.create.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "plan": {
+            "type": "string",
+            "description": "Plan slug from list_plans, e.g. nano."
+          },
+          "region": {
+            "type": "string",
+            "description": "Region slug from list_regions, e.g. montreal."
+          },
+          "image": {
+            "type": "string",
+            "description": "Image slug from list_images, e.g. debian-13."
+          },
+          "hostname": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^(?!.*[.-]{2})[a-zA-Z0-9]([a-zA-Z0-9.-]{0,126}[a-zA-Z0-9])?$",
+            "description": "Letters, digits, dots and hyphens; no leading, trailing or doubled separator."
+          },
+          "billing": {
+            "type": "string",
+            "enum": [
+              "hourly",
+              "monthly"
+            ],
+            "description": "Hourly draws on prepaid credit; monthly raises an invoice. Fixed for the life of the machine."
+          },
+          "ssh_keys": {
+            "description": "Fingerprints or ids of SSH keys already on the account (see list_ssh_keys).",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "options": {
+            "description": "Paid options declared by the plan, by name.",
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {}
+          },
+          "ipv4": {
+            "description": "false orders an IPv6-only machine, cheaper; outbound IPv4 goes through NAT64.",
+            "type": "boolean"
+          },
+          "vpc": {
+            "description": "Private network id (list_vpcs) to connect the machine to, in the same region.",
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "private_only": {
+            "description": "No public address at all; needs vpc. Reachable only from the private network, Internet through its gateway. Priced like ipv4: false.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "plan",
+          "region",
+          "image",
+          "hostname",
+          "billing"
+        ]
+      }
+    },
+    {
+      "name": "create_vm",
+      "description": "Orders a machine and spends credit (hourly) or raises an invoice (monthly). Returns the machine and a provisioning action to poll with get_action. Retrying the same order is safe: it is deduplicated for 24 hours. Scope: vms.create.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "plan": {
+            "type": "string",
+            "description": "Plan slug from list_plans, e.g. nano."
+          },
+          "region": {
+            "type": "string",
+            "description": "Region slug from list_regions, e.g. montreal."
+          },
+          "image": {
+            "type": "string",
+            "description": "Image slug from list_images, e.g. debian-13."
+          },
+          "hostname": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^(?!.*[.-]{2})[a-zA-Z0-9]([a-zA-Z0-9.-]{0,126}[a-zA-Z0-9])?$",
+            "description": "Letters, digits, dots and hyphens; no leading, trailing or doubled separator."
+          },
+          "billing": {
+            "type": "string",
+            "enum": [
+              "hourly",
+              "monthly"
+            ],
+            "description": "Hourly draws on prepaid credit; monthly raises an invoice. Fixed for the life of the machine."
+          },
+          "ssh_keys": {
+            "description": "Fingerprints or ids of SSH keys already on the account (see list_ssh_keys).",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "options": {
+            "description": "Paid options declared by the plan, by name.",
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {}
+          },
+          "ipv4": {
+            "description": "false orders an IPv6-only machine, cheaper; outbound IPv4 goes through NAT64.",
+            "type": "boolean"
+          },
+          "vpc": {
+            "description": "Private network id (list_vpcs) to connect the machine to, in the same region.",
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "private_only": {
+            "description": "No public address at all; needs vpc. Reachable only from the private network, Internet through its gateway. Priced like ipv4: false.",
+            "type": "boolean"
+          },
+          "payment": {
+            "description": "Monthly only. credit pays from the balance when it covers the invoice.",
+            "type": "string",
+            "enum": [
+              "credit",
+              "manual"
+            ]
+          },
+          "password_delivery": {
+            "description": "email mails a generated password; none needs at least one SSH key.",
+            "type": "string",
+            "enum": [
+              "email",
+              "none"
+            ]
+          },
+          "idempotency_key": {
+            "description": "Your own unique value per order. By default one is derived from the order itself.",
+            "type": "string",
+            "maxLength": 255
+          }
+        },
+        "required": [
+          "plan",
+          "region",
+          "image",
+          "hostname",
+          "billing"
+        ]
+      }
+    },
+    {
+      "name": "power_vm",
+      "description": "start, shutdown (clean ACPI), reboot, or stop (hard power-off). Returns an action to poll with get_action. Scope: vms.action.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "vm": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Machine id, as returned by list_vms or create_vm."
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "start",
+              "shutdown",
+              "reboot",
+              "stop"
+            ],
+            "description": "start powers on; shutdown asks the system to stop cleanly (ACPI); reboot restarts; stop cuts the power at once, unsaved data may be lost."
+          }
+        },
+        "required": [
+          "vm",
+          "type"
+        ]
+      }
+    },
+    {
+      "name": "eject_netboot_iso",
+      "description": "Takes the netboot.xyz ISO out of a machine reinstalled with the netboot image, live, once the OS is installed: the machine then boots from its disk only. The machine has no UEFI, so the OS must have a BIOS boot loader. Getting the ISO back means reinstalling with netboot, which wipes the disk. On a machine without the ISO it succeeds and changes nothing. Scope: vms.action.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "vm": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Machine id, as returned by list_vms or create_vm."
+          }
+        },
+        "required": [
+          "vm"
+        ]
+      }
+    },
+    {
+      "name": "rename_vm",
+      "description": "Changes the hostname, inside the guest and in the console. Scope: vms.action.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "vm": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Machine id, as returned by list_vms or create_vm."
+          },
+          "hostname": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^(?!.*[.-]{2})[a-zA-Z0-9]([a-zA-Z0-9.-]{0,126}[a-zA-Z0-9])?$",
+            "description": "Letters, digits, dots and hyphens; no leading, trailing or doubled separator."
+          }
+        },
+        "required": [
+          "vm",
+          "hostname"
+        ]
+      }
+    },
+    {
+      "name": "reinstall_vm",
+      "description": "ERASES THE DISK and redeploys another image. Ask the user first. confirm_hostname must be the machine's exact current hostname. Scope: vms.action.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "vm": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Machine id, as returned by list_vms or create_vm."
+          },
+          "image": {
+            "type": "string",
+            "description": "Image slug from list_images, offered in the machine's region and fitting its plan."
+          },
+          "confirm_hostname": {
+            "type": "string",
+            "description": "The machine's exact hostname, typed back as confirmation."
+          },
+          "ssh_keys": {
+            "description": "Fingerprints or ids of SSH keys already on the account (see list_ssh_keys) to install on the new system.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "password_delivery": {
+            "description": "email (default) mails a generated password; none needs at least one SSH key.",
+            "type": "string",
+            "enum": [
+              "email",
+              "none"
+            ]
+          }
+        },
+        "required": [
+          "vm",
+          "image",
+          "confirm_hostname"
+        ]
+      }
+    },
+    {
+      "name": "destroy_vm",
+      "description": "DESTROYS the machine and its disk, with no undo and no backup kept. With when=now on a monthly or yearly machine: the unused paid time, less the hours used at the hourly rate, returns as account credit; the share paid with gifted credit returns as gifted credit. If the plan changed during the period or the expiry was changed by hand, support works out the amount. Ask the user first. confirm_hostname must be the machine's exact hostname. Scope: vms.destroy.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "vm": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Machine id, as returned by list_vms or create_vm."
+          },
+          "confirm_hostname": {
+            "type": "string",
+            "description": "The machine's exact hostname, typed back as confirmation."
+          },
+          "when": {
+            "description": "Monthly and yearly machines only: at the end of the paid period (nothing returned), or now (the unused paid time, less the hours used at the hourly rate, returns as account credit; gifted credit returns as gifted; support works out the amount if the plan changed during the period or the expiry was changed by hand).",
+            "type": "string",
+            "enum": [
+              "period_end",
+              "now"
+            ]
+          }
+        },
+        "required": [
+          "vm",
+          "confirm_hostname"
+        ]
+      }
+    },
+    {
+      "name": "get_action",
+      "description": "Follows an asynchronous action (create, reinstall, power…). Poll until status leaves running; on error it carries the reason. Scope: vms.read.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Action id, as returned by create_vm, power_vm, reinstall_vm or list_vm_actions."
+          }
+        },
+        "required": [
+          "action"
+        ]
+      }
+    },
+    {
+      "name": "list_vm_actions",
+      "description": "History of actions on one machine, from the API and the console. Scope: vms.read.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "vm": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Machine id, as returned by list_vms or create_vm."
+          }
+        },
+        "required": [
+          "vm"
+        ]
+      }
+    },
+    {
+      "name": "get_vm_network",
+      "description": "IPv4 and IPv6 addresses of a machine with their reverse DNS, and its private networks. Scope: vms.read.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "vm": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Machine id, as returned by list_vms or create_vm."
+          }
+        },
+        "required": [
+          "vm"
+        ]
+      }
+    },
+    {
+      "name": "set_reverse_dns",
+      "description": "Sets the PTR record of one of the machine's addresses; null restores the default. Scope: network.write.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "vm": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Machine id, as returned by list_vms or create_vm."
+          },
+          "address": {
+            "type": "string",
+            "description": "An IPv4 or IPv6 address of the machine."
+          },
+          "hostname": {
+            "description": "Fully qualified name, or null to clear.",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "vm",
+          "address",
+          "hostname"
+        ]
+      }
+    },
+    {
+      "name": "list_vpcs",
+      "description": "The account's private networks with their range, gateway and connected machines, plus the quota. Scope: vms.read.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "get_vpc",
+      "description": "One private network and the machines on it, with their private address. Scope: vms.read.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "vpc": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Private network id, as returned by list_vpcs or create_vpc."
+          }
+        },
+        "required": [
+          "vpc"
+        ]
+      }
+    },
+    {
+      "name": "create_vpc",
+      "description": "Creates an isolated private network; ready when the call returns. The first usable address (.1) is reserved for the gateway. Scope: network.write.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "description": "Display name of the network, 1 to 64 characters."
+          },
+          "cidr": {
+            "type": "string",
+            "description": "Private IPv4 range from /16 to /29 in 10.0.0.0/8, 172.16.0.0/12 or 192.168.0.0/16, e.g. 10.0.0.0/24."
+          },
+          "region": {
+            "type": "string",
+            "description": "Region slug from list_regions, e.g. montreal."
+          }
+        },
+        "required": [
+          "name",
+          "cidr",
+          "region"
+        ]
+      }
+    },
+    {
+      "name": "delete_vpc",
+      "description": "Deletes an empty private network. Refused while a machine is still on it: disconnect or destroy those first. Ask the user first. Scope: network.write.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "vpc": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Private network id, as returned by list_vpcs or create_vpc."
+          }
+        },
+        "required": [
+          "vpc"
+        ]
+      }
+    },
+    {
+      "name": "connect_vpc",
+      "description": "Hot-adds a card on the private network and sets its address in the system, without a restart. configuration: manual means the address must be set by hand in the guest. Connecting again returns the same address. Scope: network.write.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "vpc": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Private network id, as returned by list_vpcs or create_vpc."
+          },
+          "vm": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Machine id, as returned by list_vms or create_vm."
+          },
+          "ip": {
+            "description": "Address wanted in the range; default the next free one.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "vpc",
+          "vm"
+        ]
+      }
+    },
+    {
+      "name": "disconnect_vpc",
+      "description": "Removes the machine's private address and card, without a restart. Refused for the only network of a machine with no public address. Scope: network.write.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "vpc": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Private network id, as returned by list_vpcs or create_vpc."
+          },
+          "vm": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Machine id, as returned by list_vms or create_vm."
+          }
+        },
+        "required": [
+          "vpc",
+          "vm"
+        ]
+      }
+    },
+    {
+      "name": "move_vpc",
+      "description": "Joins the target network, then leaves this one, so the machine is never cut off. Keeps the same address ending when free. Scope: network.write.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "vpc": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "The network the machine is on now."
+          },
+          "vm": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Machine id, as returned by list_vms or create_vm."
+          },
+          "to": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "The target network."
+          }
+        },
+        "required": [
+          "vpc",
+          "vm",
+          "to"
+        ]
+      }
+    },
+    {
+      "name": "list_firewalls",
+      "description": "The account's firewalls with their inbound rules and the machines they protect, plus the quota. Scope: vms.read.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "get_firewall",
+      "description": "One firewall: its rules and the machines it protects, with the status of each (applied, pending, error). Scope: vms.read.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "firewall": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Firewall id, as returned by list_firewalls or create_firewall."
+          }
+        },
+        "required": [
+          "firewall"
+        ]
+      }
+    },
+    {
+      "name": "create_firewall",
+      "description": "Creates a reusable set of inbound and outbound rules. Without rules it starts with SSH (TCP 22) and ping open from anywhere; pass rules: [] for none. Nothing is filtered until it is attached to a machine. Scope: network.write.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "description": "Display name of the firewall, 1 to 64 characters."
+          },
+          "private_network": {
+            "description": "Also filter inbound traffic arriving through private networks (VPC, site-to-site VPN). Default false: private networks stay fully open.",
+            "type": "boolean"
+          },
+          "rules": {
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "direction": {
+                  "description": "in (default) for inbound traffic, out for outbound. The first enabled outbound allow rule makes outbound restrictive.",
+                  "type": "string",
+                  "enum": [
+                    "in",
+                    "out"
+                  ]
+                },
+                "action": {
+                  "description": "allow (default) or deny. Rules are read in order and the first match wins: put a deny above the allow it overrides.",
+                  "type": "string",
+                  "enum": [
+                    "allow",
+                    "deny"
+                  ]
+                },
+                "enabled": {
+                  "description": "false keeps the rule without applying it (temporary rules, tests). Default true.",
+                  "type": "boolean"
+                },
+                "protocol": {
+                  "type": "string",
+                  "enum": [
+                    "tcp",
+                    "udp",
+                    "icmp",
+                    "any"
+                  ],
+                  "description": "icmp covers ping for IPv4 and IPv6; any is every protocol."
+                },
+                "ports": {
+                  "description": "TCP/UDP only: \"22\", \"80,443\" or a range \"8000-8100\" (up to 15 items). Omitted or null: all ports.",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "sources": {
+                  "description": "Inbound rules only: IPv4/IPv6 addresses or ranges allowed in. Omitted or empty: anywhere.",
+                  "maxItems": 20,
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "destinations": {
+                  "description": "Outbound rules only: IPv4/IPv6 addresses or ranges allowed out to. Omitted or empty: anywhere.",
+                  "maxItems": 20,
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "description": {
+                  "description": "Free note shown next to the rule, e.g. \"SSH from the office\".",
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "maxLength": 64
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "protocol"
+              ]
+            },
+            "description": "The firewall's full list of rules in order, up to 50. The first rule that matches decides; inbound, what no rule allows is refused."
+          }
+        },
+        "required": [
+          "name"
+        ]
+      }
+    },
+    {
+      "name": "update_firewall",
+      "description": "rules REPLACES the whole list, in order, and is applied at once to every attached machine: send every rule to keep, not only the new one (read get_firewall first). To edit, disable or move one rule, send the full list with that change. private_network turns filtering of the private network on or off. Removing the SSH rule can lock the agent out. pending_machines counts machines not updated yet, retried automatically. Scope: network.write.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "firewall": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Firewall id, as returned by list_firewalls or create_firewall."
+          },
+          "name": {
+            "description": "New display name; omitted, the name is kept.",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "private_network": {
+            "description": "Also filter inbound traffic arriving through private networks (VPC, site-to-site VPN). Default false: private networks stay fully open.",
+            "type": "boolean"
+          },
+          "rules": {
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "direction": {
+                  "description": "in (default) for inbound traffic, out for outbound. The first enabled outbound allow rule makes outbound restrictive.",
+                  "type": "string",
+                  "enum": [
+                    "in",
+                    "out"
+                  ]
+                },
+                "action": {
+                  "description": "allow (default) or deny. Rules are read in order and the first match wins: put a deny above the allow it overrides.",
+                  "type": "string",
+                  "enum": [
+                    "allow",
+                    "deny"
+                  ]
+                },
+                "enabled": {
+                  "description": "false keeps the rule without applying it (temporary rules, tests). Default true.",
+                  "type": "boolean"
+                },
+                "protocol": {
+                  "type": "string",
+                  "enum": [
+                    "tcp",
+                    "udp",
+                    "icmp",
+                    "any"
+                  ],
+                  "description": "icmp covers ping for IPv4 and IPv6; any is every protocol."
+                },
+                "ports": {
+                  "description": "TCP/UDP only: \"22\", \"80,443\" or a range \"8000-8100\" (up to 15 items). Omitted or null: all ports.",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "sources": {
+                  "description": "Inbound rules only: IPv4/IPv6 addresses or ranges allowed in. Omitted or empty: anywhere.",
+                  "maxItems": 20,
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "destinations": {
+                  "description": "Outbound rules only: IPv4/IPv6 addresses or ranges allowed out to. Omitted or empty: anywhere.",
+                  "maxItems": 20,
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "description": {
+                  "description": "Free note shown next to the rule, e.g. \"SSH from the office\".",
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "maxLength": 64
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "protocol"
+              ]
+            },
+            "description": "The firewall's full list of rules in order, up to 50. The first rule that matches decides; inbound, what no rule allows is refused."
+          }
+        },
+        "required": [
+          "firewall"
+        ]
+      }
+    },
+    {
+      "name": "delete_firewall",
+      "description": "Deletes a firewall attached to no machine. Refused while it protects one: detach it first. Scope: network.write.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "firewall": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Firewall id, as returned by list_firewalls or create_firewall."
+          }
+        },
+        "required": [
+          "firewall"
+        ]
+      }
+    },
+    {
+      "name": "attach_firewall",
+      "description": "From now on the machine refuses inbound traffic no rule of its firewalls opens; enforced within about ten seconds of the call. Up to 5 firewalls per machine, rules add up. Refused for a machine with no public address. Attaching again is harmless. Scope: network.write.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "firewall": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Firewall id, as returned by list_firewalls or create_firewall."
+          },
+          "vm": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Machine id, as returned by list_vms or create_vm."
+          }
+        },
+        "required": [
+          "firewall",
+          "vm"
+        ]
+      }
+    },
+    {
+      "name": "detach_firewall",
+      "description": "Removes the firewall's rules from the machine; with no other firewall it accepts all inbound traffic again. Scope: network.write.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "firewall": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Firewall id, as returned by list_firewalls or create_firewall."
+          },
+          "vm": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Machine id, as returned by list_vms or create_vm."
+          }
+        },
+        "required": [
+          "firewall",
+          "vm"
+        ]
+      }
+    },
+    {
+      "name": "list_load_balancers",
+      "description": "The account's load balancers with their addresses, pools, targets and health, listeners and rules, certificates; plus the quota. Scope: vms.read.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "get_load_balancer",
+      "description": "One load balancer in full: status, ipv4/ipv6 to put in DNS, pools with targets (health, sessions, response time), listeners with rules in evaluation order, certificates. Scope: vms.read.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "lb": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Load balancer id, as returned by list_load_balancers or create_load_balancer."
+          }
+        },
+        "required": [
+          "lb"
+        ]
+      }
+    },
+    {
+      "name": "get_load_balancer_metrics",
+      "description": "Requests by response class, connections, bytes in/out and peak sessions over 1h (1-minute buckets), 24h (15 minutes) or 7d (1 hour), plus totals. Scope: vms.read.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "lb": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Load balancer id, as returned by list_load_balancers or create_load_balancer."
+          },
+          "range": {
+            "description": "Period covered. Default 1h.",
+            "type": "string",
+            "enum": [
+              "1h",
+              "24h",
+              "7d"
+            ]
+          }
+        },
+        "required": [
+          "lb"
+        ]
+      }
+    },
+    {
+      "name": "create_load_balancer",
+      "description": "Orders a load balancer in a private network, billed by the hour from now (the account needs 24 hours of credit), or by the month (7.30 CAD) or the year (73 CAD) with billing. A monthly or yearly period comes out of credit if it covers it; otherwise billing.pending_invoice holds the invoice to pay and it stays hourly until then. Ready within minutes (status pending → active); pools and listeners can be added meanwhile. Retrying the same call is safe. Scope: vms.create.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "description": "Display name of the load balancer, 1 to 64 characters."
+          },
+          "vpc": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Private network whose machines will be the targets (list_vpcs)."
+          },
+          "billing": {
+            "description": "hourly (default), monthly (the price of 730 hours, paid in advance) or yearly (ten months). Ask the user; monthly or yearly needs credit or an invoice paid by the user.",
+            "type": "string",
+            "enum": [
+              "hourly",
+              "monthly",
+              "yearly"
+            ]
+          },
+          "idempotency_key": {
+            "description": "Your own unique value per order. By default one is derived from the call.",
+            "type": "string",
+            "maxLength": 255
+          }
+        },
+        "required": [
+          "name",
+          "vpc"
+        ]
+      }
+    },
+    {
+      "name": "delete_load_balancer",
+      "description": "Deletes the load balancer, its address and its configuration; billing stops. Target machines are not touched. Ask the user first. Scope: vms.destroy.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "lb": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Load balancer id, as returned by list_load_balancers or create_load_balancer."
+          }
+        },
+        "required": [
+          "lb"
+        ]
+      }
+    },
+    {
+      "name": "upsert_pool",
+      "description": "Without pool: creates one (name required, up to 10). With pool: changes only the fields given. Deleting a pool also removes its targets and the rules leading to it. Scope: network.write.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "lb": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Load balancer id, as returned by list_load_balancers or create_load_balancer."
+          },
+          "pool": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Pool id, from get_load_balancer."
+          },
+          "name": {
+            "description": "Letters, digits, spaces, . _ -; unique in the load balancer.",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "protocol": {
+            "description": "http pools serve http/https listeners, tcp pools tcp listeners. Default http; cannot change once in use.",
+            "type": "string",
+            "enum": [
+              "http",
+              "tcp"
+            ]
+          },
+          "algorithm": {
+            "description": "roundrobin (default) takes targets in turn, by weight; leastconn picks the one with the fewest open connections, for long-lived connections; source keeps a client IP on the same target (session persistence).",
+            "type": "string",
+            "enum": [
+              "roundrobin",
+              "leastconn",
+              "source"
+            ]
+          },
+          "health_type": {
+            "description": "tcp (default): a connection is enough. http: GET health_path, 2xx or 3xx is healthy, on http and tcp pools alike. https: the same over TLS, tcp pools only, for targets that terminate TLS themselves (certificate not verified).",
+            "type": "string",
+            "enum": [
+              "tcp",
+              "http",
+              "https"
+            ]
+          },
+          "health_path": {
+            "description": "e.g. /health",
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "health_interval": {
+            "description": "Seconds between checks, default 5.",
+            "type": "integer",
+            "minimum": 2,
+            "maximum": 60
+          },
+          "send_proxy": {
+            "description": "tcp pools only: PROXY protocol v2 to the targets.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "lb"
+        ]
+      }
+    },
+    {
+      "name": "delete_pool",
+      "description": "Removes a pool, its targets and the rules leading to it. Scope: network.write.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "lb": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Load balancer id, as returned by list_load_balancers or create_load_balancer."
+          },
+          "pool": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Pool id, from get_load_balancer."
+          }
+        },
+        "required": [
+          "lb",
+          "pool"
+        ]
+      }
+    },
+    {
+      "name": "set_targets",
+      "description": "REPLACES the pool's targets with exactly this list (up to 25): send every target to keep. Each machine must be in the load balancer's private network (connect_vpc first). drain: true stops new connections to a target before maintenance. Scope: network.write.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "lb": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Load balancer id, as returned by list_load_balancers or create_load_balancer."
+          },
+          "pool": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Pool id, from get_load_balancer."
+          },
+          "targets": {
+            "maxItems": 25,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "vm": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 9007199254740991,
+                  "description": "Machine id, as returned by list_vms or create_vm."
+                },
+                "port": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 65535,
+                  "description": "Port the service listens on, on the machine's private address."
+                },
+                "weight": {
+                  "description": "Share of traffic relative to the other targets, 1 to 256. Default 1.",
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 256
+                },
+                "drain": {
+                  "description": "true stops sending new connections to this target; open ones finish. Default false.",
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "vm",
+                "port"
+              ]
+            },
+            "description": "The pool's full list of targets, up to 25; [] empties the pool."
+          }
+        },
+        "required": [
+          "lb",
+          "pool",
+          "targets"
+        ]
+      }
+    },
+    {
+      "name": "upsert_listener",
+      "description": "An entry port on the load balancer's address. Without listener: opens one (port and protocol required, up to 5; 22 and 8402 are reserved). https gets certificates for its rules' hostnames; redirect_https makes port 80 redirect to it. A tcp listener needs a tcp default_pool. sources restricts who may connect (null: everyone); with an https listener, port 80 stays open to everyone. Scope: network.write.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "lb": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Load balancer id, as returned by list_load_balancers or create_load_balancer."
+          },
+          "listener": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Listener id, from get_load_balancer."
+          },
+          "port": {
+            "description": "Port to open on the load balancer's address, e.g. 443. Required to open a listener; 22 and 8402 are reserved.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 65535
+          },
+          "protocol": {
+            "description": "http or https route by hostname and path to http pools; tcp passes the connection as is to a tcp pool. Required to open a listener.",
+            "type": "string",
+            "enum": [
+              "http",
+              "https",
+              "tcp"
+            ]
+          },
+          "default_pool": {
+            "description": "Pool for traffic no rule matches; none answers 503.",
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "redirect_https": {
+            "description": "https only: port 80 answers with a redirect to this listener.",
+            "type": "boolean"
+          },
+          "sources": {
+            "description": "IPv4/IPv6 addresses or ranges allowed in.",
+            "anyOf": [
+              {
+                "maxItems": 20,
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "lb"
+        ]
+      }
+    },
+    {
+      "name": "delete_listener",
+      "description": "Closes the port and removes its rules. Scope: network.write.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "lb": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Load balancer id, as returned by list_load_balancers or create_load_balancer."
+          },
+          "listener": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Listener id, from get_load_balancer."
+          }
+        },
+        "required": [
+          "lb",
+          "listener"
+        ]
+      }
+    },
+    {
+      "name": "set_rules",
+      "description": "REPLACES the http/https listener's rules: each sends a hostname and/or path prefix to an http pool (up to 25). They are evaluated most specific first, whatever the order sent; anything unmatched goes to the default pool. No wildcard hostname on https. Each https hostname gets a certificate once it points to the load balancer. Scope: network.write.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "lb": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Load balancer id, as returned by list_load_balancers or create_load_balancer."
+          },
+          "listener": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Listener id, from get_load_balancer."
+          },
+          "rules": {
+            "maxItems": 25,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "hostname": {
+                  "description": "e.g. app.example.com, or *.example.com on http only.",
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "maxLength": 253
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "path_prefix": {
+                  "description": "e.g. /api/",
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "maxLength": 128
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "pool": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 9007199254740991,
+                  "description": "Pool id, from get_load_balancer."
+                }
+              },
+              "required": [
+                "pool"
+              ]
+            },
+            "description": "The listener's full list of rules, up to 25; [] sends everything to the default pool."
+          }
+        },
+        "required": [
+          "lb",
+          "listener",
+          "rules"
+        ]
+      }
+    },
+    {
+      "name": "list_databases",
+      "description": "The account's managed databases with their status, private and public addresses, disk, backups and billing (no passwords), plus the quota. Scope: vms.read.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "get_database_options",
+      "description": "What can be ordered: engines and versions, extensions, sizes with their hourly, monthly and yearly prices per region, and the price of disk beyond what a size includes. Call it before create_database and show the price to the user. Scope: vms.read.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "get_database",
+      "description": "One database: status, connection (host, private ip, port, defaultdb and ffxfadmin; on Valkey no database and default), public access and sources, disk usage and cap, users with their databases (null: all) and read_only, logical databases and extensions, Valkey's eviction policy and data memory, backups and restore window, maintenance window, fork link, warning. No passwords. Scope: vms.read.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "database": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Database id, as returned by list_databases or create_database."
+          }
+        },
+        "required": [
+          "database"
+        ]
+      }
+    },
+    {
+      "name": "get_database_credentials",
+      "description": "Every user with its password, databases and read_only, and its own connection_uri; ready-made connection strings for the admin (private network, and public when open). Treat the result as a secret: give it to the application through an environment variable or a secret store, never into code, commits or logs. Scope: databases.write.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "database": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Database id, as returned by list_databases or create_database."
+          }
+        },
+        "required": [
+          "database"
+        ]
+      }
+    },
+    {
+      "name": "get_database_metrics",
+      "description": "CPU, memory, connections and commits per minute (commands per minute on Valkey) over 1h (1-minute buckets), 24h (10 minutes) or 7d (1 hour); only buckets with samples. Scope: vms.read.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "database": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Database id, as returned by list_databases or create_database."
+          },
+          "range": {
+            "description": "Period covered. Default 24h.",
+            "type": "string",
+            "enum": [
+              "1h",
+              "24h",
+              "7d"
+            ]
+          }
+        },
+        "required": [
+          "database"
+        ]
+      }
+    },
+    {
+      "name": "get_slow_queries",
+      "description": "The 20 queries with the most total time (pg_stat_statements, values replaced by $1, $2…; performance_schema on MySQL and MariaDB, values replaced by ?): calls, total and mean time, rows. A starting point for indexes. On Valkey, the commands with the most total time since the engine started (GET, HSET…). Scope: vms.read.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "database": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Database id, as returned by list_databases or create_database."
+          }
+        },
+        "required": [
+          "database"
+        ]
+      }
+    },
+    {
+      "name": "list_database_backups",
+      "description": "Completed backups (weekly full, daily differential; the transaction log is archived continuously) and the restore window: any minute in it can be restored with restore_database. On Valkey, snapshots (rdb) every hour when there were writes, all kept 24 hours, then one a day. Scope: vms.read.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "database": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Database id, as returned by list_databases or create_database."
+          }
+        },
+        "required": [
+          "database"
+        ]
+      }
+    },
+    {
+      "name": "create_database",
+      "description": "Orders a managed database (PostgreSQL, MySQL, MariaDB or Valkey) in a private network, billed by the hour from now (the account needs 24 hours of credit), or by the month (730 hours) or the year (ten months) with billing; get_database_options gives each price. A monthly or yearly period comes out of credit if it covers it; otherwise billing.pending_invoice holds the invoice to pay and it stays hourly until then. Ready within minutes (status pending → active), with the admin user ffxfadmin and the logical database defaultdb (Valkey: the admin default, no logical database). Retrying the same call is safe. Scope: vms.create.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "description": "Display name of the database, 1 to 64 characters."
+          },
+          "vpc": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Private network the database joins (list_vpcs); the machines on it reach the database."
+          },
+          "engine": {
+            "description": "Default postgresql. mysql is Percona Server; valkey is Redis-compatible (key-value, in memory).",
+            "type": "string",
+            "enum": [
+              "postgresql",
+              "mysql",
+              "mariadb",
+              "valkey"
+            ]
+          },
+          "version": {
+            "description": "Major version from get_database_options; the newest by default.",
+            "type": "string"
+          },
+          "size_gb": {
+            "description": "Memory in GB, one of the sizes of get_database_options for the region. Default: 1, or the source's size.",
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "billing": {
+            "description": "hourly (default), monthly (the price of 730 hours, paid in advance) or yearly (ten months). Ask the user; monthly or yearly needs credit or an invoice paid by the user.",
+            "type": "string",
+            "enum": [
+              "hourly",
+              "monthly",
+              "yearly"
+            ]
+          },
+          "idempotency_key": {
+            "description": "Your own unique value per order. By default one is derived from the call.",
+            "type": "string",
+            "maxLength": 255
+          }
+        },
+        "required": [
+          "name",
+          "vpc"
+        ]
+      }
+    },
+    {
+      "name": "restore_database",
+      "description": "Creates a NEW database, billed like any other, holding the data as it was at a given minute of the source's restore window (list_database_backups; Valkey: the last snapshot before that minute), with the same users and passwords. The source is not touched and may have been deleted in the last 7 days. Retrying the same call is safe. Scope: vms.create.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "database": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "The source database."
+          },
+          "at": {
+            "type": "string",
+            "description": "ISO 8601 timestamp, UTC unless an offset is given, e.g. 2026-10-14T09:30:00Z."
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "description": "Name of the new database."
+          },
+          "vpc": {
+            "description": "Default: the source's private network.",
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "size_gb": {
+            "description": "Memory in GB, one of the sizes of get_database_options for the region. Default: 1, or the source's size.",
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "idempotency_key": {
+            "description": "Your own unique value per order. By default one is derived from the call.",
+            "type": "string",
+            "maxLength": 255
+          }
+        },
+        "required": [
+          "database",
+          "at",
+          "name"
+        ]
+      }
+    },
+    {
+      "name": "fork_database",
+      "description": "Creates a NEW database, billed like any other, whose data is an instant copy of this one (for a test or staging copy), with the same users and passwords. It stays linked to its source for up to 7 days (no backups of its own, the source cannot be deleted) unless detach_database_fork ends that sooner. Retrying the same call is safe. Scope: vms.create.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "database": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "The source database."
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "description": "Name of the new database."
+          },
+          "vpc": {
+            "description": "Default: the source's private network; same region either way.",
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "size_gb": {
+            "description": "Memory in GB, one of the sizes of get_database_options for the region. Default: 1, or the source's size.",
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "idempotency_key": {
+            "description": "Your own unique value per order. By default one is derived from the call.",
+            "type": "string",
+            "maxLength": 255
+          }
+        },
+        "required": [
+          "database",
+          "name"
+        ]
+      }
+    },
+    {
+      "name": "detach_database_fork",
+      "description": "Gives a linked fork its own copy of the data; the database is unavailable for about 30 seconds, then its backups start. Scope: vms.action.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "database": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Database id, as returned by list_databases or create_database."
+          }
+        },
+        "required": [
+          "database"
+        ]
+      }
+    },
+    {
+      "name": "resize_database",
+      "description": "Moves the database to a LARGER size (more vCPU, memory and included disk; see get_database_options): same data, users, names and addresses. It restarts: one to two minutes of downtime, status maintenance meanwhile (resize.to_gb set), then active with the new size_gb. The new rate applies from the next hour. Larger sizes only, there is no way back: tell the user the new price and the downtime first. Retrying the same call is safe. Scope: vms.create.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "database": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Database id, as returned by list_databases or create_database."
+          },
+          "size_gb": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1024,
+            "description": "Memory in GB, larger than the current size_gb."
+          },
+          "idempotency_key": {
+            "description": "Your own unique value per order. By default one is derived from the call.",
+            "type": "string",
+            "maxLength": 255
+          }
+        },
+        "required": [
+          "database",
+          "size_gb"
+        ]
+      }
+    },
+    {
+      "name": "delete_database",
+      "description": "DELETES the database and its data; billing stops. Ask the user first. confirm_name must be the database's exact name. Its backups stay 7 days (restore_database can bring it back meanwhile). Refused while a linked fork depends on it. Scope: vms.destroy.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "database": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Database id, as returned by list_databases or create_database."
+          },
+          "confirm_name": {
+            "type": "string",
+            "description": "The database's exact name, typed back as confirmation."
+          }
+        },
+        "required": [
+          "database",
+          "confirm_name"
+        ]
+      }
+    },
+    {
+      "name": "update_database",
+      "description": "Any of: the name; the weekly maintenance window (day 0 = Sunday, start hour, Montréal time, 2 hours long; minor updates, usually under 2 minutes of downtime); the disk cap (the disk grows by itself at 80 % full, up to the cap; disk beyond what the size includes is billed per GB); on Valkey, the eviction policy. Scope: databases.write.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "database": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Database id, as returned by list_databases or create_database."
+          },
+          "name": {
+            "description": "New display name; the connection host does not change.",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "maintenance_day": {
+            "description": "Day of the weekly maintenance window: 0 is Sunday, 6 is Saturday.",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 6
+          },
+          "maintenance_hour": {
+            "description": "Hour the 2-hour window starts, 0 to 23, Montréal time.",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 23
+          },
+          "disk_cap_gb": {
+            "description": "Largest size in GB the disk may grow to by itself; disk beyond what the size includes is billed per GB.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000
+          },
+          "eviction_policy": {
+            "description": "Valkey only: what happens when data memory is full. noeviction (default) refuses writes; allkeys-lru removes the least used keys, for a cache.",
+            "type": "string",
+            "enum": [
+              "noeviction",
+              "allkeys-lru",
+              "allkeys-lfu",
+              "allkeys-random",
+              "volatile-lru",
+              "volatile-lfu",
+              "volatile-random",
+              "volatile-ttl"
+            ]
+          }
+        },
+        "required": [
+          "database"
+        ]
+      }
+    },
+    {
+      "name": "set_database_public_access",
+      "description": "Opens the database to the internet at its public host and port (IPv4 and IPv6, TLS and password still required), or closes it. sources restricts who may connect (IPv4/IPv6 addresses or ranges); omitted it is left as is, null or [] means everyone. Prefer listing the user's addresses. Live within about 30 seconds. Scope: network.write.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "database": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Database id, as returned by list_databases or create_database."
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "true opens the database to the internet; false closes it, leaving the private network only."
+          },
+          "sources": {
+            "description": "IPv4/IPv6 addresses or ranges allowed to connect from the internet, up to 50. Omitted: left as is; null or []: everyone.",
+            "anyOf": [
+              {
+                "maxItems": 50,
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "database",
+          "enabled"
+        ]
+      }
+    },
+    {
+      "name": "backup_database",
+      "description": "Starts a differential backup within a minute, e.g. before a risky migration. Not available on a linked fork. Scope: backups.write.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "database": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Database id, as returned by list_databases or create_database."
+          }
+        },
+        "required": [
+          "database"
+        ]
+      }
+    },
+    {
+      "name": "create_database_user",
+      "description": "Creates a user with a generated password, returned here once (also readable with get_database_credentials); live within seconds. Up to 30 users. It connects only to its databases (every logical database, future ones included, when databases is omitted): it reads and writes everything there and creates tables (on PostgreSQL in public too), or only reads with read_only; elsewhere it has no access. Its connection_uri points to defaultdb, or to its first database without access to defaultdb. On Valkey, an ACL user with every key and data command (no databases, no read_only). Treat the password as a secret. Scope: databases.write.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "database": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Database id, as returned by list_databases or create_database."
+          },
+          "username": {
+            "type": "string",
+            "pattern": "^[a-z_][a-z0-9_]{0,62}$",
+            "description": "Lowercase letters, digits and _, starting with a letter or _."
+          },
+          "databases": {
+            "description": "Logical databases it may connect to (existing ones, see get_database). Omit for all of them, future ones included.",
+            "maxItems": 30,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z_][a-z0-9_]{0,62}$",
+              "description": "Lowercase letters, digits and _, starting with a letter or _."
+            }
+          },
+          "read_only": {
+            "description": "SELECT only (MySQL, MariaDB: SELECT and SHOW VIEW). Default false.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "database",
+          "username"
+        ]
+      }
+    },
+    {
+      "name": "set_database_user_access",
+      "description": "Sets the logical databases a user connects to (databases: a list, or null for all of them, future ones included) and whether it only reads; a field left out keeps its value. Applied within seconds; where its access is removed or lowered, its open connections are closed, so tell the user first if an application uses it. Not on the admin (it always has every database) nor on Valkey. Scope: databases.write.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "database": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Database id, as returned by list_databases or create_database."
+          },
+          "username": {
+            "type": "string",
+            "pattern": "^[a-z_][a-z0-9_]{0,62}$",
+            "description": "Lowercase letters, digits and _, starting with a letter or _."
+          },
+          "databases": {
+            "description": "Logical databases it may connect to; null for all of them, future ones included.",
+            "anyOf": [
+              {
+                "maxItems": 30,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^[a-z_][a-z0-9_]{0,62}$",
+                  "description": "Lowercase letters, digits and _, starting with a letter or _."
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "read_only": {
+            "description": "true: SELECT only (MySQL, MariaDB: SELECT and SHOW VIEW); false: reads and writes. Omitted: left as is.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "database",
+          "username"
+        ]
+      }
+    },
+    {
+      "name": "reset_database_password",
+      "description": "Gives the user a new password, returned here; the old one stops working within seconds, so update the application first or right after. Scope: databases.write.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "database": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Database id, as returned by list_databases or create_database."
+          },
+          "username": {
+            "type": "string",
+            "pattern": "^[a-z_][a-z0-9_]{0,62}$",
+            "description": "Lowercase letters, digits and _, starting with a letter or _."
+          }
+        },
+        "required": [
+          "database",
+          "username"
+        ]
+      }
+    },
+    {
+      "name": "delete_database_user",
+      "description": "Hands the user's objects to the admin, then drops the user. The admin (ffxfadmin, or default on Valkey) cannot be deleted. Scope: databases.write.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "database": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Database id, as returned by list_databases or create_database."
+          },
+          "username": {
+            "type": "string",
+            "pattern": "^[a-z_][a-z0-9_]{0,62}$",
+            "description": "Lowercase letters, digits and _, starting with a letter or _."
+          }
+        },
+        "required": [
+          "database",
+          "username"
+        ]
+      }
+    },
+    {
+      "name": "create_logical_database",
+      "description": "Creates another database inside the managed database (like defaultdb), owned by the admin; up to 30. Not on Valkey (numbered databases, SELECT 0 to 15). Scope: databases.write.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "database": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Database id, as returned by list_databases or create_database."
+          },
+          "name": {
+            "type": "string",
+            "pattern": "^[a-z_][a-z0-9_]{0,62}$",
+            "description": "Lowercase letters, digits and _, starting with a letter or _."
+          }
+        },
+        "required": [
+          "database",
+          "name"
+        ]
+      }
+    },
+    {
+      "name": "delete_logical_database",
+      "description": "DROPS the logical database with everything in it (the backups keep it 7 days). Ask the user first. Scope: databases.write.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "database": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Database id, as returned by list_databases or create_database."
+          },
+          "name": {
+            "type": "string",
+            "pattern": "^[a-z_][a-z0-9_]{0,62}$",
+            "description": "Lowercase letters, digits and _, starting with a letter or _."
+          }
+        },
+        "required": [
+          "database",
+          "name"
+        ]
+      }
+    },
+    {
+      "name": "enable_extension",
+      "description": "PostgreSQL only. Enables an extension from get_database_options (vector for pgvector, postgis, pg_trgm…) in one logical database; installed on demand, live within a minute. Scope: databases.write.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "database": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Database id, as returned by list_databases or create_database."
+          },
+          "name": {
+            "type": "string",
+            "pattern": "^[a-z_][a-z0-9_]{0,62}$",
+            "description": "The logical database, e.g. defaultdb."
+          },
+          "extension": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "description": "Extension name from get_database_options, e.g. vector, postgis, pg_trgm."
+          }
+        },
+        "required": [
+          "database",
+          "name",
+          "extension"
+        ]
+      }
+    },
+    {
+      "name": "disable_extension",
+      "description": "Drops the extension without CASCADE: if objects depend on it, it stays and get_database shows why in warning. Scope: databases.write.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "database": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Database id, as returned by list_databases or create_database."
+          },
+          "name": {
+            "type": "string",
+            "pattern": "^[a-z_][a-z0-9_]{0,62}$",
+            "description": "The logical database."
+          },
+          "extension": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "description": "Name of an extension enabled in that logical database (see get_database)."
+          }
+        },
+        "required": [
+          "database",
+          "name",
+          "extension"
+        ]
+      }
+    },
+    {
+      "name": "get_runners",
+      "description": "The runs-on labels with their vCPU, memory and price per minute, the account's concurrency (vCPU of jobs starting or running, and the cap), the linked GitHub organizations and accounts, this month's minutes and cost per repository, the actions cache next to the runners (bytes, entries and last use per repository, price per GB per month), and the Docker cache per repository (enabled in the console, bytes, last successful job). Scope: billing.read.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "list_runner_jobs",
+      "description": "Jobs that ran or wait on FFxF runners, most recent first: repository, workflow and job, label, status (queued with waiting_reason credit, budget or account; running; succeeded; failed, stopped_for_credit when the credit ran out; cancelled; refused with refusal), times, billed minutes and amount, link to the run. Scope: billing.read.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "repository": {
+            "description": "owner/name",
+            "type": "string",
+            "maxLength": 200
+          },
+          "status": {
+            "description": "Keep only jobs in this status.",
+            "type": "string",
+            "enum": [
+              "queued",
+              "running",
+              "succeeded",
+              "failed",
+              "cancelled",
+              "refused"
+            ]
+          },
+          "limit": {
+            "description": "Default 25.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "cursor": {
+            "description": "meta.next_cursor of the previous page.",
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "list_ssh_keys",
+      "description": "SSH keys saved on the account, to pass to create_vm. Scope: sshkeys.write or vms.read.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "add_ssh_key",
+      "description": "Saves a public key on the account so new machines can be reached without a password. Scope: sshkeys.write.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "Label to recognise the key by, e.g. laptop."
+          },
+          "public_key": {
+            "type": "string",
+            "maxLength": 8192,
+            "description": "OpenSSH public key, e.g. ssh-ed25519 AAAA… user@host."
+          }
+        },
+        "required": [
+          "name",
+          "public_key"
+        ]
+      }
+    },
+    {
+      "name": "delete_ssh_key",
+      "description": "Removes a key from the account. Machines already deployed with it keep it; only future deployments change. Scope: sshkeys.write.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "key": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "string",
+                "minLength": 1
+              }
+            ],
+            "description": "Key id from list_ssh_keys."
+          }
+        },
+        "required": [
+          "key"
+        ]
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "net.ffxf/cloud",
+    "version": "1.14.3",
+    "remoteUrl": "https://ffxf.net/mcp",
+    "publishedAt": "2026-11-23T22:59:15.645534Z",
+    "fetchedAt": "2026-11-24T12:15:48.059Z",
+    "toolsSha256": "6567b1b2f4e7c03cb85e21409cb1c2b03a1a698367d8862d16ad851f3335016a"
+  }
+}

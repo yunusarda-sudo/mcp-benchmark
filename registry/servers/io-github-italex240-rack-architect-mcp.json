@@ -1,0 +1,1589 @@
+{
+  "$schema": "../schema.json",
+  "name": "io.github.itAlex240/rack-architect-mcp",
+  "title": "RackArchitect MCP",
+  "category": "Developer Tools & DevOps",
+  "description": "Hosted Remote MCP & 3D/2D Rack-as-Code planner, 5-stage validator, CAD SVG/BOM & STL generator.",
+  "repository": "https://github.com/itAlex240/rack-architect-mcp",
+  "tools": [
+    {
+      "name": "search_catalog",
+      "description": "Search and filter the local hardware catalog to discover compatible rackmount devices, modular carriers, and sub-modules before mounting. All supplied filters combine with logical AND: 'form_factor' and its alias 'mount_type' accept width shorthands '10inch', '19inch', and '6inch' that match both direct rackmount gear and modular carriers, 'accepted_slot_type' matches both carrier bays and compatible sub-modules, and 'max_depth_mm' bounds chassis depth excluding plug clearance. Returns all matches from the bounded catalog in one unpaginated response sorted in deterministic registration order, with built-in blueprints followed by custom blueprints. Call with no arguments to list the full catalog; use get_device_blueprint to inspect expanded port coordinates for a known slug, or define_custom_blueprint to register unlisted hardware.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "query": {
+            "description": "Optional case-insensitive substring filter matching slug, manufacturer, or model name (omit to match all).",
+            "type": "string",
+            "maxLength": 200
+          },
+          "form_factor": {
+            "description": "Primary rack width or mounting form-factor filter (shorthands \"10inch\", \"19inch\", and \"6inch\" match both direct rackmount equipment and modular carriers of that width).",
+            "type": "string",
+            "enum": [
+              "rackmount-19",
+              "rackmount-10",
+              "rackmount-6",
+              "sub-module",
+              "shelf-standing",
+              "10inch",
+              "19inch",
+              "6inch"
+            ]
+          },
+          "mount_type": {
+            "description": "Optional alias for form_factor to filter by physical mounting style (\"rackmount-10\", \"rackmount-19\", \"rackmount-6\", \"sub-module\", or \"shelf-standing\"); combined with logical AND if both are provided.",
+            "type": "string",
+            "enum": [
+              "rackmount-19",
+              "rackmount-10",
+              "rackmount-6",
+              "sub-module",
+              "shelf-standing",
+              "10inch",
+              "19inch",
+              "6inch"
+            ]
+          },
+          "category": {
+            "description": "Functional hardware category filter (e.g., \"switch\", \"router\", \"ups\", \"pdu\", \"patch-panel\", \"modular-carrier\", \"mini-pc\", \"sbc\").",
+            "type": "string",
+            "enum": [
+              "switch",
+              "router",
+              "compute-node",
+              "mini-pc",
+              "sbc",
+              "nas",
+              "patch-panel",
+              "pdu",
+              "ups",
+              "modular-carrier",
+              "brush-panel",
+              "blanking-panel",
+              "blank-panel",
+              "shelf",
+              "keystone-module"
+            ]
+          },
+          "max_depth_mm": {
+            "description": "Maximum allowed chassis depth in millimeters (inclusive upper bound).",
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "maximum": 2000
+          },
+          "min_poe_budget_watts": {
+            "description": "Minimum required PSE PoE output power budget in watts (inclusive lower bound).",
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100000
+          },
+          "accepted_slot_type": {
+            "description": "Sub-module slot compatibility token matching either a sub-module slot_compatibility or a carrier slot accepted_slot_type (e.g., \"mini-pc-1liter\", \"sbc-rpi5\", \"standard-keystone\").",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          }
+        }
+      }
+    },
+    {
+      "name": "get_device_blueprint",
+      "description": "Retrieve the complete hardware specification, millimeter port coordinates, electrical and PoE ratings, and carrier slot geometry for a single catalog blueprint. The 'slug' parameter requires a case-sensitive exact match in lowercase kebab-case vendor-model-variant format against the built-in or session custom catalog; partial substrings or uppercase characters do not match. Returns the full blueprint in one unpaginated payload with repeating port_groups pre-expanded into up to 256 flat ports[] entries, or returns status 'INVALID' with a BLUEPRINT_NOT_FOUND issue and candidate slugs instead of throwing. Use when you already know the target slug and need exact port_id or slot_id values for mount_equipment or connect_cables; use search_catalog instead to discover unknown slugs by criteria.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "slug": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "description": "Exact lowercase kebab-case hardware catalog blueprint slug to retrieve (discoverable via search_catalog)."
+          }
+        },
+        "required": [
+          "slug"
+        ]
+      }
+    },
+    {
+      "name": "define_custom_blueprint",
+      "description": "Validate and register a custom hardware blueprint into the active catalog so unlisted equipment can be mounted. Pass the entire specification inside the top-level 'blueprint' object: 'blueprint.slug' must use lowercase kebab-case, ports may combine explicit 'ports[]' with repeating 'port_groups[]' macros whose coordinates fit strictly within 'blueprint.geometry' without overlapping, and 'slots[]' applies only when 'mount_type' is 'modular-carrier' whereas 'slot_compatibility' applies to 'sub-module'. Persists YAML to the local custom-catalog folder in stdio mode or session memory on remote servers, overwrites same-slug custom entries without touching mounted rack state or undo history, and returns status 'INVALID' instead of throwing on validation errors. Use only after search_catalog confirms hardware is unlisted; use mount_equipment instead to place an already registered blueprint into the rack.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "blueprint": {
+            "type": "object",
+            "properties": {
+              "slug": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "pattern": "^[a-z0-9-]+$",
+                "description": "Unique lowercase kebab-case hardware identifier (vendor-model-variant)."
+              },
+              "manufacturer": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 160,
+                "description": "Hardware manufacturer name."
+              },
+              "model": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 160,
+                "description": "Hardware model name or part number."
+              },
+              "description": {
+                "description": "Human-readable explanation of what the device is, its role in the rack, and its physical mounting method (e.g. native rack ears vs. 3D-printed carrier/cradle).",
+                "type": "string",
+                "maxLength": 2000
+              },
+              "category": {
+                "type": "string",
+                "enum": [
+                  "switch",
+                  "router",
+                  "compute-node",
+                  "mini-pc",
+                  "sbc",
+                  "nas",
+                  "patch-panel",
+                  "pdu",
+                  "ups",
+                  "modular-carrier",
+                  "brush-panel",
+                  "blanking-panel",
+                  "blank-panel",
+                  "shelf",
+                  "keystone-module"
+                ],
+                "description": "Primary functional category of the hardware unit."
+              },
+              "mount_type": {
+                "type": "string",
+                "enum": [
+                  "rackmount-19",
+                  "rackmount-10",
+                  "rackmount-6",
+                  "sub-module",
+                  "shelf-standing"
+                ],
+                "description": "Physical form factor and mounting mechanism."
+              },
+              "slot_compatibility": {
+                "description": "Slot compatibility token when mount_type is \"sub-module\".",
+                "type": "string",
+                "maxLength": 100
+              },
+              "is_passthrough_coupler": {
+                "description": "True if the entire unit acts as a passive front-to-rear feedthrough patch panel.",
+                "type": "boolean"
+              },
+              "geometry": {
+                "type": "object",
+                "properties": {
+                  "u_height": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 60,
+                    "description": "Nominal height in Rack Units (1U = 44.45mm, max 60U)."
+                  },
+                  "width_mm": {
+                    "type": "number",
+                    "exclusiveMinimum": 0,
+                    "maximum": 1000,
+                    "description": "Physical chassis body width in millimeters (max 1000mm)."
+                  },
+                  "height_mm": {
+                    "type": "number",
+                    "exclusiveMinimum": 0,
+                    "maximum": 3000,
+                    "description": "Physical chassis height in millimeters (max 3000mm)."
+                  },
+                  "depth_mm": {
+                    "type": "number",
+                    "exclusiveMinimum": 0,
+                    "maximum": 2000,
+                    "description": "Physical chassis depth in millimeters along the Z-axis (max 2000mm)."
+                  },
+                  "ear_mount_style": {
+                    "default": "flush-front",
+                    "type": "string",
+                    "enum": [
+                      "included-19inch-ears",
+                      "included-10inch-ears",
+                      "included-6inch-ears",
+                      "flush-front",
+                      "recessed-20mm",
+                      "sub-module-clip",
+                      "rear-rail-mount",
+                      "none"
+                    ],
+                    "description": "Mounting ear geometry relative to the vertical rack rails."
+                  },
+                  "front_protrusion_mm": {
+                    "default": 0,
+                    "description": "Protrusion in front of Z=0 (handles, ears, knobs) in mm.",
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 500
+                  },
+                  "rear_protrusion_mm": {
+                    "default": 0,
+                    "description": "Protrusion behind depth_mm (fans, PSU handles) in mm.",
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 500
+                  },
+                  "weight_grams": {
+                    "default": 0,
+                    "description": "Total device mass in grams for Center of Gravity calculation.",
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 500000
+                  },
+                  "has_cable_pass_through": {
+                    "description": "True if cables can pass front-to-rear through this unit.",
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "u_height",
+                  "width_mm",
+                  "height_mm",
+                  "depth_mm"
+                ],
+                "description": "Physical 3D bounding dimensions and mass specification."
+              },
+              "power_and_thermal": {
+                "type": "object",
+                "properties": {
+                  "electrical_role": {
+                    "type": "string",
+                    "enum": [
+                      "consumer",
+                      "pse-switch",
+                      "pdu",
+                      "ups",
+                      "passive"
+                    ],
+                    "description": "Role in the electrical and PoE Directed Acyclic Graph (DAG)."
+                  },
+                  "idle_watts": {
+                    "default": 0,
+                    "description": "Idle power draw in watts.",
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 100000
+                  },
+                  "max_system_watts": {
+                    "default": 0,
+                    "description": "Peak own system power consumption in watts (excluding PoE output).",
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 100000
+                  },
+                  "poe_budget_watts": {
+                    "description": "Maximum total PoE output power budget in watts for PSE switches.",
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 100000
+                  },
+                  "ups_capacity_watts": {
+                    "description": "Maximum output load capacity in watts for UPS units.",
+                    "type": "number",
+                    "exclusiveMinimum": 0,
+                    "maximum": 100000
+                  },
+                  "ups_battery_wh": {
+                    "description": "Usable battery energy capacity in Watt-hours (Wh) for UPS runtime estimation.",
+                    "type": "number",
+                    "exclusiveMinimum": 0,
+                    "maximum": 100000
+                  },
+                  "pdu_capacity_watts": {
+                    "description": "Maximum output load capacity in watts for PDU units.",
+                    "type": "number",
+                    "exclusiveMinimum": 0,
+                    "maximum": 100000
+                  },
+                  "airflow": {
+                    "default": "passive-convection",
+                    "type": "string",
+                    "enum": [
+                      "front-to-rear",
+                      "rear-to-front",
+                      "side-to-side",
+                      "passive-convection",
+                      "none"
+                    ],
+                    "description": "Primary thermal airflow path through the device chassis."
+                  },
+                  "noise_db_a": {
+                    "description": "Acoustic noise emission in dB(A) at 1 meter distance.",
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 200
+                  }
+                },
+                "required": [
+                  "electrical_role"
+                ],
+                "description": "Electrical power consumption, PoE budget, thermal airflow, and acoustic dB(A) characteristics."
+              },
+              "port_groups": {
+                "default": [],
+                "description": "Optional repeating port grid macros expanded into flat ports[] upon registration.",
+                "maxItems": 16,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id_prefix": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 64,
+                      "description": "Prefix for generated port_id values (e.g. \"eth\")."
+                    },
+                    "label_prefix": {
+                      "description": "Prefix for generated human-readable labels.",
+                      "type": "string",
+                      "maxLength": 96
+                    },
+                    "start_index": {
+                      "default": 1,
+                      "description": "Starting numeric suffix for generated port IDs (default: 1).",
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 10000
+                    },
+                    "count": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 128,
+                      "description": "Total number of ports to generate in this group (1..128)."
+                    },
+                    "face": {
+                      "type": "string",
+                      "enum": [
+                        "front",
+                        "rear"
+                      ],
+                      "description": "Mounting or port face relative to the rack or chassis."
+                    },
+                    "connector_type": {
+                      "type": "string",
+                      "enum": [
+                        "rj45",
+                        "rj45-serial-console",
+                        "sfp-plus",
+                        "iec-c13",
+                        "iec-c14",
+                        "schuko-cee7",
+                        "dc-5525",
+                        "usb-c",
+                        "usb-a",
+                        "audio-35mm"
+                      ],
+                      "description": "Physical connector interface type."
+                    },
+                    "direction": {
+                      "type": "string",
+                      "enum": [
+                        "input",
+                        "output",
+                        "bidirectional"
+                      ],
+                      "description": "Signal or electrical power flow direction."
+                    },
+                    "capabilities": {
+                      "default": [],
+                      "description": "Capabilities assigned to every port generated by this group.",
+                      "maxItems": 32,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "100base-tx",
+                          "1000base-t",
+                          "2500base-t",
+                          "5gbase-t",
+                          "10gbase-t",
+                          "10gbase-sr",
+                          "10gbase-lr",
+                          "10gbase-dac",
+                          "25gbase-dac",
+                          "poe-out",
+                          "poe+",
+                          "poe-out-af",
+                          "poe-out-at",
+                          "poe-out-bt-type3",
+                          "poe-out-bt-type4",
+                          "poe-in-af",
+                          "poe-in-at",
+                          "poe-in-bt-type3",
+                          "poe-in-bt-type4",
+                          "ac-mains",
+                          "dc-power",
+                          "usb-pd",
+                          "usb-3.0",
+                          "usb-3.1",
+                          "audio-analog",
+                          "serial-rs232",
+                          "passthrough-coupler"
+                        ],
+                        "description": "Supported electrical, optical, or PoE protocol capability."
+                      }
+                    },
+                    "orientation": {
+                      "default": "upright",
+                      "type": "string",
+                      "enum": [
+                        "upright",
+                        "inverted",
+                        "left",
+                        "right"
+                      ],
+                      "description": "Physical orientation of the connector latch/keyway."
+                    },
+                    "is_passthrough_coupler": {
+                      "description": "True if generated ports are passive front-to-rear couplers.",
+                      "type": "boolean"
+                    },
+                    "grid": {
+                      "type": "object",
+                      "properties": {
+                        "origin_x_mm": {
+                          "type": "number",
+                          "minimum": -2000,
+                          "maximum": 2000,
+                          "description": "X coordinate of the first port (column 0) in mm."
+                        },
+                        "origin_y_mm": {
+                          "type": "number",
+                          "minimum": -3000,
+                          "maximum": 3000,
+                          "description": "Y coordinate of the first port (row 0) in mm."
+                        },
+                        "columns": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 64,
+                          "description": "Number of horizontal port columns in the matrix (1..64)."
+                        },
+                        "rows": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 16,
+                          "description": "Number of vertical port rows in the matrix (1..16)."
+                        },
+                        "pitch_x_mm": {
+                          "type": "number",
+                          "minimum": -500,
+                          "maximum": 500,
+                          "description": "Horizontal center-to-center spacing between adjacent columns in mm."
+                        },
+                        "pitch_y_mm": {
+                          "type": "number",
+                          "minimum": -500,
+                          "maximum": 500,
+                          "description": "Vertical center-to-center spacing between adjacent rows in mm."
+                        }
+                      },
+                      "required": [
+                        "origin_x_mm",
+                        "origin_y_mm",
+                        "columns",
+                        "rows",
+                        "pitch_x_mm",
+                        "pitch_y_mm"
+                      ],
+                      "description": "2D grid layout parameters for automatic port matrix expansion."
+                    }
+                  },
+                  "required": [
+                    "id_prefix",
+                    "count",
+                    "face",
+                    "connector_type",
+                    "direction",
+                    "grid"
+                  ],
+                  "description": "Declarative port matrix macro expanded into flat PortDefinition items on load."
+                }
+              },
+              "ports": {
+                "default": [],
+                "description": "Explicit physical ports with local face millimeter coordinates.",
+                "maxItems": 256,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "port_id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128,
+                      "description": "Unique identifier of the port within the device."
+                    },
+                    "label": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 160,
+                      "description": "Human-readable silk-screened port label."
+                    },
+                    "face": {
+                      "type": "string",
+                      "enum": [
+                        "front",
+                        "rear"
+                      ],
+                      "description": "Mounting or port face relative to the rack or chassis."
+                    },
+                    "connector_type": {
+                      "type": "string",
+                      "enum": [
+                        "rj45",
+                        "rj45-serial-console",
+                        "sfp-plus",
+                        "iec-c13",
+                        "iec-c14",
+                        "schuko-cee7",
+                        "dc-5525",
+                        "usb-c",
+                        "usb-a",
+                        "audio-35mm"
+                      ],
+                      "description": "Physical connector interface type."
+                    },
+                    "direction": {
+                      "type": "string",
+                      "enum": [
+                        "input",
+                        "output",
+                        "bidirectional"
+                      ],
+                      "description": "Signal or electrical power flow direction."
+                    },
+                    "capabilities": {
+                      "default": [],
+                      "description": "Electrical, optical, or PoE capabilities supported by this port.",
+                      "maxItems": 32,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "100base-tx",
+                          "1000base-t",
+                          "2500base-t",
+                          "5gbase-t",
+                          "10gbase-t",
+                          "10gbase-sr",
+                          "10gbase-lr",
+                          "10gbase-dac",
+                          "25gbase-dac",
+                          "poe-out",
+                          "poe+",
+                          "poe-out-af",
+                          "poe-out-at",
+                          "poe-out-bt-type3",
+                          "poe-out-bt-type4",
+                          "poe-in-af",
+                          "poe-in-at",
+                          "poe-in-bt-type3",
+                          "poe-in-bt-type4",
+                          "ac-mains",
+                          "dc-power",
+                          "usb-pd",
+                          "usb-3.0",
+                          "usb-3.1",
+                          "audio-analog",
+                          "serial-rs232",
+                          "passthrough-coupler"
+                        ],
+                        "description": "Supported electrical, optical, or PoE protocol capability."
+                      }
+                    },
+                    "coordinates": {
+                      "type": "object",
+                      "properties": {
+                        "x_mm": {
+                          "type": "number",
+                          "minimum": -2000,
+                          "maximum": 2000,
+                          "description": "Horizontal offset in mm from the bottom-left corner of the face."
+                        },
+                        "y_mm": {
+                          "type": "number",
+                          "minimum": -3000,
+                          "maximum": 3000,
+                          "description": "Vertical offset in mm from the bottom-left corner of the face."
+                        },
+                        "orientation": {
+                          "default": "upright",
+                          "type": "string",
+                          "enum": [
+                            "upright",
+                            "inverted",
+                            "left",
+                            "right"
+                          ],
+                          "description": "Physical orientation of the connector latch/keyway."
+                        }
+                      },
+                      "required": [
+                        "x_mm",
+                        "y_mm"
+                      ],
+                      "description": "Local 2D coordinates on the device face in millimeters."
+                    },
+                    "is_passthrough_coupler": {
+                      "description": "True if this port is a passive front-to-rear feedthrough coupler.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "port_id",
+                    "label",
+                    "face",
+                    "connector_type",
+                    "direction",
+                    "coordinates"
+                  ],
+                  "description": "Explicit physical port definition with local millimeter coordinates."
+                }
+              },
+              "slots": {
+                "default": [],
+                "description": "Sub-module carrier bays when mount_type is \"modular-carrier\".",
+                "maxItems": 32,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "slot_id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 100,
+                      "description": "Unique slot identifier within the carrier."
+                    },
+                    "accepted_slot_type": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 100,
+                      "description": "Required child slot_compatibility token (e.g. \"mini-pc-1liter\")."
+                    },
+                    "offset_mm": {
+                      "type": "object",
+                      "properties": {
+                        "x": {
+                          "type": "number",
+                          "minimum": -2000,
+                          "maximum": 2000,
+                          "description": "Local X offset from carrier origin in mm."
+                        },
+                        "y": {
+                          "type": "number",
+                          "minimum": -3000,
+                          "maximum": 3000,
+                          "description": "Local Y offset from carrier origin in mm."
+                        },
+                        "z": {
+                          "default": 0,
+                          "description": "Local Z offset from carrier origin in mm.",
+                          "type": "number",
+                          "minimum": -2000,
+                          "maximum": 2000
+                        }
+                      },
+                      "required": [
+                        "x",
+                        "y"
+                      ],
+                      "description": "Local 3D offset of a sub-module slot relative to its parent carrier."
+                    },
+                    "max_dimensions_mm": {
+                      "type": "object",
+                      "properties": {
+                        "width": {
+                          "type": "number",
+                          "exclusiveMinimum": 0,
+                          "maximum": 2000,
+                          "description": "Maximum allowed child width in mm."
+                        },
+                        "height": {
+                          "type": "number",
+                          "exclusiveMinimum": 0,
+                          "maximum": 3000,
+                          "description": "Maximum allowed child height in mm."
+                        },
+                        "depth": {
+                          "type": "number",
+                          "exclusiveMinimum": 0,
+                          "maximum": 2000,
+                          "description": "Maximum allowed child depth in mm."
+                        }
+                      },
+                      "required": [
+                        "width",
+                        "height",
+                        "depth"
+                      ],
+                      "description": "Maximum internal bounding dimensions of a carrier slot in mm."
+                    }
+                  },
+                  "required": [
+                    "slot_id",
+                    "accepted_slot_type",
+                    "offset_mm",
+                    "max_dimensions_mm"
+                  ],
+                  "description": "Sub-U carrier bay specification for modular child devices."
+                }
+              },
+              "visuals": {
+                "default": {
+                  "chassis_color_hex": "#E5E7EB",
+                  "material_preset": "matte-black-steel",
+                  "has_oled_display": false,
+                  "stl_mesh_path": null
+                },
+                "type": "object",
+                "properties": {
+                  "chassis_color_hex": {
+                    "default": "#E5E7EB",
+                    "description": "Primary chassis hex color code.",
+                    "type": "string",
+                    "pattern": "^#[0-9A-Fa-f]{6}$"
+                  },
+                  "material_preset": {
+                    "default": "matte-black-steel",
+                    "type": "string",
+                    "enum": [
+                      "matte-black-steel",
+                      "coated-aluminum",
+                      "3d-printed-petg",
+                      "3d-printed-abs",
+                      "polycarbonate"
+                    ],
+                    "description": "Surface material shader preset for 3D procedural rendering."
+                  },
+                  "has_oled_display": {
+                    "default": false,
+                    "description": "True if the front panel includes a status OLED screen.",
+                    "type": "boolean"
+                  },
+                  "stl_mesh_path": {
+                    "default": null,
+                    "description": "Optional relative path to custom 3D mesh (.stl/.glb).",
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "maxLength": 512
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "description": "Visual rendering metadata for 2D SVG and 3D WebGL pipelines."
+              },
+              "printable_metadata": {
+                "default": null,
+                "description": "3D printing fabrication metadata for printable modular carriers.",
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "filament_grams": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 50000,
+                        "description": "Estimated filament mass in grams."
+                      },
+                      "material_recommendation": {
+                        "default": "PETG",
+                        "description": "Recommended 3D printing filament material (e.g. \"PETG\", \"ABS\", \"ASA\").",
+                        "type": "string",
+                        "maxLength": 128
+                      },
+                      "heat_set_inserts": {
+                        "description": "Optional specification of required brass heat-set inserts.",
+                        "type": "string",
+                        "maxLength": 256
+                      },
+                      "fasteners": {
+                        "description": "Optional specification of required mounting screws and cage nuts.",
+                        "type": "string",
+                        "maxLength": 256
+                      },
+                      "printables_url": {
+                        "description": "Optional HTTPS reference URL to an upstream 3D model repository.",
+                        "type": "string",
+                        "maxLength": 512,
+                        "pattern": "^https?:\\/\\/"
+                      }
+                    },
+                    "required": [
+                      "filament_grams"
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "estimated_price_eur": {
+                "description": "Optional indicative street price in EUR for BOM hardware budget estimation.",
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1000000
+              }
+            },
+            "required": [
+              "slug",
+              "manufacturer",
+              "model",
+              "category",
+              "mount_type",
+              "geometry",
+              "power_and_thermal"
+            ],
+            "description": "Complete custom hardware blueprint specification; ports may be defined via explicit ports[], repeating port_groups[] macros, or both."
+          }
+        },
+        "required": [
+          "blueprint"
+        ]
+      }
+    },
+    {
+      "name": "init_rack",
+      "description": "Initialize a new rack project and destructively reset the active rack.yaml state to an empty enclosure with the specified width standard, U height, and rail depth. Overwrites the current enclosure and clears all mounted devices, child sub-modules, cables, and external endpoints, while pushing the previous project state onto the in-memory undo stack for recovery via undo_redo. 'project_name' sets the title used in exported schematics and BOMs, 'rail_depth_mm' plus 'rear_clearance_mm' bounds total +Z chassis and rear plug depth before wall collision, and 'front_door_clearance_mm' is enforced only when 'enclosure_type' has a closed front door. Use when starting a rack design from scratch or changing enclosure dimensions; use validate_rack to inspect the current rack, or modify_equipment to move or remove individual devices.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "project_name": {
+            "default": "Rack Project",
+            "description": "Human-readable project name stored in rack.yaml.",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160
+          },
+          "standard": {
+            "type": "string",
+            "enum": [
+              "19inch",
+              "10inch",
+              "6inch"
+            ],
+            "description": "Mechanical rack width standard (\"19inch\" = 482.6mm, \"10inch\" = 254.0mm, \"6inch\" = 152.4mm)."
+          },
+          "u_height": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 60,
+            "description": "Total usable vertical rack height in Rack Units (1U = 44.45mm, 1..60U)."
+          },
+          "rail_depth_mm": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "maximum": 2000,
+            "description": "Front-to-rear mounting rail depth in millimeters along the Z-axis (max 2000mm)."
+          },
+          "enclosure_type": {
+            "default": "open-frame",
+            "description": "Enclosure door style (\"open-frame\", \"closed-glass-front\", or \"closed-vented-front\").",
+            "type": "string",
+            "enum": [
+              "open-frame",
+              "closed-glass-front",
+              "closed-vented-front"
+            ]
+          },
+          "front_door_clearance_mm": {
+            "default": 45,
+            "description": "Available clearance in millimeters between front mounting rails (Z=0) and a closed front door.",
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1000
+          },
+          "rear_clearance_mm": {
+            "default": 40,
+            "description": "Available clearance in millimeters behind the rear mounting rails (Z=rail_depth_mm) for power plugs and bending radii.",
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1000
+          }
+        },
+        "required": [
+          "standard",
+          "u_height",
+          "rail_depth_mm"
+        ]
+      }
+    },
+    {
+      "name": "mount_equipment",
+      "description": "Mount a new hardware device instance onto a rack unit or into a modular carrier bay in the active rack.yaml project and run 5-stage validation. 'instance_id' must be unique across both top-level devices and nested sub-modules, 'blueprint_slug' must reference an existing catalog or custom slug, and placement uses two mutually exclusive modes: 'u_position' with optional 'face' where the device's full U span fits within 1..u_height, or 'parent_carrier_id' plus a compatible 'slot_id' for sub-modules. Precondition errors such as duplicate 'instance_id', unknown 'blueprint_slug', or missing carriers return status 'INVALID' without mutating state, whereas 3D collision or PoE issues persist the mount, push an undo snapshot, and return remediation_suggestions. Use to add a new device instance; use modify_equipment to move, rename, or remove an existing instance, or plan_external_endpoints for off-rack room cable drops.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "instance_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "description": "Unique project-wide instance identifier for this mounted device (e.g., \"ups-u1\", \"sw-core-01\")."
+          },
+          "blueprint_slug": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "description": "Catalog or custom hardware blueprint slug to instantiate."
+          },
+          "hostname": {
+            "description": "Optional logical hostname or display label shown in elevations and schematics.",
+            "type": "string",
+            "maxLength": 160
+          },
+          "u_position": {
+            "description": "1-indexed lowest Rack Unit (U) when mounting directly onto the rack rails (mutually exclusive with parent_carrier_id/slot_id).",
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 60
+          },
+          "face": {
+            "default": "front",
+            "description": "Target rack mounting face (\"front\" or \"rear\") for direct rackmount equipment.",
+            "type": "string",
+            "enum": [
+              "front",
+              "rear"
+            ]
+          },
+          "parent_carrier_id": {
+            "description": "Mounted parent modular-carrier instance_id when mounting a sub-module (requires slot_id; mutually exclusive with u_position).",
+            "type": "string",
+            "maxLength": 100
+          },
+          "slot_id": {
+            "description": "Target bay slot_id inside parent_carrier_id when mounting a sub-module (e.g., \"left-bay\", \"keystone-1\").",
+            "type": "string",
+            "maxLength": 100
+          }
+        },
+        "required": [
+          "instance_id",
+          "blueprint_slug"
+        ]
+      }
+    },
+    {
+      "name": "modify_equipment",
+      "description": "Move, rename, or destructively remove an existing mounted device or child sub-module in the active rack, recalculate 3D cable splines, and re-run 5-stage validation. 'instance_id' resolves across top-level devices and carrier sub-modules, and required fields depend on 'action': 'move' updates 'u_position' and 'face' on rackmount gear or 'slot_id' and optional 'parent_carrier_id' across carriers for sub-modules with primary fields taking precedence over 'new_*' aliases, 'rename' updates or clears 'hostname', and 'remove' cascades to child sub-modules plus attached cables and external endpoints when 'remove_connected_cables' is true. Pushes the prior state onto the undo stack and updates rack.yaml atomically, or returns status 'INVALID' without mutating state when 'instance_id' or a target carrier is unknown. Use to update or delete a mounted instance; use mount_equipment to add new hardware, or disconnect_cables to remove cables while keeping devices mounted.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "instance_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "description": "Existing mounted device or child sub-module instance_id to modify."
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "move",
+              "rename",
+              "remove"
+            ],
+            "description": "Modification operation: \"move\" relocates a device, \"rename\" updates its hostname, and \"remove\" deletes the device instance."
+          },
+          "u_position": {
+            "description": "New 1-indexed U position when action is \"move\" on a direct rackmount device (takes precedence over new_u_position).",
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 60
+          },
+          "new_u_position": {
+            "description": "Optional alias for u_position when action is \"move\".",
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 60
+          },
+          "face": {
+            "description": "New mounting face (\"front\" or \"rear\") when action is \"move\" on a rackmount device (takes precedence over new_face).",
+            "type": "string",
+            "enum": [
+              "front",
+              "rear"
+            ]
+          },
+          "new_face": {
+            "description": "Optional alias for face when action is \"move\".",
+            "type": "string",
+            "enum": [
+              "front",
+              "rear"
+            ]
+          },
+          "parent_carrier_id": {
+            "description": "Target parent carrier instance_id when action is \"move\" on a child sub-module.",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "slot_id": {
+            "description": "Target slot_id inside parent_carrier_id when action is \"move\" on a child sub-module.",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "hostname": {
+            "description": "New logical hostname when action is \"rename\" (takes precedence over new_hostname).",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160
+          },
+          "new_hostname": {
+            "description": "Optional alias for hostname when action is \"rename\".",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160
+          },
+          "remove_connected_cables": {
+            "default": true,
+            "description": "When action is \"remove\", whether to automatically disconnect all cables and external endpoints attached to the removed device (default: true).",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "instance_id",
+          "action"
+        ]
+      }
+    },
+    {
+      "name": "connect_cables",
+      "description": "Connect or update a batch of up to 128 power and network cables between mounted device ports in the active rack, computing 3D Catmull-Rom splines, commercial length bins, and PoE or power budgets. Each entry in 'cables[]' upserts in place by 'cable_id' while leaving all other cables and mounted equipment untouched, pushes a recoverable undo snapshot, and persists rack.yaml atomically; port, speed, PoE, or clearance violations return status 'INVALID' with remediation_suggestions instead of throwing. Within each cable, endpoint 'face' is required only on pass-through couplers such as patch panels exposing identical 'port_id' values on both faces, 'preferred_portal_u' applies only to front-to-rear transitions, and 'vlan_id' or 'ip_cidr' annotate logical network links. Use when both endpoint devices are mounted inside the rack; use disconnect_cables to remove cables, or plan_external_endpoints to terminate incoming building cable drops on a patch panel.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "cables": {
+            "minItems": 1,
+            "maxItems": 128,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "cable_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "description": "Unique identifier for the cable connection."
+                },
+                "from": {
+                  "type": "object",
+                  "properties": {
+                    "instance_id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 100,
+                      "description": "Target device instance_id (top-level or child sub-module)."
+                    },
+                    "port_id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128,
+                      "description": "Target port_id on the device."
+                    },
+                    "face": {
+                      "description": "Explicit rack face selector (used to distinguish front vs rear connections on passthrough couplers).",
+                      "type": "string",
+                      "enum": [
+                        "front",
+                        "rear"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "instance_id",
+                    "port_id"
+                  ],
+                  "description": "Source or destination port endpoint of a physical cable."
+                },
+                "to": {
+                  "type": "object",
+                  "properties": {
+                    "instance_id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 100,
+                      "description": "Target device instance_id (top-level or child sub-module)."
+                    },
+                    "port_id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128,
+                      "description": "Target port_id on the device."
+                    },
+                    "face": {
+                      "description": "Explicit rack face selector (used to distinguish front vs rear connections on passthrough couplers).",
+                      "type": "string",
+                      "enum": [
+                        "front",
+                        "rear"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "instance_id",
+                    "port_id"
+                  ],
+                  "description": "Source or destination port endpoint of a physical cable."
+                },
+                "cable_type": {
+                  "type": "string",
+                  "enum": [
+                    "cat6a",
+                    "cat6a-angled",
+                    "cat6",
+                    "cat6-angled",
+                    "cat5e",
+                    "cat5e-angled",
+                    "sfp-plus-dac",
+                    "sfp-plus-dac-angled",
+                    "fiber-lc-duplex",
+                    "fiber-lc-duplex-angled",
+                    "rj45-serial-rollover",
+                    "rj45-serial-rollover-angled",
+                    "power-c13-c14",
+                    "power-c13-c14-angled",
+                    "power-schuko-c13",
+                    "power-schuko-c13-angled",
+                    "power-dc-5525",
+                    "power-dc-5525-angled",
+                    "power-usb-c",
+                    "power-usb-c-angled"
+                  ],
+                  "description": "Standardized physical cable and connector assembly type."
+                },
+                "color_hex": {
+                  "default": "#3B82F6",
+                  "description": "Hex color code for 2D/3D cable visualization.",
+                  "type": "string",
+                  "pattern": "^#[0-9A-Fa-f]{6}$"
+                },
+                "label": {
+                  "description": "Optional cable label or circuit tag.",
+                  "type": "string",
+                  "maxLength": 240
+                },
+                "vlan_id": {
+                  "description": "Optional IEEE 802.1Q primary VLAN ID carried on this link (1..4094).",
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 4094
+                },
+                "ip_cidr": {
+                  "description": "Optional IPv4/IPv6 subnet or interface CIDR annotation (e.g. \"10.10.20.0/24\").",
+                  "type": "string",
+                  "maxLength": 64
+                },
+                "preferred_portal_u": {
+                  "description": "Optional 1-indexed U hint for front-to-rear cable portal routing.",
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 60
+                },
+                "routing_mode": {
+                  "description": "Optional routing strategy override: defaults to shortest-direct (shortest collision-free path); set to left-duct or right-duct only when the user explicitly requests routing via a side cable duct.",
+                  "default": "shortest-direct",
+                  "type": "string",
+                  "enum": [
+                    "shortest-direct",
+                    "left-duct",
+                    "right-duct"
+                  ]
+                }
+              },
+              "required": [
+                "cable_id",
+                "from",
+                "to",
+                "cable_type"
+              ],
+              "description": "Point-to-point physical cable connection between two ports."
+            },
+            "description": "Batch of one or more cable connections to upsert by cable_id, route in 3D, and validate (max 128 per call)."
+          }
+        },
+        "required": [
+          "cables"
+        ]
+      }
+    },
+    {
+      "name": "disconnect_cables",
+      "description": "Remove specific cables by identifier or strip all cables attached to a mounted device or modular carrier from the active rack, then re-evaluate PoE budgets and plug clearances. Supply a non-empty 'cable_ids' list, 'instance_id', or both to disconnect their union; 'instance_id' matches both 'from' and 'to' endpoints across a carrier and its child sub-modules while leaving external patch-panel drops intact, whereas omitting both or passing only an empty list returns status 'INVALID' with a PORT_NOT_FOUND issue and zero mutations. Valid calls push an undo snapshot, persist rack.yaml atomically, and return removed IDs, remaining cable count, and updated validation results, succeeding idempotently when targeted IDs are already absent. Use when rewiring ports while keeping hardware mounted; use connect_cables to add or replace cables, or modify_equipment with action 'remove' to delete a device and its cables.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "cable_ids": {
+            "description": "Specific cable_id values to disconnect (can be combined with instance_id; at least one of cable_ids or instance_id must be provided).",
+            "maxItems": 512,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          "instance_id": {
+            "description": "Mounted device or modular-carrier instance_id whose attached cables (including child sub-module cables) should all be disconnected.",
+            "type": "string",
+            "maxLength": 100
+          }
+        }
+      }
+    },
+    {
+      "name": "plan_external_endpoints",
+      "description": "Terminate external building or room cable drops onto the rear RJ45 ports of a mounted patch panel without consuming rack U slots, and optionally auto-create labeled Cat6A front patch cables to a mounted switch. 'groups[]' batch-generates drops first—with 'custom_labels[]' overriding numbered 'label_prefix' entries per index—followed by 'endpoints[]', allocating sequential free rear ports from 'start_port_number' and sequential free switch RJ45 ports from 'auto_connect_switch_start_port'. Setting 'clear_existing' destructively removes prior external drops on 'patch_panel_instance_id' and their front patch cables before allocation, while unmounted patch-panel or switch IDs return status 'INVALID' without mutating state. Use for off-rack building wiring entering the enclosure; never mount room endpoints via mount_equipment, and use connect_cables for purely internal rack-to-rack links.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "patch_panel_instance_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "description": "Mounted patch panel instance_id whose rear ports receive the incoming building cable drops."
+          },
+          "start_port_number": {
+            "description": "1-indexed starting port number on the patch panel (defaults to next free rear port or 1).",
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 256
+          },
+          "entry_position": {
+            "default": "top-rear",
+            "description": "Rear building cable conduit entry point into the rack frame.",
+            "type": "string",
+            "enum": [
+              "top-rear",
+              "bottom-rear"
+            ]
+          },
+          "groups": {
+            "description": "Batch groups of external drops (e.g., 10x PoE cameras, 5x Wi-Fi APs, 5x room LAN outlets).",
+            "maxItems": 24,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id_prefix": {
+                  "description": "Optional ID prefix for generated endpoints (e.g., \"cam\", \"ap\", \"room\").",
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 64
+                },
+                "label_prefix": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 160,
+                  "description": "Human-readable label prefix (e.g., \"Kamera\", \"WLAN Access Point\", \"Raum LAN\")."
+                },
+                "custom_labels": {
+                  "description": "Optional per-item custom labels overriding numbered prefix (e.g., [\"Büro – PC\", \"Heimkino – Beamer\", \"Studio – Workstation\"]).",
+                  "maxItems": 96,
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  }
+                },
+                "category": {
+                  "default": "other-lan",
+                  "type": "string",
+                  "enum": [
+                    "poe-camera",
+                    "wifi-ap",
+                    "wall-outlet-pc",
+                    "projector-media",
+                    "workstation-dock",
+                    "iot-controller",
+                    "isp-wan-uplink",
+                    "other-lan"
+                  ],
+                  "description": "Physical category of an external building or room drop entering the rack from outside."
+                },
+                "room_or_zone": {
+                  "description": "Building zone or room name (e.g., \"Außenbereich\", \"EG Wohnzimmer\", \"Wohnräume\").",
+                  "type": "string",
+                  "maxLength": 160
+                },
+                "count": {
+                  "default": 1,
+                  "description": "Number of external cable drops in this group (1..96).",
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 96
+                },
+                "poe_draw_watts": {
+                  "default": 0,
+                  "description": "PoE power draw in watts per drop (0 for standard LAN; e.g., 9 for PoE camera, 18 for Wi-Fi AP).",
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 200
+                },
+                "required_speed": {
+                  "default": "1gbe",
+                  "description": "Required Ethernet link speed for the external room/device drop.",
+                  "type": "string",
+                  "enum": [
+                    "100m",
+                    "1gbe",
+                    "2.5gbe",
+                    "10gbe"
+                  ]
+                },
+                "color_hex": {
+                  "description": "Hex color code for this group of cables (defaults to category color if omitted).",
+                  "type": "string",
+                  "pattern": "^#[0-9A-Fa-f]{6}$"
+                },
+                "vlan_id": {
+                  "description": "Optional IEEE 802.1Q VLAN ID assigned to this group.",
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 4094
+                }
+              },
+              "required": [
+                "label_prefix"
+              ]
+            }
+          },
+          "endpoints": {
+            "description": "Individual external building/room drops to terminate on the rear of the patch panel.",
+            "maxItems": 128,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "endpoint_id": {
+                  "description": "Optional explicit endpoint_id (auto-generated if omitted).",
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 100
+                },
+                "label": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200,
+                  "description": "Human-readable label for this room/device drop (e.g., \"Kamera 1 – Einfahrt\")."
+                },
+                "category": {
+                  "default": "other-lan",
+                  "type": "string",
+                  "enum": [
+                    "poe-camera",
+                    "wifi-ap",
+                    "wall-outlet-pc",
+                    "projector-media",
+                    "workstation-dock",
+                    "iot-controller",
+                    "isp-wan-uplink",
+                    "other-lan"
+                  ],
+                  "description": "Physical category of an external building or room drop entering the rack from outside."
+                },
+                "room_or_zone": {
+                  "description": "Optional building zone or room name.",
+                  "type": "string",
+                  "maxLength": 160
+                },
+                "poe_draw_watts": {
+                  "default": 0,
+                  "description": "Required PoE power draw in watts (0 for non-PoE LAN).",
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 200
+                },
+                "required_speed": {
+                  "default": "1gbe",
+                  "description": "Required Ethernet link speed for the external room/device drop.",
+                  "type": "string",
+                  "enum": [
+                    "100m",
+                    "1gbe",
+                    "2.5gbe",
+                    "10gbe"
+                  ]
+                },
+                "patch_panel_port_id": {
+                  "description": "Optional explicit patch panel port_id (e.g., \"p1\"); auto-assigned sequentially if omitted.",
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                "color_hex": {
+                  "description": "Optional hex color code for this drop and its front patch cable.",
+                  "type": "string",
+                  "pattern": "^#[0-9A-Fa-f]{6}$"
+                },
+                "vlan_id": {
+                  "description": "Optional VLAN ID (1..4094).",
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 4094
+                },
+                "notes": {
+                  "description": "Optional installation notes.",
+                  "type": "string",
+                  "maxLength": 1000
+                }
+              },
+              "required": [
+                "label"
+              ]
+            }
+          },
+          "auto_connect_switch_instance_id": {
+            "description": "Optional switch instance_id to automatically patch from the front of the patch panel using labeled Cat6A cables.",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "auto_connect_switch_start_port": {
+            "default": 1,
+            "description": "1-indexed starting Ethernet port number on auto_connect_switch_instance_id (e.g., 1 for eth1).",
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 256
+          },
+          "clear_existing": {
+            "default": false,
+            "description": "If true, destructively clears existing external_endpoints (and their front patch cables) on patch_panel_instance_id before planning.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "patch_panel_instance_id"
+        ]
+      }
+    },
+    {
+      "name": "validate_rack",
+      "description": "Inspect the active rack.yaml state and run all 5 deterministic validation stages covering mechanical bounds, 3D depth and plug clearances, PoE and power budgets, cable compatibility, and thermal limits. Takes no parameters, performs zero state or undo-stack mutations, and returns the ASCII front and rear elevation diagram, power utilization summary, and all diagnostic issues with remediation_suggestions. Sets status to 'INVALID' instead of throwing whenever any validation ERROR is present. Use to inspect currently mounted equipment or verify zero errors before exporting; use export_deliverables instead to generate SVG, BOM, GLB, or 3D-print files.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "export_deliverables",
+      "description": "Generate 2D elevation and wiring SVGs, a Markdown BOM, a binary 3D GLB scene, parametric OpenSCAD or watertight STL 3D-print models, and optional printable cable-label sheets for the active rack project. Omitting 'formats' exports the six standard deliverables whereas adding 'labels-csv' or 'labels-svg' generates Brother/DYMO wrap-around cable labels; 'carrier-scad' and 'carrier-stl' emit one file per mounted modular carrier, switch cradle, or printable cover panel, and 'output_dir' resolves relative paths within the project directory. Local stdio execution writes deterministic filenames—elevation.svg, wiring-schematic.svg, BOM.md, rack-scene.glb, labels.csv, labels.svg, and <slug>.scad or <slug>.stl—overwriting same-named files in place, whereas hosted remote sessions stream in-memory HTTPS download URLs; neither mode mutates rack state or undo history. Use after validate_rack confirms a valid layout; use validate_rack instead for read-only validation and ASCII elevation inspection without generating export files.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "formats": {
+            "default": [
+              "elevation-svg",
+              "wiring-svg",
+              "bom-md",
+              "scene-glb",
+              "carrier-scad",
+              "carrier-stl"
+            ],
+            "description": "Deliverable formats to generate and write to disk (defaults to the 6 standard CAD/BOM formats; optionally include \"labels-csv\" or \"labels-svg\" for printable cable labels, and carrier-scad/carrier-stl emit files when modular carriers are mounted).",
+            "maxItems": 8,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "elevation-svg",
+                "wiring-svg",
+                "bom-md",
+                "scene-glb",
+                "carrier-scad",
+                "carrier-stl",
+                "labels-csv",
+                "labels-svg"
+              ]
+            }
+          },
+          "output_dir": {
+            "description": "Optional target filesystem directory for generated files in local stdio mode (defaults to the directory of the active rack.yaml file; ignored on hosted remote MCP servers where HTTPS download URLs are returned instead).",
+            "type": "string",
+            "maxLength": 512
+          }
+        }
+      }
+    },
+    {
+      "name": "undo_redo",
+      "description": "Traverse the per-project in-memory history ring buffer of up to 50 snapshots to revert the latest rack mutation or reapply a reverted mutation, updating rack.yaml atomically. Setting 'action' to 'undo' steps backward across rack-state mutations—excluding catalog-only define_custom_blueprint calls and read-only tools—and pushes the displaced state onto the redo stack, whereas 'redo' is available only immediately after 'undo' because any new rack mutation flushes the redo stack. Calling either action when its target stack is empty is a safe no-op returning applied=false without throwing. Use to roll back an unintended batch change or accidental init_rack reset; use modify_equipment or disconnect_cables instead to edit specific items without reverting intermediate steps.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "undo",
+              "redo"
+            ],
+            "description": "History traversal direction: \"undo\" reverts the most recent state mutation, \"redo\" reapplies a reverted mutation."
+          }
+        },
+        "required": [
+          "action"
+        ]
+      }
+    },
+    {
+      "name": "optimize_rack",
+      "description": "Deterministically optimize top-level rackmount equipment U positions and rear PDU face assignments to eliminate chassis or plug-clearance collisions, lower the vertical Center of Gravity below 0.50, preserve mid-height front-to-rear cable portals, and minimize 3D cable arc lengths. Evaluates candidate zoned and locally refined layouts against the full 3D geometry, 5-stage validation, and Catmull-Rom routing engines while keeping carrier sub-modules inside their parent bays, keeping existing cables and external endpoints intact, and locking any devices or parent carriers named in 'pin_instance_ids'. Only commits a strictly improving, non-regressing layout to rack.yaml and pushes an undo snapshot when at least one device moves, making repeated calls safely idempotent. Use when a rack has collisions, top-heavy warnings, or unclustered patch cabling; use modify_equipment instead to move a single device to an explicit U slot.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "pin_instance_ids": {
+            "description": "Optional list of mounted device or child sub-module instance_id values whose current U position and rack face must remain locked during optimization.",
+            "maxItems": 120,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            }
+          }
+        }
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "io.github.itAlex240/rack-architect-mcp",
+    "version": "1.0.1",
+    "remoteUrl": "https://mcp.rackarchitect.dev/mcp",
+    "publishedAt": "2026-11-24T00:38:48.7973Z",
+    "fetchedAt": "2026-11-24T12:15:48.059Z",
+    "toolsSha256": "b3ad275d68174166799fd4f035f1a9bcf163e08a9d05123607598197ca3de6af"
+  }
+}

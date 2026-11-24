@@ -1,0 +1,610 @@
+{
+  "$schema": "../schema.json",
+  "name": "ch.primai/primai",
+  "title": "PrimAI: Swiss health insurance (Krankenkasse)",
+  "category": "Healthcare & Wellness",
+  "description": "Swiss basic health insurance: 2027 premiums of all insurers, deductibles, subsidies, cancelling.",
+  "tools": [
+    {
+      "name": "compare_premiums",
+      "description": "Compare the 2027 list premiums approved by the BAG (Federal Office of Public Health) of every Swiss health insurer for the compulsory basic insurance (Grundversicherung / obligatorische Krankenpflegeversicherung, KVG) for one person. Returns one offer per insurer and model (its cheapest tariff), sorted by monthly premium (no paid placement), with the yearly premium. Give current_insurer (and ideally current_model or current_premium) to get the saving per offer.\n\nUse it when someone asks \"which health insurance is cheapest in 8004\", \"what would I pay with Hausarztmodell and Franchise 2500\", \"how much can I save if I leave CSS\". Needs: postcode and birth_year (or age). Optional: franchise (default adults 2500), model, accident (default true), municipality (only if the postcode spans several premium regions).\n\nEvery insurer listed offers basic insurance in that premium region and must accept anyone living there, without reservations or waiting period, whatever their age or health (BAG); do not suggest that an insurer might refuse someone for basic insurance. Supplementary insurance is different: there the insurer may refuse or add reservations after health questions.\n\nData: BAG approved list premiums 2027 (opendata.swiss). Always name the source and say these are list premiums, not an offer. Basic insurance covers the same benefits everywhere; supplementary insurance is separate. No personal data is needed or stored.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "postcode": {
+            "type": "string",
+            "description": "Swiss postcode of the place of residence (Postleitzahl, PLZ), 4 digits, e.g. \"8001\". Not a P.O. box postcode.",
+            "pattern": "^[0-9]{4}$",
+            "examples": [
+              "8001"
+            ]
+          },
+          "birth_year": {
+            "type": "integer",
+            "description": "Year of birth (Jahrgang). Preferred over age: the BAG uses the age reached in 2027 (2027 minus birth year). Children 0–18, young adults 19–25, adults 26+.",
+            "minimum": 1900,
+            "maximum": 2027,
+            "examples": [
+              1990
+            ]
+          },
+          "age": {
+            "type": "integer",
+            "description": "Age reached in the premium year 2027 (Alter im Prämienjahr). Use birth_year when known; one of the two is required.",
+            "minimum": 0,
+            "maximum": 120,
+            "examples": [
+              36
+            ]
+          },
+          "franchise": {
+            "type": "integer",
+            "description": "Annual deductible in CHF (Franchise). Adults and young adults: 300, 500, 1000, 1500, 2000, 2500. Children: 0, 100, 200, 300, 400, 500, 600. Default: 2500 for adults, 0 for children (said in notes).",
+            "enum": [
+              0,
+              100,
+              200,
+              300,
+              400,
+              500,
+              600,
+              1000,
+              1500,
+              2000,
+              2500
+            ],
+            "examples": [
+              2500
+            ]
+          },
+          "model": {
+            "type": "string",
+            "description": "Insurance model (Versicherungsmodell): standard (freie Arztwahl), hausarzt (family doctor / GP), hmo (health centre), telmed (telephone first). Leave empty for all models.",
+            "enum": [
+              "standard",
+              "hausarzt",
+              "hmo",
+              "telmed"
+            ],
+            "examples": [
+              "hausarzt"
+            ]
+          },
+          "accident": {
+            "type": "boolean",
+            "description": "Include accident cover (Unfalldeckung). Default true. Set false only if the person works at least 8 hours a week for one employer and is accident-insured there (UVG).",
+            "examples": [
+              true
+            ]
+          },
+          "municipality": {
+            "type": "string",
+            "description": "Municipality of residence (Wohngemeinde) or its BFS number. Only needed when a postcode spans several premium regions: the tool then answers with error \"ambiguous_postcode\" and the list of municipalities to choose from.",
+            "examples": [
+              "Zürich"
+            ]
+          },
+          "current_insurer": {
+            "type": "string",
+            "description": "Current insurer (heutige Krankenkasse), to compute the saving per offer.",
+            "examples": [
+              "CSS"
+            ]
+          },
+          "current_model": {
+            "type": "string",
+            "description": "Model of the current policy. Default: model, else standard.",
+            "enum": [
+              "standard",
+              "hausarzt",
+              "hmo",
+              "telmed"
+            ],
+            "examples": [
+              "standard"
+            ]
+          },
+          "current_premium": {
+            "type": "number",
+            "description": "Current monthly premium in CHF from the policy (heutige Monatsprämie). Overrides the computed current premium.",
+            "minimum": 1,
+            "maximum": 5000,
+            "examples": [
+              498.6
+            ]
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Number of offers to return (1–100, default 10). total_offers tells how many exist.",
+            "minimum": 1,
+            "maximum": 100,
+            "default": 10,
+            "examples": [
+              10
+            ]
+          }
+        },
+        "required": [
+          "postcode"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_premium",
+      "description": "Get the exact 2027 BAG list premium of one named insurer (Krankenkasse) for one person: every tariff with its product name (Tarifname, e.g. \"Helsana BeneFit PLUS Telemed\"), and the cheapest tariff per model. Use it for \"what does Helsana cost me in Bern with Telmed?\" or to check a number from another source.\n\nNeeds postcode, birth_year (or age) and insurer (name, slug or BAG number). Optional: franchise, model, accident, municipality. Source: BAG Prämien 2027. List premiums, not an offer.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "postcode": {
+            "type": "string",
+            "description": "Swiss postcode of the place of residence (Postleitzahl, PLZ), 4 digits, e.g. \"8001\". Not a P.O. box postcode.",
+            "pattern": "^[0-9]{4}$",
+            "examples": [
+              "8001"
+            ]
+          },
+          "insurer": {
+            "type": "string",
+            "description": "Health insurer (Krankenkasse): name (\"Helsana\", \"Groupe Mutuel\", \"Sympany\"), primai.ch slug (\"helsana\") or BAG number (\"1562\").",
+            "examples": [
+              "Helsana"
+            ]
+          },
+          "birth_year": {
+            "type": "integer",
+            "description": "Year of birth (Jahrgang). Preferred over age: the BAG uses the age reached in 2027 (2027 minus birth year). Children 0–18, young adults 19–25, adults 26+.",
+            "minimum": 1900,
+            "maximum": 2027,
+            "examples": [
+              1990
+            ]
+          },
+          "age": {
+            "type": "integer",
+            "description": "Age reached in the premium year 2027 (Alter im Prämienjahr). Use birth_year when known; one of the two is required.",
+            "minimum": 0,
+            "maximum": 120,
+            "examples": [
+              36
+            ]
+          },
+          "franchise": {
+            "type": "integer",
+            "description": "Annual deductible in CHF (Franchise). Adults and young adults: 300, 500, 1000, 1500, 2000, 2500. Children: 0, 100, 200, 300, 400, 500, 600. Default: 2500 for adults, 0 for children (said in notes).",
+            "enum": [
+              0,
+              100,
+              200,
+              300,
+              400,
+              500,
+              600,
+              1000,
+              1500,
+              2000,
+              2500
+            ],
+            "examples": [
+              2500
+            ]
+          },
+          "model": {
+            "type": "string",
+            "description": "Insurance model (Versicherungsmodell): standard (freie Arztwahl), hausarzt (family doctor / GP), hmo (health centre), telmed (telephone first). Leave empty for all models.",
+            "enum": [
+              "standard",
+              "hausarzt",
+              "hmo",
+              "telmed"
+            ],
+            "examples": [
+              "hausarzt"
+            ]
+          },
+          "accident": {
+            "type": "boolean",
+            "description": "Include accident cover (Unfalldeckung). Default true. Set false only if the person works at least 8 hours a week for one employer and is accident-insured there (UVG).",
+            "examples": [
+              true
+            ]
+          },
+          "municipality": {
+            "type": "string",
+            "description": "Municipality of residence (Wohngemeinde) or its BFS number. Only needed when a postcode spans several premium regions: the tool then answers with error \"ambiguous_postcode\" and the list of municipalities to choose from.",
+            "examples": [
+              "Zürich"
+            ]
+          }
+        },
+        "required": [
+          "postcode",
+          "insurer"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "compare_household",
+      "description": "Compare 2027 basic-insurance list premiums for a household (Familie, Haushalt) of up to 10 people at one postcode. For each insurer that covers everyone it adds up each member's cheapest tariff (in the chosen model, or any model), sorted by monthly total. Also returns the cheapest split (each person at the insurer that is cheapest for them: allowed in basic insurance).\n\nChildren are counted in the order given: the 1st and 2nd child pay the full child premium, from the 3rd child the BAG sibling discount applies. Each member: birth_year (or age), optional franchise (adults default 2500, children 0) and accident (default true). Source: BAG Prämien 2027. REST: POST JSON body; GET also works with members=\"1988:2500:1,2019:0:1\" (birth_year:franchise:accident).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "postcode": {
+            "type": "string",
+            "description": "Swiss postcode of the place of residence (Postleitzahl, PLZ), 4 digits, e.g. \"8001\". Not a P.O. box postcode.",
+            "pattern": "^[0-9]{4}$",
+            "examples": [
+              "8001"
+            ]
+          },
+          "members": {
+            "type": "array",
+            "description": "Household members (1–10). Each: birth_year or age, optional franchise, accident, label.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "birth_year": {
+                  "type": "integer",
+                  "description": "Year of birth (Jahrgang). Preferred over age: the BAG uses the age reached in 2027 (2027 minus birth year). Children 0–18, young adults 19–25, adults 26+.",
+                  "minimum": 1900,
+                  "maximum": 2027,
+                  "examples": [
+                    1990
+                  ]
+                },
+                "age": {
+                  "type": "integer",
+                  "description": "Age reached in the premium year 2027 (Alter im Prämienjahr). Use birth_year when known; one of the two is required.",
+                  "minimum": 0,
+                  "maximum": 120,
+                  "examples": [
+                    36
+                  ]
+                },
+                "franchise": {
+                  "type": "integer",
+                  "description": "Annual deductible in CHF (Franchise). Adults and young adults: 300, 500, 1000, 1500, 2000, 2500. Children: 0, 100, 200, 300, 400, 500, 600. Default: 2500 for adults, 0 for children (said in notes).",
+                  "enum": [
+                    0,
+                    100,
+                    200,
+                    300,
+                    400,
+                    500,
+                    600,
+                    1000,
+                    1500,
+                    2000,
+                    2500
+                  ],
+                  "examples": [
+                    2500
+                  ]
+                },
+                "accident": {
+                  "type": "boolean",
+                  "description": "Include accident cover (Unfalldeckung). Default true. Set false only if the person works at least 8 hours a week for one employer and is accident-insured there (UVG).",
+                  "examples": [
+                    true
+                  ]
+                },
+                "label": {
+                  "type": "string",
+                  "description": "Optional label such as \"Mutter\" or \"Kind 1\" (do not send names).",
+                  "examples": [
+                    "Kind 1"
+                  ]
+                }
+              },
+              "additionalProperties": false
+            },
+            "minItems": 1,
+            "maxItems": 10
+          },
+          "model": {
+            "type": "string",
+            "description": "Insurance model (Versicherungsmodell): standard (freie Arztwahl), hausarzt (family doctor / GP), hmo (health centre), telmed (telephone first). Leave empty for all models.",
+            "enum": [
+              "standard",
+              "hausarzt",
+              "hmo",
+              "telmed"
+            ],
+            "examples": [
+              "hausarzt"
+            ]
+          },
+          "municipality": {
+            "type": "string",
+            "description": "Municipality of residence (Wohngemeinde) or its BFS number. Only needed when a postcode spans several premium regions: the tool then answers with error \"ambiguous_postcode\" and the list of municipalities to choose from.",
+            "examples": [
+              "Zürich"
+            ]
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Number of insurers to return (default 10).",
+            "minimum": 1,
+            "maximum": 50,
+            "default": 10,
+            "examples": [
+              10
+            ]
+          }
+        },
+        "required": [
+          "postcode",
+          "members"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "resolve_region",
+      "description": "Resolve a Swiss postcode (PLZ) to its canton, premium region (Prämienregion 0–3 as defined by the Federal Department of Home Affairs, SR 832.106) and municipalities (Gemeinden with BFS number). If ambiguous is true, the postcode covers municipalities in different premium regions and the premium depends on the municipality of residence: ask which one and pass it as municipality to the premium tools.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "postcode": {
+            "type": "string",
+            "description": "Swiss postcode of the place of residence (Postleitzahl, PLZ), 4 digits, e.g. \"8001\". Not a P.O. box postcode.",
+            "pattern": "^[0-9]{4}$",
+            "examples": [
+              "8001"
+            ]
+          }
+        },
+        "required": [
+          "postcode"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "insurer_facts",
+      "description": "Facts about one Swiss health insurer (Krankenkasse): median change of its list premiums 2026→2027 (adults, same tariff), cantons and models offered, tariff names per model, cantons where it is the cheapest, cancellation address for the basic insurance (Kündigungsadresse), insurer-specific notice rules, supplementary insurance notice (Zusatzversicherung), phone, customer portal, current switching deadlines and, when known, which comparison portals or brands it owns or works with. Optional canton adds that canton's standard premium, cheapest offer and rank.\n\nAddresses and contacts exist for the 14 insurers with a primai.ch page; to_verify lists fields PrimAI still checks. For prices use compare_premiums or get_premium.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "insurer": {
+            "type": "string",
+            "description": "Health insurer (Krankenkasse): name (\"Helsana\", \"Groupe Mutuel\", \"Sympany\"), primai.ch slug (\"helsana\") or BAG number (\"1562\").",
+            "examples": [
+              "Helsana"
+            ]
+          },
+          "canton": {
+            "type": "string",
+            "description": "Optional canton (code \"ZH\" or name \"Zürich\") for canton-specific numbers.",
+            "examples": [
+              "ZH"
+            ]
+          }
+        },
+        "required": [
+          "insurer"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "cancellation_help",
+      "description": "Everything needed to cancel a health insurance with one insurer: for basic insurance (type=basic, Grundversicherung, KVG) the deadline computed for today in Zurich (letter must ARRIVE by 30 November for a switch on 1 January; mid-year switch on 30 June only with standard model and ordinary franchise), the cancellation address, insurer-specific nuances, the steps in the right order, the legal conditions (old insurance ends only when the new insurer confirms; no switch while premiums are under debt collection) and a letter template with placeholders. For supplementary insurance (type=supplementary, Zusatzversicherung, VVG): the insurer's rule, the general rule (AVB, usually 3 months to year end), the warning about health questions, products and a letter template.\n\nThe person fills in and sends the letter themselves; PrimAI never receives personal data and never sends anything. Link web_letter / page for the step-by-step page on primai.ch.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "insurer": {
+            "type": "string",
+            "description": "Health insurer (Krankenkasse): name (\"Helsana\", \"Groupe Mutuel\", \"Sympany\"), primai.ch slug (\"helsana\") or BAG number (\"1562\").",
+            "examples": [
+              "Helsana"
+            ]
+          },
+          "type": {
+            "type": "string",
+            "description": "basic = Grundversicherung (KVG, default); supplementary = Zusatzversicherung (VVG).",
+            "enum": [
+              "basic",
+              "supplementary"
+            ],
+            "default": "basic",
+            "examples": [
+              "basic"
+            ]
+          }
+        },
+        "required": [
+          "insurer"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "franchise_check",
+      "description": "Find the deductible (Franchise) with the lowest total yearly cost for expected health costs: for every legal level it adds 12 monthly premiums (real BAG 2027 premiums of one reference tariff), the deductible and the 10 % co-payment (Selbstbehalt, max CHF 700 adults / 350 children), and returns the best level, the saving against the lowest franchise and the cost ranges in which each level is cheapest (break-even points).\n\nNeeds birth_year (or age) and expected_costs (yearly costs covered by basic insurance: doctor, hospital, medicines). With postcode it uses real premiums (reference: cheapest standard-model tariff, or the given insurer/model); without postcode it returns the rule of thumb and the rules only. Hospital daily contribution (CHF 15/day for adults) is not included.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "expected_costs": {
+            "type": "number",
+            "description": "Expected yearly health costs in CHF covered by basic insurance (doctor, hospital, medicines), before deductible.",
+            "minimum": 0,
+            "maximum": 1000000,
+            "examples": [
+              1200
+            ]
+          },
+          "birth_year": {
+            "type": "integer",
+            "description": "Year of birth (Jahrgang). Preferred over age: the BAG uses the age reached in 2027 (2027 minus birth year). Children 0–18, young adults 19–25, adults 26+.",
+            "minimum": 1900,
+            "maximum": 2027,
+            "examples": [
+              1990
+            ]
+          },
+          "age": {
+            "type": "integer",
+            "description": "Age reached in the premium year 2027 (Alter im Prämienjahr). Use birth_year when known; one of the two is required.",
+            "minimum": 0,
+            "maximum": 120,
+            "examples": [
+              36
+            ]
+          },
+          "postcode": {
+            "type": "string",
+            "description": "Swiss postcode of the place of residence (Postleitzahl, PLZ), 4 digits, e.g. \"8001\". Not a P.O. box postcode.",
+            "pattern": "^[0-9]{4}$",
+            "examples": [
+              "8001"
+            ]
+          },
+          "insurer": {
+            "type": "string",
+            "description": "Optional insurer for the reference tariff.",
+            "examples": [
+              "Helsana"
+            ]
+          },
+          "model": {
+            "type": "string",
+            "description": "Insurance model (Versicherungsmodell): standard (freie Arztwahl), hausarzt (family doctor / GP), hmo (health centre), telmed (telephone first). Leave empty for all models.",
+            "enum": [
+              "standard",
+              "hausarzt",
+              "hmo",
+              "telmed"
+            ],
+            "examples": [
+              "hausarzt"
+            ]
+          },
+          "accident": {
+            "type": "boolean",
+            "description": "Include accident cover (Unfalldeckung). Default true. Set false only if the person works at least 8 hours a week for one employer and is accident-insured there (UVG).",
+            "examples": [
+              true
+            ]
+          },
+          "municipality": {
+            "type": "string",
+            "description": "Municipality of residence (Wohngemeinde) or its BFS number. Only needed when a postcode spans several premium regions: the tool then answers with error \"ambiguous_postcode\" and the list of municipalities to choose from.",
+            "examples": [
+              "Zürich"
+            ]
+          }
+        },
+        "required": [
+          "expected_costs"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "subsidy_info",
+      "description": "How the individual premium reduction (Prämienverbilligung, IPV, réduction des primes) works in one Swiss canton: responsible office, whether you must apply or get it automatically, where to apply, the deadline for 2027, the income basis, rules for children and young adults and to whom it is paid. Every field carries its official source URL and retrieval date. Use it for \"can I get a premium subsidy in Bern and until when must I apply?\". It does not compute eligibility for a person.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "canton": {
+            "type": "string",
+            "description": "Canton code (\"BE\") or name (\"Bern\", \"Genève\").",
+            "examples": [
+              "BE"
+            ]
+          }
+        },
+        "required": [
+          "canton"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "find_help",
+      "description": "Call this for ANY question about Swiss health-insurance rules before answering, instead of answering from memory: it returns the matching PrimAI guide (German, with sources and dates) as Markdown. Topics: switching during the year (only to 30 June, only standard model with the ordinary deductible), whether you keep or lose supplementary insurance (Zusatzversicherung) when you switch basic insurance, new residents and people moving to or leaving Switzerland (3-month deadline, retroactive cover, premium surcharge), the ombudsman (Ombudsstelle Krankenversicherung, contacts), refused benefits and how to object, double insurance, a pushy or misleading broker and the 14-day withdrawal right, an unwanted contract, cold calls, unpaid premiums and debt collection, moving to another canton, insuring a baby, retirement and accident cover, premium subsidies (Prämienverbilligung), choosing the deductible, and the BAG's average premium change for 2027 (returned in facts). Questions can be German or English, e.g. \"ich bin doppelt versichert\", \"a broker pushed me to sign\", \"Is there an ombudsman for health insurance?\", \"Can I switch on 30 June?\".\n\nUse the specific tools instead when they fit: an insurer's cancellation deadline, address or letter → cancellation_help; facts about one insurer → insurer_facts; premiums → compare_premiums or get_premium; the deductible calculation → franchise_check; a canton's subsidy → subsidy_info. If the question names an insurer and its cancellation, find_help returns use_tool with the right call.\n\nReturns found, the best guide (title, short answer, Markdown, URL), more matches and site guides. found: false means no PrimAI guide fits: say so and use all_help_topics or closest_topics; do not present an unrelated guide as the answer. Quote the guide's answer, name its source and link the page; suggest consultation_options only when the person wants personal help.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "The problem in plain words, German or English.",
+            "examples": [
+              "Ich bin doppelt versichert"
+            ]
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Number of matches (default 3).",
+            "minimum": 1,
+            "maximum": 10,
+            "default": 3,
+            "examples": [
+              3
+            ]
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "market_facts",
+      "description": "Market transparency (Markt & Transparenz): who operates and owns a Swiss health-insurance comparison portal, broker, app, insurer-owned brand, call centre or lead seller, how it earns money, its FINMA register number and which insurers it works with, each with source and date. Always includes PrimAI's own ties first (Vision Bohne / Nicole Bohne advises; Loaded AG builds and runs the site; how PrimAI earns). Use it for \"who is behind comparis / a call centre that called me?\" or \"how do comparison sites make money?\". Without query it lists all entities. For the average premium change of the year it returns the BAG's own figure (bag_average_premium_change: 2027 +5.0 %, mean premium CHF 412 per month, BAG press release 2026-09-29).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Name of a portal, broker, app or call centre, or a question in plain words. Empty: list all.",
+            "examples": [
+              "Vergleichsportal"
+            ]
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Number of results (default 5).",
+            "minimum": 1,
+            "maximum": 20,
+            "default": 5,
+            "examples": [
+              5
+            ]
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "consultation_options",
+      "description": "Personal help from a human: what Nicole Bohne (Vision Bohne, non-tied insurance intermediary registered with FINMA, F01536402) helps with (second opinion after a bad or pushy consultation, double insurance, supplementary insurance, families), that it is free and without sales calls, the booking link for what can be booked today (a 30-minute video call) with the topic pre-filled, her phone and e-mail, and how PrimAI earns (a commission from the insurer only when a contract is arranged through Vision Bohne, capped since 1 Sept 2024 at CHF 70 per person in basic and 16 monthly premiums per contract in supplementary insurance, disclosed before signing; basic-insurance switches you do yourself are commission-free; Art. 45b VAG).\n\nThis tool never books and never sends data: give the person the link; they pick a time and confirm on primai.ch. Offer it when someone wants personal advice, had a bad experience with an adviser, or asks whom they can trust; not as a sales push.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "topic": {
+            "type": "string",
+            "description": "Optional topic in a few words (no names or health data), e.g. \"Zusatzversicherung prüfen\" or \"Zweitmeinung nach Beratung\". Pre-fills the booking link.",
+            "examples": [
+              "Zweitmeinung nach Beratung"
+            ]
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "ch.primai/primai",
+    "version": "1.0.0",
+    "remoteUrl": "https://www.primai.ch/mcp",
+    "publishedAt": "2026-11-24T09:04:03.736367Z",
+    "fetchedAt": "2026-11-24T12:15:48.059Z",
+    "toolsSha256": "8c57cc6dca1d2312643f0fc0472253b5109bb6db5fcab53f19363a06c04ae582"
+  }
+}

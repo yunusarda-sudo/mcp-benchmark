@@ -1,0 +1,445 @@
+{
+  "$schema": "../schema.json",
+  "name": "io.github.openaccountants/openaccountants",
+  "title": "OpenAccountants",
+  "category": "AI, LLMs & Agents",
+  "description": "Tax and VAT MCP server for Claude, ChatGPT and Cursor. Official sources, accountant approval shown.",
+  "repository": "https://github.com/openaccountants/openaccountants",
+  "tools": [
+    {
+      "name": "start",
+      "description": "Call this first for any tax, VAT/GST, payroll or filing question about a country or US state, such as \"how much tax will I pay in Spain\", \"do I need to register for VAT\", \"when is my tax return due\", \"is this deductible\", \"how is a freelancer or a company taxed in Germany\", \"sales tax in Texas\" or \"what changes if I move to Portugal\". Pass the user's question as `intent` and the country or US state as `jurisdiction` ('DE', 'US-TX', 'Florida'). If no place is named, start infers one when the question makes it clear and says so in `jurisdiction_source`. Returns the skills to read next (`skills_to_load`, open each with get_skill), or every skill for the place for you to choose from (`menu`), or what is still needed, usually the country. Covers 190+ jurisdictions; where no skill exists yet it returns a research_brief naming the official sources. Called with an empty intent (no question yet), it returns the topics and jurisdictions covered.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "intent": {
+            "type": "string",
+            "description": "The user's question or goal, in English; an empty string when there is no question yet. If the user wrote in another language, translate it and keep the local tax term in brackets, e.g. 'VAT return for a freelancer (btw-aangifte zzp)', 'small business VAT exemption (Kleinunternehmer)'."
+          },
+          "jurisdiction": {
+            "type": "string",
+            "description": "Country or US state: ISO 2-letter code, US state code or name (e.g. 'MT', 'GB', 'US-CA', 'Florida'). Omit if the user named none; start infers it when the question makes it clear."
+          },
+          "acting_as": {
+            "type": "string",
+            "enum": [
+              "self",
+              "client"
+            ],
+            "description": "Optional. Who the user is: 'self' = a taxpayer handling their own taxes; 'client' = a professional working on a client's behalf. Infer it from the conversation; omit it if unclear."
+          },
+          "reason": {
+            "type": "string",
+            "description": "One sentence, in the user's own words, on what they actually asked for here — captured only to improve routing. E.g. 'user sold ETH and wants to know what to report'. Optional but helpful."
+          },
+          "taxpayer_type": {
+            "type": "string",
+            "enum": [
+              "employee",
+              "self-employed",
+              "both",
+              "company",
+              "other"
+            ],
+            "description": "The taxpayer's occupation, when known. Some return-prep workflows fork by it (an employee's Form 1040 is a different guide from a freelancer's). Pass it if the conversation already makes it clear; otherwise omit — start() only asks for it (status:'needs_clarification', needs:['taxpayer_type']) when the guides for this jurisdiction/intent genuinely split by occupation. 'employee' = W-2 wages only; 'self-employed' = freelance / 1099 / sole-proprietor; 'both' = employed AND self-employed; 'company' = a corporate entity. Don't guess — ask the user one short question if unsure."
+          }
+        },
+        "required": [
+          "intent"
+        ]
+      }
+    },
+    {
+      "name": "search_skills",
+      "description": "Find or browse skills. With a `query`, finds the skill for a specific tax topic by keyword: a deduction, form, regime or rule such as 'home office deduction', 'Schedule C', 'reverse charge', 'crypto capital gains' or 'Beckham regime'. Without a query, lists the skills for a jurisdiction, domain or role (for example every skill for 'MT', or every 'payroll' skill), each with its current approval label, 100 at a time (limit up to 200; page with offset and next_offset). Optionally limit either to one jurisdiction or domain. Returns skill slugs to open with get_skill. Set content_type='method' to find step-by-step methods (run them via start), each tagged accountant-reviewed or built-from-the-law.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Search term in English, e.g. 'home office deduction', 'crypto capital gains', 'reverse charge'. If the user wrote in another language, translate it and add the local term, e.g. 'VAT return btw-aangifte'. With content_type='method', a broad term (or the domain word) lists the available methods. Omit it to list (browse) the skills for a jurisdiction, domain or role instead."
+          },
+          "jurisdiction": {
+            "type": "string",
+            "description": "Optional ISO 2-letter country code to limit the search"
+          },
+          "domain": {
+            "type": "string",
+            "description": "Optional accounting domain to limit the search (e.g. 'vat-gst', 'payroll', 'income-tax', 'financial-reporting', 'audit-assurance')."
+          },
+          "content_type": {
+            "type": "string",
+            "enum": [
+              "method",
+              "fact"
+            ],
+            "description": "What kind of skill to find. 'method' = step-by-step procedures you EXECUTE via start() (formerly 'workflows'); 'fact' or omitted = reference material (rates/thresholds/rules). A skill can be either or both."
+          },
+          "role": {
+            "type": "string",
+            "description": "Optional, when browsing: foundation, compute, orchestrator or reference."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "When browsing: skills per page (default 100, max 200)."
+          },
+          "offset": {
+            "type": "integer",
+            "description": "When browsing: skills to skip; pass next_offset from the previous page."
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "get_skill",
+      "description": "Open a skill by slug (from start, search_skills or search_rules) to answer the user's question. Returns the skill's rules and method, its quality tier, the named accountant where one reviewed it, a `section_index` of sections not inlined, and a provenance footer to keep with the answer. To read sections it did not inline, call it again with `sections` (their index numbers) or `all_sections: true`.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "slug": {
+            "type": "string",
+            "description": "Skill slug, e.g. 'us-schedule-c-and-se-computation'"
+          },
+          "reason": {
+            "type": "string",
+            "description": "One sentence on WHY you're making this call, in the user's terms (for routing analysis only). Optional."
+          },
+          "sections": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "description": "Optional. Return these sections in full instead of the compact core: their `index` numbers from section_index."
+          },
+          "all_sections": {
+            "type": "boolean",
+            "description": "Optional. true = return every section in full, with its heading and markdown."
+          }
+        },
+        "required": [
+          "slug"
+        ]
+      }
+    },
+    {
+      "name": "search_rules",
+      "description": "Look up tax rates, thresholds and rules in one or many jurisdictions, such as 'VAT rates in MT, IE and DE', 'income tax brackets for 2025' or 'rules mentioning reverse charge'. Returns a bundled markdown rule set plus each jurisdiction's official source (`official_source`). For one specific figure in one jurisdiction a skill is often more complete (search_skills then get_skill): a figure can sit in a skill without being a separate rule here, and then this returns related guidance instead. Entries tagged `GUIDANCE` are text, not values. Figures are not certified current: confirm each against `official_source` and prefer it when they disagree. By default returns all matching rules, each tagged with its verification status; status:'verified' excludes draft, needs_update and unsure rules; it still includes rules built from the law, so it does not mean an accountant approved them. Set `facets: true` to get the valid filter values instead of rules; a call that finds nothing returns `valid_values` for the filter that missed.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "jurisdictions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "ISO codes to include, e.g. ['MT','US-CA']. Omit for all jurisdictions."
+          },
+          "domains": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Accounting domains, e.g. ['vat-gst','income-tax']. facets: true lists them."
+          },
+          "roles": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Skill roles: foundation | compute | orchestrator | reference."
+          },
+          "block_types": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "rate",
+                "threshold",
+                "rule",
+                "formula",
+                "refusal_code",
+                "definition",
+                "table_ref",
+                "table"
+              ]
+            },
+            "description": "Rule kinds to include. Default = all of these (framing prose + workflow steps are excluded)."
+          },
+          "statuses": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "draft",
+                "research_verified",
+                "accountant_verified",
+                "needs_update",
+                "unsure"
+              ]
+            },
+            "description": "Verification statuses to include. Default = all (each rule is tagged)."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "all",
+              "verified"
+            ],
+            "description": "Shorthand for `statuses`: 'verified' = accountant- + research-verified only. Default 'all'."
+          },
+          "tax_year": {
+            "type": "integer",
+            "description": "Limit to a tax year, e.g. 2025."
+          },
+          "topic": {
+            "type": "string",
+            "description": "Filter by a fact topic."
+          },
+          "text": {
+            "type": "string",
+            "description": "Free-text search over each rule's label, value, and citation."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Max rules to return (default 200, max 500)."
+          },
+          "offset": {
+            "type": "integer",
+            "description": "Pagination offset — pass the previous response's next_offset."
+          },
+          "reason": {
+            "type": "string",
+            "description": "One sentence on WHY you're making this call, in the user's terms (for routing analysis only). Optional."
+          },
+          "facets": {
+            "type": "boolean",
+            "description": "true = return the valid filter values (jurisdictions, domains, roles, rule kinds, statuses, tax years, sample topics) instead of rules. Other arguments are ignored."
+          }
+        }
+      }
+    },
+    {
+      "name": "get_deadlines",
+      "description": "Filing and payment deadlines for a country or US state: 'when is my tax return due', 'when do I file VAT', 'when is the next instalment'. Returns upcoming dates and recurring filing rhythms (monthly VAT, quarterly instalments) from the OpenAccountants tax calendar. Signed-in users with a saved home jurisdiction can omit `jurisdiction`; the response marks `jurisdiction_source`.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "jurisdiction": {
+            "type": "string",
+            "description": "ISO code, slug, or name ('MT', 'US-CA', 'Malta'). Optional for signed-in users with a saved home jurisdiction."
+          },
+          "horizon_days": {
+            "type": "integer",
+            "description": "How far ahead to look (default 120, max 366)."
+          }
+        }
+      }
+    },
+    {
+      "name": "list_jurisdictions",
+      "description": "Answers 'which countries do you cover?' or 'what is there for [country]?'. Returns every jurisdiction with published skills (countries as ISO 2, US states as US-XX, Canadian provinces) with skill counts, accountant-reviewed counts and the named lead accountant where there is one.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "list_verifiers",
+      "description": "Answers 'who reviewed this?' or 'which accountants are behind this?'. Returns the named licensed accountants who have signed off on OpenAccountants jurisdictions, with their credentials and the jurisdictions they cover.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "jurisdiction": {
+            "type": "string",
+            "description": "Optional ISO code filter — only return verifiers for this jurisdiction."
+          }
+        }
+      }
+    },
+    {
+      "name": "get_quote",
+      "description": "Returns OpenAccountants' two plans and how to reach the team. Free: 100 questions a month for individuals and teams of 5 or fewer, with every skill and calculator. Team: for finance teams, accounting firms and larger organisations; no monthly cap, team accounts and custom builds into existing workflows, including agents on the ledger and tools the team already uses (Xero, QuickBooks, Sage, NetSuite and others); priced for each team, so no amount is returned. Also returns the pricing page, the contact link and an email address. OpenAccountants does not provide accounting services.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "jurisdiction": {
+            "type": "string",
+            "description": "Optional. The country the enquiry concerns (ISO code or name). Logged as demand; it does not change the result."
+          },
+          "entity_type": {
+            "type": "string",
+            "enum": [
+              "sole_trader",
+              "company",
+              "individual",
+              "other"
+            ],
+            "description": "Optional. Who is asking. Logged."
+          },
+          "services": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Optional. What the team wants built or covered, e.g. vat, payroll, bookkeeping. Logged."
+          },
+          "monthly_volume": {
+            "type": "string",
+            "description": "Optional. One line on size, e.g. team size, entities or transactions. Logged."
+          },
+          "current_fee": {
+            "type": "string",
+            "description": "Optional. What they pay today, if they said. Logged."
+          },
+          "reason": {
+            "type": "string",
+            "description": "One sentence on WHY you're making this call, in the user's terms (for routing analysis only). Optional."
+          }
+        }
+      }
+    },
+    {
+      "name": "validate_vat_number",
+      "description": "Check live whether an EU VAT number is valid and registered, for example before applying a B2B reverse charge, zero-rating an intra-EU sale or onboarding a supplier. Queries the European Commission's VIES registry and returns the verdict plus the registered business name and address where the authority discloses them. Coverage: the 27 EU member states plus 'XI' (Northern Ireland); use 'EL' for Greece. Other countries, including the UK, are not supported yet: say live validation is not available there rather than guessing. If the registry is down the response says so.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "country_code": {
+            "type": "string",
+            "description": "2-letter EU member-state code of the VAT number, e.g. 'DE', 'IE', 'FR'. Use 'EL' for Greece and 'XI' for Northern Ireland. May be omitted if the country prefix is already part of vat_number."
+          },
+          "vat_number": {
+            "type": "string",
+            "description": "The VAT number, with or without the country prefix and spaces, e.g. 'IE6388047V', 'IE 6388047V', or '6388047V'."
+          }
+        },
+        "required": [
+          "vat_number"
+        ]
+      }
+    },
+    {
+      "name": "check_audit_exemption",
+      "description": "Answers 'does my company need an audit?' for a private limited company in Malta (MT, Article 185(2) micro thresholds) or the UK (GB, small-company thresholds before and after 6 April 2025). A deterministic check of turnover, balance sheet total and average employees. Returns 'exempt' | 'review' | 'audit_required' | 'cannot_determine', the per-threshold table, the rule citation, and whether a named accountant has confirmed the thresholds ('draft' = no accountant has confirmed them yet; say which). Pass prior_year figures: most regimes are two-consecutive-year tests, so without them a qualifying year returns 'review'. 'cannot_determine' is a valid outcome (unsupported jurisdiction, wrong currency, a shape needing judgment). Use the determination as returned, not thresholds from memory.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "jurisdiction": {
+            "type": "string",
+            "description": "ISO-style code. MT and GB supported today."
+          },
+          "financial_year_end": {
+            "type": "string",
+            "description": "ISO date the financial year ends, e.g. '2025-12-31'."
+          },
+          "turnover": {
+            "type": "number",
+            "description": "Revenue/turnover for the year, in the jurisdiction's currency."
+          },
+          "balance_sheet_total": {
+            "type": "number",
+            "description": "Total assets at the balance sheet date."
+          },
+          "employees_average": {
+            "type": "number",
+            "description": "Average number of employees during the year."
+          },
+          "currency": {
+            "type": "string",
+            "description": "Currency of the figures — must match the regime (EUR for MT, GBP for GB); convert first, never guess a rate."
+          },
+          "entity_type": {
+            "type": "string",
+            "description": "Optional. 'private_ltd' (default), 'plc', 'branch'. Non-private shapes route to a human."
+          },
+          "group_member": {
+            "type": "boolean",
+            "description": "Optional. True if the company is part of a group — group thresholds need a reviewer, so this forces 'review'."
+          },
+          "prior_year": {
+            "type": "object",
+            "description": "Prior-year figures for the two-consecutive-years test.",
+            "properties": {
+              "turnover": {
+                "type": "number"
+              },
+              "balance_sheet_total": {
+                "type": "number"
+              },
+              "employees_average": {
+                "type": "number"
+              }
+            }
+          }
+        },
+        "required": [
+          "jurisdiction",
+          "financial_year_end",
+          "turnover",
+          "balance_sheet_total",
+          "employees_average",
+          "currency"
+        ]
+      }
+    },
+    {
+      "name": "share_with_openaccountants",
+      "description": "Only when the user asks: sends their feedback, or their request for a person to check or do the work, to OpenAccountants. Two modes. (1) `note`: an anonymized note about the guidance (a gap, a workaround you needed, or via `skill_slug` a bug in a specific skill). Anonymize hard: no names, amounts, or PII. (2) `request_review: true`: the user wants a person at OpenAccountants to check or do the work. Typical requests: 'can an accountant check this?', 'can someone file this for me?', 'can someone do this for me?', 'I want an accountant', 'can I talk to a person?'. A question about whether your own answer is right is not such a request; re-check it yourself. Also requires `working_paper` (complete), `jurisdiction`, `scenario`, and `contact_email`. The request is saved with OpenAccountants and the team is notified; the response returns an OpenAccountants booking link. The call is free. The work itself is paid and is done by a licensed accountant in your country, under their own licence and their own agreement with you, with what is done and the fee agreed before anything starts. Never describe the work itself as free. Call at most once per user request; not as a routine closing step.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "note": {
+            "type": "string",
+            "description": "Anonymized improvement note: what the guidance covered vs what you added or worked around and why, or a bug in a specific skill. No names, amounts, or PII."
+          },
+          "skill_slug": {
+            "type": "string",
+            "description": "Optional: set when the note is feedback about a SPECIFIC skill, by its slug (e.g. 'us-sales-tax')."
+          },
+          "request_review": {
+            "type": "boolean",
+            "description": "true only when the user has asked for a person (an accountant or OpenAccountants) to check their result, file it or do the work. Requires working_paper + jurisdiction + scenario + contact_email. Omit/false = just the note."
+          },
+          "jurisdiction": {
+            "type": "string",
+            "description": "Review only: ISO code or slug for the user's tax jurisdiction (e.g. 'US-CA')."
+          },
+          "scenario": {
+            "type": "string",
+            "description": "Review only: brief description of the situation to review."
+          },
+          "contact_email": {
+            "type": "string",
+            "description": "Review only, REQUIRED when request_review: the user's email, so OpenAccountants can reply. Ask for it first."
+          },
+          "contact_name": {
+            "type": "string",
+            "description": "Review only: the user's name."
+          },
+          "tax_year": {
+            "type": "integer",
+            "description": "Review only: tax year, if relevant."
+          },
+          "working_paper": {
+            "type": "string",
+            "description": "Review only: the COMPLETE working paper markdown — every line item and assumption, not a summary."
+          }
+        },
+        "required": [
+          "note"
+        ]
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "io.github.openaccountants/openaccountants",
+    "version": "1.5.0",
+    "remoteUrl": "https://www.openaccountants.com/api/mcp",
+    "publishedAt": "2026-11-23T12:40:15.586462Z",
+    "fetchedAt": "2026-11-24T12:15:48.059Z",
+    "toolsSha256": "5145fecd6e91b3fa84409f8bc885d4018c41813398d4b0168cb729457e12ea06"
+  }
+}
