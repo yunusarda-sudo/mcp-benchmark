@@ -152,7 +152,7 @@
         document.getElementById(`bar-${k}`).style.width = '0%';
       });
       document.getElementById('token-total').textContent = '—';
-      document.getElementById('cost-projection').textContent = '—';
+      updateCostEstimate();
       document.getElementById('findings-count').textContent = '0 findings';
       document.getElementById('findings-list').replaceChildren();
     }
@@ -226,15 +226,46 @@
       }
     }
 
+    const costSessionsInput = document.getElementById('cost-sessions');
+    const costTurnsInput = document.getElementById('cost-turns');
+    const COST_FIELD_IDS = ['cost-projection', 'cost-per-session', 'cost-tokens-turn', 'cost-tokens-session', 'cost-tokens-month'];
+    const tokenFormat = new Intl.NumberFormat('en-US');
+    const compactFormat = new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 });
+
+    function readPositiveInt(input, fallback, max) {
+      const value = Math.floor(Number(input.value));
+      return Number.isFinite(value) && value >= 1 ? Math.min(value, max) : fallback;
+    }
+
+    function formatUsd(amount) {
+      if (amount === 0) return '$0.00';
+      if (amount < 0.01) return '<$0.01';
+      return '$' + amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
     function updateCostEstimate() {
-      const out = document.getElementById('cost-projection');
-      if (!currentAuditResult) { out.textContent = '—'; return; }
+      if (!currentAuditResult) {
+        COST_FIELD_IDS.forEach(id => { document.getElementById(id).textContent = '—'; });
+        return;
+      }
       const ratePerMillion = parseFloat(modelCostSelector.value);
-      const cost = ((currentAuditResult.totalTokens * 1000) / 1000000) * ratePerMillion;
-      out.textContent = `$${cost.toFixed(3)}`;
+      const sessions = readPositiveInt(costSessionsInput, 1000, 100000000);
+      const turns = readPositiveInt(costTurnsInput, 15, 1000);
+      const report = window.McpBenchmark.estimateTokenEconomics(
+        currentAuditResult.totalTokens, currentAuditResult.toolsAnalyzed, sessions, turns);
+      const monthlyTokens = report.tokensPer1000Sessions;
+      const sessionCost = (report.tokensPer10TurnSession / 1000000) * ratePerMillion;
+
+      document.getElementById('cost-tokens-turn').textContent = tokenFormat.format(report.tokensPerTurn);
+      document.getElementById('cost-tokens-session').textContent = tokenFormat.format(report.tokensPer10TurnSession);
+      document.getElementById('cost-tokens-month').textContent = compactFormat.format(monthlyTokens);
+      document.getElementById('cost-projection').textContent = formatUsd((monthlyTokens / 1000000) * ratePerMillion);
+      document.getElementById('cost-per-session').textContent = `${formatUsd(sessionCost)} / session`;
     }
 
     modelCostSelector.addEventListener('change', updateCostEstimate);
+    costSessionsInput.addEventListener('input', updateCostEstimate);
+    costTurnsInput.addEventListener('input', updateCostEstimate);
 
     // Auto-Fix
     btnAutoFix.addEventListener('click', () => {

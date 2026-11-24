@@ -689,10 +689,23 @@
     ]
   };
 
+  // Mirrors src/costEstimator.ts estimateTokenEconomics (token fields only).
+  function estimateTokenEconomics(totalTokens, toolCount, sessionCount = 1000, turnsPerSession = 15) {
+    const tokensPerSession = totalTokens * turnsPerSession;
+    return {
+      totalTokens,
+      averageTokensPerTool: toolCount > 0 ? Math.round(totalTokens / toolCount) : 0,
+      tokensPerTurn: totalTokens,
+      tokensPer10TurnSession: tokensPerSession,
+      tokensPer1000Sessions: tokensPerSession * sessionCount,
+    };
+  }
+
   window.McpBenchmark = {
     benchmarkServer,
     analyzeToolDefinition,
     autoFixTools,
+    estimateTokenEconomics,
     extractTools,
     replaceTools,
     gradeFromScore,
