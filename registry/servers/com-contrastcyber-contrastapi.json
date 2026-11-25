@@ -1,0 +1,1213 @@
+{
+  "$schema": "../schema.json",
+  "name": "com.contrastcyber/contrastapi",
+  "title": "ContrastAPI",
+  "category": "Observability & Analytics",
+  "description": "Monitor CVEs, packages, domains and IPs. CVE/EPSS/KEV, SBOM, DNS/TLS, IP lookups. No key, x402.",
+  "repository": "https://github.com/UPinar/contrastapi",
+  "tools": [
+    {
+      "name": "health",
+      "description": "Database freshness: CVE/KEV/CWE counts and latest entries, and the sync state of each upstream feed. last_synced is when a feed's state was last written; read it with last_status. Costs no credits.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "cve_lookup",
+      "description": "Full CVE record by ID (CVSS, EPSS, KEV, CWE, references, CISA SSVC, Nuclei templates), with the optional GitHub Security Advisory. Call the cve_products tool for every affected product. Unknown impact? Read ssvc.mission_wellbeing.high.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "cve_id": {
+            "type": "string",
+            "maxLength": 24,
+            "description": "CVE ID, e.g. CVE-2021-44228"
+          },
+          "include_ghsa": {
+            "type": "boolean",
+            "description": "Add the GitHub Security Advisory of the CVE, from the local copy of the GitHub Advisory Database"
+          }
+        },
+        "required": [
+          "cve_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "cve_lookup_bulk",
+      "description": "Look up many CVEs at once, each with the fields of cve_lookup. Ids beyond the remaining credits come back in not_processed. Costs 1 credit per CVE ID looked up, at least 1.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "cve_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "maxItems": 50,
+            "description": "CVE IDs"
+          }
+        },
+        "required": [
+          "cve_ids"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "cve_products",
+      "description": "The products a CVE affects, one page at a time, with the vulnerable products first. The vendor and product arguments keep only the products with that exact name. For the CVEs of one product, call cve_search.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "cve_id": {
+            "type": "string",
+            "maxLength": 24,
+            "description": "CVE ID, e.g. CVE-2021-44228"
+          },
+          "vendor": {
+            "type": "string",
+            "maxLength": 128,
+            "description": "Exact vendor name, as affected_products writes it"
+          },
+          "product": {
+            "type": "string",
+            "maxLength": 128,
+            "description": "Exact product name, as affected_products writes it"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50,
+            "default": 20,
+            "description": "Products per page"
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0,
+            "default": 0,
+            "description": "Products to skip; pass next_offset of the previous page"
+          }
+        },
+        "required": [
+          "cve_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "cve_search",
+      "description": "Search CVEs by severity, CWE, CVSS, EPSS, CISA KEV, ransomware use, Nuclei template, vendor, product and publish date, one page at a time. Call the cve_lookup tool for a full record, and the cpe_search tool to find the names.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "severity": {
+            "type": "string",
+            "enum": [
+              "CRITICAL",
+              "HIGH",
+              "MEDIUM",
+              "LOW",
+              "NONE"
+            ],
+            "maxLength": 16,
+            "description": "CVSS severity: CRITICAL, HIGH, MEDIUM, LOW or NONE, from the v3 rating when the CVE has one"
+          },
+          "vendor": {
+            "type": "string",
+            "maxLength": 128,
+            "description": "Exact vendor name as cpe_search lists it, e.g. apache"
+          },
+          "product": {
+            "type": "string",
+            "maxLength": 128,
+            "description": "Exact product name as cpe_search lists it, e.g. log4j"
+          },
+          "cwe_id": {
+            "type": "string",
+            "maxLength": 16,
+            "description": "e.g. CWE-79"
+          },
+          "min_cvss": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10,
+            "description": "CVSS v3, or v4 when a CVE has no v3"
+          },
+          "min_epss": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "description": "Lowest EPSS score, a probability from 0 to 1, e.g. 0.1"
+          },
+          "in_kev": {
+            "type": "boolean",
+            "description": "true lists only CVEs in CISA KEV, false only CVEs not in it"
+          },
+          "known_ransomware": {
+            "type": "boolean",
+            "const": true,
+            "description": "Only CVEs whose CISA KEV entry notes known ransomware use"
+          },
+          "has_nuclei_template": {
+            "type": "boolean",
+            "const": true,
+            "description": "Only CVEs with a Nuclei detection template"
+          },
+          "published_after": {
+            "type": "string",
+            "maxLength": 31,
+            "description": "YYYY-MM-DD"
+          },
+          "published_before": {
+            "type": "string",
+            "maxLength": 31,
+            "description": "YYYY-MM-DD"
+          },
+          "kev_added_after": {
+            "type": "string",
+            "maxLength": 31,
+            "description": "YYYY-MM-DD; only CVEs added to CISA KEV on or after this date and still in it"
+          },
+          "include_rejected": {
+            "type": "boolean",
+            "description": "Also list the CVEs that NVD marks Rejected"
+          },
+          "sort": {
+            "type": "string",
+            "enum": [
+              "published_time",
+              "epss",
+              "cvss",
+              "kev_date_added"
+            ],
+            "maxLength": 15,
+            "description": "kev_date_added needs in_kev=true or kev_added_after"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "default": 20,
+            "description": "CVEs per page"
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10000,
+            "default": 0,
+            "description": "CVEs to skip; pass next_offset of the previous page"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "cve_leading",
+      "description": "List the CVEs most likely to be exploited, by EPSS score (the probability of exploitation in the next 30 days), with a verdict on the top score. To rank by composite risk score, call the cve_triage tool.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "vendor": {
+            "type": "string",
+            "maxLength": 128,
+            "description": "Exact vendor name as cpe_search lists it, e.g. apache"
+          },
+          "product": {
+            "type": "string",
+            "maxLength": 128,
+            "description": "Exact product name as cpe_search lists it, e.g. log4j"
+          },
+          "min_epss": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "description": "Lowest EPSS score, a probability from 0 to 1, e.g. 0.1"
+          },
+          "in_kev": {
+            "type": "boolean",
+            "description": "true lists only CVEs in CISA KEV, false only CVEs not in it"
+          },
+          "known_ransomware": {
+            "type": "boolean",
+            "const": true,
+            "description": "Only CVEs whose CISA KEV entry notes known ransomware use"
+          },
+          "has_nuclei_template": {
+            "type": "boolean",
+            "const": true,
+            "description": "Only CVEs with a Nuclei detection template"
+          },
+          "include_rejected": {
+            "type": "boolean",
+            "description": "Also list the CVEs that NVD marks Rejected"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50,
+            "default": 20,
+            "description": "How many CVEs to list, highest EPSS first"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "kev_lookup",
+      "description": "CISA KEV entry of a CVE: required action, patch deadline, ransomware use. A removed CVE gives in_kev false, a never-listed one the tool error \"KEV entry not found\". Full CVE record: cve_lookup. CVEs in KEV now: cve_search with in_kev=true.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "cve_id": {
+            "type": "string",
+            "maxLength": 24,
+            "description": "CVE ID"
+          }
+        },
+        "required": [
+          "cve_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "cwe_lookup",
+      "description": "CWE weakness details (description, mitigations, examples, OWASP Top 10 category in 2021 and 2025), with how many CVEs and CISA KEV entries name it. To list them, call the cve_search tool with its cwe_id argument.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "cwe_id": {
+            "type": "string",
+            "maxLength": 16,
+            "description": "CWE ID, e.g. CWE-79"
+          }
+        },
+        "required": [
+          "cwe_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "cve_risk_score",
+      "description": "Composite risk score of a CVE, 0-100, for patch priority. It reads EPSS, CISA KEV, Metasploit, CVSS, NVD and CNA exploit references, and ExploitDB. has_public_poc is null when no source names an exploit. For many CVEs, call cve_triage_bulk.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "cve_id": {
+            "type": "string",
+            "maxLength": 24,
+            "description": "CVE ID"
+          }
+        },
+        "required": [
+          "cve_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "cve_exploit",
+      "description": "Public exploit intelligence (GitHub PoCs, Metasploit, NVD and CNA exploit references, ExploitDB). GitHub PoC repositories are listed but not counted as proof of a public exploit. For a single patch-priority score, call cve_risk_score.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "cve_id": {
+            "type": "string",
+            "maxLength": 24,
+            "description": "CVE ID"
+          }
+        },
+        "required": [
+          "cve_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "cve_triage",
+      "description": "Rank the CVEs of a vendor or product by composite risk score, at or above the optional min_risk_score argument, as lean rows (cve_id, risk_score, label). Call the cve_lookup tool for detail, and the cpe_search tool to find the names.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "vendor": {
+            "type": "string",
+            "maxLength": 128,
+            "description": "Exact vendor name as cpe_search lists it, e.g. apache"
+          },
+          "product": {
+            "type": "string",
+            "maxLength": 128,
+            "description": "Exact product name as cpe_search lists it, e.g. log4j"
+          },
+          "min_risk_score": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100,
+            "description": "Composite risk-score threshold"
+          },
+          "include_rejected": {
+            "type": "boolean",
+            "description": "Also list the CVEs that NVD marks Rejected"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "default": 20,
+            "description": "CVEs per page"
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10000,
+            "default": 0,
+            "description": "CVEs to skip; pass next_offset of the previous page"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "epss_risers",
+      "description": "List the CVEs whose EPSS score rose most over the last 7 or 30 days, with the old and the new score. Filter by vendor, product, KEV state or a minimum score. Call the cve_lookup tool for the details of a CVE.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "window_days": {
+            "type": "integer",
+            "minimum": 7,
+            "maximum": 30,
+            "default": 7,
+            "description": "Days to look back: 7 or 30. Default 7."
+          },
+          "vendor": {
+            "type": "string",
+            "maxLength": 128,
+            "description": "Exact vendor name as cpe_search lists it, e.g. apache"
+          },
+          "product": {
+            "type": "string",
+            "maxLength": 128,
+            "description": "Exact product name as cpe_search lists it, e.g. log4j"
+          },
+          "in_kev": {
+            "type": "boolean",
+            "description": "true lists only CVEs in CISA KEV, false only CVEs not in it"
+          },
+          "min_epss": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "description": "Lowest current EPSS score to list, 0.0 to 1.0."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "default": 20,
+            "description": "CVEs per page"
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10000,
+            "default": 0,
+            "description": "CVEs to skip; pass next_offset of the previous page"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "cve_triage_bulk",
+      "description": "Triage many CVEs at once, ranked by composite risk score. Ids beyond the remaining credits come back in not_processed. Costs 1 credit per CVE ID triaged, at least 1.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "cve_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "maxItems": 50,
+            "description": "CVE IDs"
+          }
+        },
+        "required": [
+          "cve_ids"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "product_exposure",
+      "description": "CVE exposure of one vendor and product: severity, KEV and PoC counts, CVSS, EPSS, the worst risk score, the top CVEs and the endoflife.date support dates. To find the names, call the cpe_search tool.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "vendor": {
+            "type": "string",
+            "maxLength": 128,
+            "description": "Exact vendor name as cpe_search lists it, e.g. apache"
+          },
+          "product": {
+            "type": "string",
+            "maxLength": 128,
+            "description": "Exact product name as cpe_search lists it, e.g. log4j"
+          },
+          "version": {
+            "type": "string",
+            "maxLength": 128,
+            "description": "Product version, e.g. 22.21.1 or 11-24h2; picks the release cycle of eol"
+          },
+          "include_rejected": {
+            "type": "boolean",
+            "description": "Also count and list the CVEs that NVD marks Rejected"
+          }
+        },
+        "required": [
+          "vendor",
+          "product"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "cpe_search",
+      "description": "Find the CPE vendor and product names that hold a text, ranked by vulnerable CVE count. Pass a name with no % as it is to the vendor and product arguments of the cve_search, cve_triage, cve_leading, product_exposure and epss_risers tools.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "search": {
+            "type": "string",
+            "maxLength": 128,
+            "description": "Text in vendor or product names, at least 3 bytes; case does not matter, and _ matches a space"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50,
+            "default": 20,
+            "description": "Vendor and product pairs per page"
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10000,
+            "default": 0,
+            "description": "Pairs to skip; pass next_offset of the previous page"
+          }
+        },
+        "required": [
+          "search"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "cvss_calculator",
+      "description": "Decode a CVSS v3.0/v3.1 vector into its base metrics and recompute its base, temporal and environmental scores. Use it on a vector you hold; cve_lookup already gives the scores of a CVE. v2 and v4 are refused.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "vector": {
+            "type": "string",
+            "maxLength": 127,
+            "description": "CVSS:3.0/ or CVSS:3.1/ vector with all eight base metrics; temporal and environmental metrics are optional, e.g. CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"
+          }
+        },
+        "required": [
+          "vector"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "watchlist_edit",
+      "description": "Add, remove, list or clear the items this API key watches: CVEs, products, CVE searches, packages, domains and IP addresses. Read their changes with the watchlist_events tool. Requires a Pro API key.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "add",
+              "remove"
+            ],
+            "maxLength": 8,
+            "description": "add or remove; leave out to list the items"
+          },
+          "endpoint": {
+            "type": "string",
+            "enum": [
+              "cve_lookup",
+              "kev_lookup",
+              "cve_exploit",
+              "product_exposure",
+              "cve_search",
+              "dns_lookup",
+              "ssl_check",
+              "whois_lookup",
+              "headers_check",
+              "cert_search",
+              "package_check",
+              "ip_lookup"
+            ],
+            "maxLength": 16,
+            "description": "The tool the item watches"
+          },
+          "cve_id": {
+            "type": "string",
+            "maxLength": 24,
+            "description": "For a cve_lookup, kev_lookup or cve_exploit item, e.g. CVE-2021-44228"
+          },
+          "vendor": {
+            "type": "string",
+            "maxLength": 128,
+            "description": "Vendor, for a product_exposure or cve_search item"
+          },
+          "product": {
+            "type": "string",
+            "maxLength": 128,
+            "description": "Product, for a product_exposure or cve_search item"
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "CRITICAL",
+              "HIGH",
+              "MEDIUM",
+              "LOW",
+              "NONE"
+            ],
+            "maxLength": 16,
+            "description": "cve_search items only"
+          },
+          "cwe_id": {
+            "type": "string",
+            "maxLength": 16,
+            "description": "cve_search items only, e.g. CWE-79"
+          },
+          "min_cvss": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10,
+            "description": "CVSS v3, or v4 when a CVE has no v3; cve_search items only"
+          },
+          "min_epss": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "description": "At most three decimals; cve_search items only"
+          },
+          "in_kev": {
+            "type": "boolean",
+            "description": "cve_search items only"
+          },
+          "known_ransomware": {
+            "type": "boolean",
+            "const": true,
+            "description": "cve_search items only"
+          },
+          "has_nuclei_template": {
+            "type": "boolean",
+            "const": true,
+            "description": "cve_search items only"
+          },
+          "domain": {
+            "type": "string",
+            "maxLength": 253,
+            "description": "For a dns_lookup, ssl_check, whois_lookup, headers_check or cert_search item, such as example.com"
+          },
+          "ecosystem": {
+            "type": "string",
+            "maxLength": 16,
+            "description": "For a package_check item: npm, PyPI, Maven, Go, NuGet, RubyGems, crates.io, Packagist or SwiftURL"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 256,
+            "description": "Package name of a package_check item, e.g. lodash"
+          },
+          "version": {
+            "type": "string",
+            "maxLength": 128,
+            "description": "Exact version of a product_exposure or package_check item; leave out to watch every version"
+          },
+          "ip_address": {
+            "type": "string",
+            "maxLength": 45,
+            "description": "Public IPv4 or IPv6 address of an ip_lookup item, such as 8.8.8.8, no prefix"
+          },
+          "clear": {
+            "type": "boolean",
+            "const": true,
+            "description": "Deletes every item and the event cursor; takes no other argument"
+          },
+          "packages": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "ecosystem": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "version": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "ecosystem",
+                "name"
+              ],
+              "additionalProperties": false
+            },
+            "minItems": 1,
+            "maxItems": 500,
+            "description": "package_check items, each with an ecosystem, a name and an optional version"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "watchlist_events",
+      "description": "Report what changed on the items this API key watches, such as a new advisory for a package or a certificate about to expire, oldest first. A plain call continues where the last one stopped. Requires a Pro API key.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "default": 20,
+            "description": "Most events per call; a shorter page with has_more true is not the end; repeat=true answers the whole last batch"
+          },
+          "cursor": {
+            "type": "string",
+            "maxLength": 18,
+            "description": "next_cursor of an earlier answer; reads after it and keeps the position"
+          },
+          "repeat": {
+            "type": "boolean",
+            "const": true,
+            "description": "Answers the last batch again; cannot be combined with cursor"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "privacy_my_data",
+      "description": "What this server keeps about the caller: the hash its credits are counted under, the rate limit left in this hour and the privacy policy. For a Pro key, which vendor keys are stored and a 15-minute link to change them.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "vendor_key_edit",
+      "description": "Save, delete or check your own Shodan and AbuseIPDB keys, which the ip_lookup tool uses. Needs a Pro API key or a manage link. The privacy_my_data tool gives a web link where a person can save the keys without the agent seeing them.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "apply",
+              "status"
+            ],
+            "maxLength": 6,
+            "description": "apply saves or deletes keys; status reports the stored keys and needs link"
+          },
+          "link": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "The 64 hex digits after #l= in a manage link; leave out to use this Pro API key"
+          },
+          "shodan_key": {
+            "type": "string",
+            "maxLength": 128,
+            "description": "a Shodan key to check and save"
+          },
+          "shodan_delete": {
+            "type": "boolean",
+            "const": true,
+            "description": "deletes the stored Shodan key"
+          },
+          "abuseipdb_key": {
+            "type": "string",
+            "maxLength": 128,
+            "description": "an AbuseIPDB key to check and save"
+          },
+          "abuseipdb_delete": {
+            "type": "boolean",
+            "const": true,
+            "description": "deletes the stored AbuseIPDB key"
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "password_check",
+      "description": "Check a password's SHA-1 against Have I Been Pwned's Pwned Passwords list. It takes the full SHA-1, never the password. Only its first 5 hex digits leave this server.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sha1_hash": {
+            "type": "string",
+            "maxLength": 40,
+            "description": "SHA-1 of the password: 40 hex digits, either case"
+          }
+        },
+        "required": [
+          "sha1_hash"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "dns_lookup",
+      "description": "Look up a domain's DNS records: A, AAAA, MX, NS, TXT, CNAME, SOA and CAA. A record type the resolver could not answer is listed under unavailable.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "domain": {
+            "type": "string",
+            "maxLength": 253,
+            "description": "Domain name, such as example.com"
+          }
+        },
+        "required": [
+          "domain"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "dns_takeover_check",
+      "description": "Check a host name for subdomain takeover through a dangling CNAME. takeover_possible is null when the CNAME points to a service whose DNS does not show whether the name can be claimed.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "domain": {
+            "type": "string",
+            "maxLength": 253,
+            "description": "Host name, such as shop.example.com"
+          }
+        },
+        "required": [
+          "domain"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "email_auth_check",
+      "description": "Check a domain's mail authentication: SPF, DMARC (from a parent domain when the domain has no record of its own), DKIM, MX and MTA-STS, each check with pass, warn or fail and a severity.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "domain": {
+            "type": "string",
+            "maxLength": 253,
+            "description": "Domain name, such as example.com"
+          },
+          "dkim_selector": {
+            "type": "string",
+            "maxLength": 238,
+            "description": "DKIM selector, such as google; without it the check tries the selectors of the domain's mail providers"
+          }
+        },
+        "required": [
+          "domain"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "email_address_check",
+      "description": "Check an e-mail address without sending mail: whether its domain exists and takes mail, and whether a disposable domain list names it. It cannot tell whether the mailbox exists.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "maxLength": 254,
+            "description": "E-mail address, such as name@example.com"
+          }
+        },
+        "required": [
+          "email"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "ssl_check",
+      "description": "Check the TLS certificate and settings of a host name on port 443: version, cipher, trust, OCSP revocation, expiry, DNS names, the chain and an abuse.ch SSL Blacklist listing.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "domain": {
+            "type": "string",
+            "maxLength": 253,
+            "description": "Host name, such as www.example.com"
+          }
+        },
+        "required": [
+          "domain"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "headers_check",
+      "description": "Rate nine security headers of a web site, such as CSP, HSTS and Set-Cookie, from one GET to https://<domain>/ that follows up to 5 redirects on the same host or its www pair. Each finding that does not pass has a remediation.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "domain": {
+            "type": "string",
+            "maxLength": 253,
+            "description": "Host name of the site, such as www.example.com"
+          },
+          "include_full_header_values": {
+            "type": "boolean",
+            "description": "true sends each header value and URL whole, instead of cutting it after 500 code points"
+          }
+        },
+        "required": [
+          "domain"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "well_known",
+      "description": "Read robots.txt of https://<domain> and, if it allows us, /.well-known/security.txt, with up to 5 redirects on the host or its www pair. Gives the rules that bind us, sitemaps, fields such as Contact and Expires, and RFC 9309/9116 issues.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "domain": {
+            "type": "string",
+            "maxLength": 253,
+            "description": "Host name of the site, such as www.example.com"
+          }
+        },
+        "required": [
+          "domain"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "redirect_chain",
+      "description": "Follow an http or https URL's redirects, up to 10 requests on ports 80 and 443. Lists each hop and status, the final URL, the stop reason and any https to http step. Reads no body; no HTML or JavaScript redirect. Location text is untrusted.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "maxLength": 4096,
+            "description": "The http or https URL to follow; REST takes it percent-encoded"
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "whois_lookup",
+      "description": "Look up a domain's registration over RDAP, or WHOIS where allowed: registrar, dates, status, name servers and DNSSEC. A name under a registered domain asks about that domain. No registrant data.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "domain": {
+            "type": "string",
+            "maxLength": 253,
+            "description": "Domain name, such as example.com; www.example.com asks about example.com"
+          }
+        },
+        "required": [
+          "domain"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "wayback_lookup",
+      "description": "List when the Wayback Machine captured a host's home page: the first and last capture, the years between them (archive span, not domain age) and the latest 10 captures with links.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "domain": {
+            "type": "string",
+            "maxLength": 253,
+            "description": "Host name, such as example.com"
+          }
+        },
+        "required": [
+          "domain"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "cert_search",
+      "description": "List the unexpired certificates that Certificate Transparency logs hold for a host name, wildcards included, from SSLMate's Cert Spotter: the 10 newest, with issuer, validity and DNS names. Costs 2 credits.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "domain": {
+            "type": "string",
+            "maxLength": 253,
+            "description": "Host name, such as example.com or www.example.com"
+          }
+        },
+        "required": [
+          "domain"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "subdomain_enum",
+      "description": "List up to 50 subdomains of a registrable domain from Certificate Transparency, DNS queries for 94 common names and the domain's MX, NS and SPF records, and, when DNS can tell, whether each listed name has an IPv4 address. Costs 2 credits.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "domain": {
+            "type": "string",
+            "maxLength": 253,
+            "description": "Domain name, such as example.com; www.example.com asks about example.com"
+          }
+        },
+        "required": [
+          "domain"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "ip_lookup",
+      "description": "Look up a public IP: AS, country, cloud provider, CDN, datacenter, Tor exit, crawler, DROP listing and PTR name. A Pro key with its own Shodan or AbuseIPDB key adds exposure and reputation. For every prefix of the AS, call asn_lookup.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "ip_address": {
+            "type": "string",
+            "maxLength": 45,
+            "description": "Public IPv4 or IPv6 address, such as 8.8.8.8 or 2001:4860:4860::8888"
+          }
+        },
+        "required": [
+          "ip_address"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "asn_lookup",
+      "description": "Look up an autonomous system by number, such as AS15169, or by an IP address it holds: name, country and one page of its IPv4 and IPv6 prefixes, derived from IPtoASN.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "target": {
+            "type": "string",
+            "maxLength": 45,
+            "description": "AS number, such as AS15169 or 15169, or a public IPv4 or IPv6 address, such as 8.8.8.8"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50,
+            "default": 50,
+            "description": "Prefixes per page, in each address family"
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0,
+            "default": 0,
+            "description": "Prefixes to skip in each family; pass next_offset of the previous page"
+          }
+        },
+        "required": [
+          "target"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "d3fend_for_attack",
+      "description": "MITRE D3FEND defenses that counter a MITRE ATT&CK technique. A technique id such as T1055 also matches its sub-techniques. Source: MITRE D3FEND (MIT license).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "attack_technique_id": {
+            "type": "string",
+            "maxLength": 9,
+            "description": "MITRE ATT&CK technique id in upper case, e.g. T1055 or T1055.012"
+          }
+        },
+        "required": [
+          "attack_technique_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "driver_lookup",
+      "description": "Look up a Windows driver hash in the LOLDrivers catalog of vulnerable and malicious drivers. Block on the file and Authenticode hashes, not on the detection rules. For many hashes, call driver_lookup_bulk. Source: LOLDrivers (Apache-2.0).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "file_hash": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "MD5, SHA1 or SHA256 of the driver file, or its Authentihash: 32, 40 or 64 hex digits, either case"
+          },
+          "include_commands": {
+            "type": "boolean",
+            "description": "true adds the catalog's command text to each match"
+          }
+        },
+        "required": [
+          "file_hash"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "driver_lookup_bulk",
+      "description": "Look up many driver file hashes in the LOLDrivers catalog at once, each with the fields of driver_lookup. Hashes beyond the remaining credits come back in not_processed. Costs 1 credit per hash looked up, at least 1.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "hashes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "maxItems": 20,
+            "description": "MD5, SHA1 or SHA256 of driver files or of their Authentihash"
+          }
+        },
+        "required": [
+          "hashes"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "package_check",
+      "description": "Check a package against the OSV.dev advisories (GitHub, Go, PyPA, RustSec) and the OpenSSF malicious package list, with the fixed version and endoflife.date dates. For severity, pass the CVE aliases to the cve_triage_bulk tool.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "ecosystem": {
+            "type": "string",
+            "maxLength": 16,
+            "description": "npm, PyPI, Maven, Go, NuGet, RubyGems, crates.io, Packagist or SwiftURL. Case does not matter."
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 256,
+            "description": "Package name as the dependency file writes it, e.g. lodash, @babel/core, org.apache.logging.log4j:log4j-core, golang.org/x/net"
+          },
+          "version": {
+            "type": "string",
+            "maxLength": 128,
+            "description": "Exact version, e.g. 4.17.20; without it every result is listed"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50,
+            "default": 20,
+            "description": "Results per page"
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0,
+            "default": 0,
+            "description": "Results to skip; pass next_offset of the previous page"
+          }
+        },
+        "required": [
+          "ecosystem",
+          "name"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "package_check_bulk",
+      "description": "Check many packages at once, each an ecosystem, a name and an exact version, against the advisories package_check reads. For the summary and ranges of an advisory, call the package_check tool. Costs 1 credit per package checked, at least 1.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "ecosystem": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "version": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "ecosystem",
+                "name",
+                "version"
+              ],
+              "additionalProperties": false
+            },
+            "minItems": 1,
+            "maxItems": 500,
+            "description": "Packages, each with its ecosystem, name and exact version"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "additionalProperties": false
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "com.contrastcyber/contrastapi",
+    "version": "2.3.4",
+    "remoteUrl": "https://api.contrastcyber.com/mcp/",
+    "publishedAt": "2026-11-25T08:32:31.601872Z",
+    "fetchedAt": "2026-11-25T11:03:46.215Z",
+    "toolsSha256": "5afa878cc389b6847c9dabb5c0f55ee113dca0d2d186aa47e30ead81cabddcc9"
+  }
+}

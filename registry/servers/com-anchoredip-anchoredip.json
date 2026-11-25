@@ -1,0 +1,219 @@
+{
+  "$schema": "../schema.json",
+  "name": "com.anchoredip/anchoredip",
+  "title": "AnchoredIP",
+  "category": "E-Commerce & Retail",
+  "description": "Dedicated static outbound IPv4 over WireGuard. Self-serve at published prices, no sales call.",
+  "tools": [
+    {
+      "name": "list_plans",
+      "description": "The published catalogue with live prices and which payment methods each plan accepts. Prices are never hardcoded; read them here.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "order_lease",
+      "description": "Place an order. Every plan is paid: the order returns a dashboard link where a person pays, and the lease stays pending until the payment clears, then activates by itself with no approval. No account is needed to order.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "plan": {
+            "type": "string",
+            "description": "Slug from list_plans."
+          },
+          "organization_name": {
+            "type": "string"
+          },
+          "country": {
+            "type": "string",
+            "description": "ISO 3166-1 alpha-2."
+          },
+          "billing_email": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "plan",
+          "organization_name",
+          "country",
+          "billing_email"
+        ]
+      }
+    },
+    {
+      "name": "lease_status",
+      "description": "Everything about one lease: whether it is active, which addresses it holds, its tunnels and when it renews.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "access_token": {
+            "type": "string",
+            "description": "Returned by order_lease. The only credential for a lease."
+          }
+        },
+        "required": [
+          "access_token"
+        ]
+      }
+    },
+    {
+      "name": "create_tunnel",
+      "description": "Provision a peer and return its WireGuard configuration. Three routing modes, and the right one depends on the machine.\n\nsource (the default) sends only traffic from the leased address through us and leaves the default route alone — but it is written with wg-quick PostUp rules that invoke `ip`, so it runs on Linux under wg-quick and nowhere else. On macOS it aborts and deletes the interface.\n\nfull works in every client but claims the default route, so it cannot run beside an always-on corporate VPN.\n\ndestinations routes only the addresses you name. It needs no PostUp and takes no default route, so it runs in any client on any platform, and it matches what is usually being bought — one partner seeing a fixed address. It survives beside a VPN that installs a default route, but not one that captures traffic below the routing table. It cannot receive inbound connections from anywhere but those destinations.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "access_token": {
+            "type": "string",
+            "description": "Returned by order_lease. The only credential for a lease."
+          },
+          "routing_mode": {
+            "type": "string",
+            "enum": [
+              "source",
+              "full",
+              "destinations"
+            ],
+            "description": "Defaults to source, which is Linux only. Use destinations when the machine is not a Linux server, or when only certain partners need to see the address."
+          },
+          "destinations": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Addresses or ranges to route through the tunnel, like 203.0.113.10 or 203.0.113.0/24. Required with routing_mode=destinations and rejected without it. Ask the user which partner requires the address rather than guessing a range."
+          },
+          "transport": {
+            "type": "string",
+            "enum": [
+              "wireguard",
+              "amneziawg"
+            ],
+            "description": "Defaults to wireguard. Use amneziawg where deep packet inspection blocks a plain WireGuard handshake; it needs an AmneziaWG client rather than wg-quick."
+          },
+          "label": {
+            "type": "string",
+            "description": "For the customer's own reference."
+          }
+        },
+        "required": [
+          "access_token"
+        ]
+      }
+    },
+    {
+      "name": "revoke_tunnel",
+      "description": "Retire a peer and hand its slot back to the plan's allowance. An agent that provisions a tunnel per short-lived worker and never revokes one exhausts the allowance and then cannot bring the next machine up. Revoking the peer that holds the public address stops inbound connections to it and cannot be undone by promoting another — only by bringing a new machine up.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "access_token": {
+            "type": "string",
+            "description": "Returned by order_lease. The only credential for a lease."
+          },
+          "tunnel_id": {
+            "type": "integer",
+            "description": "The id lease_status reports for the tunnel."
+          }
+        },
+        "required": [
+          "access_token",
+          "tunnel_id"
+        ]
+      }
+    },
+    {
+      "name": "renew_lease",
+      "description": "Raise an invoice for another term and keep the same addresses: the address does not change, so whatever the customer's partner has already allowlisted goes on working. Name a plan to move to another tier. Pressing it twice quotes the same reference rather than raising a second invoice.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "access_token": {
+            "type": "string",
+            "description": "Returned by order_lease. The only credential for a lease."
+          },
+          "plan": {
+            "type": "string",
+            "description": "Slug from list_plans. Defaults to the plan the lease is already on."
+          }
+        },
+        "required": [
+          "access_token"
+        ]
+      }
+    },
+    {
+      "name": "set_autorenew",
+      "description": "Stop this lease charging the customer's card again, or start it again. Only a card subscription can be stopped — a bank transfer is a payment the customer sends us, so there is nothing of ours to cancel. Stopping is not a cancellation: the lease runs to the end of the period already paid for, and the same call turns it back on.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "access_token": {
+            "type": "string",
+            "description": "Returned by order_lease. The only credential for a lease."
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "false stops the next charge, true resumes it."
+          }
+        },
+        "required": [
+          "access_token",
+          "enabled"
+        ]
+      }
+    },
+    {
+      "name": "billing_portal_link",
+      "description": "A one-hour signed-in link to the payment provider's billing page for a card subscription, where the customer changes the card that is charged or downloads receipts. The link is for the human to open in a browser — do not fetch it. A lease paid once or by bank transfer has no card on file, and the call says so.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "access_token": {
+            "type": "string",
+            "description": "Returned by order_lease. The only credential for a lease."
+          }
+        },
+        "required": [
+          "access_token"
+        ]
+      }
+    },
+    {
+      "name": "set_reverse_dns",
+      "description": "Publish a PTR record for an address on the lease. Live within a second; an empty hostname removes it.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "access_token": {
+            "type": "string",
+            "description": "Returned by order_lease. The only credential for a lease."
+          },
+          "address": {
+            "type": "string"
+          },
+          "hostname": {
+            "type": "string",
+            "description": "Empty removes the record."
+          }
+        },
+        "required": [
+          "access_token",
+          "address",
+          "hostname"
+        ]
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "com.anchoredip/anchoredip",
+    "version": "1.4.0",
+    "remoteUrl": "https://api.anchoredip.com/api/mcp/",
+    "publishedAt": "2026-11-24T16:48:01.17578Z",
+    "fetchedAt": "2026-11-25T11:03:46.215Z",
+    "toolsSha256": "5b1a515012ee31ce6df011a8dea5af568d398a40f6384a3b5ce8033d640eb9fd"
+  }
+}

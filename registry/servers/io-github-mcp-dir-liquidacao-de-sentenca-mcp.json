@@ -2,253 +2,924 @@
   "$schema": "../schema.json",
   "name": "io.github.mcp-dir/liquidacao-de-sentenca-mcp",
   "title": "Liquidação de Sentença",
-  "category": "Developer Tools & DevOps",
-  "description": "Brazilian judgment liquidation for law firms: both conventions, PDF statement. Paid per case.",
+  "category": "AI, LLMs & Agents",
+  "description": "Judgment and debt liquidation for AI: sum installments and payments, apply official correction (IPCA",
   "repository": "https://github.com/mcp-dir/liquidacao-de-sentenca-mcp",
   "tools": [
     {
-      "name": "liquidacao_ler_processo",
-      "description": "Lê os PDFs de um processo (decisões, demonstrativo, faturas ou a cópia integral) e devolve a ficha do título, com a página de cada campo, pronta para liquidacao_calcular. Cobra o caso (R$ 39) na primeira tool cobrável do processo; ler ou calcular o mesmo processo de novo em 30 dias não cobra. Pode levar alguns minutos: se a conexão cair, chame de novo com o mesmo processo e a ficha salva volta sem nova leitura. Arquivo ANEXADO na conversa ou no computador do usuário: NÃO tente ler o conteúdo nem montar file_base64 (você recebe o texto extraído, não os bytes do arquivo, e o upload sairia corrompido). Chame esta tool SEM arquivo, passando file_path se souber o caminho do anexo: ela devolve um comando pronto de upload. Execute esse comando no seu sandbox de execução de código (ou peça pro usuário rodar no terminal) e chame de novo com o `upload_id` E o `file_name` que ela devolveu.",
+      "name": "calculo_atualizar",
+      "description": "Atualização monetária / liquidação de débito judicial: corrige parcelas por um índice oficial (IPCA, INPC, IGP-M, SELIC, TR…) e aplica juros, multa e honorários. Retorna detalhamento por parcela e totais. ATENÇÃO ao regime legal: SELIC já engloba correção+juros (não somar 1% a.m. por cima); pós-set/2024 o cível usa IPCA + taxa legal (Lei 14.905/2024).",
       "inputSchema": {
         "$schema": "http://json-schema.org/draft-07/schema#",
         "type": "object",
         "properties": {
-          "tipo": {
-            "type": "string",
-            "enum": [
-              "rmc",
-              "consignado",
-              "trabalhista"
-            ]
-          },
-          "processo": {
-            "type": "string"
-          },
-          "arquivos": {
+          "parcelas": {
             "type": "array",
             "items": {
               "type": "object",
               "properties": {
-                "file_name": {
+                "descricao": {
                   "type": "string"
                 },
-                "upload_id": {
+                "data_epoca": {
                   "type": "string"
                 },
-                "file_url": {
-                  "type": "string"
+                "valor": {
+                  "type": "number"
                 },
-                "file_base64": {
-                  "type": "string"
-                },
-                "file_path": {
-                  "type": "string"
-                },
-                "papel": {
-                  "type": "string"
+                "tipo": {
+                  "type": "string",
+                  "enum": [
+                    "PARCELA_DEBITO",
+                    "ABATIMENTO_PAGAMENTO"
+                  ]
                 }
-              }
+              },
+              "required": [
+                "data_epoca",
+                "valor",
+                "tipo"
+              ]
             }
+          },
+          "indice": {
+            "type": "string",
+            "enum": [
+              "NENHUM",
+              "IPCA",
+              "IPCA-E",
+              "IPCA-15",
+              "INPC",
+              "IGP-M",
+              "IGP-DI",
+              "INCC",
+              "IPC-FIPE",
+              "SELIC",
+              "CDI",
+              "TR",
+              "POUPANCA",
+              "POUPANCA-ANTIGA"
+            ]
           },
           "data_calculo": {
             "type": "string"
           },
-          "reler": {
+          "taxa_juros": {
+            "type": "number"
+          },
+          "periodicidade_juros": {
+            "type": "string",
+            "enum": [
+              "MENSAL",
+              "ANUAL"
+            ]
+          },
+          "juros_tipo": {
+            "type": "string",
+            "enum": [
+              "simples",
+              "composto"
+            ]
+          },
+          "multa": {
+            "type": "number"
+          },
+          "multa_incide_sobre_juros": {
+            "type": "boolean"
+          },
+          "honorarios": {
+            "type": "number"
+          },
+          "honorarios_tipo": {
+            "type": "string",
+            "enum": [
+              "PERCENTUAL",
+              "FIXO"
+            ]
+          },
+          "pro_rata": {
             "type": "boolean"
           }
         },
         "required": [
-          "tipo",
-          "arquivos"
+          "parcelas"
         ]
       }
     },
     {
-      "name": "liquidacao_calcular",
-      "description": "Calcula a liquidação nas duas convenções (de mercado e técnica), com memória linha a linha, índices mês a mês com o código da série, cada premissa e política com a fonte e quem decidiu, versões do motor e do leitor e o id do caso. Com só o `processo`, usa a ficha lida por liquidacao_ler_processo. Recalcular o mesmo caso em 30 dias não cobra. Para reproduzir um cálculo sem consultar a fonte das séries, passe `series_congeladas` do pacote anterior.",
+      "name": "calculo_indice",
+      "description": "Consulta de índice oficial: fator de correção acumulado entre duas datas (mês inicial excluído, mês final incluído — convenção BACEN/IBGE). Se `valor` informado, retorna o valor corrigido; se `incluir_valores` true, retorna as variações mensais publicadas (puxar os índices crus).",
       "inputSchema": {
         "$schema": "http://json-schema.org/draft-07/schema#",
         "type": "object",
         "properties": {
-          "tipo": {
-            "type": "string"
-          },
-          "processo": {
-            "type": "string"
-          },
-          "ficha": {
-            "type": "object",
-            "propertyNames": {
-              "type": "string"
-            },
-            "additionalProperties": {}
-          },
-          "documentos": {
-            "type": "object",
-            "propertyNames": {
-              "type": "string"
-            },
-            "additionalProperties": {}
-          },
-          "politicas": {
-            "type": "object",
-            "properties": {
-              "perfil": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "object",
-                    "propertyNames": {
-                      "type": "string"
-                    },
-                    "additionalProperties": {}
-                  }
-                ]
-              },
-              "revisor": {
-                "type": "object",
-                "propertyNames": {
-                  "type": "string"
-                },
-                "additionalProperties": {}
-              }
-            }
-          },
-          "premissas": {
-            "type": "object",
-            "propertyNames": {
-              "type": "string"
-            },
-            "additionalProperties": {}
-          },
-          "data_calculo": {
-            "type": "string"
-          },
-          "series_congeladas": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "propertyNames": {
-                "type": "string"
-              },
-              "additionalProperties": {}
-            }
-          },
-          "simular": {
-            "type": "object",
-            "properties": {
-              "politica": {
-                "type": "string"
-              },
-              "valor": {}
-            },
-            "required": [
-              "politica",
-              "valor"
+          "indice": {
+            "type": "string",
+            "enum": [
+              "NENHUM",
+              "IPCA",
+              "IPCA-E",
+              "IPCA-15",
+              "INPC",
+              "IGP-M",
+              "IGP-DI",
+              "INCC",
+              "IPC-FIPE",
+              "SELIC",
+              "CDI",
+              "TR",
+              "POUPANCA",
+              "POUPANCA-ANTIGA"
             ]
           },
-          "novo_caso": {
+          "data_inicial": {
+            "type": "string"
+          },
+          "data_final": {
+            "type": "string"
+          },
+          "valor": {
+            "type": "number"
+          },
+          "pro_rata": {
             "type": "boolean"
+          },
+          "incluir_valores": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "indice",
+          "data_inicial"
+        ]
+      }
+    },
+    {
+      "name": "calculo_salario_minimo",
+      "description": "Salário mínimo nacional vigente de um ano (dinâmico, IPEADATA). Base para dosimetria (dia-multa), pensão por % do SM e mínimo existencial.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "ano": {
+            "type": "number"
           }
         }
       }
     },
     {
-      "name": "liquidacao_comparar",
-      "description": "Compara o cálculo da outra parte (ou da contadoria) com o nosso, rubrica a rubrica, classifica cada diferença e devolve o texto-base da impugnação. Primeira comparação do caso: R$ 20. Arquivo ANEXADO na conversa ou no computador do usuário: NÃO tente ler o conteúdo nem montar file_base64 (você recebe o texto extraído, não os bytes do arquivo, e o upload sairia corrompido). Chame esta tool SEM arquivo, passando file_path se souber o caminho do anexo: ela devolve um comando pronto de upload. Execute esse comando no seu sandbox de execução de código (ou peça pro usuário rodar no terminal) e chame de novo com o `upload_id` E o `file_name` que ela devolveu.\n\nBulk support: accepts calculo_ids for batched execution.",
+      "name": "calculo_aluguel",
+      "description": "Aluguéis em atraso (Lei 8.245/91): reajusta o aluguel ao longo do contrato pelo índice, corrige cada mês atrasado até hoje, aplica juros de mora (1% a.m.) e multa moratória. Retorna detalhamento por mês + total.",
       "inputSchema": {
         "$schema": "http://json-schema.org/draft-07/schema#",
         "type": "object",
         "properties": {
-          "calculo_id": {
+          "aluguel_inicial": {
+            "type": "number"
+          },
+          "inicio_contrato": {
             "type": "string"
           },
-          "planilha": {
-            "type": "object",
-            "properties": {
-              "file_name": {
-                "type": "string"
-              },
-              "upload_id": {
-                "type": "string"
-              },
-              "file_url": {
-                "type": "string"
-              },
-              "file_base64": {
-                "type": "string"
-              },
-              "file_path": {
-                "type": "string"
-              },
-              "papel": {
-                "type": "string"
-              }
-            }
+          "inicio_atraso": {
+            "type": "string"
           },
-          "alheia": {
-            "type": "object",
-            "propertyNames": {
-              "type": "string"
-            },
-            "additionalProperties": {}
+          "fim_atraso": {
+            "type": "string"
           },
-          "autor": {
+          "data_calculo": {
+            "type": "string"
+          },
+          "indice": {
             "type": "string",
             "enum": [
-              "autor",
-              "reu",
-              "contadoria",
-              "perito"
+              "NENHUM",
+              "IPCA",
+              "IPCA-E",
+              "IPCA-15",
+              "INPC",
+              "IGP-M",
+              "IGP-DI",
+              "INCC",
+              "IPC-FIPE",
+              "SELIC",
+              "CDI",
+              "TR",
+              "POUPANCA",
+              "POUPANCA-ANTIGA"
             ]
           },
-          "convencao": {
-            "type": "string",
-            "enum": [
-              "mercado",
-              "tecnica"
-            ]
+          "periodicidade_meses": {
+            "type": "number"
           },
-          "calculo_ids": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
+          "juros": {
+            "type": "number"
+          },
+          "multa": {
+            "type": "number"
           }
         },
         "required": [
-          "calculo_id"
+          "aluguel_inicial",
+          "inicio_contrato",
+          "inicio_atraso",
+          "fim_atraso"
         ]
       }
     },
     {
-      "name": "liquidacao_demonstrativo",
-      "description": "Gera o demonstrativo do cálculo em PDF e JSON, a metodologia (cada premissa com a fonte e quem decidiu) e as tarefas de revisão (bloqueia, confirmar, informa). Não é cobrado.\n\nBulk support: accepts calculo_ids for batched execution.",
+      "name": "calculo_pensao",
+      "description": "Pensão alimentícia em atraso (art. 528 CPC): por mês do período calcula o devido (% do salário mínimo do mês, valor fixo ou % da remuneração), subtrai pagamentos e aplica correção (INPC) + juros 1% a.m. desde cada vencimento.",
       "inputSchema": {
         "$schema": "http://json-schema.org/draft-07/schema#",
         "type": "object",
         "properties": {
-          "calculo_id": {
-            "type": "string"
-          },
-          "convencao": {
+          "forma": {
             "type": "string",
             "enum": [
-              "mercado",
-              "tecnica"
+              "PERCENTUAL_SM",
+              "VALOR_FIXO",
+              "PERCENTUAL_REMUNERACAO"
             ]
           },
-          "calculo_ids": {
+          "referencia": {
+            "type": "number"
+          },
+          "inicio_atraso": {
+            "type": "string"
+          },
+          "fim_atraso": {
+            "type": "string"
+          },
+          "data_calculo": {
+            "type": "string"
+          },
+          "indice": {
+            "type": "string",
+            "enum": [
+              "NENHUM",
+              "IPCA",
+              "IPCA-E",
+              "IPCA-15",
+              "INPC",
+              "IGP-M",
+              "IGP-DI",
+              "INCC",
+              "IPC-FIPE",
+              "SELIC",
+              "CDI",
+              "TR",
+              "POUPANCA",
+              "POUPANCA-ANTIGA"
+            ]
+          },
+          "juros": {
+            "type": "number"
+          },
+          "pagamentos": {
             "type": "array",
             "items": {
-              "type": "string"
+              "type": "object",
+              "properties": {
+                "competencia": {
+                  "type": "string"
+                },
+                "valor": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "competencia",
+                "valor"
+              ]
+            }
+          },
+          "remuneracoes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "competencia": {
+                  "type": "string"
+                },
+                "remuneracao": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "competencia",
+                "remuneracao"
+              ]
             }
           }
         },
         "required": [
-          "calculo_id"
+          "forma",
+          "referencia",
+          "inicio_atraso",
+          "fim_atraso"
+        ]
+      }
+    },
+    {
+      "name": "calculo_trabalhista",
+      "description": "Verbas rescisórias / liquidação trabalhista (CLT): saldo de salário, aviso prévio indenizado (Lei 12.506/2011), 13º proporcional, férias proporcionais + 1/3, férias vencidas, multa de 40%/20% do FGTS, com descontos de INSS e IRRF (tabelas 2026). Verbas indenizatórias isentas.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "salario": {
+            "type": "number"
+          },
+          "admissao": {
+            "type": "string"
+          },
+          "demissao": {
+            "type": "string"
+          },
+          "motivo": {
+            "type": "string",
+            "enum": [
+              "sem_justa_causa",
+              "pedido_demissao",
+              "justa_causa",
+              "acordo"
+            ]
+          },
+          "aviso": {
+            "type": "string",
+            "enum": [
+              "indenizado",
+              "trabalhado",
+              "dispensado"
+            ]
+          },
+          "saldo_fgts": {
+            "type": "number"
+          },
+          "dependentes": {
+            "type": "number"
+          },
+          "ferias_vencidas": {
+            "type": "boolean"
+          },
+          "projetar_aviso": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "salario",
+          "admissao",
+          "demissao"
+        ]
+      }
+    },
+    {
+      "name": "calculo_fgts",
+      "description": "Correção do FGTS (tese TR → INPC/IPCA-E, STF): por depósito calcula a diferença entre corrigir pelo índice de inflação vs pela TR, com juros de 3% a.a. da conta. Aceita depósitos manuais (ou, futuramente, extrato OCR).",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "depositos": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "competencia": {
+                  "type": "string"
+                },
+                "valor": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "competencia",
+                "valor"
+              ]
+            }
+          },
+          "data_calculo": {
+            "type": "string"
+          },
+          "indice": {
+            "type": "string",
+            "enum": [
+              "NENHUM",
+              "IPCA",
+              "IPCA-E",
+              "IPCA-15",
+              "INPC",
+              "IGP-M",
+              "IGP-DI",
+              "INCC",
+              "IPC-FIPE",
+              "SELIC",
+              "CDI",
+              "TR",
+              "POUPANCA",
+              "POUPANCA-ANTIGA"
+            ]
+          },
+          "incluir_juros_3aa": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "depositos"
+        ]
+      }
+    },
+    {
+      "name": "calculo_dosimetria",
+      "description": "Dosimetria da pena (art. 68 CP, sistema trifásico): pena-base pelas circunstâncias judiciais (art. 59), pena intermediária por atenuantes/agravantes (Súmula 231 STJ), pena definitiva por causas de aumento/diminuição (ex.: tentativa). Frações configuráveis.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "pena_min_anos": {
+            "type": "number"
+          },
+          "pena_max_anos": {
+            "type": "number"
+          },
+          "circunstancias_desfavoraveis": {
+            "type": "number"
+          },
+          "atenuantes": {
+            "type": "number"
+          },
+          "agravantes": {
+            "type": "number"
+          },
+          "causas_aumento": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "frac": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "frac"
+              ]
+            }
+          },
+          "causas_diminuicao": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "frac": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "frac"
+              ]
+            }
+          },
+          "fracao_fase1": {
+            "type": "number"
+          },
+          "fracao_fase2": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "pena_min_anos",
+          "pena_max_anos"
+        ]
+      }
+    },
+    {
+      "name": "calculo_progressao",
+      "description": "Progressão de regime (LEP art. 112, Lei 13.964/2019): percentual de cumprimento por primário/reincidente × comum/hediondo × violência/resultado morte, descontando remição (trabalho/estudo) e detração, e retorna a data de progressão.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "pena_anos": {
+            "type": "number"
+          },
+          "inicio_cumprimento": {
+            "type": "string"
+          },
+          "reincidente": {
+            "type": "boolean"
+          },
+          "hediondo": {
+            "type": "boolean"
+          },
+          "violencia": {
+            "type": "boolean"
+          },
+          "resultado_morte": {
+            "type": "boolean"
+          },
+          "dias_trabalhados": {
+            "type": "number"
+          },
+          "horas_estudo": {
+            "type": "number"
+          },
+          "dias_detracao": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "pena_anos",
+          "inicio_cumprimento"
+        ]
+      }
+    },
+    {
+      "name": "calculo_partilha",
+      "description": "Partilha de bens no divórcio por regime (Código Civil): apura a massa partilhável (bens − dívidas conforme o regime) e a quota de cada cônjuge, com torna por desequilíbrio. Marque entra_partilha por bem para sobrepor o default do regime.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "regime": {
+            "type": "string",
+            "enum": [
+              "COMUNHAO_PARCIAL",
+              "COMUNHAO_UNIVERSAL",
+              "SEPARACAO_TOTAL",
+              "PARTICIPACAO_FINAL_AQUESTOS"
+            ]
+          },
+          "bens": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "descricao": {
+                  "type": "string"
+                },
+                "valor": {
+                  "type": "number"
+                },
+                "titular": {
+                  "type": "string",
+                  "enum": [
+                    "A",
+                    "B",
+                    "AMBOS"
+                  ]
+                },
+                "adquirido_na_constancia": {
+                  "type": "boolean"
+                },
+                "oneroso": {
+                  "type": "boolean"
+                },
+                "heranca_doacao": {
+                  "type": "boolean"
+                },
+                "incomunicavel": {
+                  "type": "boolean"
+                },
+                "entra_partilha": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "valor"
+              ]
+            }
+          },
+          "dividas": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "descricao": {
+                  "type": "string"
+                },
+                "valor": {
+                  "type": "number"
+                },
+                "entra_partilha": {
+                  "type": "boolean"
+                },
+                "anterior_casamento": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "valor"
+              ]
+            }
+          },
+          "nomes": {
+            "type": "object",
+            "properties": {
+              "A": {
+                "type": "string"
+              },
+              "B": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "required": [
+          "regime",
+          "bens"
+        ]
+      }
+    },
+    {
+      "name": "calculo_tempo_contribuicao",
+      "description": "Tempo de contribuição (CNIS): soma os vínculos contando concomitância uma vez e converte atividade especial em comum (fatores EC 103/2019, só até 13/11/2019). Retorna tempo total e se atinge o tempo antigo (35H/30M).",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "sexo": {
+            "type": "string",
+            "enum": [
+              "H",
+              "M"
+            ]
+          },
+          "vinculos": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "inicio": {
+                  "type": "string"
+                },
+                "fim": {
+                  "type": "string"
+                },
+                "tipo": {
+                  "type": "string",
+                  "enum": [
+                    "NORMAL",
+                    "PROFESSOR",
+                    "ESPECIAL_25",
+                    "ESPECIAL_20",
+                    "ESPECIAL_15"
+                  ]
+                }
+              },
+              "required": [
+                "inicio",
+                "fim"
+              ]
+            }
+          }
+        },
+        "required": [
+          "sexo",
+          "vinculos"
+        ]
+      }
+    },
+    {
+      "name": "calculo_rmi",
+      "description": "RMI — Renda Mensal Inicial (pós-reforma EC 103/2019): média dos salários de contribuição × coeficiente (60% + 2% por ano acima de 20H/15M), com piso (salário mínimo) e teto (INSS).",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "sexo": {
+            "type": "string",
+            "enum": [
+              "H",
+              "M"
+            ]
+          },
+          "media_salarios": {
+            "type": "number"
+          },
+          "tempo_contribuicao_anos": {
+            "type": "number"
+          },
+          "salario_minimo": {
+            "type": "number"
+          },
+          "teto_inss": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "sexo",
+          "media_salarios",
+          "tempo_contribuicao_anos"
+        ]
+      }
+    },
+    {
+      "name": "calculo_revisional",
+      "description": "Revisional de contrato bancário: recalcula o financiamento pela taxa média de mercado do BACEN (busca ao vivo por modalidade+mês) e apura o excedente por parcela (Price ou SAC). A taxa média é referência, não teto (STJ).",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "valor_financiado": {
+            "type": "number"
+          },
+          "num_parcelas": {
+            "type": "number"
+          },
+          "taxa_contratada_am": {
+            "type": "number"
+          },
+          "parcela_paga": {
+            "type": "number"
+          },
+          "sistema": {
+            "type": "string",
+            "enum": [
+              "PRICE",
+              "SAC"
+            ]
+          },
+          "modalidade": {
+            "type": "string",
+            "enum": [
+              "PF_CREDITO_PESSOAL_NAO_CONSIGNADO",
+              "PF_AQUISICAO_VEICULOS",
+              "PF_CHEQUE_ESPECIAL",
+              "PF_TOTAL"
+            ]
+          },
+          "data_contrato": {
+            "type": "string"
+          },
+          "taxa_bacen_am": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "valor_financiado",
+          "num_parcelas",
+          "taxa_contratada_am",
+          "parcela_paga"
+        ]
+      }
+    },
+    {
+      "name": "calculo_superendividamento",
+      "description": "Superendividamento (Lei 14.181/2021): % da renda comprometida, mínimo existencial (R$600, parametrizável), renda disponível e capacidade de pagamento de um plano de até 5 anos.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "renda_liquida": {
+            "type": "number"
+          },
+          "dividas": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "credor": {
+                  "type": "string"
+                },
+                "parcela": {
+                  "type": "number"
+                },
+                "saldo": {
+                  "type": "number"
+                }
+              }
+            }
+          },
+          "minimo_existencial": {
+            "type": "number"
+          },
+          "prazo_meses": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "renda_liquida",
+          "dividas"
+        ]
+      }
+    },
+    {
+      "name": "calculo_rmc_rcc",
+      "description": "RMC/RCC — reserva de margem consignável de cartão (INSS, códigos 217/268): limites de 5% e restituição corrigida dos descontos. Tese: cartão rotativo vendido como consignado que nunca amortiza.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "beneficio_mensal": {
+            "type": "number"
+          },
+          "descontos": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "competencia": {
+                  "type": "string"
+                },
+                "valor": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "competencia",
+                "valor"
+              ]
+            }
+          },
+          "indice": {
+            "type": "string",
+            "enum": [
+              "NENHUM",
+              "IPCA",
+              "IPCA-E",
+              "IPCA-15",
+              "INPC",
+              "IGP-M",
+              "IGP-DI",
+              "INCC",
+              "IPC-FIPE",
+              "SELIC",
+              "CDI",
+              "TR",
+              "POUPANCA",
+              "POUPANCA-ANTIGA"
+            ]
+          },
+          "data_calculo": {
+            "type": "string"
+          },
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "RMC",
+              "RCC"
+            ]
+          }
+        },
+        "required": [
+          "beneficio_mensal",
+          "descontos"
+        ]
+      }
+    },
+    {
+      "name": "calculo_restituicao_inss",
+      "description": "Restituição de descontos indevidos no INSS (fraude associativa, códigos 280/304/310/378): soma as parcelas descontadas corrigidas. Ressarcimento administrativo via acordo STF (ADPF 1.236).",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "descontos": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "codigo": {
+                  "type": "string"
+                },
+                "competencia": {
+                  "type": "string"
+                },
+                "valor": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "competencia",
+                "valor"
+              ]
+            }
+          },
+          "indice": {
+            "type": "string",
+            "enum": [
+              "NENHUM",
+              "IPCA",
+              "IPCA-E",
+              "IPCA-15",
+              "INPC",
+              "IGP-M",
+              "IGP-DI",
+              "INCC",
+              "IPC-FIPE",
+              "SELIC",
+              "CDI",
+              "TR",
+              "POUPANCA",
+              "POUPANCA-ANTIGA"
+            ]
+          },
+          "data_calculo": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "descontos"
         ]
       }
     },
@@ -457,10 +1128,10 @@
     "type": "registry",
     "registry": "registry.modelcontextprotocol.io",
     "name": "io.github.mcp-dir/liquidacao-de-sentenca-mcp",
-    "version": "0.1.1",
+    "version": "0.1.2",
     "remoteUrl": "https://api.mcp.ai/p_liquidacao-de-sentenca",
-    "publishedAt": "2026-11-23T12:13:38.147764Z",
-    "fetchedAt": "2026-11-24T12:15:48.059Z",
-    "toolsSha256": "47092ddd5b5f97c096054bb79dd356591fa178aea4f29add2db6669e78cce6fc"
+    "publishedAt": "2026-11-24T21:24:32.145257Z",
+    "fetchedAt": "2026-11-25T11:03:46.215Z",
+    "toolsSha256": "5281539817ebf674b6f657b9654d0101646754d7a913139e4a5fa6d60e26485e"
   }
 }

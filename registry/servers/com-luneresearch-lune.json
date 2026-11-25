@@ -1,0 +1,671 @@
+{
+  "$schema": "../schema.json",
+  "name": "com.luneresearch/lune",
+  "title": "Lune Research",
+  "category": "AI, LLMs & Agents",
+  "description": "Search peer-reviewed papers and research methodology guidance from your AI agent.",
+  "repository": "https://github.com/RetrogradeLabs/lune-mcp-server",
+  "tools": [
+    {
+      "name": "search_papers",
+      "description": "Searches full-text, peer-reviewed papers from top-tier venues. Use for questions about academic papers, research topics, literature reviews, surveys, “what's been published on X”, named methods, or any claim that should be backed by a peer-reviewed citation. Returns each paper's metadata and the passages that matched. Hybrid semantic + lexical search over titles, abstracts, and full text. Phrase the query the way a researcher would describe the topic in prose, not a keyword bag. Triggering questions: “what's the latest on diffusion guidance”, “which papers compare against SimPO” (requirements beyond the topic are checked per paper: `conditions`, evidence first in `contexts`). `paper_id` is a handle for YOU to fetch full text via `get_paper_fulltext`; never show it to the user: cite papers by title, authors, and venue. `rerank_score` is the calibrated Cohere Rerank v3.5 relevance (0..1), null when the reranker did not run (a lone term, or a failure); `score` is uncalibrated: keep the hits' order. The top-level `best_score` and `low_confidence` derive from `rerank_score`: `low_confidence` marks weaker matches, so rephrase for stronger ones and still cite a hit that fits; with no reranked hit, `best_score` is null and `low_confidence` false, so judge each hit yourself. Each hit carries metadata, abstract, ids, and `contexts` spans to ground or quote from; `detail: false` returns concise hits with one `snippet`. Page with `offset` (re-call with offset += limit while `has_more` is true and `conditions` match page 1's; offset + limit <= 50). Order with `sort_by` (relevance / date / citations, within the ranked shortlist, not the corpus). Narrow with `year_min` / `year_max` / `venues`.",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500,
+            "description": "Full natural-language research query; phrase it the way you would ask a human research assistant. On the paper corpus the server drops request wording (\"find me papers on\"), adds the standard names of what the query describes and a hypothetical abstract (HyDE), and expands an abbreviation only when the rest of the query fixes its meaning, so give context (\"MPC for drone control\", not \"MPC\"); a lone term is searched as typed, without expansion, HyDE or rerank. The richer the input, the better the recall. Good: \"methods for retrieval-augmented generation that reduce hallucination on long-form QA\". Less optimal: \"RAG hallucination\"."
+          },
+          "conference": {
+            "description": "Filter by conference short name, e.g. \"CCS\", \"NeurIPS\".",
+            "type": "string",
+            "maxLength": 200
+          },
+          "year": {
+            "type": "integer",
+            "minimum": 1990,
+            "maximum": 2100
+          },
+          "limit": {
+            "default": 10,
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50
+          },
+          "offset": {
+            "description": "Pagination offset over the ranked results. Re-call with offset += limit while the response `has_more` is true. offset + limit must stay <= 50.",
+            "default": 0,
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "sort_by": {
+            "description": "Result ordering within the ranked shortlist: `relevance` (default), `date` (newest first), or `citations` (most-cited first).",
+            "default": "relevance",
+            "type": "string",
+            "enum": [
+              "relevance",
+              "date",
+              "citations"
+            ]
+          },
+          "year_min": {
+            "description": "Only include papers published in this year or later.",
+            "type": "integer",
+            "minimum": 1990,
+            "maximum": 2100
+          },
+          "year_max": {
+            "description": "Only include papers published in this year or earlier.",
+            "type": "integer",
+            "minimum": 1990,
+            "maximum": 2100
+          },
+          "venues": {
+            "description": "Restrict to these conference short names (e.g. [\"NeurIPS\", \"ICML\"]).",
+            "maxItems": 64,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          "detail": {
+            "description": "true (default): include the full abstract, ids, and contexts[] matched spans for grounding. false: concise hits (title, authors, year, venue, citations, score, and a single grounding snippet) for token-saving triage. For the complete paper text call get_paper_fulltext.",
+            "default": true,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "search_papers_many",
+      "description": "Use for a LITERATURE SWEEP or survey: a research question broad enough to need several angles, e.g. \"what's been done on X\", a related-work section, or a state-of-the-field summary. One call returns one merged, ranked list of the papers the angles found, with the passages that matched. For a single focused question, use `search_papers` instead. Runs 1 to 25 query variants in ONE call and gets back a single deduped, RRF-merged ranked list with per-paper provenance (`matched_queries`: which of your queries, by index into the echoed `queries`, surfaced each paper, and at what rank): supply several genuinely different angles on the topic (rephrasings, sub-questions, alternate terminology) and the server fuses their ranked lists so the merged result covers more of the corpus than any single query would. Each variant runs the same hybrid retrieval as `search_papers` (Cohere Embed v4 + BM25 + Cohere Rerank v3.5) without its server-side rewrites, because your variants are the expansion: spell out abbreviations and synonyms in the variants themselves. Filters (`conference`, `year`, `year_min`, `year_max`, `venues`) are SHARED across all queries. The envelope reports `queries_run` and, for any variant whose pipeline failed, `queries_failed` (so one bad variant never sinks the batch). `has_more` is always false: the merged shortlist is bounded; widen the query set or filters for more coverage. Each hit carries metadata, abstract, ids, and the matched `contexts` spans to ground or quote from; `detail: false` returns concise hits with one `snippet`. `paper_id` is a handle for YOU to fetch full text via `get_paper_fulltext`; cite papers by title, authors, and venue, never by id. Billing: each query variant counts as one search against your quota (an 8-query call costs 8), since the server runs a full search pipeline per variant; prefer a focused set of genuinely distinct angles over padding the list.",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "queries": {
+            "minItems": 1,
+            "maxItems": 25,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000
+            },
+            "description": "1 to 25 query variants to run in ONE call. Phrase each the way you would ask a human research assistant (full natural-language questions beat keyword bags). Supply genuinely different angles on the topic (rephrasings, sub-questions, alternate terminology) so the merged list covers more of the literature than any single query would. The server runs each variant through the full hybrid pipeline and RRF-fuses the ranked lists into one deduped result set."
+          },
+          "conference": {
+            "description": "Shared across every query: filter to this conference short name, e.g. \"CCS\", \"NeurIPS\".",
+            "type": "string",
+            "maxLength": 200
+          },
+          "year": {
+            "description": "Shared across every query: restrict to a single publication year.",
+            "type": "integer",
+            "minimum": 1990,
+            "maximum": 2100
+          },
+          "year_min": {
+            "description": "Shared across every query: only papers published in this year or later.",
+            "type": "integer",
+            "minimum": 1990,
+            "maximum": 2100
+          },
+          "year_max": {
+            "description": "Shared across every query: only papers published in this year or earlier.",
+            "type": "integer",
+            "minimum": 1990,
+            "maximum": 2100
+          },
+          "venues": {
+            "description": "Shared across every query: restrict to these conference short names (e.g. [\"NeurIPS\", \"ICML\"]).",
+            "maxItems": 64,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          "limit": {
+            "default": 10,
+            "description": "Max papers in the merged, deduped result list (default 10, max 50).",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50
+          },
+          "detail": {
+            "default": true,
+            "description": "true (default): include the full abstract, ids, and contexts[] non-abstract matched spans for grounding. false: concise hits (title, authors, year, venue, citations, score, and a single grounding snippet) for token-saving triage. `matched_queries` provenance is always present. For the complete paper text call get_paper_fulltext.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "queries",
+          "limit",
+          "detail"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_paper_fulltext",
+      "description": "Use this when the user asks “what does the methods/results section say”, wants to quote a specific section, or when the abstract isn't enough to verify a claim. Heavy: only call once a paper looks relevant from `search_papers`, `search_related_papers`, or `get_paper_citations`. `format=markdown` returns one rendered document; `format=json` returns a structured section list. Pass `sections` (case-insensitive headings, e.g. [\"Methods\"]) to fetch only those sections instead of the whole document.",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "paper_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "A corpus paper UUID, from a search_papers / search_papers_many / search_related_papers / get_paper_citations result."
+          },
+          "format": {
+            "description": "`markdown` returns one rendered document, ready to read or quote inline. `json` returns a structured section list, useful when you want to navigate by section name (methods / results / related work).",
+            "default": "markdown",
+            "type": "string",
+            "enum": [
+              "markdown",
+              "json"
+            ]
+          },
+          "sections": {
+            "description": "Return only these sections (case-insensitive heading match), e.g. [\"Methods\", \"Results\"]. Omit to return the whole document.",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "required": [
+          "paper_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_paper_citations",
+      "description": "Use this when the user asks “what does this paper build on”, “what built on this”, traces influence chains, asks for follow-up work, or wants the lineage of an idea. `direction=cited_by` returns indexed papers that cite this one; `direction=cites` returns this paper's parsed references (which may or may not be in the corpus). Each edge carries `contexts`, the citing sentences with their section, which show HOW a work is used (baseline, method borrowed, result disputed). Page with `limit` / `offset`; the response reports `total` and `has_more` so you can walk a large citation set.",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "paper_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "A corpus paper UUID, taken from a `search_papers` or `search_related_papers` result."
+          },
+          "direction": {
+            "description": "`cited_by`: indexed papers that cite this one (forward, follow-up work). `cites`: this paper's parsed references (back, what it built on).",
+            "default": "cited_by",
+            "type": "string",
+            "enum": [
+              "cited_by",
+              "cites"
+            ]
+          },
+          "limit": {
+            "description": "Max citation edges to return per page (default 25, max 100).",
+            "default": 25,
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "offset": {
+            "description": "Pagination offset; re-call with offset += limit while the response `has_more` is true. The response also reports `total`.",
+            "default": 0,
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "paper_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "list_conferences",
+      "description": "Use this when the user asks “what conferences does Lune track”, “is venue X covered”, or wants a category-level browse (e.g. AI/ML, security, databases, software/systems). Pass `category` as a keyword (`ai`, `security`, ...) to narrow; it matches the conference's research area.",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "category": {
+            "description": "Optional research-area filter, matched case-insensitively against the conference's field. Accepts short codes (`ai`, `ml`, `nlp`, `cv`, `security`, `databases`, `software`, `systems`) or any substring of the field name. Omit to list every conference.",
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_conference_papers",
+      "description": "Use this when the user asks for papers from a specific conference (optionally a year), e.g. “most-cited NeurIPS 2024 papers”, “show me CCS 2025 accepted papers”, or “what's new in security at IEEE S&P this year”. `sort` is `recency` (newest first, default) or `citations` (most-cited first); page with `limit` / `offset`.",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "conference": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "Conference short name, e.g. \"NeurIPS\", \"CCS\", \"ICLR\"."
+          },
+          "year": {
+            "description": "Restrict to a single year (e.g. 2024). Omit to span all years.",
+            "type": "integer",
+            "minimum": 1990,
+            "maximum": 2100
+          },
+          "limit": {
+            "description": "Max papers to return per page (default 20, max 100).",
+            "default": 20,
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "offset": {
+            "description": "Pagination offset; use to fetch subsequent pages.",
+            "default": 0,
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "sort": {
+            "description": "`recency` (newest first, default) or `citations` (most-cited first).",
+            "default": "recency",
+            "type": "string",
+            "enum": [
+              "recency",
+              "citations"
+            ]
+          }
+        },
+        "required": [
+          "conference"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "search_related_papers",
+      "description": "Given a paper_id, return the most semantically similar papers by embedding distance, NOT by citation links. Use for “more papers like this one” / “adjacent work on the same topic”. For papers this one cites or that cite it, use `get_paper_citations` instead. Each hit carries metadata, abstract, the closest non-abstract matched chunk as `contexts`, and a `similarity` score (0..1, higher is nearer). Returns up to `limit` papers; an unknown paper_id is an error, an empty list means no neighbors were found.",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "paper_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "A corpus paper UUID (from a paper search) to find neighbors for."
+          },
+          "limit": {
+            "default": 6,
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 20
+          }
+        },
+        "required": [
+          "paper_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "extract_from_papers",
+      "description": "Pull a structured table out of up to 50 papers in ONE call: you define the columns (`fields`: each a snake_case `name`, a `type`, and an optional `description`) and an `instruction`, and the server reads each paper's full text and returns one typed row per paper. Use this when you need the SAME facts across many papers, e.g. \"dataset, model size, and reported accuracy for each of these papers\": one call reads every paper and returns the table. Pass `sections` (case-insensitive headings, e.g. [\"Results\"]) to focus extraction and cut noise. The model is instructed to use only what each paper states, not to infer; a field it can't ground may be absent or null. Each row carries `truncated` (true when the paper's text overflowed the budget and the tail was dropped, so treat it as partial). A paper with no parsed full text, or one the model couldn't extract, is reported in `papers_failed` (with a `reason`) instead of sinking the batch, so `papers_processed` == rows + failures. Heavy: one model call per paper, so extract only papers you already judged relevant from a search or citation result. For the raw text of a single paper, use get_paper_fulltext instead.",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "paper_ids": {
+            "minItems": 1,
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "description": "1 to 50 corpus paper UUIDs to extract from in ONE call, from a search_papers / search_papers_many / search_related_papers / get_paper_citations result."
+          },
+          "fields": {
+            "minItems": 1,
+            "maxItems": 12,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "snake_case identifier; becomes the key for this field on every row (e.g. `dataset`, `headline_accuracy`)."
+                },
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "string",
+                    "number",
+                    "boolean",
+                    "string[]"
+                  ],
+                  "description": "Wire type the extracted value is coerced to."
+                },
+                "description": {
+                  "description": "What to pull for this field; sharpens the extraction.",
+                  "type": "string",
+                  "maxLength": 2000
+                }
+              },
+              "required": [
+                "name",
+                "type"
+              ],
+              "additionalProperties": false
+            },
+            "description": "1 to 12 fields to extract per paper. Each becomes a typed column on every row, keyed by its `name`."
+          },
+          "instruction": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000,
+            "description": "Natural-language guidance for the extraction (e.g. \"Pull the primary evaluation dataset and the headline accuracy\"). The model is told to use only what the paper states."
+          },
+          "sections": {
+            "description": "Restrict extraction to these sections (case-insensitive heading match), e.g. [\"Results\", \"Experiments\"]. Omit to consider the whole paper.",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "required": [
+          "paper_ids",
+          "fields",
+          "instruction"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "verify_claims",
+      "description": "Fact-check 1 to 25 natural-language claims against Lune's peer-reviewed corpus in ONE call. For each claim the server retrieves the most relevant passages and an LLM judges the claim ONLY against those passages (never outside knowledge), returning one verdict per claim: `supported`, `unsupported`, or `insufficient_evidence`. Use this to ground a draft before you assert it, to vet a user's claim, or to check your own answer against the literature. Every verdict carries a `verbatim_quote` copied EXACTLY from a retrieved passage (or null when nothing could be quoted, e.g. an insufficient_evidence verdict) plus `supporting_paper_ids` (the corpus papers the verdict relied on); both are verified server-side, the quote is guaranteed to be a real substring of a retrieved passage and the ids are guaranteed to be real retrieved candidates, so you can cite the quote directly without re-checking. Also returns a `confidence` (0..1) and short `reasoning` per claim. Filters (`conference`, `year`, `year_min`, `year_max`, `venues`) scope the evidence search and are shared across every claim; `context` is optional shared framing for the judge. `paper_id`s are fetch handles for get_paper_fulltext, not for showing to the user, cite papers by title, authors, and venue.",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "claims": {
+            "minItems": 1,
+            "maxItems": 25,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000
+            },
+            "description": "1 to 25 natural-language factual claims to fact-check against the corpus in ONE call. Phrase each as a complete, self-contained assertion (e.g. \"LoRA fine-tuning matches full fine-tuning on GLUE while training far fewer parameters\"), not a keyword bag. Each claim is retrieved and judged independently, so you get one grounded verdict per claim."
+          },
+          "context": {
+            "description": "Optional shared framing passed to the judge for every claim, e.g. the surrounding paragraph or the question the claims answer. Use it to disambiguate terse claims; it does not change what is retrieved.",
+            "type": "string"
+          },
+          "conference": {
+            "description": "Restrict the evidence search to this conference short name, e.g. \"CCS\", \"NeurIPS\". Shared across every claim.",
+            "type": "string",
+            "maxLength": 200
+          },
+          "year": {
+            "description": "Restrict the evidence search to a single publication year.",
+            "type": "integer",
+            "minimum": 1990,
+            "maximum": 2100
+          },
+          "year_min": {
+            "description": "Restrict the evidence search to this publication year or later. Shared across every claim.",
+            "type": "integer",
+            "minimum": 1990,
+            "maximum": 2100
+          },
+          "year_max": {
+            "description": "Restrict the evidence search to this publication year or earlier. Shared across every claim.",
+            "type": "integer",
+            "minimum": 1990,
+            "maximum": 2100
+          },
+          "venues": {
+            "description": "Restrict the evidence search to these conference short names (e.g. [\"NeurIPS\", \"ICML\"]). Shared across every claim.",
+            "maxItems": 64,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          }
+        },
+        "required": [
+          "claims"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "gather_evidence",
+      "description": "Use for a multi-part research task when you need to know whether your gathered evidence is SUFFICIENT, what is still MISSING, and what to search next, without the tool writing the answer. Pass the goal in `task` and your first search angles in `queries`; the server runs one corpus search per angle, decomposes the task into evidence requirements (or use your own via `requirements`), and returns each requirement as covered / partial / missing with the exact `evidence_spans` (verbatim quotes) that support it, plus `next_queries` for the gaps. Default `max_iterations=1` is a one-shot assessment billed len(queries); set `max_iterations>1` AND `max_total_queries>len(queries)` to authorize bounded server-side follow-up searches (billed `max_total_queries`, capped at 25). Optionally pass a `draft` to get per-sentence support checks against the gathered spans. Every covered requirement and supported draft sentence carries a verbatim quote verified server-side, so you can cite it directly. You write the answer; cite papers by title, authors, and venue, not by paper_id.",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "task": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000,
+            "description": "The research goal in prose: what you are trying to establish. Drives requirement decomposition and the sufficiency judgment."
+          },
+          "queries": {
+            "minItems": 1,
+            "maxItems": 25,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000
+            },
+            "description": "Your initial search angles (full natural-language questions). One corpus search runs per angle; they are billed like search_papers_many."
+          },
+          "requirements": {
+            "description": "Optional explicit evidence slots; omit to let the server derive them from `task`.",
+            "minItems": 1,
+            "maxItems": 12,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "key": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "snake_case id for this evidence slot."
+                },
+                "description": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2000,
+                  "description": "What evidence this slot needs."
+                }
+              },
+              "required": [
+                "key",
+                "description"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "draft": {
+            "description": "Optional current draft. Each sentence is checked for support against the gathered spans (no extra searches). The tool never rewrites your draft.",
+            "type": "string",
+            "maxLength": 8000
+          },
+          "max_iterations": {
+            "default": 1,
+            "description": "Sufficiency rounds. Default 1 is a one-shot advisor. Set >1 (with max_total_queries>len(queries)) to authorize bounded server-side follow-up searches.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 5
+          },
+          "max_total_queries": {
+            "description": "Total search budget across all iterations (the billed ceiling). Defaults to len(queries). Must exceed len(queries) only when max_iterations>1.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 25
+          },
+          "conference": {
+            "description": "Filter to this conference short name, e.g. \"NeurIPS\".",
+            "type": "string",
+            "maxLength": 200
+          },
+          "year": {
+            "type": "integer",
+            "minimum": 1990,
+            "maximum": 2100
+          },
+          "year_min": {
+            "type": "integer",
+            "minimum": 1990,
+            "maximum": 2100
+          },
+          "year_max": {
+            "type": "integer",
+            "minimum": 1990,
+            "maximum": 2100
+          },
+          "venues": {
+            "description": "Restrict to these conference short names.",
+            "maxItems": 64,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          }
+        },
+        "required": [
+          "task",
+          "queries",
+          "max_iterations"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "search_research_guidance",
+      "description": "Use before recommending experimental design, ablation strategy, evaluation metrics, baselines, reproducibility, paper structure, related-work organisation, venue choice, response-to-reviewers, scientific writing, or methodology in general. Searches the Lune guidance corpus, curated from senior researchers, reproducibility checklists, venue-reviewer guidance, and author tutorials, so methodology advice can cite vetted sources. Triggering questions: “how should I design an ablation for X”, “what's a good evaluation setup for retrieval”, “how do I respond to reviewer 2”, “what's the reproducibility checklist for NeurIPS”, “how should I structure the related-work section”, “what venue should I target for a systems paper on X”. Returns top-K excerpts with source attribution; cite every entry you draw on.",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "limit": {
+            "default": 5,
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 20
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_research_guidance_doc",
+      "description": "Use this AFTER `search_research_guidance` when you need the full text of a guidance document (not just the matched excerpt), for example to quote a passage or follow a checklist end-to-end. Pass the `doc_id` from a search hit.",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "doc_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "Guidance document UUID, from a `search_research_guidance` hit. NOT a corpus paper_id (those come from `search_papers`)."
+          }
+        },
+        "required": [
+          "doc_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "send_feedback",
+      "description": "Sends the user's feedback about Lune to the Lune team. Use it when the user says something about Lune itself (papers it missed, results that did not fit, an error, something that helped, an idea): offer to pass it on, show the user the message you would send, and call this only after they agree. Set `allow_training` only if they also agreed that Lune may train models on it, after telling them they can withdraw that at any time in their Lune account settings. Write the message from what the user said about Lune, leaving out unrelated conversation and personal details.",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "category": {
+            "type": "string",
+            "enum": [
+              "missing_papers",
+              "irrelevant_results",
+              "helpful",
+              "issue",
+              "idea",
+              "other"
+            ],
+            "description": "missing_papers: Lune did not find papers the user expected. irrelevant_results: the results did not fit the question. helpful: Lune helped. issue: an error or something broken. idea: a suggestion."
+          },
+          "message": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 2000,
+            "description": "The feedback as the user approved it: what they asked Lune for and what happened, naming the papers involved. Leave out the user's own name and contact details, credentials, and private documents."
+          },
+          "allow_training": {
+            "description": "True only when the user explicitly agreed that Lune may use this feedback to train its models.",
+            "default": false,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "category",
+          "message"
+        ],
+        "additionalProperties": false
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "com.luneresearch/lune",
+    "version": "3.0.2",
+    "remoteUrl": "https://mcp.luneresearch.com/",
+    "publishedAt": "2026-11-25T01:21:42.466603Z",
+    "fetchedAt": "2026-11-25T11:03:46.215Z",
+    "toolsSha256": "c6012564f0c1a45cdf0577ddbae926232dd9c90557d77dae5383697a9f35a7c6"
+  }
+}

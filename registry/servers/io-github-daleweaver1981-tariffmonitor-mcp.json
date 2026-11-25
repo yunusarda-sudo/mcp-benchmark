@@ -1,0 +1,116 @@
+{
+  "$schema": "../schema.json",
+  "name": "io.github.daleweaver1981/tariffmonitor-mcp",
+  "title": "Tariff Monitor: US Import Duty & HTS Lookup",
+  "category": "Developer Tools & DevOps",
+  "description": "US import tariffs: classify to HTS code, stacked rate (MFN+301+232+forced-labor), compare origins.",
+  "repository": "https://github.com/daleweaver1981/tariffmonitor-mcp",
+  "tools": [
+    {
+      "name": "lookup_hts_code",
+      "description": "Find the US HTS (Harmonized Tariff Schedule) code for a product, by plain-language product name or numeric prefix, from the official USITC schedule (19,856 10-digit codes). Use this first whenever you have a product name rather than a code (e.g. \"laptop\", \"t-shirt\", \"water bottle\", \"wireless earbuds\", \"toys\", \"e-bike\", \"running shoes\"), then pass a code to calculate_tariff or compare_origins. Everyday shopping words that a plain search of the schedule misses are mapped to the official heading that covers them (e.g. laptop -> 8471.30 \"Portable automatic data processing machines\"), and the answer names that heading; when a word commonly falls under more than one heading (water bottle: 7323.93 stainless, 9617.00 vacuum flasks, 3924.10 plastic) each is listed, with the 10-digit lines ranked by match to the query. Otherwise descriptions are matched as one phrase; if a phrase matches nothing the tool retries single words and says which word it used. Returns up to 12 codes.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Product keyword (e.g. \"footwear\") or HTS code prefix (e.g. \"6404\"). Minimum 2 characters. Single keywords match best."
+          }
+        },
+        "required": [
+          "query"
+        ]
+      }
+    },
+    {
+      "name": "calculate_tariff",
+      "description": "Calculate the full stacked US import tariff rate for an HTS code from a specific origin country. Returns: base rate, each additional layer (China Section 301 matched by HTS line to Lists 1, 2, 3, 4A and the 2024 four-year-review increases; Section 232 steel, aluminum and copper matched by HTS line to the U.S. note 16 lists, headings 9903.82.02-.26: 50% on listed metal articles, 25% on listed derivatives, UK and 15%-floor rates, with the metal-content conditions stated; other Section 232 programs (vehicles and parts, wood products, trucks, semiconductors, drones) flagged as needs review when the line is named, not computed; Section 301 Brazil, 25% since 22 Jul 2026, heading 9903.05.01, with its exemption lists; and the 2026 Section 301 forced-labor tariff on 60 economies: 10% or 12.5% by origin, or a 10%/12.5% cap net of MFN for the EU, Taiwan, Japan, South Korea and Switzerland, in effect since 24 Jul 2026, FR Doc. 2026-15181, HTS 9903.05.20-9903.05.84), the total current rate, the date the data was checked, and notes naming each exemption or assumption (Section 232 goods, USMCA- or CAFTA-DR-qualifying entries, listed products). For products of Canada it notes that Section 338 duties may apply; their product lists are published only as images, so they are not computed. Also states when the Section 301 China product exclusions end: through 11:59 p.m. ET on January 9, 2027 (Federal Register, FR Doc. 2026-22925, which extended the earlier 9 Nov 2026 end). Rates are effective-date aware: pass date (YYYY-MM-DD) for the rule in force on that entry date. For products of China it applies the 178 Section 301 product exclusions by statistical number (U.S. note 20(vvv)/(www)) through their end date, and the maritime Section 301 headings (9903.92.10 +25% on ship-to-shore cranes; from 10 Jan 2027 (the maritime action is suspended through 9 Jan 2027 by FR Doc. 2026-22867) 9903.91.14 +100% on those cranes and 9903.91.12 +100% on intermodal chassis, shown as \"up to\" because chapter 99 does not say how it combines with List 3), each with its legal source, and says when a rate depends on a proposed, not final, extension. Figures are estimates; IEEPA tariffs ended 20 Feb 2026 and are not included. Optionally computes dollar impact from annual import volume.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "hts_code": {
+            "type": "string",
+            "description": "HTS code — at least 6 digits, up to 10 (e.g. \"6404.11\" or \"6404112030\"). Dots and spaces are ignored. Zero-padded headings such as \"6404110000\" are not real schedule codes; if the exact code is not found, the 8- then 6-digit heading is tried and the answer states which code the rate is for."
+          },
+          "origin_country": {
+            "type": "string",
+            "description": "ISO-2 origin country code (e.g. \"CN\" for China, \"VN\" for Vietnam, \"MX\" for Mexico). Default: CN.",
+            "default": "CN"
+          },
+          "annual_import_value_usd": {
+            "type": "number",
+            "description": "Optional. Your annual import value in USD. If provided, the response includes the dollar cost of current duties and any additional cost once the Section 301 China exclusions end (after 11:59 p.m. ET on January 9, 2027 per the Federal Register, FR Doc. 2026-22925)."
+          },
+          "date": {
+            "type": "string",
+            "description": "Optional. Entry date YYYY-MM-DD; the rate in force on that date is returned (e.g. \"2027-01-09\" vs \"2027-01-10\" to see the Section 301 exclusion end and the maritime duties). Default: today in US Eastern time."
+          }
+        },
+        "required": [
+          "hts_code"
+        ]
+      }
+    },
+    {
+      "name": "classify_product",
+      "description": "Suggest up to 3 US HTS-10 codes for a product from a product description or an invoice line. Each candidate has: the HTS description from our own HTS data (never written by a model), a one-line reason that quotes that description, a confidence label (high, medium or low), and, when you pass origin_country, the stacked duty from the same logic as calculate_tariff (MFN + Section 301 + Section 232 + the 2026 forced-labor layer). How it works: candidates are retrieved only from our HTS data; a self-hosted model on our own server (no outside AI provider) ranks only among those candidates, and any code that is not in our data is dropped. These are SUGGESTIONS TO VERIFY, not a classification ruling: binding rulings come from US Customs and Border Protection (CBP, https://rulings.cbp.gov/), and the right line often depends on material, construction and use details a one-line description may not show. Measured on our server: about 1 to 3 minutes per call because the model runs on shared CPU hardware (set a long client timeout); if the model server is busy or unreachable the tool returns a retryable error. Free public endpoint: each call counts as 1 of your 25 daily calls. Running the npm package locally needs your own Ollama server (set TM_OLLAMA_URL).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "description": {
+            "type": "string",
+            "description": "Product description or invoice line, e.g. \"men's 100% cotton knit t-shirt\". Required."
+          },
+          "origin_country": {
+            "type": "string",
+            "description": "Optional ISO-2 origin country (e.g. CN, VN, MX). When given, each candidate includes its stacked duty."
+          }
+        },
+        "required": [
+          "description"
+        ]
+      }
+    },
+    {
+      "name": "compare_origins",
+      "description": "Compare the estimated US import tariff for ONE HTS code across several origin countries side by side (e.g. China vs Vietnam vs Mexico vs India), for sourcing and \"China plus one\" decisions. For each origin returns the total current rate, the layers that make it up (MFN base, Section 301 China, Section 232 by HTS line, Section 301 Brazil, 2026 Section 301 forced-labor tariff) and the rate after the Section 301 China exclusions end (through 11:59 p.m. ET on 9 Jan 2027 per the Federal Register, FR Doc. 2026-22925), sorted lowest first, with the dollar duty when an annual import value is given. Estimates only; preferential rates (USMCA, FTAs) depend on rules of origin and are not assumed.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "hts_code": {
+            "type": "string",
+            "description": "HTS code, 6 to 10 digits (e.g. \"8471.30\" or \"6404112030\"). Use lookup_hts_code first if you only have a product name."
+          },
+          "origin_countries": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "ISO-2 origin country codes to compare, 2 to 8 of them (e.g. [\"CN\",\"VN\",\"MX\",\"IN\"]). Default: CN, VN, MX, IN, TH."
+          },
+          "annual_import_value_usd": {
+            "type": "number",
+            "description": "Optional. Annual import value in USD; adds the estimated annual duty for each origin."
+          },
+          "date": {
+            "type": "string",
+            "description": "Optional. Entry date YYYY-MM-DD; the rate in force on that date is returned (e.g. \"2027-01-09\" vs \"2027-01-10\" to see the Section 301 exclusion end and the maritime duties). Default: today in US Eastern time."
+          }
+        },
+        "required": [
+          "hts_code"
+        ]
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "io.github.daleweaver1981/tariffmonitor-mcp",
+    "version": "1.6.7",
+    "remoteUrl": "https://adcreator-ai.com/mcp-free",
+    "publishedAt": "2026-11-25T00:11:46.519049Z",
+    "fetchedAt": "2026-11-25T11:03:46.215Z",
+    "toolsSha256": "ddffdb7e9a54aa5bc8eb9b7dc33bfb60878087b2655c9e223a312b5606887c74"
+  }
+}

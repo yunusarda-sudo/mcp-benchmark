@@ -1,0 +1,544 @@
+{
+  "$schema": "../schema.json",
+  "name": "com.cnamio/domains",
+  "title": "Cnamio",
+  "category": "Other",
+  "description": "Custom domains for your users: detect DNS, create records, confirm propagation. Free sign-up.",
+  "repository": "https://github.com/cnamio/agent-kit",
+  "tools": [
+    {
+      "name": "get_integration_guide",
+      "description": "Returns the Cnamio integration guide (Markdown) for adding custom domains to an app: the DNS records with a per-user ownership TXT, the environment variables, the server session route, the browser connect window, the headless API and webhook verification, with the Node.js and Python server SDKs (npm package cnamio, PyPI package cnamio). Framework recipes (Next.js, Express, Rails, Laravel, Django) are listed at https://cnamio.com/llms.txt. Takes no input and needs no credentials.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "start_sandbox",
+      "description": "Creates a 30-minute sandbox session of a Cnamio test application, without an account or credentials. Returns application_id, auth_token, expires_at and user_id. A sandbox session answers from a simulated DNS provider: nothing real is read or written and any domain name connects at once; domains whose first label is conflict (for example conflict.example.com) simulate records already in the way; a first label of pending (pending.example.com) simulates a record that never propagates; the provider token invalid is refused.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "start_signup",
+      "description": "Requests a free Cnamio account for an email address, in two requests. With the email alone it sends nothing: it returns confirmation_required, the address, the Terms (https://cnamio.com/terms) and Privacy Policy (https://cnamio.com/privacy) links and a confirmationToken valid 10 minutes for that address only, so the person can confirm the address and accept before anything is emailed. With the same email, consent: true and that confirmationToken, Cnamio emails a link to the address; only opening it, and accepting the Terms again on the screen it opens, creates the account (a test application on the simulated sandbox provider and a live application on the free plan). An address that already has an account gets a sign-in link instead, and the answer is the same in both cases. Limited to 3 requests a minute and 10 a day per caller, and a few emails per address. Returns received: true and the next steps; the application secret is never returned (it is generated in the dashboard). The answer also carries a 30-minute sandbox session (sandbox).",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "email"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "description": "The email address of the person the account is for."
+          },
+          "consent": {
+            "type": "boolean",
+            "const": true,
+            "description": "Second request only. true: that person confirmed this address and accepted the Terms and the Privacy Policy."
+          },
+          "confirmationToken": {
+            "type": "string",
+            "pattern": "^sc1\\.[0-9a-z]+\\.[A-Za-z0-9_-]+$",
+            "description": "Second request only: the confirmation_token the first request returned for this email."
+          },
+          "name": {
+            "type": "string",
+            "description": "The person's name (optional)."
+          },
+          "company": {
+            "type": "string",
+            "description": "Company or product name (optional)."
+          },
+          "locale": {
+            "type": "string",
+            "enum": [
+              "en",
+              "pt-BR",
+              "es"
+            ],
+            "description": "Language of the email and the dashboard."
+          }
+        }
+      }
+    },
+    {
+      "name": "check_domain",
+      "description": "Looks up where a domain's DNS is hosted and how the given records can be connected, without changing anything. Returns provider, setupType, connectMethods (contains api_token when the records can be created through the DNS provider's API with a provider token), nameservers, recordState for a single CNAME, and conflicts with records already published (checked unless checkConflicts is false).",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "domain",
+          "dnsRecords"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "domain": {
+            "type": "string",
+            "description": "The domain or subdomain to connect, without scheme or path.",
+            "examples": [
+              "links.mybrand.com"
+            ]
+          },
+          "dnsRecords": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 20,
+            "description": "Records your product needs. host is relative to the zone; placeholders {DOMAIN}, {SUBDOMAIN}, {SLD}, {TLD}; @ is the apex (no CNAME at the apex).",
+            "items": {
+              "type": "object",
+              "required": [
+                "type",
+                "host",
+                "value"
+              ],
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "A",
+                    "AAAA",
+                    "CNAME",
+                    "TXT",
+                    "MX",
+                    "CAA"
+                  ],
+                  "description": "The DNS record type."
+                },
+                "host": {
+                  "type": "string",
+                  "examples": [
+                    "{SUBDOMAIN}"
+                  ],
+                  "description": "The record name, relative to the zone; @ is the apex; placeholders allowed."
+                },
+                "value": {
+                  "type": "string",
+                  "examples": [
+                    "custom.yourapp.com"
+                  ],
+                  "description": "The record content: a hostname for CNAME, an address for A/AAAA, the text for TXT."
+                },
+                "ttl": {
+                  "type": "integer",
+                  "description": "Time to live in seconds (optional; the provider default otherwise)."
+                },
+                "priority": {
+                  "type": "integer",
+                  "description": "MX priority (MX records only)."
+                },
+                "optional": {
+                  "type": "boolean",
+                  "description": "true: the connection completes without this record, and its absence only degrades monitoring."
+                }
+              }
+            }
+          },
+          "checkConflicts": {
+            "type": "boolean",
+            "default": true,
+            "description": "Compare the records with those already published."
+          },
+          "sandboxToken": {
+            "type": "string",
+            "description": "The auth_token of a sandbox session. Used only when the request carries no credentials; the request then runs against the simulated sandbox provider (no real DNS)."
+          }
+        }
+      }
+    },
+    {
+      "name": "connect_domain",
+      "description": "Starts a manual connection of a domain: returns a job_id and the exact records the domain owner creates at their DNS provider, and Cnamio watches the authoritative nameservers for them for up to 72 hours. Changes no DNS.",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "domain",
+          "dnsRecords"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "domain": {
+            "type": "string",
+            "description": "The domain or subdomain to connect, without scheme or path.",
+            "examples": [
+              "links.mybrand.com"
+            ]
+          },
+          "dnsRecords": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 20,
+            "description": "Records your product needs. host is relative to the zone; placeholders {DOMAIN}, {SUBDOMAIN}, {SLD}, {TLD}; @ is the apex (no CNAME at the apex).",
+            "items": {
+              "type": "object",
+              "required": [
+                "type",
+                "host",
+                "value"
+              ],
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "A",
+                    "AAAA",
+                    "CNAME",
+                    "TXT",
+                    "MX",
+                    "CAA"
+                  ],
+                  "description": "The DNS record type."
+                },
+                "host": {
+                  "type": "string",
+                  "examples": [
+                    "{SUBDOMAIN}"
+                  ],
+                  "description": "The record name, relative to the zone; @ is the apex; placeholders allowed."
+                },
+                "value": {
+                  "type": "string",
+                  "examples": [
+                    "custom.yourapp.com"
+                  ],
+                  "description": "The record content: a hostname for CNAME, an address for A/AAAA, the text for TXT."
+                },
+                "ttl": {
+                  "type": "integer",
+                  "description": "Time to live in seconds (optional; the provider default otherwise)."
+                },
+                "priority": {
+                  "type": "integer",
+                  "description": "MX priority (MX records only)."
+                },
+                "optional": {
+                  "type": "boolean",
+                  "description": "true: the connection completes without this record, and its absence only degrades monitoring."
+                }
+              }
+            }
+          },
+          "userId": {
+            "type": "string",
+            "description": "Your own user id, echoed in the job and its webhooks."
+          },
+          "sandboxToken": {
+            "type": "string",
+            "description": "The auth_token of a sandbox session. Used only when the request carries no credentials; the request then runs against the simulated sandbox provider (no real DNS)."
+          }
+        }
+      }
+    },
+    {
+      "name": "connect_domain_automatic",
+      "description": "Creates the given records at the domain's DNS provider through the provider's API, with an API token from the domain owner, and returns a job_id. Works for domains whose connectMethods include api_token. The token is used for this request only and never stored. Existing DNS records are never deleted; an existing SPF record may be extended, with every existing term kept, and no other existing record is changed. A conflict with existing records returns 409 with the reasons and creates nothing.",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "domain",
+          "dnsRecords",
+          "providerToken"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "domain": {
+            "type": "string",
+            "description": "The domain or subdomain to connect, without scheme or path.",
+            "examples": [
+              "links.mybrand.com"
+            ]
+          },
+          "dnsRecords": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 20,
+            "description": "Records your product needs. host is relative to the zone; placeholders {DOMAIN}, {SUBDOMAIN}, {SLD}, {TLD}; @ is the apex (no CNAME at the apex).",
+            "items": {
+              "type": "object",
+              "required": [
+                "type",
+                "host",
+                "value"
+              ],
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "A",
+                    "AAAA",
+                    "CNAME",
+                    "TXT",
+                    "MX",
+                    "CAA"
+                  ],
+                  "description": "The DNS record type."
+                },
+                "host": {
+                  "type": "string",
+                  "examples": [
+                    "{SUBDOMAIN}"
+                  ],
+                  "description": "The record name, relative to the zone; @ is the apex; placeholders allowed."
+                },
+                "value": {
+                  "type": "string",
+                  "examples": [
+                    "custom.yourapp.com"
+                  ],
+                  "description": "The record content: a hostname for CNAME, an address for A/AAAA, the text for TXT."
+                },
+                "ttl": {
+                  "type": "integer",
+                  "description": "Time to live in seconds (optional; the provider default otherwise)."
+                },
+                "priority": {
+                  "type": "integer",
+                  "description": "MX priority (MX records only)."
+                },
+                "optional": {
+                  "type": "boolean",
+                  "description": "true: the connection completes without this record, and its absence only degrades monitoring."
+                }
+              }
+            }
+          },
+          "providerToken": {
+            "type": "string",
+            "description": "An API token for the domain's DNS provider, from the domain owner (a token, not an account password)."
+          },
+          "userId": {
+            "type": "string",
+            "description": "Your own user id, echoed in the job and its webhooks."
+          },
+          "sandboxToken": {
+            "type": "string",
+            "description": "The auth_token of a sandbox session. Used only when the request carries no credentials; the request then runs against the simulated sandbox provider (no real DNS)."
+          }
+        }
+      }
+    },
+    {
+      "name": "get_connection_status",
+      "description": "Returns the status of a connection: pending, in_progress, completed (connected) or failed (72 hours without propagation). A connected domain keeps being monitored (read-only): health is healthy, degraded (an optional record is gone, or the zone cannot be read) or broken (a required record is gone), with missing_records listing what is gone.",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "jobId"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "jobId": {
+            "type": "string",
+            "pattern": "^job_[0-9a-f-]{36}$",
+            "description": "The job_id of a connection (job_…)."
+          },
+          "sandboxToken": {
+            "type": "string",
+            "description": "The auth_token of a sandbox session. Used only when the request carries no credentials; the request then runs against the simulated sandbox provider (no real DNS)."
+          }
+        }
+      }
+    },
+    {
+      "name": "recheck_propagation",
+      "description": "Checks the domain's authoritative nameservers again now for a connection still in progress and returns its status. At most once every 5 minutes per connection (429 before that); a connection already completed or failed answers 409 and nothing is checked.",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "jobId"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "jobId": {
+            "type": "string",
+            "pattern": "^job_[0-9a-f-]{36}$",
+            "description": "The job_id of a connection (job_…)."
+          },
+          "sandboxToken": {
+            "type": "string",
+            "description": "The auth_token of a sandbox session. Used only when the request carries no credentials; the request then runs against the simulated sandbox provider (no real DNS)."
+          }
+        }
+      }
+    },
+    {
+      "name": "list_connections",
+      "description": "Lists the application's recent connections, newest first, optionally only those of one domain, one status or one monitoring health (broken: connected domains whose required records disappeared), up to limit. Needs the application credentials or an OAuth sign-in; a session token is refused.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "domain": {
+            "type": "string",
+            "description": "Only connections of this domain."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "in_progress",
+              "completed",
+              "failed"
+            ],
+            "description": "Only connections in this status."
+          },
+          "health": {
+            "type": "string",
+            "enum": [
+              "healthy",
+              "degraded",
+              "broken"
+            ],
+            "description": "Only connections in this monitoring state."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "default": 20,
+            "description": "How many connections at most."
+          }
+        }
+      }
+    },
+    {
+      "name": "create_share_link",
+      "description": "Creates a link (url) that lets whoever manages the DNS (an agency, the IT team) connect the given domains with the given records, without the application secret. The link is bound to those domains and records, single-use per domain by default (maxUses) and expires in 7 days by default (expiresInDays, at most 30). Returns the url, which carries a token returned only in this answer, and the share_link_id. Connections started from the link are listed like any other, with that share_link_id.",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "domains",
+          "dnsRecords"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "domains": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 20,
+            "items": {
+              "type": "string"
+            },
+            "examples": [
+              [
+                "links.mybrand.com"
+              ]
+            ],
+            "description": "The domains the link may connect."
+          },
+          "dnsRecords": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 20,
+            "description": "Records your product needs. host is relative to the zone; placeholders {DOMAIN}, {SUBDOMAIN}, {SLD}, {TLD}; @ is the apex (no CNAME at the apex).",
+            "items": {
+              "type": "object",
+              "required": [
+                "type",
+                "host",
+                "value"
+              ],
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "A",
+                    "AAAA",
+                    "CNAME",
+                    "TXT",
+                    "MX",
+                    "CAA"
+                  ],
+                  "description": "The DNS record type."
+                },
+                "host": {
+                  "type": "string",
+                  "examples": [
+                    "{SUBDOMAIN}"
+                  ],
+                  "description": "The record name, relative to the zone; @ is the apex; placeholders allowed."
+                },
+                "value": {
+                  "type": "string",
+                  "examples": [
+                    "custom.yourapp.com"
+                  ],
+                  "description": "The record content: a hostname for CNAME, an address for A/AAAA, the text for TXT."
+                },
+                "ttl": {
+                  "type": "integer",
+                  "description": "Time to live in seconds (optional; the provider default otherwise)."
+                },
+                "priority": {
+                  "type": "integer",
+                  "description": "MX priority (MX records only)."
+                },
+                "optional": {
+                  "type": "boolean",
+                  "description": "true: the connection completes without this record, and its absence only degrades monitoring."
+                }
+              }
+            }
+          },
+          "maxUses": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "default": 1,
+            "description": "Connections each domain may start through the link."
+          },
+          "expiresInDays": {
+            "type": "number",
+            "minimum": 0.05,
+            "maximum": 30,
+            "default": 7,
+            "description": "Days until the link expires."
+          },
+          "userId": {
+            "type": "string",
+            "description": "Your own user id, echoed in the job and its webhooks."
+          },
+          "label": {
+            "type": "string",
+            "description": "Your own note, never shown on the link page."
+          }
+        }
+      }
+    },
+    {
+      "name": "revoke_share_link",
+      "description": "Revokes a shareable connection link at once: it starts no more connections and cannot be restored. Connections already started from it go on. Returns the link with its revoked_at time.",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "shareLinkId"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "shareLinkId": {
+            "type": "string",
+            "pattern": "^shl_[A-Za-z0-9_-]{16}$",
+            "description": "The share_link_id of the link (shl_…)."
+          }
+        }
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "com.cnamio/domains",
+    "version": "1.3.0",
+    "remoteUrl": "https://api.cnamio.com/mcp",
+    "publishedAt": "2026-11-24T23:45:33.156757Z",
+    "fetchedAt": "2026-11-25T11:03:46.215Z",
+    "toolsSha256": "cfa8c7a110f555bc77b65877d268edc37c0a42b867d603f434a25b46e3263e55"
+  }
+}

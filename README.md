@@ -4,7 +4,7 @@
 
 [![npm version](https://img.shields.io/npm/v/mcp-benchmark.svg)](https://www.npmjs.com/package/mcp-benchmark)
 [![CI](https://github.com/yunusarda-sudo/mcp-benchmark/actions/workflows/ci.yml/badge.svg)](https://github.com/yunusarda-sudo/mcp-benchmark/actions/workflows/ci.yml)
-[![MCP Registry Servers](https://img.shields.io/badge/MCP_Registry-1408_Servers-blueviolet)](LEADERBOARD.md)
+[![MCP Registry Servers](https://img.shields.io/badge/MCP_Registry-2124_Servers-blueviolet)](LEADERBOARD.md)
 [![Web Playground](https://img.shields.io/badge/Web_Playground-Live-10b981)](https://yunusarda-sudo.github.io/mcp-benchmark/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
@@ -197,16 +197,16 @@ Explore the full interactive leaderboard with sorting, search, and tool inspecti
 <!-- NEW_RELEASES_START -->
 | Published | Server | Grade | TQI | Tools | Data |
 |:---|:---|:---:|---:|---:|:---:|
-| 2026-11-24 | **Shopproof EU shop rules** · `app.shopproof/rules` | `A+` | 95 | 8 | [json](registry/servers/app-shopproof-rules.json) |
-| 2026-11-24 | [**cuttingfloor**](https://github.com/Mvp2o-ai/cuttingfloor) · `io.github.Mvp2o-ai/cuttingfloor` | `A` | 89 | 77 | [json](registry/servers/io-github-mvp2o-ai-cuttingfloor.json) |
-| 2026-11-24 | **io.github.zz959397ghb/zzm49** | `A` | 88 | 2 | [json](registry/servers/io-github-zz959397ghb-zzm49.json) |
-| 2026-11-24 | [**Polradar**](https://github.com/bluetouff/polradar) · `io.github.bluetouff/polradar` | `A` | 94 | 5 | [json](registry/servers/io-github-bluetouff-polradar.json) |
-| 2026-11-24 | [**Unique.domains**](https://github.com/UniqueDomains/mcp-server) · `domains.unique/mcp-server` | `A+` | 96 | 51 | [json](registry/servers/domains-unique-mcp-server.json) |
-| 2026-11-24 | [**borbur.net salary, tax and visa calculators**](https://github.com/Borbur14/spain-salary-calculator-2026) · `net.borbur/salary-calculators` | `A` | 93 | 26 | [json](registry/servers/net-borbur-salary-calculators.json) |
-| 2026-11-24 | **Procvičky.cz – pracovní listy** · `cz.procvicky/pracovni-listy` | `A+` | 99 | 3 | [json](registry/servers/cz-procvicky-pracovni-listy.json) |
-| 2026-11-24 | **Hotels &amp; Coast** · `com.hotelsandcoast/stays` | `B` | 86 | 21 | [json](registry/servers/com-hotelsandcoast-stays.json) |
-| 2026-11-24 | **Cars &amp; Coast** · `com.carsandcoast/coast` | `B` | 87 | 22 | [json](registry/servers/com-carsandcoast-coast.json) |
-| 2026-11-24 | **Wallace's Line — wildlife sighting chances** · `com.wallacesline/wildlife` | `A+` | 97 | 6 | [json](registry/servers/com-wallacesline-wildlife.json) |
+| 2026-11-25 | **formatPaperback KDP calculators** · `com.formatpaperback/kdp` | `A` | 92 | 4 | [json](registry/servers/com-formatpaperback-kdp.json) |
+| 2026-11-25 | **Namepiq** · `com.namepiq/domains` | `A` | 93 | 36 | [json](registry/servers/com-namepiq-domains.json) |
+| 2026-11-25 | [**MillionVerifier MCP by usefulapi**](https://github.com/m190/usefulapi-mcp) · `io.usefulapi/millionverifier` | `B` | 86 | 4 | [json](registry/servers/io-usefulapi-millionverifier.json) |
+| 2026-11-25 | [**io.github.openvancamp/openvan-travel**](https://github.com/openvancamp/openvan-camp-public-api) | `A` | 93 | 32 | [json](registry/servers/io-github-openvancamp-openvan-travel.json) |
+| 2026-11-25 | **Photo2Ads** · `com.photo2ads/ad-studio` | `A` | 94 | 4 | [json](registry/servers/com-photo2ads-ad-studio.json) |
+| 2026-11-25 | **Hotels &amp; Coast** · `com.hotelsandcoast/stays` | `B` | 86 | 22 | [json](registry/servers/com-hotelsandcoast-stays.json) |
+| 2026-11-25 | **Cars &amp; Coast** · `com.carsandcoast/coast` | `B` | 87 | 23 | [json](registry/servers/com-carsandcoast-coast.json) |
+| 2026-11-25 | **Kamertaal** · `nl.kamertaal/dutch-parliament-tweede-kamer` | `A` | 92 | 17 | [json](registry/servers/nl-kamertaal-dutch-parliament-tweede-kamer.json) |
+| 2026-11-25 | **I Love Ferry · Bahamas Ferry** · `us.iloveferry/bahamas-ferry` | `A` | 92 | 5 | [json](registry/servers/us-iloveferry-bahamas-ferry.json) |
+| 2026-11-25 | [**Onchain Signals**](https://github.com/glibey/onchain-signals) · `io.github.glibey/onchain-signals` | `A+` | 96 | 7 | [json](registry/servers/io-github-glibey-onchain-signals.json) |
 <!-- NEW_RELEASES_END -->
 
 ### Top Synced Servers
@@ -215,25 +215,25 @@ Explore the full interactive leaderboard with sorting, search, and tool inspecti
 | # | Server | Grade | TQI | Tools | Tokens/tool | Data |
 |---:|:---|:---:|---:|---:|---:|:---:|
 | 1 | **ae.brainy/brainy-48** | `A+` | 100 | 4 | 185 | [json](registry/servers/ae-brainy-brainy-48.json) |
-| 2 | **Injection Check** · `com.injectioncheck/injectioncheck` | `A+` | 100 | 1 | 197 | [json](registry/servers/com-injectioncheck-injectioncheck.json) |
-| 3 | **トゥーンエル** · `com.tooneru/manga` | `A+` | 100 | 6 | 128 | [json](registry/servers/com-tooneru-manga.json) |
-| 4 | [**Startups Españolas press desk**](https://github.com/martinschenk/startups-espanolas-mcp) · `es.startups-espanolas/notas-de-prensa` | `A+` | 100 | 5 | 181 | [json](registry/servers/es-startups-espanolas-notas-de-prensa.json) |
-| 5 | **AI Verified** · `io.aiverified/verify-business` | `A+` | 100 | 1 | 162 | [json](registry/servers/io-aiverified-verify-business.json) |
-| 6 | [**Viventii Events, Leisure, POIs, Tickets &amp; Ticket Resale**](https://github.com/borsty2103/viventii-mcp) · `io.github.borsty2103/viventii-mcp` | `A+` | 100 | 16 | 183 | [json](registry/servers/io-github-borsty2103-viventii-mcp.json) |
-| 7 | [**Brazil DANFSe &amp; Tax Reform RTC \(x402\)**](https://github.com/brunopompeo1/brazil-ai-fiscal-apis-x402) · `io.github.brunopompeo1/br-danfse-rtc-x402` | `A+` | 100 | 2 | 946 | [json](registry/servers/io-github-brunopompeo1-br-danfse-rtc-x402.json) |
-| 8 | **Tally food nutrients** · `io.github.martindochamp/tally-foods` | `A+` | 100 | 2 | 136 | [json](registry/servers/io-github-martindochamp-tally-foods.json) |
-| 9 | [**Jobs Data MCP \(SteadyScrape\)**](https://github.com/steadyscrape/jobs-data-mcp) · `io.github.steadyscrape/jobs-data-mcp` | `A+` | 100 | 4 | 316 | [json](registry/servers/io-github-steadyscrape-jobs-data-mcp.json) |
-| 10 | [**PageDigest — Web Page Summarizer &amp; Structured Extractor**](https://github.com/SuBai520-QWQ/pagedigest) · `io.github.SuBai520-QWQ/pagedigest` | `A+` | 100 | 1 | 134 | [json](registry/servers/io-github-subai520-qwq-pagedigest.json) |
-| 11 | [**TimeTrex MCP by usefulapi**](https://github.com/m190/usefulapi-mcp) · `io.usefulapi/timetrex` | `A+` | 100 | 4 | 177 | [json](registry/servers/io-usefulapi-timetrex.json) |
-| 12 | [**FilmCraft — Video Editing Assistant MCP**](https://github.com/yueliao11/mcp-servers) · `tech.filmcraft/video-editing-assistant` | `A+` | 100 | 3 | 148 | [json](registry/servers/tech-filmcraft-video-editing-assistant.json) |
-| 13 | **Verifera job search** · `uk.co.verifera/job-search` | `A+` | 100 | 1 | 324 | [json](registry/servers/uk-co-verifera-job-search.json) |
-| 14 | [**First names in Switzerland**](https://gitlab.com/opendata.ch/vornamen) · `ch.opendata/vornamen` | `A+` | 99 | 4 | 160 | [json](registry/servers/ch-opendata-vornamen.json) |
-| 15 | [**AL-KARA Cosmetics &amp; GCC Store MCP Server**](https://github.com/attaristnboli-a11y/alkara-store-mcp) · `com.alkaratr/store-mcp` | `A+` | 99 | 4 | 153 | [json](registry/servers/com-alkaratr-store-mcp.json) |
+| 2 | [**Wigoo**](https://github.com/youssbim/wigoo-mcp) · `com.getwigoo/wigoo` | `A+` | 100 | 4 | 222 | [json](registry/servers/com-getwigoo-wigoo.json) |
+| 3 | **Injection Check** · `com.injectioncheck/injectioncheck` | `A+` | 100 | 1 | 197 | [json](registry/servers/com-injectioncheck-injectioncheck.json) |
+| 4 | **トゥーンエル** · `com.tooneru/manga` | `A+` | 100 | 6 | 128 | [json](registry/servers/com-tooneru-manga.json) |
+| 5 | **GStars** · `dev.gstars/gstars` | `A+` | 100 | 4 | 219 | [json](registry/servers/dev-gstars-gstars.json) |
+| 6 | [**Startups Españolas press desk**](https://github.com/martinschenk/startups-espanolas-mcp) · `es.startups-espanolas/notas-de-prensa` | `A+` | 100 | 5 | 181 | [json](registry/servers/es-startups-espanolas-notas-de-prensa.json) |
+| 7 | **AI Verified** · `io.aiverified/verify-business` | `A+` | 100 | 1 | 162 | [json](registry/servers/io-aiverified-verify-business.json) |
+| 8 | **io.github.ai-ip/dataquant** | `A+` | 100 | 3 | 179 | [json](registry/servers/io-github-ai-ip-dataquant.json) |
+| 9 | [**Viventii Events, Leisure, POIs, Tickets &amp; Ticket Resale**](https://github.com/borsty2103/viventii-mcp) · `io.github.borsty2103/viventii-mcp` | `A+` | 100 | 16 | 183 | [json](registry/servers/io-github-borsty2103-viventii-mcp.json) |
+| 10 | [**Brazil DANFSe &amp; Tax Reform RTC \(x402\)**](https://github.com/brunopompeo1/brazil-ai-fiscal-apis-x402) · `io.github.brunopompeo1/br-danfse-rtc-x402` | `A+` | 100 | 2 | 946 | [json](registry/servers/io-github-brunopompeo1-br-danfse-rtc-x402.json) |
+| 11 | **Toronto Walk** · `io.github.howardchenghuang-dotcom/torontowalk` | `A+` | 100 | 3 | 133 | [json](registry/servers/io-github-howardchenghuang-dotcom-torontowalk.json) |
+| 12 | **Tally food nutrients** · `io.github.martindochamp/tally-foods` | `A+` | 100 | 2 | 136 | [json](registry/servers/io-github-martindochamp-tally-foods.json) |
+| 13 | **Nightarot** · `io.github.skorykh-work/nightarot` | `A+` | 100 | 4 | 145 | [json](registry/servers/io-github-skorykh-work-nightarot.json) |
+| 14 | [**Jobs Data MCP \(SteadyScrape\)**](https://github.com/steadyscrape/jobs-data-mcp) · `io.github.steadyscrape/jobs-data-mcp` | `A+` | 100 | 4 | 316 | [json](registry/servers/io-github-steadyscrape-jobs-data-mcp.json) |
+| 15 | [**PageDigest — Web Page Summarizer &amp; Structured Extractor**](https://github.com/SuBai520-QWQ/pagedigest) · `io.github.SuBai520-QWQ/pagedigest` | `A+` | 100 | 1 | 134 | [json](registry/servers/io-github-subai520-qwq-pagedigest.json) |
 <!-- LEADERBOARD_TOP_END -->
 
 <!-- SYNC_INFO_START -->
-**1408 servers · 22392 tools · last sync 2026-11-24.**
-Last run: 72593 registry entries scanned, 43255 auth-free remote candidates, 751 returned tools, 454 required authentication, 295 failed (probe cap reached).
+**2124 servers · 32754 tools · last sync 2026-11-25.**
+Last run: 73567 registry entries scanned, 43862 auth-free remote candidates, 932 returned tools, 547 required authentication, 21 failed (probe cap reached).
 Probed newest first by registry publish date, at most 1500 per run and at most 3 listed servers per operator (registrable domain of the remote host).
 <!-- SYNC_INFO_END -->
 

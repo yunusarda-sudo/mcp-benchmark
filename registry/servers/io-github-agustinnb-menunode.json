@@ -1,0 +1,1220 @@
+{
+  "$schema": "../schema.json",
+  "name": "io.github.agustinnb/menunode",
+  "title": "MenuNode",
+  "category": "AI, LLMs & Agents",
+  "description": "Restaurant menus, allergens, opening hours, table reservations, waitlists and orders for AI agents.",
+  "repository": "https://github.com/agustinnb/menunode-mcp",
+  "tools": [
+    {
+      "name": "search_restaurants",
+      "description": "Find restaurants on MenuNode when you do not know the slug yet, by restaurant or by dish. All filters are optional and combine with AND: dish (words that must appear in a dish: name, description, translations, its category or dietary tags — e.g. \"milanesa\", \"sin TACC\", \"vegan pizza\"; returns matched_dishes per restaurant with the price in force right now and whether each dish is available or sold out), query (free text over the restaurant's name, cuisine, description and city OR over its dishes; restaurants that match through a dish also get matched_dishes), city, cuisine, open_now (evaluated in each restaurant's own timezone; restaurants that publish no hours are excluded when open_now is true), dietary (e.g. [\"vegetarian\",\"dairy_free\"]: the restaurant has available dishes with every tag; vegetarian also counts vegan dishes), accepts_orders, accepts_reservations, near {lat, lng, radius_km} (only restaurants with coordinates; results then sorted by distance). language (en|es|pt|fr) picks the language dish names come back in, when the restaurant offers it. Each result carries price_band: dish prices worked out from its main location's menu today (half of the dishes between p25 and p75, the most expensive section; not per person; null with fewer than 6 priced dishes). Returns up to `limit` (max 20) results and a next_cursor to page. Only restaurants that publish their menu are searched. Use the returned slug with get_restaurant_info / get_menu / get_menu_structured.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "dish": {
+            "type": "string",
+            "description": "Dish or ingredient words, e.g. \"milanesa napolitana\", \"sin TACC\", \"vegan pizza\" (accent-insensitive, all words must match a dish)"
+          },
+          "query": {
+            "type": "string",
+            "description": "Free text: restaurant name, cuisine, dish, neighbourhood"
+          },
+          "city": {
+            "type": "string",
+            "description": "City or neighbourhood (accent-insensitive)"
+          },
+          "cuisine": {
+            "type": "string",
+            "description": "Cuisine type, e.g. \"pizza\", \"peruvian\", \"parrilla\""
+          },
+          "open_now": {
+            "type": "boolean"
+          },
+          "dietary": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Dietary tags restaurants can set on dishes: vegan, vegetarian, gluten_free, dairy_free, spicy, nuts, halal, kosher. vegetarian also matches vegan dishes. For coeliacs use dish \"sin TACC\" (celiac_safe), not gluten_free."
+          },
+          "accepts_orders": {
+            "type": "boolean",
+            "description": "Takes pay-at-restaurant orders online (create_order)"
+          },
+          "accepts_reservations": {
+            "type": "boolean",
+            "description": "Takes table bookings online (create_reservation)"
+          },
+          "near": {
+            "type": "object",
+            "properties": {
+              "lat": {
+                "type": "number"
+              },
+              "lng": {
+                "type": "number"
+              },
+              "radius_km": {
+                "type": "number",
+                "description": "Default 5, max 200"
+              }
+            },
+            "required": [
+              "lat",
+              "lng"
+            ]
+          },
+          "language": {
+            "type": "string",
+            "enum": [
+              "en",
+              "es",
+              "pt",
+              "fr"
+            ],
+            "description": "Language for dish names in matched_dishes (falls back to the restaurant's own language)"
+          },
+          "limit": {
+            "type": "number",
+            "description": "Results per page, default 10, max 20"
+          },
+          "cursor": {
+            "type": "string",
+            "description": "next_cursor from a previous call"
+          }
+        }
+      }
+    },
+    {
+      "name": "get_restaurant_info",
+      "description": "Everything about a restaurant on MenuNode except the dishes (but group_menus: its set menus offered to groups, priced by quote_group): locations (a restaurant may have several, each with its own branch slug, address and menu_url; pass `branch` to this and the other tools for one of them, omit it for the main one), description, cuisine, price range, currency, address, phone/WhatsApp/email/website/socials, opening hours and whether it is open right now (holiday closures and special hours included), special_hours: date exceptions for the next 14 days (closed days and special schedules, with a label such as \"Christmas Day\"), and whether it accepts online orders and reservations (and how: dine-in/pickup/delivery, payment methods), and menu_languages: the languages the menu can be read in (the restaurant's own first; pass one as `language` to get_menu), and price_band: dish prices worked out from today's menu at this location (half of the dishes cost between p25 and p75, and the most expensive section with its median; not a price per person; null with fewer than 6 priced dishes), and faq: the restaurant's own answers to questions people asked (ask_restaurant forwards a new one while takes_questions is true), and quiet_hours: the quiet hour the restaurant itself declares (no music, low light) by weekday and time, with the days it suspended (bookable times inside it come back quiet: true from list_available_slots / check_availability; MenuNode does not check it, so say it is declared by the restaurant). amenities: what the restaurant says the place has (accessible_entrance, accessible_restroom: wheelchair access; kids: good for kids, high chairs; pets; parking; outdoor_seating), true or false; a missing key means it did not answer, never assume no. payment_at_place: how it says people can pay at the place or on receipt (cash, debit_card, credit_card, qr: Mercado Pago, MODO or wallets, bank_transfer, pix), same rule; ordering.payment_methods is what an order placed here accepts. payment_benefits: benefits of a bank or payment app the restaurant declares for paying at the place on some weekdays, until a date (also_online: also for an online order); pass on its text as written, it says they are subject to the issuer's terms. Fields are null, not omitted, when unset.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "restaurant_slug": {
+            "type": "string"
+          },
+          "branch": {
+            "type": "string",
+            "description": "Location of a restaurant with several (get_restaurant_info.locations[].branch, e.g. \"palermo\"). Omit for the main location. Hours, contact, address, ordering and reservations differ per location."
+          }
+        },
+        "required": [
+          "restaurant_slug"
+        ]
+      }
+    },
+    {
+      "name": "get_menu",
+      "description": "The full current menu as markdown (dish ids included, add-ons listed, EU-14 allergens and possible traces per dish, coeliac-safe (Sin TACC) dishes marked, sold-out dishes flagged \"SOLD OUT\") plus contact/hours lines and, for a restaurant with several locations, the list of them with their menu links. Pass `language` to get it in one of the languages the restaurant offers (see get_restaurant_info.menu_languages); otherwise it comes in the restaurant's own language. Prefer get_menu_structured when you intend to order. discontinued lists the dishes the restaurant deleted from this menu in the last 12 months (it no longer serves them: never offer or order them; replaced_by, when set, is the dish it suggests instead); pass `since` (ISO 8601 date or time) to also get removed_since, the ones removed at or after it. daily_menu_upcoming lists the menu of the day the restaurant already saved for the next days (date, title, set_price, dishes): it may change, so say so and never promise it. allergen_changes lists the allergens the restaurant itself declared it added to a dish in the last 30 days (added, may_contain_added = new traces, celiac_lost = no longer Sin TACC, declared_on): say it as declared by the restaurant. It is not a complete list: a dish without an entry is NOT \"unchanged\", never say so; when it matters, tell the diner to ask the restaurant. Pass `avoid` when the diner says what they cannot eat: contains = the restaurant declares it in the dish; may_contain = declared as possible traces (cross-contact): a conflict too, not a detail; not_recorded = the restaurant has not recorded it for this dish: UNKNOWN, not absent; not_listed_in_declared = the restaurant reviewed the dish and it is not among what it declares, which is not a guarantee. None of these values means a dish is safe or free of an allergen, and a dish with no row is unknown. Health information: never tell the diner a dish is safe or free of anything, whatever the answer; pass on the note of each dish you mention (note_id, its text in avoid_notes), and tell them to confirm with the restaurant before ordering. Add-ons carry no allergen information. daily_menu_upcoming dishes carry no allergen information.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "restaurant_slug": {
+            "type": "string"
+          },
+          "branch": {
+            "type": "string",
+            "description": "Location of a restaurant with several (get_restaurant_info.locations[].branch, e.g. \"palermo\"). Omit for the main location. Hours, contact, address, ordering and reservations differ per location."
+          },
+          "language": {
+            "type": "string",
+            "enum": [
+              "en",
+              "es",
+              "pt",
+              "fr"
+            ],
+            "description": "Menu language: en | es | pt | fr. A language the restaurant does not offer falls back to its own language."
+          },
+          "avoid": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "gluten",
+                "crustaceans",
+                "eggs",
+                "fish",
+                "peanuts",
+                "soy",
+                "milk",
+                "tree_nuts",
+                "celery",
+                "mustard",
+                "sesame",
+                "sulphites",
+                "lupin",
+                "molluscs",
+                "gluten_celiac"
+              ]
+            },
+            "description": "What the diner must avoid: EU-14 allergen keys, or gluten_celiac for a coeliac (it also reads the Sin TACC mark). Not a filter: every dish still comes back, each with one answer per key. peanuts and tree_nuts are separate; shellfish needs crustaceans and molluscs; any other allergy has no key: send the diner to the restaurant."
+          },
+          "since": {
+            "type": "string",
+            "description": "ISO 8601 date (midnight on the restaurant's calendar) or date-time: removed_since lists the dishes removed at or after it"
+          }
+        },
+        "required": [
+          "restaurant_slug"
+        ]
+      }
+    },
+    {
+      "name": "get_menu_structured",
+      "description": "The menu as JSON: categories (with available_now / available_hours for time-of-day menus like breakfast, evaluated in the restaurant's timezone; set_menu_price for a fixed-price menu of the day, which is not orderable dish by dish) → items with item_id, price (the price in force right now, happy hour included; regular_price + price_note when a promo applies), available_now (true = create_order takes it for as soon as possible), orderable (now | later = only in an order scheduled for later, the restaurant takes those | no = not online right now) with orderable_reason (sold_out | notice | hours | set_menu | preorder; null when now) and orderable_from (ISO, only \"not before this time\" for a dish sold out until then, never a time the order is sure to be taken: the real earliest time comes back as earliest_at; null = go by notice_days or the category hours), available (false = sold out right now: create_order refuses it for as soon as possible; when sold_out_until is set and the restaurant takes scheduled orders, an order scheduled at or after the earliest_at it returns is accepted; a dish outside its category hours can only go into an order scheduled within those hours), sold_out_until (ISO time a \"sold out today\" dish comes back, else null), preorder on a category (null for most: delivery_dates YYYY-MM-DD on the restaurant's clock and order_by ISO; its dishes are ordered only scheduled on one of those dates, before order_by, in an order with no other dishes: never offer another date; create_order refuses with preorder_date, preorder_closed or preorder_mixed), notice_days (whole days ahead the dish must be ordered, 0 = none; an earlier time fails with scheduled_not_accepted, reason too_soon, earliest_at), dietary tags, allergens (EU-14 keys the dish contains: gluten, crustaceans, eggs, fish, peanuts, soy, milk, tree_nuts, celery, mustard, sesame, sulphites, lupin, molluscs — an empty list never means \"allergen-free\"), may_contain (same keys, possible traces from cross-contact), allergens_status (declared | none_declared = the restaurant checked and declared none | not_recorded = never filled in, UNKNOWN: tell the diner to ask the restaurant; never present a dish as free of an allergen unless it is explicitly marked) with allergens_reviewed_at, celiac_safe (true only when the restaurant marks the dish \"Sin TACC\": gluten-free and prepared to avoid cross-contact; the gluten_free dietary tag alone means the recipe has no gluten), calories (kcal per serving as the restaurant declares it; null = not recorded, never estimate), contains_alcohol (true = the restaurant marked the dish as containing alcohol; false = not marked, never \"alcohol-free\"), wine (null unless the dish is a wine: style red | white | rose | sparkling | sweet, producer = winery, grapes, region, vintage year; any of them may be missing — use it to answer \"a Malbec from Mendoza\" and the like), add-ons (personalization_id, price) and pairs_well_with (item_ids of other dishes the restaurant suggests with this one — offer them once when the diner orders the dish, never push; may list a dish that is sold out or out of hours right now, check its own available_now). allergen_disclaimer is the restaurant's own notice about allergens and cross-contact (null if none). Pass `language` for a translated menu (the response says which language you got and which exist). Item ids are the same in every language. Use these ids with create_order. Dishes the restaurant no longer serves are not here: get_menu.discontinued lists them. Pass `avoid` when the diner says what they cannot eat: contains = the restaurant declares it in the dish; may_contain = declared as possible traces (cross-contact): a conflict too, not a detail; not_recorded = the restaurant has not recorded it for this dish: UNKNOWN, not absent; not_listed_in_declared = the restaurant reviewed the dish and it is not among what it declares, which is not a guarantee. None of these values means a dish is safe or free of an allergen, and a dish with no row is unknown. Health information: never tell the diner a dish is safe or free of anything, whatever the answer; pass on the note of each dish you mention (note_id, its text in avoid_notes), and tell them to confirm with the restaurant before ordering. Add-ons carry no allergen information. daily_menu_upcoming dishes carry no allergen information.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "restaurant_slug": {
+            "type": "string"
+          },
+          "branch": {
+            "type": "string",
+            "description": "Location of a restaurant with several (get_restaurant_info.locations[].branch, e.g. \"palermo\"). Omit for the main location. Hours, contact, address, ordering and reservations differ per location."
+          },
+          "language": {
+            "type": "string",
+            "enum": [
+              "en",
+              "es",
+              "pt",
+              "fr"
+            ],
+            "description": "Menu language: en | es | pt | fr. A language the restaurant does not offer falls back to its own language."
+          },
+          "avoid": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "gluten",
+                "crustaceans",
+                "eggs",
+                "fish",
+                "peanuts",
+                "soy",
+                "milk",
+                "tree_nuts",
+                "celery",
+                "mustard",
+                "sesame",
+                "sulphites",
+                "lupin",
+                "molluscs",
+                "gluten_celiac"
+              ]
+            },
+            "description": "What the diner must avoid: EU-14 allergen keys, or gluten_celiac for a coeliac (it also reads the Sin TACC mark). Not a filter: every dish still comes back, each with one answer per key. peanuts and tree_nuts are separate; shellfish needs crustaceans and molluscs; any other allergy has no key: send the diner to the restaurant."
+          },
+          "locale": {
+            "type": "string",
+            "description": "Deprecated alias of `language`."
+          }
+        },
+        "required": [
+          "restaurant_slug"
+        ]
+      }
+    },
+    {
+      "name": "ask_restaurant",
+      "description": "Ask the restaurant one short question its menu and get_restaurant_info do not answer (e.g. \"Can the milanesa be baked instead of fried?\", \"Do you have a high chair?\"). Check get_restaurant_info.faq first. If the restaurant already answered the same question, the answer comes back right away (status answered). Otherwise, when get_restaurant_info.takes_questions is true, the question waits up to 24 h for the restaurant (status asked or already_asked); its answer is then published in get_restaurant_info.faq, get_menu and llms.txt for everyone, never sent back to a person, so ask again or read faq later. status not_taking = the restaurant does not take questions this way right now: give the diner contact (phone, WhatsApp or email). The question is published only in the restaurant's own words; never put names, emails, phone numbers or links in it (refused).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "restaurant_slug": {
+            "type": "string"
+          },
+          "branch": {
+            "type": "string",
+            "description": "Location of a restaurant with several (get_restaurant_info.locations[].branch, e.g. \"palermo\"). Omit for the main location. Hours, contact, address, ordering and reservations differ per location."
+          },
+          "question": {
+            "type": "string",
+            "minLength": 8,
+            "maxLength": 280,
+            "description": "One question, in the diner's words, without personal data or links"
+          },
+          "language": {
+            "type": "string",
+            "description": "Language of the question (en | es | pt | fr …), optional"
+          }
+        },
+        "required": [
+          "restaurant_slug",
+          "question"
+        ]
+      }
+    },
+    {
+      "name": "quote_group",
+      "description": "Price a group meal (a birthday, a company dinner) from the restaurant's own menus for groups (get_restaurant_info.group_menus): for each one that takes this party_size on that date, total = price_per_person x party_size. It is the price the restaurant publishes today: nothing is saved or sent to the restaurant, it holds until valid_until and it does not lock the price for the event date. Nothing else is added or guessed: drinks, deposit, service and anything not in includes are listed in to_confirm. Pass date (YYYY-MM-DD, up to a year ahead) to check that day against each menu's own dates and weekdays, its notice_days and the restaurant's booking rules (booking: bookable, reason, free_times; reason party_size = too many people to book online, use the contact); a menu that starts later is priced for a date inside its dates. menu_id prices only one. status no_group_menu or no_fit = there is no published price for this group: give the diner the contact (or ask_restaurant) and never make one up. reserve_url opens the booking page with the party size (and date) filled in; nothing is booked by this call.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "restaurant_slug": {
+            "type": "string"
+          },
+          "branch": {
+            "type": "string",
+            "description": "Location of a restaurant with several (get_restaurant_info.locations[].branch, e.g. \"palermo\"). Omit for the main location. Hours, contact, address, ordering and reservations differ per location."
+          },
+          "party_size": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 500,
+            "description": "How many people, the organiser included"
+          },
+          "date": {
+            "type": "string",
+            "description": "YYYY-MM-DD on the restaurant's calendar, today to a year ahead (optional; without it, today's menus)"
+          },
+          "menu_id": {
+            "type": "integer",
+            "description": "One of get_restaurant_info.group_menus[].menu_id (optional; default all)"
+          },
+          "language": {
+            "type": "string",
+            "enum": [
+              "en",
+              "es",
+              "pt",
+              "fr"
+            ],
+            "description": "Menu language: en | es | pt | fr. A language the restaurant does not offer falls back to its own language."
+          }
+        },
+        "required": [
+          "restaurant_slug",
+          "party_size"
+        ]
+      }
+    },
+    {
+      "name": "send_event_inquiry",
+      "description": "Send the restaurant an inquiry for an event or a large group (a birthday, a company dinner, a family celebration, a wedding): date, party size (2 to 500), event type, the guest's name and at least one contact (email and/or phone); optional: budget_per_person in the restaurant's currency, dietary (allergies or diets, free text), message, and group_menu_id = one of get_restaurant_info.group_menus[].menu_id the guest is interested in. Nothing is booked, held or charged: it reaches the restaurant's inbox and the restaurant answers the guest by email or WhatsApp, so tell the guest to wait for that answer. Fails with feature_off when this location does not take event inquiries online (give the guest the contact from get_restaurant_info instead). Only at the guest's explicit request, with their own contact. For a price, quote_group first; for a normal table, create_reservation.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "restaurant_slug": {
+            "type": "string"
+          },
+          "branch": {
+            "type": "string",
+            "description": "Location of a restaurant with several (get_restaurant_info.locations[].branch, e.g. \"palermo\"). Omit for the main location. Hours, contact, address, ordering and reservations differ per location."
+          },
+          "date": {
+            "type": "string",
+            "description": "YYYY-MM-DD on the restaurant's calendar, today to a year ahead"
+          },
+          "party_size": {
+            "type": "integer",
+            "minimum": 2,
+            "maximum": 500
+          },
+          "event_type": {
+            "type": "string",
+            "enum": [
+              "birthday",
+              "company",
+              "family",
+              "wedding",
+              "other"
+            ]
+          },
+          "event_type_other": {
+            "type": "string",
+            "description": "What kind of event, when event_type is other (max 60 characters)"
+          },
+          "budget_per_person": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Optional, in the restaurant's currency"
+          },
+          "dietary": {
+            "type": "string",
+            "description": "Allergies or diets in the group (max 500 characters)"
+          },
+          "customer_name": {
+            "type": "string"
+          },
+          "customer_email": {
+            "type": "string"
+          },
+          "customer_phone": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string",
+            "description": "Anything else the guest wants to say (max 1000 characters)"
+          },
+          "group_menu_id": {
+            "type": "integer",
+            "description": "Optional: get_restaurant_info.group_menus[].menu_id"
+          },
+          "language": {
+            "type": "string",
+            "enum": [
+              "en",
+              "es",
+              "pt",
+              "fr"
+            ],
+            "description": "The guest's language (default: the restaurant's)"
+          }
+        },
+        "required": [
+          "restaurant_slug",
+          "date",
+          "party_size",
+          "event_type",
+          "customer_name"
+        ]
+      }
+    },
+    {
+      "name": "prepare_order_link",
+      "description": "Check a cart against today's menu and get a link to the restaurant's own order page with those dishes already in the cart (and pickup / delivery / dine-in already chosen when you pass fulfillment).The diner opens it, checks it and fills in their contact, pickup or delivery details and payment there. Nothing is ordered, saved or charged by this call and no personal data goes in, except avoid, which is not kept. Use it when you cannot verify the diner (emailed code) or pay for them; create_order is for placing the order yourself. Same lines as create_order: item_id from get_menu_structured, quantity, personalization_ids. Returns order_url (give it to the diner as is), estimated_total (the food at today's prices in `currency`; cover charge, delivery fee and coupons are added on the page), left_out (dishes that would not go in and why: not_on_menu, addon_unavailable, sold_out, notice = must be ordered days ahead, hours = not served right now, set_menu, preorder = only for set delivery dates (get_menu_structured category preorder; create_order scheduled on one of them, apart from other dishes), limit_reached with `left` = how many can still be ordered when known; absent for an online daily quota; combo = a combo or set meal sent without valid combo_option_ids (a step not answered, an option that ran out or is gone): send the option_ids from get_menu_structured combo_steps, or the diner picks on the page), accepting_now (an order for as soon as possible is taken right now) and scheduled_only (only an order for a later time is taken right now; the page offers it). Dishes are checked for right now, sections with their own hours (breakfast, lunch) included: a dish outside its section's hours is left out with hours even if the diner wants it later. The order_url has no language unless you pass `language` (the page then opens in the diner's own). Prices and availability are confirmed on the page. Fails with commerce_disabled where the restaurant takes no online orders (plan_required with its phone when it takes them by phone only). Pass `avoid` when the diner says what they cannot eat, through prepare_order_link or get_menu_structured before create_order: a create_order that needs no emailed code is already placed when it answers. Health information: never tell the diner a dish is safe or free of anything, whatever the answer; pass on the note of each line (note_id and add_ons_note_id, the text in avoid_notes) and tell them to confirm with the restaurant. Add-ons carry no allergen information. The kitchen does NOT receive avoid: only the `allergy` of create_order, sent with allergy_consent true, reaches it.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "restaurant_slug": {
+            "type": "string"
+          },
+          "branch": {
+            "type": "string",
+            "description": "Location of a restaurant with several (get_restaurant_info.locations[].branch, e.g. \"palermo\"). Omit for the main location. Hours, contact, address, ordering and reservations differ per location."
+          },
+          "items": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 50,
+            "items": {
+              "type": "object",
+              "properties": {
+                "item_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "quantity": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 50
+                },
+                "personalization_ids": {
+                  "type": "array",
+                  "maxItems": 20,
+                  "items": {
+                    "type": "integer"
+                  }
+                },
+                "presentation_id": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "description": "Only for a dish with presentations: the one chosen (omitted = the main one; one no longer offered goes in as the main one, said in note)"
+                },
+                "combo_option_ids": {
+                  "type": "array",
+                  "maxItems": 32,
+                  "items": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "description": "Only for a combo (combo_steps in get_menu_structured): the option_ids the diner picked, as in create_order. Checked the same way; when they are not valid right now the combo is in left_out (reason combo) and never gets another option"
+                }
+              },
+              "required": [
+                "item_id",
+                "quantity"
+              ]
+            }
+          },
+          "fulfillment": {
+            "type": "string",
+            "enum": [
+              "dine_in",
+              "pickup",
+              "delivery"
+            ],
+            "description": "Preselect pickup, delivery or dine_in on the page (one of get_restaurant_info.ordering.fulfillment_options). Omit to let the diner choose; they can change it on the page."
+          },
+          "language": {
+            "type": "string",
+            "enum": [
+              "en",
+              "es",
+              "pt",
+              "fr"
+            ],
+            "description": "Menu language: en | es | pt | fr. A language the restaurant does not offer falls back to its own language."
+          },
+          "avoid": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "gluten",
+                "crustaceans",
+                "eggs",
+                "fish",
+                "peanuts",
+                "soy",
+                "milk",
+                "tree_nuts",
+                "celery",
+                "mustard",
+                "sesame",
+                "sulphites",
+                "lupin",
+                "molluscs",
+                "gluten_celiac"
+              ]
+            },
+            "description": "What the diner must avoid, the same keys as get_menu_structured's avoid. Send it only if the diner said so. A warning for the diner, never refused: every line gets one answer per key (avoid_conflicts) and the order or the link stays as it is. peanuts and tree_nuts are separate; shellfish needs crustaceans and molluscs; any other allergy has no key: send the diner to the restaurant. Not put in the link and not saved, so the kitchen does NOT receive it: the diner answers the allergy question on the page or calls the restaurant."
+          }
+        },
+        "required": [
+          "restaurant_slug",
+          "items"
+        ]
+      }
+    },
+    {
+      "name": "create_order",
+      "description": "Place an order for a diner yourself (if you cannot verify the diner by the emailed code or pay for them, use prepare_order_link and give them its order_url instead). MenuNode collects no payment: the diner pays at the restaurant / on delivery, or, with payment_method transfer (only when get_restaurant_info.ordering.payment_methods lists it), by bank transfer straight to the restaurant's account. Once the order is placed (here, or by confirm_order) a `transfer` object carries the account and its kind (alias, CBU/CVU, Pix key or CLABE), holder, exact amount and the reference to write; relay it to the diner (pay_first true: the kitchen waits for the money). A payment_method the location does not take fails with payment_method_not_accepted (details.accepted); details.accepted empty with online_only true means the location only takes online payment, which you cannot make for the diner: use prepare_order_link and give them its order_url to order and pay there. Requires item ids from get_menu_structured, the diner's name and email, a fulfillment type the restaurant offers (see get_restaurant_info), a table_number for dine-in, and an address + phone for delivery. When the restaurant has delivery zones (get_restaurant_info.ordering.delivery_zones) the delivery fee and minimum are computed server-side from the address (pass latitude/longitude too if the diner shared their location); an address outside every zone fails with delivery_out_of_zone (offer pickup instead) and one that cannot be found with delivery_address_not_found. Returns verification_required — if true, ask the diner for the 6-digit code emailed to them and call confirm_order. If the code email cannot be sent the call fails with code_not_sent and nothing is saved: tell the diner to try again in a few minutes or call the restaurant. An address that cannot receive mail (a made-up or reserved domain) fails with invalid_email and nothing is saved: ask for a real one. If the kitchen paused online orders the call fails with \"paused\" and a resume_at (ISO time) — tell the diner when to come back, do not retry before then; if the time slot is full it fails with next_slot_at — offer that time (as scheduled_for when the restaurant allows scheduling). Reservations are never paused. Some restaurants confirm pickup/delivery orders that may come from far away: the call then fails with requires_confirmation (details.reason: distance | timezone | phone | no_location) and nothing is created — ask the diner whether the order is real and for this location, then call again with far_order_confirmed true. Ordering for someone else: pass recipient_name and recipient_phone. Pass `avoid` when the diner says what they cannot eat, through prepare_order_link or get_menu_structured before create_order: a create_order that needs no emailed code is already placed when it answers. Health information: never tell the diner a dish is safe or free of anything, whatever the answer; pass on the note of each line (note_id and add_ons_note_id, the text in avoid_notes) and tell them to confirm with the restaurant. Add-ons carry no allergen information. The kitchen does NOT receive avoid: only the `allergy` of create_order, sent with allergy_consent true, reaches it.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "restaurant_slug": {
+            "type": "string"
+          },
+          "branch": {
+            "type": "string",
+            "description": "Location of a restaurant with several (get_restaurant_info.locations[].branch, e.g. \"palermo\"). Omit for the main location. Hours, contact, address, ordering and reservations differ per location."
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "item_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "quantity": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 50
+                },
+                "personalization_ids": {
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  }
+                },
+                "presentation_id": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "description": "Only for a dish with presentations in get_menu_structured (glass/bottle, unit/dozen): the one the diner chose; omitted = the main one. Refused with presentation_unavailable for any other id"
+                },
+                "combo_option_ids": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "description": "Only for a combo (combo_steps in get_menu_structured): the option_ids the diner picked, between min and max per step, each once. The line costs price + each extra_price. Refused with combo_choice_invalid (a step not answered, too many, an unknown id), combo_option_unavailable (one ran out: ask for another) or combo_unavailable (a step has nothing left to pick: the combo cannot be ordered now)"
+                },
+                "notes": {
+                  "type": "string",
+                  "description": "Special instructions for this dish"
+                },
+                "from_suggestion": {
+                  "type": "boolean",
+                  "description": "True when the diner accepted this dish from another ordered dish's pairs_well_with (analytics only)"
+                }
+              },
+              "required": [
+                "item_id",
+                "quantity"
+              ]
+            }
+          },
+          "customer_name": {
+            "type": "string"
+          },
+          "customer_email": {
+            "type": "string"
+          },
+          "customer_phone": {
+            "type": "string"
+          },
+          "fulfillment": {
+            "type": "string",
+            "enum": [
+              "dine_in",
+              "pickup",
+              "delivery"
+            ]
+          },
+          "table_number": {
+            "type": "string"
+          },
+          "delivery_address": {
+            "type": "object",
+            "properties": {
+              "line1": {
+                "type": "string",
+                "description": "Street and number"
+              },
+              "line2": {
+                "type": "string"
+              },
+              "city": {
+                "type": "string"
+              },
+              "postal_code": {
+                "type": "string"
+              },
+              "notes": {
+                "type": "string"
+              },
+              "latitude": {
+                "type": "number",
+                "minimum": -90,
+                "maximum": 90,
+                "description": "Optional: exact delivery point, if the diner shared it"
+              },
+              "longitude": {
+                "type": "number",
+                "minimum": -180,
+                "maximum": 180
+              }
+            }
+          },
+          "payment_method": {
+            "type": "string",
+            "enum": [
+              "cash",
+              "card",
+              "transfer",
+              "qr"
+            ],
+            "description": "How the diner will pay: cash/card/qr at the restaurant or on delivery, or transfer to the restaurant's account. Must be one of get_restaurant_info.ordering.payment_methods"
+          },
+          "coupon_code": {
+            "type": "string"
+          },
+          "notes": {
+            "type": "string",
+            "description": "Order-level notes"
+          },
+          "far_order_confirmed": {
+            "type": "boolean",
+            "description": "Only after create_order failed with requires_confirmation (#386): the diner said yes, the order is real (a prank or the wrong branch are what the restaurant wants to avoid). Never set it without asking them."
+          },
+          "recipient_name": {
+            "type": "string",
+            "maxLength": 80,
+            "description": "Pickup/delivery for someone else: who receives or picks it up. Send together with recipient_phone. Seen only by the restaurant and its courier."
+          },
+          "recipient_phone": {
+            "type": "string",
+            "maxLength": 32,
+            "description": "Phone of recipient_name"
+          },
+          "scheduled_for": {
+            "type": "string",
+            "description": "ISO datetime for a later pickup/delivery, only when get_restaurant_info.ordering.scheduling is asap_and_scheduled and within max_days_ahead; otherwise the call fails with scheduled_not_accepted (and the earliest_at/latest_at window when scheduling is allowed; reason too_soon + item when a dish needs days of notice or is sold out until tomorrow: schedule it at earliest_at or later). A preorder dish (get_menu_structured category preorder) must be scheduled on one of its delivery_dates before order_by: otherwise preorder_date (details deliveryDates, orderBy), preorder_closed after order_by, and preorder_mixed when other dishes are in the same order"
+          },
+          "avoid": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "gluten",
+                "crustaceans",
+                "eggs",
+                "fish",
+                "peanuts",
+                "soy",
+                "milk",
+                "tree_nuts",
+                "celery",
+                "mustard",
+                "sesame",
+                "sulphites",
+                "lupin",
+                "molluscs",
+                "gluten_celiac"
+              ]
+            },
+            "description": "What the diner must avoid, the same keys as get_menu_structured's avoid. Send it only if the diner said so. A warning for the diner, never refused: every line gets one answer per key (avoid_conflicts) and the order or the link stays as it is. peanuts and tree_nuts are separate; shellfish needs crustaceans and molluscs; any other allergy has no key: send the diner to the restaurant. Not saved with the order, so the kitchen does NOT receive it: for the kitchen to know, send `allergy` with allergy_consent."
+          },
+          "allergy": {
+            "type": "object",
+            "description": "What the diner is allergic to, for the kitchen: saved with the order and shown on the kitchen ticket, like the diner's own answer on the order page. Send it only if the diner said so, and only with allergy_consent true. keys: any of gluten, crustaceans, eggs, fish, peanuts, soy, milk, tree_nuts, celery, mustard, sesame, sulphites, lupin, molluscs (an unknown key fails with invalid_allergy); note: one line of text, at most 200 characters (\"celiac, no cross-contact\"). Health data: the restaurant keeps it 90 days, then it is deleted (the order stays).",
+            "properties": {
+              "keys": {
+                "type": "array",
+                "maxItems": 14,
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "gluten",
+                    "crustaceans",
+                    "eggs",
+                    "fish",
+                    "peanuts",
+                    "soy",
+                    "milk",
+                    "tree_nuts",
+                    "celery",
+                    "mustard",
+                    "sesame",
+                    "sulphites",
+                    "lupin",
+                    "molluscs"
+                  ]
+                }
+              },
+              "note": {
+                "type": "string",
+                "maxLength": 200
+              }
+            }
+          },
+          "allergy_consent": {
+            "type": "boolean",
+            "description": "Required with `allergy`: true only after the diner explicitly agreed to share their allergy with the restaurant. allergy without allergy_consent true fails with allergy_consent_required and nothing is ordered."
+          },
+          "adult_confirmed": {
+            "type": "boolean",
+            "description": "When get_restaurant_info.ordering.adult_confirmation_required is true and a dish is marked contains_alcohol: true only after the diner said they are 18 or older. Otherwise the call fails with adult_confirmation_required and nothing is ordered. Dishes with alcohol inside ordering.alcohol_hours_blocked fail with alcohol_hours (details from, to, items): order without them or later (#350)."
+          }
+        },
+        "required": [
+          "restaurant_slug",
+          "items",
+          "customer_name",
+          "customer_email",
+          "fulfillment"
+        ]
+      }
+    },
+    {
+      "name": "confirm_order",
+      "description": "Confirm a pending order with the 6-digit code emailed to the diner. A wrong code fails with otp_invalid (ask the diner to check it and try again); otp_expired or otp_attempts_exhausted means that code can no longer be used (place the order again with create_order to get a new one).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "order_id": {
+            "type": "number"
+          },
+          "code": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "order_id",
+          "code"
+        ]
+      }
+    },
+    {
+      "name": "get_order_status",
+      "description": "Current status of an order, looked up by order number + the email used to place it. Tell the diner the phase (the same words as the tracking page): awaiting_code = type the code we emailed; awaiting_payment = pay online on tracking_url; pay_expired = it can no longer be paid, order again (an unpaid online order is removed a day after it was placed); delivering = on its way. payment: online = paid / unpaid / refunded (a cancelled order can be paid and not refunded yet), null = pays another way. status is the raw staff status. missing_items: the restaurant ran out of something (a whole dish, or only the add-ons in its extras) and the diner has to choose on tracking_url (go on without it at total_without_missing, or cancel); removed_items: what they already went without; missing_refund: paid online, the money given back for them (sent / pending / by_hand = the restaurant gives it back itself).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "order_number": {
+            "type": "string"
+          },
+          "customer_email": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "order_number",
+          "customer_email"
+        ]
+      }
+    },
+    {
+      "name": "list_available_slots",
+      "description": "Reservation time slots for a date (YYYY-MM-DD) and party size, each marked available or not (with a reason), and quiet: true when the whole table time falls in the quiet hour the restaurant declares (get_restaurant_info.quiet_hours; declared by the restaurant, not checked by MenuNode). Also returns closed_reason / special_label for a closed day and the booking rules (booking_rules). tables_pickable: true where the restaurant lets the guest pick a table or a zone (check_availability lists the free ones for a time). camelCase duplicates (partySize, closedReason, specialLabel, settings) are deprecated.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "restaurant_slug": {
+            "type": "string"
+          },
+          "branch": {
+            "type": "string",
+            "description": "Location of a restaurant with several (get_restaurant_info.locations[].branch, e.g. \"palermo\"). Omit for the main location. Hours, contact, address, ordering and reservations differ per location."
+          },
+          "date": {
+            "type": "string",
+            "description": "YYYY-MM-DD"
+          },
+          "party_size": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 500
+          }
+        },
+        "required": [
+          "restaurant_slug",
+          "date",
+          "party_size"
+        ]
+      }
+    },
+    {
+      "name": "check_availability",
+      "description": "Whether one exact slot (date YYYY-MM-DD, time HH:MM) is available for a party size. Holiday closures and special hours are applied (reason \"special_closed\" + special_label when the restaurant is closed that day). quiet: true when that table time falls in the quiet hour the restaurant declares (get_restaurant_info.quiet_hours). Before change_reservation, pass the booking's confirmation_code so the guest's own table is not counted (otherwise a time the change fits in may read \"full\"). table_choice: only where the restaurant lets guests pick a table and that time is available, the zones (rooms, terrace) and the tables free for this party then (name, zone, seats = how many it takes); pass one table_id, or only a zone_id, to create_reservation. Null = the guest cannot pick a table (the restaurant seats them), or too many plan reads from this address for now (try again in a few minutes). It never says who booked the other tables or when.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "restaurant_slug": {
+            "type": "string"
+          },
+          "branch": {
+            "type": "string",
+            "description": "Location of a restaurant with several (get_restaurant_info.locations[].branch, e.g. \"palermo\"). Omit for the main location. Hours, contact, address, ordering and reservations differ per location."
+          },
+          "date": {
+            "type": "string"
+          },
+          "time": {
+            "type": "string"
+          },
+          "party_size": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 500
+          },
+          "confirmation_code": {
+            "type": "string",
+            "description": "Optional: the booking being changed, left out of the count (#536). Ignored when it is not a booking of this location and date."
+          }
+        },
+        "required": [
+          "restaurant_slug",
+          "date",
+          "time",
+          "party_size"
+        ]
+      }
+    },
+    {
+      "name": "create_reservation",
+      "description": "Book a table for a guest. Requires date, a time from list_available_slots, party size, the guest's name and email; phone and notes optional; coming_for_item_id (optional) = the one dish they say they are coming for, an item_id of this location's menu today (anything else fails with invalid_coming_for): the kitchen gets it, nothing is held for them and they are never promised a notice; seating_preference (optional: inside | outside | any) = where they would rather sit, kept only when the restaurant asks for it on that date (seating.asked in list_available_slots / check_availability) and echoed back as seating_preference (null = not kept): it is a preference the staff reads, so tell the guest it depends on room that day; happening_id (optional) = the id of the event in get_restaurant_info.happenings the table is for (the match, live music; same date), counted against its own capacity: the booking is marked with it for the staff; table_id or zone_id (optional, not both) = a table or only a zone the guest picked from check_availability.table_choice, checked again when saved: table_taken if someone got it first (call check_availability again and offer another), invalid_table if both are passed (even where the restaurant does not let guests pick); table echoes the table or zone kept (null = none: ignored where the restaurant does not let guests pick, and then the restaurant seats them). Returns verification_required — if true, ask the guest for the emailed 6-digit code and call confirm_reservation. If the guest already has a booking here at an overlapping time, confirm_reservation answers already_booked (only once the code proves the email, so nobody learns another person's bookings): change that one with change_reservation, or confirm this one too with confirm_additional: true. Where the restaurant asks for no code there is no such check. If the code email cannot be sent the call fails with code_not_sent and nothing is saved: tell the guest to try again in a few minutes or call the restaurant. An address that cannot receive mail (a made-up or reserved domain) fails with invalid_email and nothing is saved: ask for a real one. Depending on the restaurant the booking is confirmed automatically or awaits the owner's confirmation (status \"pending\"). Some restaurants ask for a deposit to hold the table (often only for large groups): deposit_amount says how much (null = none) as soon as the booking is made, so tell the guest; deposit (method, pay_by, the restaurant's own policy text and how to pay) comes only once the booking is past its code, here or in confirm_reservation / get_reservation. method \"transfer\": the guest transfers straight to the restaurant (account and reference in deposit.transfer) and the booking stays \"pending\" until the restaurant marks it received. method \"mercadopago\" or \"stripe\" (the provider): give the guest deposit.payment_url (their booking page, where they pay on the provider's own checkout, straight to the restaurant); unpaid by pay_by the booking is cancelled and the time freed; a cancel up to deposit.refund_until gives it back automatically, after that or on a no-show the restaurant keeps it (refund_until null = never given back). You never pay nor mark a deposit. You cannot pay it or mark it paid, and nothing is cancelled by itself.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "restaurant_slug": {
+            "type": "string"
+          },
+          "branch": {
+            "type": "string",
+            "description": "Location of a restaurant with several (get_restaurant_info.locations[].branch, e.g. \"palermo\"). Omit for the main location. Hours, contact, address, ordering and reservations differ per location."
+          },
+          "date": {
+            "type": "string"
+          },
+          "time": {
+            "type": "string"
+          },
+          "party_size": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 500
+          },
+          "customer_name": {
+            "type": "string"
+          },
+          "customer_email": {
+            "type": "string"
+          },
+          "customer_phone": {
+            "type": "string"
+          },
+          "notes": {
+            "type": "string"
+          },
+          "coming_for_item_id": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Optional: the item_id (get_menu_structured, same location) of the one dish the guest says they are coming for. Passed to the kitchen; nothing is reserved or promised."
+          },
+          "seating_preference": {
+            "type": "string",
+            "enum": [
+              "inside",
+              "outside",
+              "any"
+            ],
+            "description": "Optional: where the guest would rather sit. Only kept when list_available_slots / check_availability say seating.asked for that date. A preference the staff reads: no table or area is held."
+          },
+          "table_id": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Optional: one of check_availability.table_choice.tables[].table_id for that date, time and party. Fails with table_taken when it is no longer free. Never together with zone_id: both fail with invalid_table, even where guests cannot pick."
+          },
+          "zone_id": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Optional, instead of table_id: one of check_availability.table_choice.zones[].zone_id; the restaurant picks the table in that zone. Never together with table_id (invalid_table, even where guests cannot pick)."
+          },
+          "allergy": {
+            "type": "object",
+            "description": "Optional: what the guest is allergic to, for the kitchen to check before they come. Send it only if the guest said so, and only with allergy_consent true. keys: any of gluten, crustaceans, eggs, fish, peanuts, soy, milk, tree_nuts, celery, mustard, sesame, sulphites, lupin, molluscs (an unknown key fails with invalid_allergy); note: one line of text, at most 200 characters. At least one key or a note. Health data: the restaurant keeps it until 90 days after the booking's day, then it is deleted (the booking stays).",
+            "properties": {
+              "keys": {
+                "type": "array",
+                "maxItems": 14,
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "gluten",
+                    "crustaceans",
+                    "eggs",
+                    "fish",
+                    "peanuts",
+                    "soy",
+                    "milk",
+                    "tree_nuts",
+                    "celery",
+                    "mustard",
+                    "sesame",
+                    "sulphites",
+                    "lupin",
+                    "molluscs"
+                  ]
+                }
+              },
+              "note": {
+                "type": "string",
+                "maxLength": 200
+              }
+            }
+          },
+          "allergy_consent": {
+            "type": "boolean",
+            "description": "Required with `allergy`: true only after the guest explicitly agreed to share their allergy with the restaurant. allergy without allergy_consent true fails with allergy_consent_required and nothing is booked."
+          },
+          "allergy_dish_ids": {
+            "type": "array",
+            "maxItems": 3,
+            "items": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "description": "Optional, only with `allergy`: up to 3 item_ids (get_menu_structured, same location) the guest wants the kitchen to check. The staff answer per dish later; read it in get_reservation.allergy_plan (kitchen yes / no / not_answered) and the guest is emailed when every dish has an answer. Tell the guest it is the kitchen's word, not a guarantee: never say a dish is safe or suitable. Anything else fails with invalid_allergy_dishes."
+          },
+          "happening_id": {
+            "type": "string",
+            "description": "Optional: the id of one of get_restaurant_info.happenings (the match, live music) this table is for. Same date as the event, one with a reserve_url; counted against its own capacity besides the table. Fails with happening_not_found (not on the list any more), happening_no_booking, happening_other_day or happening_full (details.spotsLeft = people still free for it: a smaller party may fit)."
+          }
+        },
+        "required": [
+          "restaurant_slug",
+          "date",
+          "time",
+          "party_size",
+          "customer_name",
+          "customer_email"
+        ]
+      }
+    },
+    {
+      "name": "confirm_reservation",
+      "description": "Confirm a pending reservation with the 6-digit code emailed to the guest. If the same email already has a pending or confirmed booking at this location whose table time overlaps this one (lunch and dinner the same day do not), it fails with already_booked and nothing is confirmed; details carry that booking's date, time, partySize, status, confirmationCode and manageUrl. Ask the guest: change the booking they have (change_reservation with that confirmationCode; this new one is then let go on its own), or book this one too (call confirm_reservation again with the same code and confirm_additional: true). The code stays valid for that second call; do not repeat the call without confirm_additional (each try uses up one of the code's few attempts and gets the same answer). A booking the restaurant entered itself is never reported. A wrong code fails with otp_invalid (ask the guest to check it and try again); otp_expired or otp_attempts_exhausted means that code can no longer be used (book again with create_reservation to get a new one).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "reservation_id": {
+            "type": "number"
+          },
+          "code": {
+            "type": "string"
+          },
+          "confirm_additional": {
+            "type": "boolean",
+            "description": "Only after already_booked, when the guest wants this table as well as the one they have (e.g. for another group)."
+          }
+        },
+        "required": [
+          "reservation_id",
+          "code"
+        ]
+      }
+    },
+    {
+      "name": "get_reservation",
+      "description": "Look up a reservation by its confirmation code. allergy_plan (null = none declared) is the allergy the guest declared when booking and the kitchen's word on each dish they asked about: kitchen yes = the kitchen says it can make it without what they declared (say exactly that, repeating what they declared; never \"safe\" or \"suitable\", the guarantee is the restaurant's), no = it says it cannot, not_answered = no word yet. deposit (null = none) says whether the restaurant asked for a deposit, its status (waiting, reported, received, refunded, applied, kept, refunding, refund_failed), the amount, the method (transfer, or the provider: mercadopago or stripe) and, while it is still to pay, where to transfer it or payment_url to pay online (with refund_until, the last moment a cancel gives it back). Read only: only the restaurant marks a deposit received.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "confirmation_code": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "confirmation_code"
+        ]
+      }
+    },
+    {
+      "name": "cancel_reservation",
+      "description": "Cancel a reservation on the guest's behalf using its confirmation code. Only pending/confirmed bookings whose time has not come yet can be cancelled; after that it fails with reservation_closed (the guest must call the restaurant). Works even while the restaurant takes no new online reservations.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "confirmation_code": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "confirmation_code"
+        ]
+      }
+    },
+    {
+      "name": "change_reservation",
+      "description": "Move a reservation to another time on the same day and/or change the party size, on the guest's behalf, using its confirmation code; the date cannot change (cancel and book again for another day). The reservation is kept if the new time has no room: then changed is false, result \"unchanged\" with a reason, and nothing was touched; look for another time with check_availability or list_available_slots. Where the restaurant confirms bookings by hand, a new time or a bigger party goes back to status \"pending\". Fails with call_restaurant once the guest said they are running late (the guest must call the restaurant), with reservation_closed when the booking time has come or it is no longer live, with commerce_disabled while the restaurant takes no online reservations (cancel_reservation still works), and with change_limit (details.retryAfterSeconds) after 4 changes of one booking in an hour. Repeating a change that already happened (e.g. after a timeout) is safe: result \"already_booked\" with the booking as it stands. To find a time first, pass confirmation_code to check_availability so the guest's own table is not counted.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "confirmation_code": {
+            "type": "string"
+          },
+          "time": {
+            "type": "string",
+            "description": "New time, HH:MM (24h, restaurant local time). Omit to keep the time."
+          },
+          "party_size": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 500,
+            "description": "New party size. Omit to keep it."
+          }
+        },
+        "required": [
+          "confirmation_code"
+        ]
+      }
+    },
+    {
+      "name": "create_availability_alert",
+      "description": "When the guest's day is full (check_availability or list_available_slots shows every time they would take as reason \"full\"), ask the restaurant to email them if a table frees up: date, a time range time_from..time_to (HH:MM, both included, the times they would accept), party size, the guest's name and email. Only where the restaurant offers it (fails with feature_off otherwise; then suggest another day or the contact from get_restaurant_info), with the same switches as create_reservation. Fails with has_room when a time in that range is free right now (book it with create_reservation instead), with nothing_to_wait_for when no time in that range can be booked at all (outside the hours, too soon) and day_closed when the day takes no bookings. This does NOT book or hold anything: a 6-digit code is emailed to the guest; ask them for it and call confirm_availability_alert. Once confirmed, if a time in their range frees up, the first few guests who asked, in the order they asked, get an email with a link to book it; whoever books first gets it. Alerts end on their own after that day. Only at the guest's explicit request, with their own email. code_not_sent / invalid_email: as create_reservation.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "restaurant_slug": {
+            "type": "string"
+          },
+          "branch": {
+            "type": "string",
+            "description": "Location of a restaurant with several (get_restaurant_info.locations[].branch, e.g. \"palermo\"). Omit for the main location. Hours, contact, address, ordering and reservations differ per location."
+          },
+          "date": {
+            "type": "string",
+            "description": "YYYY-MM-DD"
+          },
+          "time_from": {
+            "type": "string",
+            "description": "HH:MM, the earliest time the guest would take"
+          },
+          "time_to": {
+            "type": "string",
+            "description": "HH:MM, the latest time the guest would take (not before time_from)"
+          },
+          "party_size": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 500
+          },
+          "customer_name": {
+            "type": "string"
+          },
+          "customer_email": {
+            "type": "string"
+          },
+          "language": {
+            "type": "string",
+            "enum": [
+              "en",
+              "es",
+              "pt",
+              "fr"
+            ],
+            "description": "Language of the emails (default: the restaurant's)"
+          }
+        },
+        "required": [
+          "restaurant_slug",
+          "date",
+          "time_from",
+          "time_to",
+          "party_size",
+          "customer_name",
+          "customer_email"
+        ]
+      }
+    },
+    {
+      "name": "confirm_availability_alert",
+      "description": "Confirm a create_availability_alert with the 6-digit code emailed to the guest. From then on the guest waits for a table in that range, in the order guests confirmed; a newer alert of the same email for the same place and day replaces the older one. Nothing is booked or held. A wrong code fails with otp_invalid; otp_expired or otp_attempts_exhausted means that code can no longer be used (start again with create_availability_alert).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "alert_id": {
+            "type": "number"
+          },
+          "code": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "alert_id",
+          "code"
+        ]
+      }
+    },
+    {
+      "name": "get_waitlist_status",
+      "description": "How long is the walk-in line at a restaurant right now: groups waiting and the estimated wait for a group joining now (position × the restaurant's minutes per group, rounded to 5 — an estimate, not a promise). Only restaurants that offer online waitlist sign-up report this; otherwise online_sign_up_enabled is false, no line data is returned, declared_wait carries what the restaurant itself reported in the last 30 minutes (quote it with its time, never as a live fact; null = it reported nothing) and contact says how to ask it. No personal data of other guests. join_url is the public page where the guest can sign up themselves; join_waitlist does the same from here (email code required).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "restaurant_slug": {
+            "type": "string"
+          },
+          "branch": {
+            "type": "string",
+            "description": "Location of a restaurant with several (get_restaurant_info.locations[].branch). Omit for the main location. Each location has its own line."
+          }
+        },
+        "required": [
+          "restaurant_slug"
+        ]
+      }
+    },
+    {
+      "name": "join_waitlist",
+      "description": "Start a walk-in waitlist sign-up for a guest (only when get_waitlist_status says accepting_sign_ups_now). Requires the guest's name, party size (max 20) and email; phone and notes optional. This does NOT put them in line yet: a 6-digit code is emailed to the guest; ask them for it and call confirm_waitlist. If the code email cannot be sent the call fails with code_not_sent and nothing is saved: tell the guest to try again in a few minutes or call the restaurant. An address that cannot receive mail (a made-up or reserved domain) fails with invalid_email and nothing is saved: ask for a real one. Their place counts from that confirmation. Only do this at the guest's explicit request, with their own email. If you prefer, send them get_waitlist_status.join_url instead.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "restaurant_slug": {
+            "type": "string"
+          },
+          "branch": {
+            "type": "string",
+            "description": "Location of a restaurant with several (get_restaurant_info.locations[].branch). Omit for the main location. Each location has its own line."
+          },
+          "customer_name": {
+            "type": "string"
+          },
+          "party_size": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 20
+          },
+          "customer_email": {
+            "type": "string"
+          },
+          "customer_phone": {
+            "type": "string"
+          },
+          "notes": {
+            "type": "string",
+            "description": "e.g. \"high chair\", \"outside table\" (max 200 characters)"
+          },
+          "language": {
+            "type": "string",
+            "enum": [
+              "en",
+              "es",
+              "pt",
+              "fr"
+            ],
+            "description": "Language of the verification email and tracking page (default: the restaurant's language)"
+          }
+        },
+        "required": [
+          "restaurant_slug",
+          "customer_name",
+          "party_size",
+          "customer_email"
+        ]
+      }
+    },
+    {
+      "name": "confirm_waitlist",
+      "description": "Confirm a pending waitlist sign-up with the 6-digit code emailed to the guest. Puts the group in line and returns their position, estimated wait and tracking_url (a private link: share it only with that guest; it also lets them leave the line). A wrong code fails with otp_invalid (ask the guest to check it); otp_expired or otp_attempts_exhausted means that code can no longer be used (start again with join_waitlist).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "entry_id": {
+            "type": "number"
+          },
+          "code": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "entry_id",
+          "code"
+        ]
+      }
+    },
+    {
+      "name": "get_waitlist_position",
+      "description": "A guest's current place in the walk-in line: status (waiting | notified = table ready, go to the host | seated | closed), position, groups ahead, estimated wait and the table once assigned. Needs the tracking token or tracking_url from confirm_waitlist.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "tracking_token": {
+            "type": "string",
+            "description": "Token or the full tracking_url"
+          }
+        },
+        "required": [
+          "tracking_token"
+        ]
+      }
+    },
+    {
+      "name": "leave_waitlist",
+      "description": "Take the guest off the walk-in line (\"we are not coming anymore\"). Needs the tracking token or tracking_url. Only at the guest's request; cannot be undone by the guest.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "tracking_token": {
+            "type": "string",
+            "description": "Token or the full tracking_url"
+          }
+        },
+        "required": [
+          "tracking_token"
+        ]
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "io.github.agustinnb/menunode",
+    "version": "1.0.0",
+    "remoteUrl": "https://menunode.com/mcp",
+    "publishedAt": "2026-11-25T03:01:07.327493Z",
+    "fetchedAt": "2026-11-25T11:03:46.215Z",
+    "toolsSha256": "763b1ffd773d88d6d9896a24c3948b2026a7644285ec2f9a0a6e175efc5c6aa3"
+  }
+}

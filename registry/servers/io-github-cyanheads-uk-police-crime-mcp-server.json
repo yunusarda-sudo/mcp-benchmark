@@ -1,0 +1,534 @@
+{
+  "$schema": "../schema.json",
+  "name": "io.github.cyanheads/uk-police-crime-mcp-server",
+  "category": "Developer Tools & DevOps",
+  "description": "Search UK street crime, outcomes, stop and search, and neighbourhood teams (Scotland: BTP only).",
+  "repository": "https://github.com/cyanheads/uk-police-crime-mcp-server",
+  "tools": [
+    {
+      "name": "ukcrime_list_reference",
+      "description": "Decode the vocabulary the other ukcrime tools take: police force ids, crime category slugs, a force's neighbourhood ids, and data availability — the published months, and which forces published stop and search in each. Use it when a force, category, neighbourhood id or month is unknown; name_contains filters forces and neighbourhoods by name. The Metropolitan Police has about 680 neighbourhoods, so filter by name there; to get the force and neighbourhood covering a latitude and longitude, call ukcrime_find_neighbourhood instead.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "topic": {
+            "type": "string",
+            "enum": [
+              "forces",
+              "categories",
+              "availability",
+              "neighbourhoods"
+            ],
+            "description": "What to list: 'forces' (force ids), 'categories' (crime category slugs), 'availability' (published months and stop-and-search publication), or 'neighbourhoods' (one force's neighbourhood ids; needs force)."
+          },
+          "force": {
+            "description": "Force id such as 'leicestershire', or its name such as 'Leicestershire Police'; case-insensitive, spaces, underscores and hyphens match each other, '&' matches 'and', and a trailing 'Police', 'Police Service' or 'Constabulary' is optional. Required for topic 'neighbourhoods'. On 'availability', where 'btp' (British Transport Police) is also accepted, adds the months this force did and did not publish stop and search. Not accepted on 'forces' or 'categories'.",
+            "type": "string",
+            "maxLength": 100,
+            "pattern": "^\\s*[A-Za-z](?:[A-Za-z\\s&_-]*[A-Za-z])?\\s*$"
+          },
+          "name_contains": {
+            "description": "Words that must all appear in the name, in any order, part of a word included — case, accents and punctuation ignored, punctuation in the value splitting words, and a name's '&' also matching 'and' — so the value needs at least one letter or digit. Topics 'forces' and 'neighbourhoods' only.",
+            "type": "string",
+            "maxLength": 100
+          },
+          "month": {
+            "description": "Month as YYYY-MM. Topic 'availability' only: return just that month's row.",
+            "type": "string",
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$"
+          }
+        },
+        "required": [
+          "topic"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "ukcrime_search_crimes",
+      "description": "Search street-level crimes recorded in one month, or with month_from a range of up to 12 months, inside an area — a point with a 1-mile radius, a polygon, a snapped location_id from an earlier result, or a police neighbourhood — or list the crimes a force could not place on the map (area 'force_unplaced'). Returns the total, counts by category and by latest police outcome, the busiest map points, each month's total for a range, and a page of crimes, each with the persistent_id that ukcrime_get_crime_outcomes takes when it has one. outcome (a latest police outcome name, as by_outcome shows it) and street_name_contains narrow the counts and the page together. For the police outcomes data.police.uk published for a month, whenever the crime was recorded, use ukcrime_search_outcomes. Locations are anonymised map points, not crime sites. data.police.uk can refuse an area holding more than about 10,000 crimes, whatever the category — then search smaller polygons.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "area": {
+            "type": "string",
+            "enum": [
+              "point",
+              "polygon",
+              "location",
+              "neighbourhood",
+              "force_unplaced"
+            ],
+            "description": "Area to search: 'point' (lat and lng; a 1-mile radius), 'polygon' (polygon), 'location' (location_id), 'neighbourhood' (force and neighbourhood_id), or 'force_unplaced' (force alone: the crimes that force could not place on the map; they have no location, so street_name_contains is rejected with it). An area field the chosen area does not use is rejected."
+          },
+          "lat": {
+            "description": "Latitude, WGS84 decimal degrees, for area 'point'.",
+            "type": "number",
+            "minimum": -90,
+            "maximum": 90
+          },
+          "lng": {
+            "description": "Longitude, WGS84 decimal degrees, for area 'point'.",
+            "type": "number",
+            "minimum": -180,
+            "maximum": 180
+          },
+          "polygon": {
+            "description": "For area 'polygon': 3–2,500 vertices as { lat, lng } objects, or the string 'lat,lng:lat,lng:…'. The ring closes itself (the last vertex joins the first). [lng, lat] pairs are not accepted.",
+            "minItems": 3,
+            "maxItems": 2500,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "lat": {
+                  "type": "number",
+                  "minimum": -90,
+                  "maximum": 90,
+                  "description": "Latitude, WGS84 decimal degrees."
+                },
+                "lng": {
+                  "type": "number",
+                  "minimum": -180,
+                  "maximum": 180,
+                  "description": "Longitude, WGS84 decimal degrees."
+                }
+              },
+              "required": [
+                "lat",
+                "lng"
+              ],
+              "description": "One polygon vertex as { lat, lng }."
+            }
+          },
+          "location_id": {
+            "description": "For area 'location': location.location_id from an earlier result — one anonymised map point.",
+            "type": "string",
+            "pattern": "^\\d{1,12}$"
+          },
+          "force": {
+            "description": "Force id such as 'leicestershire', or its name such as 'Leicestershire Police' (ukcrime_list_reference topic 'forces' lists both); case-insensitive, spaces, underscores and hyphens match each other, '&' matches 'and', and a trailing 'Police', 'Police Service' or 'Constabulary' is optional. For area 'neighbourhood' (with neighbourhood_id) and 'force_unplaced' (alone), where 'btp' (British Transport Police) is also accepted.",
+            "type": "string",
+            "maxLength": 100,
+            "pattern": "^\\s*[A-Za-z](?:[A-Za-z\\s&_-]*[A-Za-z])?\\s*$"
+          },
+          "neighbourhood_id": {
+            "description": "For area 'neighbourhood', with force: a neighbourhood id from ukcrime_list_reference topic 'neighbourhoods', or from ukcrime_find_neighbourhood for a point. Exact spelling first; after a miss, a unique case-insensitive catalog match is retried.",
+            "type": "string",
+            "maxLength": 100,
+            "pattern": "^[^/\\\\?#]+$"
+          },
+          "month": {
+            "description": "Month as YYYY-MM, or the last month of the range with month_from. Omitted: the latest published month, echoed as month in the result.",
+            "type": "string",
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$"
+          },
+          "month_from": {
+            "description": "First month of a range, YYYY-MM, searched through month — up to 12 months, with a total for each in by_month. Omitted: month alone.",
+            "type": "string",
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$"
+          },
+          "category": {
+            "description": "Crime category slug such as 'burglary', or its display name such as 'Violence and sexual offences'; case-insensitive, and spaces, underscores and hyphens match each other ('vehicle_crime' finds 'vehicle-crime'). Omitted: every category (all-crime). ukcrime_list_reference topic 'categories' lists them.",
+            "type": "string",
+            "maxLength": 100
+          },
+          "outcome": {
+            "description": "Latest police outcome to keep, matched whole against the names by_outcome shows, such as 'Offender given a caution', or '(not recorded)' for crimes with none (anti-social behaviour never has one) — ignoring case, with runs of spaces, underscores and hyphens read alike. Crime records carry no outcome code, so a code such as 'cautioned' matches nothing; ukcrime_search_outcomes takes codes. Narrows the counts and the page together; a value nothing matches returns zero, and the notice lists the names present.",
+            "type": "string",
+            "maxLength": 100
+          },
+          "street_name_contains": {
+            "description": "Words that must all appear in a record's street name, in any order, part of a word included ('Granby St' finds Granby Street) — case, accents and punctuation ignored, and the 'On or near' every street name starts with dropped from both sides, so the value needs a word besides it. A record with no location never matches. Narrows the counts and the page together; when the matches span several street names, the notice names them.",
+            "type": "string",
+            "maxLength": 100
+          },
+          "limit": {
+            "default": 25,
+            "description": "Requested crimes on this page, 1–10,000; applied cap is at most 200. Default 25.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10000
+          },
+          "offset": {
+            "default": 0,
+            "description": "Rows to skip before this page; pass next_offset from the previous result. Default 0.",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "area"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "ukcrime_search_outcomes",
+      "description": "List the police outcomes data.police.uk published for one month inside an area — a point with a 1-mile radius, a polygon, a location_id, or a neighbourhood — for crimes recorded that month or any earlier one. Returns the total, counts by crime category, outcome and the month each crime was recorded, and a page of outcomes, each with its crime and persistent_id. category, outcome and street_name_contains narrow the counts and the page together, so filtering one field and reading another's breakdown gives a cross-tab. An outcome's own month can differ from the month searched, and a crime's earlier steps can be missing here: ukcrime_get_crime_outcomes gives one crime's full sequence, and ukcrime_search_crimes the latest outcome of the crimes recorded in a month. Court results are not published; the result says when a force publishes no outcomes.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "area": {
+            "type": "string",
+            "enum": [
+              "point",
+              "polygon",
+              "location",
+              "neighbourhood"
+            ],
+            "description": "Area to search: 'point' (lat and lng; a 1-mile radius), 'polygon' (polygon), 'location' (location_id), or 'neighbourhood' (force and neighbourhood_id). An area field the chosen area does not use is rejected."
+          },
+          "lat": {
+            "description": "Latitude, WGS84 decimal degrees, for area 'point'.",
+            "type": "number",
+            "minimum": -90,
+            "maximum": 90
+          },
+          "lng": {
+            "description": "Longitude, WGS84 decimal degrees, for area 'point'.",
+            "type": "number",
+            "minimum": -180,
+            "maximum": 180
+          },
+          "polygon": {
+            "description": "For area 'polygon': 3–2,500 vertices as { lat, lng } objects, or the string 'lat,lng:lat,lng:…'. The ring closes itself (the last vertex joins the first). [lng, lat] pairs are not accepted.",
+            "minItems": 3,
+            "maxItems": 2500,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "lat": {
+                  "type": "number",
+                  "minimum": -90,
+                  "maximum": 90,
+                  "description": "Latitude, WGS84 decimal degrees."
+                },
+                "lng": {
+                  "type": "number",
+                  "minimum": -180,
+                  "maximum": 180,
+                  "description": "Longitude, WGS84 decimal degrees."
+                }
+              },
+              "required": [
+                "lat",
+                "lng"
+              ],
+              "description": "One polygon vertex as { lat, lng }."
+            }
+          },
+          "location_id": {
+            "description": "For area 'location': location.location_id from an earlier result — one anonymised map point.",
+            "type": "string",
+            "pattern": "^\\d{1,12}$"
+          },
+          "force": {
+            "description": "For area 'neighbourhood', with neighbourhood_id: a force id such as 'leicestershire', or its name such as 'Leicestershire Police' (ukcrime_list_reference topic 'forces' lists both); case-insensitive, spaces, underscores and hyphens match each other, '&' matches 'and', and a trailing 'Police', 'Police Service' or 'Constabulary' is optional.",
+            "type": "string",
+            "maxLength": 100,
+            "pattern": "^\\s*[A-Za-z](?:[A-Za-z\\s&_-]*[A-Za-z])?\\s*$"
+          },
+          "neighbourhood_id": {
+            "description": "For area 'neighbourhood', with force: a neighbourhood id from ukcrime_list_reference topic 'neighbourhoods', or from ukcrime_find_neighbourhood for a point. Exact spelling first; after a miss, a unique case-insensitive catalog match is retried.",
+            "type": "string",
+            "maxLength": 100,
+            "pattern": "^[^/\\\\?#]+$"
+          },
+          "month": {
+            "description": "Month as YYYY-MM. Omitted: the latest published month, echoed as month in the result.",
+            "type": "string",
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$"
+          },
+          "category": {
+            "description": "Count only outcomes for crimes in this category: a slug such as 'burglary' or a display name such as 'Violence and sexual offences'; case-insensitive, and spaces, underscores and hyphens match each other ('vehicle_crime' finds 'vehicle-crime'). Omitted or 'all-crime': every category. ukcrime_list_reference topic 'categories' lists them.",
+            "type": "string",
+            "maxLength": 100
+          },
+          "outcome": {
+            "description": "Police outcome to keep: a code such as 'cautioned' or a name such as 'Offender given a caution', as by_outcome lists them, matched whole, ignoring case, with runs of spaces, underscores and hyphens read alike. Narrows the counts and the page together; a value nothing matches returns zero, and the notice lists the codes present.",
+            "type": "string",
+            "maxLength": 100
+          },
+          "street_name_contains": {
+            "description": "Words that must all appear in a record's street name, in any order, part of a word included ('Granby St' finds Granby Street) — case, accents and punctuation ignored, and the 'On or near' every street name starts with dropped from both sides, so the value needs a word besides it. A record with no location never matches. Narrows the counts and the page together; when the matches span several street names, the notice names them.",
+            "type": "string",
+            "maxLength": 100
+          },
+          "limit": {
+            "default": 20,
+            "description": "Requested outcomes on this page, 1–10,000; applied cap is at most 200. Default 20.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10000
+          },
+          "offset": {
+            "default": 0,
+            "description": "Rows to skip before this page; pass next_offset from the previous result. Default 0.",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "area"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "ukcrime_get_crime_outcomes",
+      "description": "Fetch the full police outcome history of up to 25 crimes per call by persistent_id — the 64-character id on crimes from ukcrime_search_crimes and ukcrime_search_outcomes. Accepts up to 1,000 raw elements or nonblank delimited tokens and 128,000 aggregate UTF-16 code units; remaining_ids carries unprocessed unique ids for the next call. Returns each crime with every outcome, oldest first, and lists the ids data.police.uk does not hold. Anti-social behaviour records carry no persistent id.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "persistent_ids": {
+            "description": "Persistent ids from ukcrime_search_crimes or ukcrime_search_outcomes: at most 1,000 raw array elements, 1,000 nonblank comma/whitespace-separated tokens before deduplication, and 128,000 aggregate UTF-16 code units. Ids are lower-cased, blanks and repeats dropped; every id is validated, the first 25 unique ids processed and the rest returned as remaining_ids.",
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128000,
+                "description": "Comma- or whitespace-separated persistent ids, at most 1,000 nonblank tokens."
+              },
+              {
+                "maxItems": 1000,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "description": "One or more comma/whitespace-separated persistent ids."
+                },
+                "description": "At most 1,000 raw elements and 128,000 aggregate UTF-16 code units."
+              }
+            ]
+          }
+        },
+        "required": [
+          "persistent_ids"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "ukcrime_search_stops",
+      "description": "Search police stop and search records for one month, or with month_from a range of up to 12 months, inside an area — a point with a 1-mile radius, a polygon, a location_id from an earlier result, or a police neighbourhood — or across a whole force with area 'force', which includes stops the force could not place. Returns the total and counts by search type, self-defined and officer-defined ethnicity, outcome, object of search, legislation, age range, gender, whether the outcome was linked to the object of search, and whether more than outer clothing was removed, each month's total for a range, and a page of stops. filters and street_name_contains narrow the counts and the page together, so filtering one field and reading another's breakdown gives a cross-tab. Forces skip months and some publish none; the result names each force it finds for the area that did not publish, with the months it skipped.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "area": {
+            "type": "string",
+            "enum": [
+              "point",
+              "polygon",
+              "location",
+              "neighbourhood",
+              "force"
+            ],
+            "description": "Area to search: 'point' (lat and lng; a 1-mile radius), 'polygon' (polygon), 'location' (location_id), 'neighbourhood' (force and neighbourhood_id), or 'force' (force alone: every stop the force published for the month or range, placed or not). An area field the chosen area does not use is rejected."
+          },
+          "lat": {
+            "description": "Latitude, WGS84 decimal degrees, for area 'point'.",
+            "type": "number",
+            "minimum": -90,
+            "maximum": 90
+          },
+          "lng": {
+            "description": "Longitude, WGS84 decimal degrees, for area 'point'.",
+            "type": "number",
+            "minimum": -180,
+            "maximum": 180
+          },
+          "polygon": {
+            "description": "For area 'polygon': 3–2,500 vertices as { lat, lng } objects, or the string 'lat,lng:lat,lng:…'. The ring closes itself (the last vertex joins the first). [lng, lat] pairs are not accepted.",
+            "minItems": 3,
+            "maxItems": 2500,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "lat": {
+                  "type": "number",
+                  "minimum": -90,
+                  "maximum": 90,
+                  "description": "Latitude, WGS84 decimal degrees."
+                },
+                "lng": {
+                  "type": "number",
+                  "minimum": -180,
+                  "maximum": 180,
+                  "description": "Longitude, WGS84 decimal degrees."
+                }
+              },
+              "required": [
+                "lat",
+                "lng"
+              ],
+              "description": "One polygon vertex as { lat, lng }."
+            }
+          },
+          "location_id": {
+            "description": "For area 'location': location.location_id from an earlier result — one anonymised map point.",
+            "type": "string",
+            "pattern": "^\\d{1,12}$"
+          },
+          "force": {
+            "description": "Force id such as 'leicestershire', or its name such as 'Leicestershire Police' (ukcrime_list_reference topic 'forces' lists both); case-insensitive, spaces, underscores and hyphens match each other, '&' matches 'and', and a trailing 'Police', 'Police Service' or 'Constabulary' is optional. For area 'neighbourhood' (with neighbourhood_id) and 'force' (alone), where 'btp' (British Transport Police) is also accepted.",
+            "type": "string",
+            "maxLength": 100,
+            "pattern": "^\\s*[A-Za-z](?:[A-Za-z\\s&_-]*[A-Za-z])?\\s*$"
+          },
+          "neighbourhood_id": {
+            "description": "For area 'neighbourhood', with force: a neighbourhood id from ukcrime_list_reference topic 'neighbourhoods', or from ukcrime_find_neighbourhood for a point. Exact spelling first; after a miss, a unique case-insensitive catalog match is retried.",
+            "type": "string",
+            "maxLength": 100,
+            "pattern": "^[^/\\\\?#]+$"
+          },
+          "month": {
+            "description": "Month as YYYY-MM, or the last month of the range with month_from. Omitted: the latest published month, echoed as month in the result.",
+            "type": "string",
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$"
+          },
+          "month_from": {
+            "description": "First month of a range, YYYY-MM, searched through month — up to 12 months, with a total for each in by_month. Omitted: month alone.",
+            "type": "string",
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$"
+          },
+          "filters": {
+            "description": "Up to 8 filters, all of which a stop must match; they narrow the counts and the page together. Fields: type, self_defined_ethnicity, officer_defined_ethnicity, outcome, object_of_search, legislation, age_range, gender, outcome_linked_to_object_of_search, removal_of_more_than_outer_clothing.",
+            "maxItems": 8,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "field": {
+                  "type": "string",
+                  "enum": [
+                    "type",
+                    "self_defined_ethnicity",
+                    "officer_defined_ethnicity",
+                    "outcome",
+                    "object_of_search",
+                    "legislation",
+                    "age_range",
+                    "gender",
+                    "outcome_linked_to_object_of_search",
+                    "removal_of_more_than_outer_clothing"
+                  ],
+                  "description": "Stop field to match."
+                },
+                "value": {
+                  "description": "Value to match exactly, case-insensitively, as the breakdowns show it: 'true' or 'false' for outcome_linked_to_object_of_search and removal_of_more_than_outer_clothing (a JSON true or false reads the same), and '(not recorded)' for stops with no value.",
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200
+                    },
+                    {
+                      "type": "boolean"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "field",
+                "value"
+              ],
+              "additionalProperties": false,
+              "description": "Keep only stops whose field equals value."
+            }
+          },
+          "street_name_contains": {
+            "description": "Words that must all appear in a record's street name, in any order, part of a word included ('Granby St' finds Granby Street) — case, accents and punctuation ignored, and the 'On or near' every street name starts with dropped from both sides, so the value needs a word besides it. A record with no location never matches. Narrows the counts and the page together; when the matches span several street names, the notice names them.",
+            "type": "string",
+            "maxLength": 100
+          },
+          "limit": {
+            "default": 15,
+            "description": "Requested stops on this page, 1–10,000; applied cap is at most 200. Default 15.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10000
+          },
+          "offset": {
+            "default": 0,
+            "description": "Rows to skip before this page; pass next_offset from the previous result. Default 0.",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "area"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "ukcrime_find_neighbourhood",
+      "description": "Find the police force and neighbourhood policing team for a point, or look one up by force and neighbourhood id. Returns the team's description, contact channels and police stations, its current priorities with the action taken, team members' ranks and names, and upcoming engagement events. include adds the boundary polygon, needed only to split a neighbourhood too large to search into smaller polygons: ukcrime_search_crimes, ukcrime_search_outcomes and ukcrime_search_stops take the neighbourhood directly through area 'neighbourhood'.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "lat": {
+            "description": "Latitude, WGS84 decimal degrees, to look up by point (with lng).",
+            "type": "number",
+            "minimum": -90,
+            "maximum": 90
+          },
+          "lng": {
+            "description": "Longitude, WGS84 decimal degrees, to look up by point (with lat).",
+            "type": "number",
+            "minimum": -180,
+            "maximum": 180
+          },
+          "force": {
+            "description": "Force id such as 'leicestershire', or its name such as 'Leicestershire Police' (ukcrime_list_reference topic 'forces' lists both), to look up by id (with neighbourhood_id); case-insensitive, spaces, underscores and hyphens match each other, '&' matches 'and', and a trailing 'Police', 'Police Service' or 'Constabulary' is optional.",
+            "type": "string",
+            "maxLength": 100,
+            "pattern": "^\\s*[A-Za-z](?:[A-Za-z\\s&_-]*[A-Za-z])?\\s*$"
+          },
+          "neighbourhood_id": {
+            "description": "Neighbourhood id from ukcrime_list_reference topic 'neighbourhoods', to look up by id (with force). Exact spelling first; after a miss, a unique case-insensitive catalog match is retried.",
+            "type": "string",
+            "maxLength": 100,
+            "pattern": "^[^/\\\\?#]+$"
+          },
+          "include": {
+            "description": "Optional sections to load: 'priorities', 'team', 'events', 'boundary'. Omitted: priorities, team and events. [] loads none of them.",
+            "maxItems": 4,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "priorities",
+                "team",
+                "events",
+                "boundary"
+              ],
+              "description": "An optional section to load."
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "io.github.cyanheads/uk-police-crime-mcp-server",
+    "version": "0.3.1",
+    "remoteUrl": "https://uk-police-crime.caseyjhand.com/mcp",
+    "publishedAt": "2026-11-25T10:19:06.810695Z",
+    "fetchedAt": "2026-11-25T11:03:46.215Z",
+    "toolsSha256": "2905d9e3b9a73f53db361ba30c407d74b4e325072b9afc73a35d7e3413182b95"
+  }
+}

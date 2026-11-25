@@ -1,0 +1,311 @@
+{
+  "$schema": "../schema.json",
+  "name": "io.github.eiry16/beacon-mfg-mcp",
+  "title": "BeaconMFG – China Supplier Directory",
+  "category": "Developer Tools & DevOps",
+  "description": "China supplier directory MCP: search 210k+ firms by GB/T 4754 industry. Free, no install.",
+  "repository": "https://github.com/eiry16/beacon-mfg",
+  "tools": [
+    {
+      "name": "search_vendors",
+      "description": "检索灯塔名录里的中国各行业经营主体（GB/T 4754 全门类，21 万家）。可按关键词（企业名/品牌/工艺/材料/认证/服务内容）、城市或区县、国标小类码过滤。返回精简档案，**字段名是短名**：id/token(8 位，传给 get_vendor 与 get_capability_card)、co(企业名称)、city(城市)、dist(区县)、gb(国标小类码)、proc(工艺)、mat(材料)、cert(认证)、has_phone(是否有电话)、tel(1=含电话，兼容旧客户端)、cap(能力键)、products(产品词)、lat/lng(坐标)。⚠ 检索结果**不含电话号码**：号码是一条一个额度的取证动作，请用 get_vendor(id)；工艺证据档位在 pinf：省缺或 null=有事实工艺；A1~B0=零采集推断（分档非核实）；class_default=挂的是国标小类默认工艺码，不是这家企业的事实工艺，严苛场景请降权。⚠ 关键词是**字面子串**匹配：口语词与归档写法不同会漏（「机加工」vs「机械零部件加工」）。0 命中时不要直接答「没有」—— 换同义词重试，或改用 city+gb 定向。\n⚠ 技术/能力词（「人工智能」「五轴加工」）在国标里可能根本没有对应小类；这种情况用 cap=<能力键>（suggest_filters 的 cap_candidates 会给）按能力索引定向，别硬塞进 query 做字面 AND，也别把 cap 当成 gb 码。",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "关键词：企业名/品牌/工艺/材料/认证/服务内容子串。词表认得的品类词（兰花 / 医院 / 人工智能…）会自动带能力域加权，回执里有 cap_auto"
+          },
+          "city": {
+            "type": "string",
+            "description": "城市名，如 深圳 / 东莞 / 苏州；也接受区县或县级市（昆山、海盐）。**省名不是合法取值**"
+          },
+          "gb": {
+            "type": "string",
+            "description": "国标小类码，如 3484(机械零部件加工)、6210(正餐服务)。给了就只扫对应分片，召回与速度都更好"
+          },
+          "gbs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "多个国标码一次定向（最多 6 个），比逐码调用省 RTT 与额度"
+          },
+          "cap": {
+            "type": "string",
+            "description": "能力键定向，如 tech_ai / cnc_turning；来自 suggest_filters 的 cap_candidates[].cap，**不是国标码**（最多 6 个用 caps）"
+          },
+          "caps": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "多个能力键一次定向（最多 6 个）"
+          },
+          "limit": {
+            "type": "integer",
+            "default": 20,
+            "description": "返回条数上限 1-200"
+          },
+          "offset": {
+            "type": "integer",
+            "default": 0,
+            "description": "分页偏移"
+          }
+        }
+      }
+    },
+    {
+      "name": "suggest_filters",
+      "description": "把一句采购口语/用户原话拆成可执行的检索参数（拆词 + 别名 + 国标类名子串），给出候选检索词与候选 gb 码，并明确「名录未收录 ≠ 这家厂不存在」。\n什么时候用：search_vendors 命中偏少/为 0、或你打算凭印象猜一个国标码时。典型链路：本工具拿候选 → search_vendors(gb=<code>) 验证 → get_vendor 取证。\n⚠ 远端**轻量版**：内嵌精简词表，不列全量货架、不给每类的完整条数；candidates 里的 gb 码是类名/别名推断的**低置信提示**，必须用 search_vendors 验证，不要直接拿它回答用户「属于某行业」。候选为空时按 next_calls 换词重试，别自己编 gb 码。\n⚠ 纯计算工具：不取企业记录，**不消耗记录额度**（但仍计入 IP 操作数）。",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "用户原话或检索词，如「找一下苏州做机加工的厂」"
+          },
+          "city": {
+            "type": "string",
+            "description": "已知城市就直接给；不给则服务端从原话里认"
+          },
+          "limit": {
+            "type": "integer",
+            "default": 8,
+            "description": "候选 gb 码上限 1-20"
+          }
+        },
+        "required": [
+          "query"
+        ]
+      }
+    },
+    {
+      "name": "list_industries",
+      "description": "列出国标小类「货架」：只列名录里**已有企业**的类，附该类全库企业条数。用户原话跟任何类名都对不上字、或 suggest_filters 没给出可靠候选时，用它按语义自己挑码。\n可传 keyword 按类名/码子串筛，parent 按门类字母(C)/大类(35)/中类(348)/小类(3484) 前缀缩小。挑 1~3 个 code 后调 search_vendors(gb=<code>) 验证。\n⚠ 远端**轻量版**：内嵌精简货架，不含 5.9MB 完整 industry-index.json；industries[].records 是**全库该类企业总数**，不是本次匹配数，也不是本轮 city 范围内的条数。⚠ 纯计算工具：不取企业记录，**不消耗记录额度**（但仍计入 IP 操作数）。",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "keyword": {
+            "type": "string",
+            "description": "可选，类名 / 国标码 / 门类路径的子串，如「酒」「014」「C」"
+          },
+          "parent": {
+            "type": "string",
+            "description": "可选，门类字母(C) 或 大类(01)/中类(014)/小类(0141) 码前缀"
+          },
+          "limit": {
+            "type": "integer",
+            "default": 30,
+            "description": "返回条数 1-200"
+          },
+          "offset": {
+            "type": "integer",
+            "default": 0,
+            "description": "分页偏移"
+          }
+        }
+      }
+    },
+    {
+      "name": "get_vendor",
+      "description": "按主体 id 取完整中文档案。字段：company(名称)、address(地址)、lat/lng(坐标)、contact_phone(电话)、category(行业路径)、keywords(关键词)、region(省市区)、source/source_url(来源)、verified_at/last_verified_at(核验时间)。id 用 search_vendors 返回的那个 8 位 token。若这家已归集到政府主体，回执里多一个 linked_entity：{uscc 统一社会信用代码, legal_name 法定登记名称, relation, origin, score}。`company` 是**经营招牌名**，`linked_entity.legal_name` 是**工商登记名**，两者经常不同；签约、开票、查资质一律用 legal_name + uscc。取多家请多次调用（每次一条计一次额度，重复看同一家不重复计）。",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "8 位主体 token，来自 search_vendors 的 hits[].id"
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    },
+    {
+      "name": "lookup_uscc",
+      "description": "按**统一社会信用代码**（营业执照上 18 位那串）精确查库，回答「这个代码在名录里吗？是哪一家？」。\n**什么时候必须用它**：\n· 对方给了营业执照/代码 —— 这是唯一不会串号的锚（名称会改、简称会重）；\n· **个体工商户** —— 它们的名称只在登记辖区内唯一（白云区有「XX五金店」，南明区也可以有同名），按名字搜必然串号，只能按代码查；\n· 认领/签约/开票前核对主体身份。\n**查不到 ≠ 不存在**：存量主体多数来自公开地图 POI，本来就不带代码，索引覆盖率见返回体 index_coverage。没命中时用 search_vendors(query=<登记全称>, city=<城市>) 按名称再试。\n返回：found / ids / count；with_profile=true（默认）时附完整档案 `vendor`（远端按条计额度，只取第一条；同代码命中的其余 id 列在 ids 里，可再用 get_vendor 取）。同一代码命中多条会标 ambiguous。",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "uscc": {
+            "type": "string",
+            "description": "统一社会信用代码（必填）。带空格/连字符/全角字符会自动归一，大小写不敏感"
+          },
+          "with_profile": {
+            "type": "boolean",
+            "default": true,
+            "description": "是否连档案一起返回。只要「在不在库、id 是多少」就传 false，省一条记录额度"
+          }
+        },
+        "required": [
+          "uscc"
+        ]
+      }
+    },
+    {
+      "name": "get_capability_card",
+      "description": "取某家企业的能力卡（结构化工艺/设备/认证/产能证据，比 get_vendor 的档案更适合做「这家到底能不能做」的判断）。输入是 search_vendors 返回的 8 位 token。返回 found:false 表示这家暂无已发布的能力卡（不是错误）。",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "8 位主体 token，来自 search_vendors 的 hits[].id"
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    },
+    {
+      "name": "start_sourcing",
+      "description": "多轮寻源起手：把一句自然语言需求（「找东莞做注塑代工的，最好有 ISO9001」）变成一轮定向检索 + 1~2 个**只问必要信息**的澄清问题，返回 session_id 供 answer_sourcing / refine_sourcing 续接。\n什么时候用它：用户有采购/代工/找厂意图，但需求还含糊（没说城市、没说工艺类别）——这种需求直接 search_vendors 会拉回一堆跨行业噪声。\n什么时候别用：需求一句话就能答（「东莞注塑厂有哪些」）→ 直接 search_vendors，省一次会话和一轮额度。\n返回：stage（no_recall / clarifying / shortlist）、recalled（本轮取回家数）、clarifying_questions（每条带 field + options，**options 的取值直接来自候选集**，答了就能用来过滤）、preview（前 3 家）。\n⚠ 澄清问题最多 2 轮，且只问「答了能过滤」的字段（城市/工艺/认证）——交期、数量这类名录里没有的字段一律不问，问了也做不到。\n⚠ 会话 2 小时过期，且**只在同一出口 IP 下可取回**（纯 IP 身份，不认 API key）；换网络/换代理后 session_id 会变成「不存在」。",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "demand_text": {
+            "type": "string",
+            "description": "一句话需求：品类/工艺/材料/地区/认证，越具体越好"
+          },
+          "city": {
+            "type": "string",
+            "description": "已知城市就直接给，省掉一轮澄清"
+          },
+          "limit": {
+            "type": "integer",
+            "default": 20,
+            "description": "本轮取回家数 1-50（每家算 1 条额度）。默认 20，够做初步筛选"
+          }
+        },
+        "required": [
+          "demand_text"
+        ]
+      }
+    },
+    {
+      "name": "answer_sourcing",
+      "description": "续接 start_sourcing 的澄清轮次：把用户对澄清问题的回答写回，服务端据此**重新检索**（不是在旧结果里二次过滤 —— 过滤只能筛掉已有的，重检才能把更适合的捞上来）。\nanswers 的键用 clarifying_questions[].field（city / proc / cert），值为该问的 options[].value；此外可传 keyword 追加自由关键词。\n回执里的 applied 是**已被采纳**的字段，ignored 是没被采纳的（多半是字段名写错）——看到 ignored 非空请对照 field 重发，不要以为已经生效。\n轮次用完（2 轮）或问题已问清 → stage 变 shortlist，直接给初选名单。",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "description": "start_sourcing 返回的 session_id（必填）"
+          },
+          "answers": {
+            "type": "object",
+            "description": "澄清回答，如 {\"city\":\"东莞\",\"proc\":\"injection_molding\"}；可加 keyword 追加自由关键词"
+          }
+        },
+        "required": [
+          "session_id"
+        ]
+      }
+    },
+    {
+      "name": "refine_sourcing",
+      "description": "推荐轮交互。action 四选一：\n· best（默认）—— 按匹配度给前 3 家 + 每家一句「为什么是它」\n· more —— 从本轮召回里再翻一批（value 给条数，默认 10）。不重复计费已给过的\n· filter —— 追加一个约束重检（value 是要加的关键词，如「不锈钢」「ISO9001」）\n· details —— 看某一家在会话里的摘要（value 给 8 位 token）。**要完整档案/电话请调 get_vendor**：本工具只回会话里已有的字段，不额外取数。\n⚠ 名单只是初选：签约前的资质、产能、法人主体一律以 get_vendor / get_capability_card 的证据为准，不要把这里的排序当成「推荐这家」。",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "description": "会话 id（必填）"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "best",
+              "more",
+              "filter",
+              "details"
+            ],
+            "default": "best",
+            "description": "交互类型，默认 best"
+          },
+          "value": {
+            "type": "string",
+            "description": "more 给条数 / filter 给关键词 / details 给 token"
+          }
+        },
+        "required": [
+          "session_id"
+        ]
+      }
+    },
+    {
+      "name": "get_onboarding_guide",
+      "description": "给供应商「入驻 / 认领」入口：返回可直接点开的控制台链接与步骤，外加一条**非手机 App** 的 HTTP/JSON 自助通道说明（供供应商自己的 Agent 认领并上传资料）。\n当用户说「我是某某公司的」「我想入驻/上架产品/让客户搜到我」「我要认领我的企业」「怎么注册成供应商」「我的审核到哪一步了」时调用。\n⚠ 本工具**只给入口，绝不代办**：短信验证码与法人手机核验必须由用户在自己的浏览器里输入 —— 让他把验证码念给你，等于把「证明他是这家企业」的凭证交给第三方，还会进入对话上下文与日志。\n⚠ 不要替用户编造企业信息，不要承诺审核结果或时效，也不要把未认领的企业说成「已经属于你」。",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "supplier_id": {
+            "type": "string",
+            "description": "可选。已拿到的 8 位 token，用于生成直达深链"
+          },
+          "company": {
+            "type": "string",
+            "description": "可选。企业名称，用于把步骤说得更具体"
+          },
+          "intent": {
+            "type": "string",
+            "enum": [
+              "claim",
+              "register",
+              "status",
+              "agent"
+            ],
+            "description": "claim=认领已收录企业（默认）；register=库里没有要新建档；status=查审核进度；agent=看 Agent HTTP 自助通道契约"
+          }
+        }
+      }
+    },
+    {
+      "name": "get_entity_risk",
+      "description": "取某法人主体的**政务事实卡**：税务、社保、司法、行政处罚、政府采购失信五类公开事实，压成 6 个法定资格核验项（三态 hit/clear/unknown）。用于政府采购资格审查、招商尽调、投标前自查。\n三种入口，按优先级取第一个有值的：\n① `uscc` —— 18 位统一社会信用代码（营业执照上那个，最权威）；\n② `id` —— search_vendors / get_vendor 返回的 8 位 token。用于查**已收录商户**：服务端会自己从该商户的登记信息或主体挂靠表取 USCC 再查。\n③ `name`（可配 `city`）—— 只用于既没有代码也没有 token 时。**不做名称反查**，直接按这个名字出一张空骨架卡，明确标「未核验」。\n⚠ **没有数据不等于查不到**：三种入口在「该主体尚无任何已接入数据」时，都会返回**结构完整的卡**（五节齐全、六项 `? 未核验`、覆盖度全 `none`），不是 404、不是空对象。把它呈现出来，并说明缺的是哪一类数据、怎么补；**绝不能说成「无记录 / 无异常」**。\n⚠ `content[0].text` 是**已经排好版的事实卡**，请原样呈现给用户，不要重排表格、不要改小节顺序、不要把符号换成 emoji。需要精确取值时读 `structuredContent`。\n⚠ 任何 `actionable=false` 的核验项，**不得**表述为「无记录 / 无异常」，必须写明数据时点（`as_of`）并提示实时核验。\n⚠ `unknown` 是「没查过」，不是「没问题」；`hit` 只表示「有记录」，不表示「不合格」。本工具只给事实，不给结论、评分或建议 —— 结论由采购人依法自行判断。\n⚠ **个体工商户不提供本卡**（USCC 以 `92` 开头）：六项核验都以企业法人为归集主体，个体户的责任主体是经营者个人，平台不出具涉及自然人的核验结论。此时返回 `error=not_applicable`，**不要重试、不要换入口再试**（三种入口结论一样）；如实告知用户「这类主体不提供核验卡」，并指向登记信息（名称 / 代码 / 经营者 / 经营场所 / 经营范围 / 登记状态，来源政务公开导入、未核验）。\n⚠ `content[0].text` 同样受 `detail` 影响：`compact` 下是一张精简卡，仍须原样呈现，**不要**自行补回被省略的明细。",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "uscc": {
+            "type": "string",
+            "description": "18 位统一社会信用代码（GB 32100 校验位会当场验）。可从营业执照、招标文件、或 get_vendor 回执的 linked_entity.uscc 取得"
+          },
+          "id": {
+            "type": "string",
+            "description": "已收录商户的 8 位 token（search_vendors / get_vendor 返回的 id）。服务端据此取该商户的登记 USCC（gov.uscc 或 linked_entity.uscc）再查事实卡。该商户尚未归集到法人主体时，返回以商户名与地区为卡头的**空骨架卡**，不是 404。"
+          },
+          "name": {
+            "type": "string",
+            "description": "企业名称。只在既无 uscc 也无 id 时使用：**不做反查**，直接以该名称出一张空骨架卡（六项 `? 未核验`）。要真数据请补 uscc 或 id。"
+          },
+          "city": {
+            "type": "string",
+            "description": "配合 name 使用，写入卡头地区（如「贵阳」）。对 uscc / id 入口无效。"
+          },
+          "detail": {
+            "type": "string",
+            "enum": [
+              "card",
+              "compact"
+            ],
+            "description": "返回详略。`card`（默认）=完整事实卡：六项核验带记录来源、经营实力、司法明细、阅读说明，单次约 1.2k token，用于呈现给用户或留档。`compact`=精简摘要：只保留六项核验结论、覆盖度与「须实时核验」清单，**不返回任何原始明细**（处罚条目、案件列表、经营指标表），单次约 0.6k token。一次比对多家（招标名单、招商候选池）时用 compact；其中某家需要看明细，再用同一 uscc 以 `detail=card` 查一次。"
+          }
+        },
+        "required": []
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "io.github.eiry16/beacon-mfg-mcp",
+    "version": "1.13.0",
+    "remoteUrl": "https://beacon-mfg.pages.dev/mcp",
+    "publishedAt": "2026-11-25T06:30:21.457855Z",
+    "fetchedAt": "2026-11-25T11:03:46.215Z",
+    "toolsSha256": "1b505bdafe14fa43597a603412592674b8393df10eb4a305b46b9d92b2cfaa5d"
+  }
+}

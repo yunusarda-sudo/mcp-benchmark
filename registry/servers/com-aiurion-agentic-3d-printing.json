@@ -1,0 +1,588 @@
+{
+  "$schema": "../schema.json",
+  "name": "com.aiurion/agentic-3d-printing",
+  "title": "AIURION Agentic 3D Printing — San Francisco",
+  "category": "AI, LLMs & Agents",
+  "description": "SF 3D printing + design workbenches (enclosures, grippers, fixtures, stamping). Quote and order.",
+  "tools": [
+    {
+      "name": "get_workbench_capabilities",
+      "description": "List the Maker Bench workbenches (enclosure, workholding, gripper, stamping) with availability, inputs and limits. Pass workbench for its full prepare and quote schemas, constraints and defaults. Not needed for print quotes. Wheel Lab is coming soon.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "workbench": {
+            "type": "string",
+            "enum": [
+              "enclosure",
+              "workholding",
+              "gripper",
+              "stamping"
+            ],
+            "description": "Optional. One workbench's full detail; omit for the compact list."
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "workbench.prepare",
+      "description": "Prepare or revise an editable design: enclosure (PCB base and lid), workholding (nests, fixtures, soft jaws), gripper (compliant TPU pad kits) or stamping (matched dies). Pass that workbench's inputs at the top level: enclosure {parameters or kicadPcb, quantity}; workholding {parameters, quantity, stlBase64, stlUnits}; gripper {configuration}; stamping {parameters, sheet, quantity, materialId, productionSpeed, fulfillmentMethod}. Call get_workbench_capabilities with workbench for field constraints if you don't have them. Returns the normalized design, revision, warnings and a private review link. Uses no quote allowance.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "workbench": {
+            "type": "string",
+            "enum": [
+              "enclosure",
+              "workholding",
+              "gripper",
+              "stamping"
+            ],
+            "description": "Which workbench."
+          },
+          "configuration": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Gripper inputs."
+          },
+          "parameters": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Geometry inputs."
+          },
+          "kicadPcb": {
+            "type": "string",
+            "description": "Enclosure: .kicad_pcb text."
+          },
+          "quantity": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Complete sets."
+          },
+          "accessToken": {
+            "type": "string",
+            "minLength": 34,
+            "maxLength": 138,
+            "description": "Guest token from printing.sessions.start, unless Authorization carries one."
+          }
+        },
+        "required": [
+          "workbench"
+        ],
+        "additionalProperties": true
+      }
+    },
+    {
+      "name": "workbench.quote",
+      "description": "Quote the exact reviewed design as one complete set. Pass back what workbench.prepare returned, unchanged (configuration, or parameters and quantity for enclosure), with its revision as reviewedRevision; set reviewConfirmed only after the customer reviewed it. Uses one quote allowance; reuse idempotencyKey for retries. Returns the quote and the review link where the customer checks out; single-part update and checkout tools don't apply.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "workbench": {
+            "type": "string",
+            "enum": [
+              "enclosure",
+              "workholding",
+              "gripper",
+              "stamping"
+            ],
+            "description": "Which workbench."
+          },
+          "configuration": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "As returned by workbench.prepare."
+          },
+          "parameters": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Enclosure, as returned."
+          },
+          "quantity": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Enclosure, as prepared."
+          },
+          "reviewedRevision": {
+            "type": "string",
+            "description": "The reviewed revision."
+          },
+          "reviewConfirmed": {
+            "type": "boolean",
+            "description": "True after customer review."
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "minLength": 8,
+            "maxLength": 128,
+            "description": "Reuse for retries."
+          },
+          "accessToken": {
+            "type": "string",
+            "minLength": 34,
+            "maxLength": 138,
+            "description": "Guest token from printing.sessions.start, unless Authorization carries one."
+          }
+        },
+        "required": [
+          "workbench",
+          "reviewedRevision",
+          "reviewConfirmed",
+          "idempotencyKey"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "printing.capabilities.get",
+      "description": "Read AIURION's supported 3D model formats, limits, materials, production options, and purchasing flow.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "printing.sessions.start",
+      "description": "Start a free 24-hour guest session with three quotes. No account needed.",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "agentName"
+        ],
+        "properties": {
+          "agentName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120,
+            "description": "Host app: ChatGPT, Claude, Cursor, Codex, Grok or Grok Bot. Otherwise your app's name, or unknown. Never a task, persona or model name. Used for order attribution."
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "printing.quotes.create",
+      "description": "Create a free quote for one model at the chosen material and quantity. Pass a ChatGPT attachment as file; otherwise send exact bytes as fileBase64, or use printing.uploads.create. Never invent bytes or URLs. Totals already include every copy. Change speed or delivery with printing.quotes.update. Get customer approval before checkout.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "accessToken": {
+            "type": "string",
+            "minLength": 34,
+            "maxLength": 138,
+            "description": "Guest token from printing.sessions.start. Omit when it is sent as a Bearer header."
+          },
+          "fileName": {
+            "type": "string",
+            "description": "Model filename: .stl, .obj, .step, .stp or .3mf."
+          },
+          "file": {
+            "type": "object",
+            "description": "ChatGPT file attachment. Add fileName if it has none.",
+            "properties": {
+              "download_url": {
+                "type": "string",
+                "description": "Temporary HTTPS URL from ChatGPT."
+              },
+              "file_id": {
+                "type": "string",
+                "description": "ChatGPT file ID."
+              },
+              "mime_type": {
+                "type": "string"
+              },
+              "file_name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "download_url",
+              "file_id"
+            ],
+            "additionalProperties": false
+          },
+          "fileBase64": {
+            "type": "string",
+            "description": "Exact model bytes as base64, no data: prefix."
+          },
+          "materialId": {
+            "type": "string",
+            "description": "Material ID from printing.capabilities.get. Defaults to black_pla. Changing it reprices the quote and needs fresh approval."
+          },
+          "printSettings": {
+            "type": "object",
+            "description": "Omit for the material's standard profile.",
+            "properties": {
+              "infillPercent": {
+                "type": "integer",
+                "minimum": 10,
+                "maximum": 100
+              },
+              "wallCount": {
+                "type": "integer",
+                "minimum": 2,
+                "maximum": 6
+              }
+            },
+            "additionalProperties": false
+          },
+          "quantity": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 150,
+            "default": 1,
+            "description": "Identical parts."
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "minLength": 8,
+            "maxLength": 128,
+            "description": "Reuse the same key on retries."
+          }
+        },
+        "required": [
+          "idempotencyKey"
+        ],
+        "oneOf": [
+          {
+            "required": [
+              "file"
+            ],
+            "not": {
+              "required": [
+                "fileBase64"
+              ]
+            }
+          },
+          {
+            "required": [
+              "fileName",
+              "fileBase64"
+            ],
+            "not": {
+              "required": [
+                "file"
+              ]
+            }
+          }
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "printing.quotes.get",
+      "description": "Read a quote this session or integration created.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "accessToken": {
+            "type": "string",
+            "minLength": 34,
+            "maxLength": 138,
+            "description": "Guest token from printing.sessions.start. Omit when it is sent as a Bearer header."
+          },
+          "quoteId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Quote ID from printing.quotes.create."
+          }
+        },
+        "required": [
+          "quoteId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "printing.quotes.update",
+      "description": "Change quantity, material, print settings, production speed or delivery, and reprice. This expires any open checkout link for the quote and its build, permanently, so tell the customer first. Then show the new price and get approval again before a new checkout. Paid or authorized quotes can't change. Never charges, refunds or starts manufacturing.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "accessToken": {
+            "type": "string",
+            "minLength": 34,
+            "maxLength": 138,
+            "description": "Guest token from printing.sessions.start. Omit when it is sent as a Bearer header."
+          },
+          "quoteId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Quote ID from printing.quotes.create."
+          },
+          "quantity": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 150,
+            "description": "Identical parts."
+          },
+          "materialId": {
+            "type": "string",
+            "description": "Material ID from printing.capabilities.get. Defaults to black_pla. Changing it reprices the quote and needs fresh approval."
+          },
+          "printSettings": {
+            "type": "object",
+            "description": "Omitted values stay as quoted.",
+            "properties": {
+              "infillPercent": {
+                "type": "integer",
+                "minimum": 10,
+                "maximum": 100
+              },
+              "wallCount": {
+                "type": "integer",
+                "minimum": 2,
+                "maximum": 6
+              }
+            },
+            "additionalProperties": false
+          },
+          "productionSpeed": {
+            "type": "string",
+            "enum": [
+              "standard",
+              "rush"
+            ],
+            "description": "Production priority."
+          },
+          "fulfillmentMethod": {
+            "type": "string",
+            "enum": [
+              "shipping",
+              "pickup",
+              "courier"
+            ],
+            "description": "US shipping, SoMa pickup or Bay Area courier."
+          }
+        },
+        "required": [
+          "quoteId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "printing.checkout.create",
+      "description": "Create an unpaid checkout link after the customer approves the current quote. Read it first with printing.quotes.get, since the customer can change delivery and speed in the quote panel, and only send option fields the customer asked for in chat. Charges nothing and places no order. The customer pays in Stripe Checkout, which only authorizes the card; AIURION captures after reviewing the model. The token works with AIURION only, never Stripe.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "accessToken": {
+            "type": "string",
+            "minLength": 34,
+            "maxLength": 138,
+            "description": "Guest token from printing.sessions.start. Omit when it is sent as a Bearer header."
+          },
+          "quoteId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Quote ID from printing.quotes.create."
+          },
+          "approvalConfirmed": {
+            "type": "boolean",
+            "const": true,
+            "description": "True only after the customer approves this quote."
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "minLength": 8,
+            "maxLength": 128,
+            "description": "Reuse the same key on retries."
+          },
+          "materialId": {
+            "type": "string",
+            "description": "Material ID from printing.capabilities.get. Defaults to black_pla. Changing it reprices the quote and needs fresh approval."
+          },
+          "productionSpeed": {
+            "type": "string",
+            "enum": [
+              "standard",
+              "rush"
+            ],
+            "description": "Production priority."
+          },
+          "fulfillmentMethod": {
+            "type": "string",
+            "enum": [
+              "shipping",
+              "pickup",
+              "courier"
+            ],
+            "description": "US shipping, SoMa pickup or Bay Area courier."
+          }
+        },
+        "required": [
+          "quoteId",
+          "approvalConfirmed",
+          "idempotencyKey"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "printing.orders.get",
+      "description": "Payment and manufacturing status for a quote you own.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "accessToken": {
+            "type": "string",
+            "minLength": 34,
+            "maxLength": 138,
+            "description": "Guest token from printing.sessions.start. Omit when it is sent as a Bearer header."
+          },
+          "quoteId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Quote ID from printing.quotes.create."
+          }
+        },
+        "required": [
+          "quoteId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "printing.uploads.create",
+      "description": "Create a private single-use link that quotes the customer's own model (STL, OBJ, STEP, STP, 3MF, up to 5 MB) without the file passing through the chat. Use it when the file isn't a native attachment and you can't send its exact bytes; for a ChatGPT file attachment, use printing.quotes.create. Returns the link, a shell upload command and an upload panel for the customer. Expires in 30 minutes and makes one quote. Then call printing.uploads.get.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "accessToken": {
+            "type": "string",
+            "minLength": 34,
+            "maxLength": 138,
+            "description": "Guest token from printing.sessions.start. Omit when it is sent as a Bearer header."
+          },
+          "materialId": {
+            "type": "string",
+            "description": "Material ID from printing.capabilities.get. Defaults to black_pla. Changing it reprices the quote and needs fresh approval."
+          },
+          "printSettings": {
+            "type": "object",
+            "description": "Omit for the material's standard profile.",
+            "properties": {
+              "infillPercent": {
+                "type": "integer",
+                "minimum": 10,
+                "maximum": 100
+              },
+              "wallCount": {
+                "type": "integer",
+                "minimum": 2,
+                "maximum": 6
+              }
+            },
+            "additionalProperties": false
+          },
+          "quantity": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 150,
+            "default": 1,
+            "description": "Identical parts."
+          },
+          "fileName": {
+            "type": "string",
+            "minLength": 5,
+            "maxLength": 120,
+            "description": "Optional filename, e.g. bracket.stl."
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "printing.uploads.get",
+      "description": "Status of an upload link (waiting_for_file, processing, failed or quoted), with the quote once it's priced.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "accessToken": {
+            "type": "string",
+            "minLength": 34,
+            "maxLength": 138,
+            "description": "Guest token from printing.sessions.start. Omit when it is sent as a Bearer header."
+          },
+          "uploadId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "From printing.uploads.create."
+          }
+        },
+        "required": [
+          "uploadId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "printing.quotes.preview",
+      "description": "Read the original STL, OBJ or 3MF belonging to an authenticated print quote for the quote review app.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "accessToken": {
+            "type": "string",
+            "minLength": 34,
+            "maxLength": 138,
+            "description": "Guest token from printing.sessions.start. Omit when it is sent as a Bearer header."
+          },
+          "quoteId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Quote ID from printing.quotes.create."
+          }
+        },
+        "required": [
+          "quoteId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "printing.uploads.submit",
+      "description": "Used by the AIURION upload panel to deliver the model file a customer dropped into it to its single-use upload link when a direct upload is blocked.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "uploadToken": {
+            "type": "string",
+            "minLength": 64,
+            "maxLength": 900,
+            "description": "Token from the upload link's URL."
+          },
+          "fileName": {
+            "type": "string",
+            "minLength": 5,
+            "maxLength": 120,
+            "description": "Original model filename."
+          },
+          "fileBase64": {
+            "type": "string",
+            "description": "Base64-encoded model bytes without a data URL prefix."
+          }
+        },
+        "required": [
+          "uploadToken",
+          "fileName",
+          "fileBase64"
+        ],
+        "additionalProperties": false
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "com.aiurion/agentic-3d-printing",
+    "version": "2.6.0",
+    "remoteUrl": "https://aiurion.com/api/agent/v1/mcp",
+    "publishedAt": "2026-11-25T06:32:22.458771Z",
+    "fetchedAt": "2026-11-25T11:03:46.215Z",
+    "toolsSha256": "26ce0fc8e968c89ed84baff5e1634f469ca223e8cabeae32066a62331bf51c5d"
+  }
+}

@@ -1,0 +1,1084 @@
+{
+  "$schema": "../schema.json",
+  "name": "io.github.Vortx-AI/emem",
+  "title": "emem, the verifiable memory protocol for the physical world",
+  "category": "Developer Tools & DevOps",
+  "description": "Shared, verifiable memory for machines and AI. Encode where data lives; decode with any AI.",
+  "repository": "https://github.com/Vortx-AI/emem",
+  "tools": [
+    {
+      "name": "emem_entity",
+      "description": "Give a real-world object (a bridge, a farm plot, a river, a named place) one shared identity. Every agent resolves this identity the same way. The result is an `entity_token` (`emem:entity:<entity_cid>`) and a signed receipt that shows how the reference resolved. Two agents that name the same object get the SAME entity_cid. A stable external id (Overture GERS or OSM) decides identity when the responder knows one, so different labels for one object collapse to one id. This stops referential drift: 'the damaged bridge near the river' becomes one thing that every model reasons about.\n\nWhen to use: Call this when a conversation refers to a THING and you need a handle that travels between agents. Anchor it with `place`, `cell` or `lat`+`lng`. Give the `emem:entity:` token to a peer, and the peer gets the same object. Recall at its cell64 to read signed facts. Choose the correct sibling: this tool MINTS or returns an identity. `emem_entity_resolve` finds an identity that an agent registered before, from a fuzzy phrase. `emem_entity_link` records that two names mean one object. Do not use it for an observation (use emem_recall or emem_memory_token) or for a place (use emem_locate). An entity is a thing AT a place.\n\nExample arguments: {\"label\":\"Golden Gate Bridge\",\"kind\":\"bridge\",\"place\":\"Golden Gate Bridge, San Francisco\"}",
+      "inputSchema": {
+        "properties": {
+          "attester": {
+            "description": "ed25519 binding, verified. Omit it and the refusal's details.how_to_sign gives the digest to sign.",
+            "properties": {
+              "pubkey_b32": {
+                "type": "string"
+              },
+              "sig_b32": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "pubkey_b32",
+              "sig_b32"
+            ],
+            "type": "object"
+          },
+          "cell": {
+            "description": "cell64 to anchor the object directly (no geocode).",
+            "type": "string"
+          },
+          "external_ids": {
+            "description": "Stable ids that drive convergence. Caller-supplied values win over geocoder-derived ones.",
+            "properties": {
+              "gers": {
+                "description": "Overture GERS division id (strongest anchor).",
+                "type": "string"
+              },
+              "osm": {
+                "description": "OpenStreetMap object as <type>/<id>, e.g. way/717919508.",
+                "type": "string"
+              },
+              "wikidata": {
+                "description": "Wikidata QID.",
+                "type": "string"
+              }
+            },
+            "type": "object"
+          },
+          "kind": {
+            "description": "Object class: bridge, river, farm_plot, building, admin_division, place, custom, ... Defaults to \"place\".",
+            "type": "string"
+          },
+          "label": {
+            "description": "Human name of the object, e.g. \"Golden Gate Bridge\", \"the north dam\". Required.",
+            "type": "string"
+          },
+          "lat": {
+            "description": "Latitude anchoring the object to a place, paired with lng. The identity is hashed from this anchor, so two agents anchoring the same object differently mint different entities.",
+            "maximum": 90,
+            "minimum": -90,
+            "type": "number"
+          },
+          "lng": {
+            "description": "Longitude, paired with lat.",
+            "maximum": 180,
+            "minimum": -180,
+            "type": "number"
+          },
+          "parent": {
+            "description": "Optional parent entity_cid (containment).",
+            "type": "string"
+          },
+          "place": {
+            "description": "Free-text place to anchor the object (geocoded). Provide place OR cell OR lat+lng.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "emem_locate",
+      "description": "Get the canonical address (cell64) of a real-world place. Every agent resolves a place to the same cell64, so two models refer to the same ground. The answer also lists, by topic, the bands and algorithms that you can recall there. For an OBJECT identity (a bridge, a plot) instead of a cell, use emem_entity. Send `lat`+`lng` as numbers, or a free-text place. When both arrive, the coordinates win. `q`, `query` and `name` are other names for `place`. The answer lists keys that this schema does not declare in `_unrecognised_arguments`, so a typo is visible.\n\nWhen to use: Call this when the next step needs the cell64 of a named place, or the bands that exist there. `data_at_this_cell` lists every band you can recall, by topic (`live_bands_by_topic`), the recipes that use them (`algorithms_for_topic`), and the bands with no materializer here. It has `research_nearby` when vouched research agents signed conclusions inside the place. Read those with emem_inferences before you recompute them. For one packaged answer in one call, use `emem_ask`.\n\nExample arguments: {\"place\":\"Mount Everest\"}",
+      "inputSchema": {
+        "properties": {
+          "lat": {
+            "description": "WGS-84 latitude in degrees, paired with `lng`. REQUIRED with `lng` unless `place`/`q` is provided.",
+            "type": "number"
+          },
+          "lng": {
+            "description": "WGS-84 longitude in degrees, paired with `lat`. REQUIRED with `lat` unless `place`/`q` is provided.",
+            "type": "number"
+          },
+          "name": {
+            "description": "Alias for `place`.",
+            "type": "string"
+          },
+          "place": {
+            "description": "Free-text place name (e.g. 'Mount Everest', 'Tokyo'). REQUIRED unless `lat`+`lng` is provided. Aliases also accepted: `q`, `query`, `name`.",
+            "type": "string"
+          },
+          "q": {
+            "description": "Alias for `place`, accepted because OSM/Mapbox/Google Geocoding all use `q`. Provide either this or `place` (or `lat`+`lng`).",
+            "type": "string"
+          },
+          "query": {
+            "description": "Alias for `place`.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      }
+    },
+    {
+      "name": "emem_recall",
+      "description": "Read the signed facts at a canonical address (cell64). When a band has no fact yet but has a registered materializer, the responder fetches it. A fact_cid names one signed attestation, so you can cite a fact and verify it again. Resolve the cid anywhere and you get the same bytes. A fact_cid is NOT a fingerprint of the observation. The digest includes the responder's key and the time it signed. Thus two responders that measure the same thing make different fact_cids, and a cid resolves only at the responder that signed it. For identity across responders, use emem_entity. Send `deterministic:true` (or a `provenance` class list) to keep only facts that you can compute from the cited raw source. In the memory algebra this is ensure(cell, bands), not get: you state what must exist.\n\nWhen to use: Call this after `emem_locate`, or with a cell64 or a place name. It returns every Primary fact at that (cell, band, tslot). A band can have no fact but have a materializer. Then the responder fetches the upstream value, signs it, stores it and returns it in the same call. The first call is slow; later calls use the cache. Thus any wired band recalls at any cell on Earth: send `bands: [<band>]`. `materialize_notes` lists what the call fetched. Empty notes mean no materializer here.\n\nExample arguments: {\"cell\":\"defi.zb64a.cAzU.zfa27\",\"bands\":[\"weather.temperature_2m\",\"copdem30m.elevation_mean\"]}",
+      "inputSchema": {
+        "properties": {
+          "as_of_signed_at": {
+            "description": "Bi-temporal transaction-time bound. RFC 3339 string. Returns only facts whose `signed_at` ≤ as_of_signed_at, answers `what did emem KNOW as of system-date Y`. Malformed strings are rejected with code:`invalid_signed_at_format`.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "as_of_tslot": {
+            "description": "Bi-temporal valid-time bound. Returns the latest fact per (cell,band) whose tslot ≤ as_of_tslot, answers `what did this place look like AS OF date X`. Conflicts with an explicit `tslot` when as_of_tslot < tslot (rejected with code:`invalid_temporal_bound`).",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "band": {
+            "description": "optional single band key, convenience alias for bands:[band]. Use when you want exactly one band (e.g. 'geotessera.2020', 'modis.ndvi_mean') and would otherwise have to wrap it in an array. Both `band` and `bands` are accepted; if both are given they are merged.",
+            "type": "string"
+          },
+          "bands": {
+            "description": "optional band keys to filter, e.g. ['indices.ndvi','geotessera']",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "cell": {
+            "description": "cell64 string, e.g. 'defi.zb64a.cAzU.zfa27'",
+            "maxLength": 23,
+            "minLength": 19,
+            "pattern": "^(?:(?:[bcdfghjklmnpqrstvwxyz][aeiouAEIOU]){2}|z[0-9a-f]{4})(?:\\.(?:(?:[bcdfghjklmnpqrstvwxyz][aeiouAEIOU]){2}|z[0-9a-f]{4})){3}$",
+            "type": "string"
+          },
+          "cell64": {
+            "description": "Alias for `cell`.",
+            "type": "string"
+          },
+          "deterministic": {
+            "description": "Sugar over `provenance`: true keeps only facts any third party can recompute from the cited raw source (direct_sensor + deterministic_index); false keeps the rest (attested_execution + model_output + human_curated + unclassified). Composable with `provenance` (intersection).",
+            "type": "boolean"
+          },
+          "include": {
+            "description": "Opt-in response expansion. include:['provenance'] attaches each fact's tamper-provenance class, which is what `deterministic` and the `provenance` filter select ON: without it you can filter by class and never be told which class a returned fact is. include:['freshness'] attaches an advisory per-fact freshness block: a Q(Δt) staleness score from the band's physics decay kernel (the same one /v1/temporal_route ranks bands with), so an agent learns how stale each reading is in the call that returns it. Advisory only; it does NOT enter the receipt. include:['edges'] attaches each fact's typed temporal edges and threads their CIDs into the receipt. Absent leaves the response byte-identical to the pre-v0.0.9 recall.",
+            "items": {
+              "enum": [
+                "freshness",
+                "edges",
+                "provenance"
+              ],
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "lat": {
+            "description": "Explicit latitude, an alternative to `cell`; paired with `lng`.",
+            "type": "number"
+          },
+          "lng": {
+            "description": "Explicit longitude, paired with `lat`.",
+            "type": "number"
+          },
+          "place": {
+            "description": "Free-text place name, an alternative to `cell`.",
+            "type": "string"
+          },
+          "provenance": {
+            "description": "Tamper-provenance filter: return only facts whose band's provenance class is in this list. `attested_execution` is a device reading trusted through its verified OS execution trace and platform attestation (not recomputable). Applied BEFORE the receipt is signed, so the receipt covers exactly the returned facts; `bands_already_attested_at_cell` stays unfiltered so you still see what else exists at the cell.",
+            "items": {
+              "enum": [
+                "direct_sensor",
+                "deterministic_index",
+                "estimator",
+                "attested_execution",
+                "model_output",
+                "human_curated",
+                "unclassified"
+              ],
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "scope": {
+            "description": "Optional multi-tenant scope {user_id, agent_id, run_id, org_id}. When at least one field is set, the recall is FILTERED to facts written under the same four-tuple (a recall scoped to {user_id:'u1'} sees only u1's facts, never another tenant's and never globally-written facts) AND the signed receipt binds the scope. Omit (or send {}) for the global, pre-v0.0.8 recall.",
+            "properties": {
+              "agent_id": {
+                "type": "string"
+              },
+              "org_id": {
+                "type": "string"
+              },
+              "run_id": {
+                "type": "string"
+              },
+              "user_id": {
+                "type": "string"
+              }
+            },
+            "type": "object"
+          },
+          "tslot": {
+            "description": "optional time slot (band-tempo-relative integer offset from emem epoch)",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "cell"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "emem_memory_token",
+      "description": "Make a citation handle, `emem:fact:<cell64>:<fact_cid>` (or `:<state_cid>`). Any agent or LLM resolves it to the same signed object, byte for byte. Give this one string to another agent instead of a new description of the fact. The tool checks that both parts are not empty and do not contain the `:` separator. Memory algebra: the `cite` operation (https://emem.dev/docs/model.html).\n\nWhen to use: Call this when you need one string that cites a place and an attested fact across messages, agents or tools. Use `emem_echo_verify` before you publish the value. FOR MANY FACTS, USE emem_memory_bundle. This is a measured result. A token is 83 to 84 characters and 51 LLM tokens. The value it cites is 11 characters and 5.4 tokens on average. Thus N tokens use about 9.5 times the context of the N numbers. A bundle is 38 characters for any N up to 256, and it resolves in one round trip. It costs less than tokens from N=1, and less than the plain values from N=5. Use one token to cite ONE fact that you must verify later.\n\nExample arguments: {\"cell\":\"defi.zb493.xoso.zcb6a\",\"fact_cid\":\"cxjiu7l54ujzrpnekp24n4534yojpue4mprddbvevnqtti3lh5bq\"}",
+      "inputSchema": {
+        "properties": {
+          "band": {
+            "description": "Optional band key. When set, the minted citation carries the band's tamper-provenance block (class, deterministic, tamper_evidence, trust_rank) so the receiving agent sees the trust class without a resolve round-trip.",
+            "type": "string"
+          },
+          "cell": {
+            "description": "cell64, neither component may contain `:`.",
+            "maxLength": 23,
+            "minLength": 19,
+            "pattern": "^(?:(?:[bcdfghjklmnpqrstvwxyz][aeiouAEIOU]){2}|z[0-9a-f]{4})(?:\\.(?:(?:[bcdfghjklmnpqrstvwxyz][aeiouAEIOU]){2}|z[0-9a-f]{4})){3}$",
+            "type": "string"
+          },
+          "fact_cid": {
+            "description": "52-char base32-nopad-lowercase content-id of the fact (full 32-byte blake3).",
+            "type": "string"
+          },
+          "observed_on": {
+            "description": "The fact's source capture date (YYYY-MM-DD) as `/v1/recall` reports it in `sources[].captured_at`. Supplied together with `band` it additionally mints the self-describing `descriptor_token`. A wrong date forges nothing: resolve binds the date to the signed fact and answers 409 on a mismatch.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "cell",
+          "fact_cid"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "emem_memory_token_resolve",
+      "description": "Read a `emem:fact:<cell64>:<fact_cid>` citation handle and return the reading that it cites. `value`, `unit`, `band` and `kind` are at the TOP level of the answer, beside the full signed `fact` body. You do not split the token or call `GET /v1/facts/<cid>` yourself. Memory algebra: the `resolve` operation (https://emem.dev/docs/model.html).\n\nWhen to use: Call this when you have a memory_token from another agent or an earlier turn and need the value. For a scalar, quote `value_verbatim`, the exact decimal string that the responder signed. A null `value` or `unit` means the fact has none (an absence, or an index with no unit). It does not mean a missing field. A cid that this responder does not hold returns a typed 404. Then try /v1/fetch, or resolve at a mirror.\n\nExample arguments: {\"token\":\"emem:fact:defi.zb493.xoso.zcb6a:cxjiu7l54ujzrpnekp24n4534yojpue4mprddbvevnqtti3lh5bq\"}",
+      "inputSchema": {
+        "properties": {
+          "token": {
+            "description": "A `emem:fact:<cell64>:<fact_cid>` citation handle to dereference.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "token"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "emem_verify_receipt",
+      "description": "Verify a signed receipt on the server. The tool builds the canonical preimage again, under the rule that the receipt's `preimage_version` names. It checks the ed25519 signature with the embedded key. It returns `{valid, reason, failure_detail, signature_valid, merkle_proof_valid, signer_pubkey_b32, preimage_blake3_hex}`. A receipt verifies BYTE FOR BYTE OR NOT AT ALL. Version 2 binds the inclusion proof, so a change of any kind makes the signature fail: a dropped field, a renamed field, a summary. Use this tool when the browser page /verify is not available. Also use it to audit a receipt from a third party.\n\nWhen to use: Send the receipt EXACTLY as the read tool returned it, complete and unchanged. Two omissions cause a false forgery, not a 400. Do not drop `merkle_proof`. Do not drop `preimage_version`. Without it the value is 0, which selects the v0 rule, and the signature reads as invalid. The signature and the key can be byte arrays, or `sig_b32` and `responder_pubkey_b32`. The tool accepts no other names. When a field changed after signing, the answer is `reason: receipt_reshaped_after_signing` and names the field. To require a specific signer, set `pubkey_b32`. A bad signature returns 200 with `valid: false`, never a 4xx. The example (from emem_tools) is a real receipt over two Trafalgar Square facts. Unchanged, it is `valid`. Change one byte, and it is not.\n\nExample arguments: 1602 bytes, too long to inline in a listing. Call `emem_tools` with `{\"name\": \"emem_verify_receipt\"}` for it whole and runnable; it is not shortened here because a truncated example is not one.",
+      "inputSchema": {
+        "properties": {
+          "current_responder_epoch": {
+            "description": "The responder key epoch you currently trust, from `/v1/manifests`. Produces an advisory `key_epoch_advisory` comparison against the receipt's epoch; a mismatch is reported, never rejected.",
+            "type": "integer"
+          },
+          "facts": {
+            "description": "The fact value(s) you intend to rely on. Each is content-addressed and checked for membership in the receipt's `fact_cids`, so a genuine receipt presented beside a tampered fact answers `valid:false` / `fact_mismatch`. Omit it and only the signature is checked, which a doctored fact survives.",
+            "type": "array"
+          },
+          "pubkey_b32": {
+            "description": "Optional explicit responder pubkey (base32). When omitted, uses the receipt's embedded pubkey/responder fields.",
+            "type": "string"
+          },
+          "receipt": {
+            "description": "The signed receipt envelope, the object under `receipt` in any read primitive's result. Must carry primitive/served_at/request_id/cells/fact_cids and either `signature` byte[] + `responder_pubkey` byte[] or their b32 string forms. IF ALL YOU HOLD IS AN `emem:fact:` TOKEN, this is not the tool to call first: a token is not a receipt and passing one here is a shape error. Call `emem_memory_token_resolve` on the token, then pass THAT result's `receipt` object here. Resolving proves the token points at the bytes it claims; verifying proves this responder signed them.",
+            "type": "object"
+          }
+        },
+        "required": [
+          "receipt"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "emem_memory_contradictions",
+      "description": "Find where the corpus DISAGREES with itself (algebra: competing evidence). Two or more independent sources can sign different values for the same place, band and time. This tool returns that disagreement with a severity from 0 to 1 and a citation for each disputed fact. It does not pick one value and hide the conflict. It tells you when not to trust a single answer. Read the SCOPE before you quote a zero. By default it counts two kinds: two DIFFERENT attesters that disagree, and one responder that answers from two upstreams. `disagreement_scope` names the kind.\n\nWhen to use: Call this before you rely on a number: 'do the sources agree on X', 'audit this claim'. Use `cell_prefix` for a region and `band` for one band family. `min_severity` removes small differences. Severity depends on the band kind: for a scalar, the spread over the band's range. For a vector, 1 minus the mean cosine. For a category, 1 minus the share of the mode. On a single-responder node, add `include_same_attester_sources: true`. There, the most likely disagreement is one signer that answers from two providers. Each record names its `disagreement_scope`. The receipt cites every disputed cid. To measure a pair, use `emem_diff`. To read the `disagrees_with` edge, use `emem_edges_recall`.\n\nExample arguments: {\"cell_prefix\":\"damO\",\"band\":\"indices.ndvi\",\"min_severity\":0.2}",
+      "inputSchema": {
+        "properties": {
+          "band": {
+            "description": "Band key filter (e.g. `indices.ndvi`). Omit to include all bands.",
+            "type": "string"
+          },
+          "cell": {
+            "description": "Alias for `cell_prefix`, and the spelling the rest of the surface uses for a cell64. Send a cell64 you already hold and the scan narrows to that place instead of running over the corpus.",
+            "type": "string"
+          },
+          "cell64": {
+            "description": "Alias for `cell_prefix`.",
+            "type": "string"
+          },
+          "cell_prefix": {
+            "description": "A cell64 to scan, or a bytewise prefix of one (e.g. `defi.zb5f9`). Omit to scan the whole corpus up to the scan cap. A full cell64 is a prefix of itself, so passing one narrows the scan to exactly that place.",
+            "type": "string"
+          },
+          "include_same_attester_sources": {
+            "default": true,
+            "description": "Default true: also report keys where ONE attester answered from two upstreams (a changed `derivation.fn_key` or `sources[].scheme` set). A re-signed provider is a refresh and stays out. Each record names its `disagreement_scope`. Pass false for distinct attesters only.",
+            "type": "boolean"
+          },
+          "limit": {
+            "default": 100,
+            "description": "Max contradictions to return.",
+            "maximum": 1000,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "min_severity": {
+            "default": 0.1,
+            "description": "Severity floor in [0, 1]. 0 = report every disagreement, 1 = only flagrant. Severity scoring is per band kind: scalar (max-min over band range), vector (1 - mean cosine), categorical (1 - mode share).",
+            "maximum": 1,
+            "minimum": 0,
+            "type": "number"
+          },
+          "resume_after": {
+            "description": "The `resume_after` of a scan that stopped at its time budget. The scan continues from the next key.",
+            "type": "string"
+          },
+          "window_unix_s": {
+            "description": "[lo, hi] inclusive Unix-seconds filter on attestations' signed_at, all disagreeing attestations must fall in the window.",
+            "items": {
+              "minimum": 0,
+              "type": "integer"
+            },
+            "maxItems": 2,
+            "minItems": 2,
+            "type": "array"
+          }
+        },
+        "type": "object"
+      }
+    },
+    {
+      "name": "emem_guard_verdict",
+      "description": "Run the emem-guard policy checks on text before you send it. The checks use this responder's corpus. The tool finds every emem: citation, resolves each one, and returns allow or deny with a reason that a machine can read: `EMEM-GUARD DENY <CODE> token=<token|-> fix=<fix> leaf=<leaf|->`. The codes are: PROV_SIG (the signature did not verify). PROV_BYTES (the citation resolved to different content). PROV_DRIFT (the reading moved past its band threshold). PROV_VALUE (a stated value does not agree with the cited fact). CLAIM_UNGROUNDED (a measurable claim has no citation; turn it on with claim_gating). `fix` tells you what to do: refresh_token, remove_reference, contact_admin, cite_observation, correct_value. Only a self-hosted guard returns GEO_ZONE and redact_and_retry. This tool is ADVISORY: it blocks nothing. A citation that this responder does not hold is never a denial, because it can be a citation from another responder. Memory algebra: the `verify` operation (https://emem.dev/docs/model.html).\n\nWhen to use: Call it on your draft before you assert something, or on a tool result before you reason on it. Then you can fix a citation that does not resolve. With `claim_gating: true`, it also names measurable claims with no citation, and the band that answers each. For a payload from another framework (CloudEvent, OPA input, OpenAI moderations body, a tool call from another server), send it unchanged and name its `shape`. The default reader reads only `texts`, and a check that read nothing answers allow. To ENFORCE the policy, use emem_guard_selfhost. It returns the procedure for your own node.\n\nExample arguments: {\"texts\":[\"Lusail ground sits at 2.6 m per emem:fact:defi.zb521.jawI.gOze:f3yr3urkrfwamlemwadulgth2qpw645vi6l6fhtuu4dy5o7onahq\"]}",
+      "inputSchema": {
+        "properties": {
+          "agent": {
+            "description": "Optional free-text label for who is asking. Advisory only, never a trust boundary.",
+            "type": "string"
+          },
+          "claim_gating": {
+            "default": false,
+            "description": "Also flag measurable physical-world claims that carry NO citation (deny code CLAIM_UNGROUNDED, fix cite_observation). Off by default: it reports on the absence of a citation rather than on a failed check. The verdict names the sentence, the magnitude, and the emem band that would answer it.",
+            "type": "boolean"
+          },
+          "shape": {
+            "default": "native",
+            "description": "Which envelope YOUR payload is in, so you never have to reshape it to ask the question: send the body your own framework produced and name its shape. native reads `texts`; `mcp` reads a JSON-RPC tools/call or tool result; `openai` reads a moderations (`input`) or chat-completions body; `cloudevent` reads a CloudEvents 1.0 structured event; `policy` reads {input}. It matters: a CloudEvent whose citation sits at data.text is invisible to the native reader, and a check that read nothing answers `allow`, so confirm `citations_found` matches what you sent. Unrecognised values fall back to native rather than erroring. This selects how the body is READ only — the verdict always comes back in this tool's declared output shape, because a tool that declares an outputSchema owes conforming structuredContent. To get the ANSWER translated into the same envelope too (an OPA `result:{allow,deny}`, an MCP CallToolResult to substitute on a deny), call POST /v1/guard/verdict?shape=… directly.",
+            "enum": [
+              "native",
+              "mcp",
+              "openai",
+              "cloudevent",
+              "policy"
+            ],
+            "type": "string"
+          },
+          "texts": {
+            "description": "Free text to check, and the only input this tool needs. Send just the pieces the question is about: a draft answer, a tool result, one turn. Do not send surrounding conversation, because nothing here reads it and a checker should ask for the smallest input that answers the question.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      }
+    },
+    {
+      "name": "emem_tools",
+      "description": "The map of emem's tools, and the one tool that finds all the others. It gives the working loop in order (name, ground, cite, resolve, verify, check for drift). Then it groups every other tool by the question it answers, each with a one-line trigger. Send `name` for the full schema of one tool and an example that runs. IF YOU SEE A LIST OF 18 TOOLS, IT IS A CURATED SUBSET OF 119, NOT THE FULL SURFACE. Hosts remove `_meta`, so this text repeats the count. A host that calls only listed tools refuses the rest: connect /mcp/full and follow `nextCursor`, or use `listed_route`.\n\nWhen to use: Call this FIRST when you do not know which tool answers the question. Also call it when your list does not have a capability. A tool that is not in your list can still be on the server. `q` searches by topic (`ndvi`, `flood`, `verify`). `name` returns one exact schema. With no arguments, you get the full map. /mcp/full registers the full catalog. emem_ask answers in one call without a choice of primitive.\n\nExample arguments: {\"q\":\"ndvi\"}",
+      "inputSchema": {
+        "properties": {
+          "bundle": {
+            "description": "Filter by the job you are doing. Call with no arguments first to see each bundle and its size.",
+            "enum": [
+              "tokenisation",
+              "verification",
+              "agent_to_agent",
+              "long_horizon",
+              "robotics",
+              "satellites",
+              "agriculture",
+              "forestry",
+              "climate_risk"
+            ],
+            "type": "string"
+          },
+          "category": {
+            "description": "Filter to one category. This is about the shape of the job, NOT about safety: 46 tools outside `write` declare `readOnlyHint: false` because reading a cold address can materialise or mint as a side effect, so `category: \"read\"` is not a safe-tools filter. Read each result's `annotations.readOnlyHint` for that.",
+            "enum": [
+              "read",
+              "write",
+              "verify",
+              "introspect",
+              "plan"
+            ],
+            "type": "string"
+          },
+          "name": {
+            "description": "Return the full descriptor for exactly this tool (input schema, runnable example, annotations), e.g. `emem_ndvi`. Use this when you already know the name and want its schema without loading the whole catalog. It SHORT-CIRCUITS: when `name` is set every other argument here is ignored, so `{name, q}` is not a search within one tool. A name this responder does not carry is not an error status, you get a body with `did_you_mean` holding up to five names that share a substring with what you asked for.",
+            "type": "string"
+          },
+          "q": {
+            "description": "Free-text filter over tool names, titles and trigger text, e.g. `ndvi`, `cloud`, `flood`, `verify`, `token`. Plain lowercased substring over name + title + description + trigger text, not fuzzy and not stemmed: `ndvi` hits, `vegetation index` only hits tools that spell that phrase. Combines with `shape`/`bundle`/`category`/`tier` as AND, so an over-narrow combination answers with an empty catalog rather than an error.",
+            "type": "string"
+          },
+          "shape": {
+            "description": "Filter by what the answer looks like, which is usually the real question. `scalar` is one number at one address; `raster` is a gridded field over an area; `timeseries` is a value per timestep; `vector` is a learned embedding; `prose` is a model-written narrative over cited facts; `reading` is text read from a document or image; `identity` is a canonical name for a thing; `token` is a citation handle; `proof` checks one.",
+            "enum": [
+              "scalar",
+              "timeseries",
+              "raster",
+              "geometry",
+              "vector",
+              "prose",
+              "reading",
+              "identity",
+              "token",
+              "proof",
+              "plan",
+              "file",
+              "catalog"
+            ],
+            "type": "string"
+          },
+          "tier": {
+            "description": "Which slice to list. Defaults to `all`, so this tool shows the whole surface even when the endpoint advertises only the core loop. Your host may still refuse a tool it did not list. Pass `core` to see only what a default connection advertises.",
+            "enum": [
+              "core",
+              "extended",
+              "all"
+            ],
+            "type": "string"
+          }
+        },
+        "type": "object"
+      }
+    },
+    {
+      "name": "emem_ask",
+      "description": "Answer a free-text question about a real-world location in one call. Signed satellite, elevation, water and built-up receipts support the answer. The tool sends the place and the question through the locate, recall and algorithm chain on the server, and returns one packaged envelope.\n\nWhen to use: Call this when the question is about a specific place and the answer must carry its evidence. Send the question as `q`, with `place`, `cell` or `lat`+`lng`. Over MCP a point answer is a projection. It has `answer`, `direct_answer` (verdict, band, rule, date, limits), `receipt` (cite `receipt.fact_cids`), `place_resolved`, `routed_to`, `context` and `spatial_trace`. It has `model_answer` if you sent `model`, and `_projection`, which names what the projection removed. `research_nearby` holds pointers to signed research conclusions; read them with emem_inferences. POST /v1/ask has more, such as `caveats` and `reasoning`. A past date never gets the newest reading. Send `context.context_id` as `context_id` to continue a thread. For how X changed, use emem_intent did_change or emem_diff.\n\nExample arguments: {\"q\":\"is this neighbourhood flood-prone for a flat purchase\",\"place\":\"Ashok Nagar, Ranchi\"}",
+      "inputSchema": {
+        "properties": {
+          "cell": {
+            "description": "cell64 string (alternative to `place`, use when you have one from a prior emem_locate / emem_recall response). Provide this OR `place` OR `lat`+`lng`.",
+            "maxLength": 23,
+            "minLength": 19,
+            "pattern": "^(?:(?:[bcdfghjklmnpqrstvwxyz][aeiouAEIOU]){2}|z[0-9a-f]{4})(?:\\.(?:(?:[bcdfghjklmnpqrstvwxyz][aeiouAEIOU]){2}|z[0-9a-f]{4})){3}$",
+            "type": "string"
+          },
+          "context_id": {
+            "description": "`context.context_id` from an earlier answer.",
+            "type": "string"
+          },
+          "date": {
+            "description": "YYYY-MM-DD, YYYY-MM or YYYY.",
+            "type": "string"
+          },
+          "include": {
+            "description": "Opt-in REST envelope sections. `reasoning` drops `algorithms_for_question`; add `algorithms` to keep it. The MCP projection ignores these.",
+            "items": {
+              "enum": [
+                "band_observations",
+                "algorithm_outcomes",
+                "facts_full",
+                "temporal_composition",
+                "scene",
+                "inventory",
+                "reasoning",
+                "algorithms"
+              ],
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "include_image": {
+            "default": false,
+            "description": "Bundle a Sentinel-2 RGB scene URL for the resolved cell. Adds ~1-2 s on first call.",
+            "type": "boolean"
+          },
+          "lat": {
+            "description": "WGS-84 latitude (paired with `lng`; alternative to `place` / `cell`).",
+            "type": "number"
+          },
+          "lng": {
+            "description": "WGS-84 longitude (paired with `lat`).",
+            "type": "number"
+          },
+          "model": {
+            "description": "Optional. Compose an EXTRA prose answer with a named model, returned as `model_answer` beside the deterministic `answer`. It does not replace it: `answer` is synthesised from the structured fields and never calls a model, so every number in it traces to a fact_cid, and asking for a model must not turn a checkable answer into an unchecked one. `model_answer` carries provenance.class = model_output. Name it by base_model (`nvidia/Cosmos3-Edge`), by family (`cosmos3_edge`, `gemma`), or by any fragment naming exactly one of them (`cosmos`); a fragment matching several is refused and names them; an unroutable name is refused with the list of routable ones, and a routable model whose service is not answering is refused as busy or down rather than silently substituted. Cosmos is refused while its host has no GPU.",
+            "type": "string"
+          },
+          "place": {
+            "description": "Free-text place name (e.g. \"Mount Fuji\", \"Ashok Nagar, Ranchi\"). REQUIRED unless `cell` or `lat`+`lng` is provided. Extract the noun phrase from the user's turn; the responder geocodes via OSM Nominatim.",
+            "type": "string"
+          },
+          "q": {
+            "description": "User's natural-language question about the place (e.g. \"is this neighbourhood flood-prone\").",
+            "type": "string"
+          },
+          "query": {
+            "description": "Alias for `q`.",
+            "type": "string"
+          },
+          "question": {
+            "description": "Alias for `q`.",
+            "type": "string"
+          },
+          "verbose": {
+            "default": false,
+            "description": "REST only: true adds per-algorithm formulas, band metadata and long prose. The MCP projection is small (about 7 KB) either way; the REST envelope is larger.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "q"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "search",
+      "description": "Search emem's signed corpus and get results as citations. Each entry is one signed fact. It has an `id` to dereference, a `title` with band, place and signed value, and a stable `url` that serves those bytes. The query can be a place or a question about one. ('NDVI near Mount Fuji': a topic word narrows the results and never removes all of them.) It can also be a cell64, an `emem:cell:` handle, or an emem citation, which returns the one fact it cites. The list has a cap for the wire. The first entry (index 0) names the cell and the TRUE total. On a cold cell, the tool MATERIALIZES a missing band first, as `emem_recall` does: it fetches, signs and stores it. Thus readOnlyHint false.\n\nWhen to use: Call this first when a question is about a place and the answer must have citations. It changes the question into a list of sources, and `fetch` expands each source. For one combined answer in one call, use emem_ask.\n\nExample arguments: {\"query\":\"Trafalgar Square, London\"}",
+      "inputSchema": {
+        "properties": {
+          "query": {
+            "description": "A place, a question about one, a cell64 or emem:cell: handle, or an emem:fact: citation.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "fetch",
+      "description": "Dereference an id from `search`. You get the reading in one line, then the signed body, the URL that serves those bytes, and metadata: cell, band, signing time and key. The id can be an `emem:fact:` citation, a bare fact_cid, or an `emem:cell:` handle for a full cell. The value is the exact decimal string that the responder signed, never a new format. A fact handle writes nothing. A cell handle, like `emem_recall`, MATERIALIZES a missing band on a cold cell: it fetches, signs and stores it. The flags follow that path: readOnlyHint false.\n\nWhen to use: Call this on each result that you will cite, before you quote the number. Quote the one-line reading. The body lets a reader check it, and emem_echo_verify grades what you emit against it. When a body is too large, the answer says so and gives the URL that serves it complete.\n\nExample arguments: {\"id\":\"emem:fact:defi.zb493.xoso.zcb6a:cxjiu7l54ujzrpnekp24n4534yojpue4mprddbvevnqtti3lh5bq\"}",
+      "inputSchema": {
+        "properties": {
+          "id": {
+            "description": "An id from `search`: an `emem:fact:` citation, a bare fact_cid, or an `emem:cell:` handle for every fact at one cell.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "emem_echo_verify",
+      "description": "Grade a value that you will emit against the signed fact that your citation cites. The tool returns `matches`. When the value does not match, it also returns the `drift` between your value and the value in emem. This step catches a transcription error that would otherwise be a silent wrong number. A model can resolve a fact correctly and still type `0.2411` for `0.241103`. No other step in the loop sees this. Memory algebra: the `verify` operation (https://emem.dev/docs/model.html).\n\nWhen to use: Call this immediately before you publish, log or pass on a value from an emem fact. Treat a false `matches` as a stop, not a warning. Use `value_verbatim` from resolve: quote that exact decimal string, then echo-verify the text you emitted. For a due-diligence or compliance record, this gives a signed check for each citation. Then you can state `every cited value was echo-verified`. The tool also accepts a bare cid, so a damaged citation still gets a grade.\n\nExample arguments: {\"token\":\"emem:fact:defi.zb572.xoso.zb1ec:4qj3l4mgh7ch5kvxmkqspjdl6y42oqhm42khh3gostccpixkbz5q\",\"claimed_value\":\"-0.0522\"}",
+      "inputSchema": {
+        "properties": {
+          "claimed_value": {
+            "description": "The value you are about to publish, as a string or a number. Send it as a STRING, character for character as you will emit it. A JSON number is stringified before the comparison, so `0.50` arrives as `0.5` and `0.2411000` as `0.2411` (measured against the live responder): the trailing digits this check exists to defend are gone before it runs. Quote `value_verbatim` from resolve as a string and echo the exact characters you will publish.",
+            "type": [
+              "string",
+              "number"
+            ]
+          },
+          "strict": {
+            "description": "Require BYTE-IDENTICAL equality. Default false, which also accepts a numerically equal value spelled differently (0.50 for 0.5). It changes exactly one outcome: the numerically-equal-but-respelled case, which passes by default and becomes `drift: \"reformatted\"` here. `rounded` and `wrong` already fail either way, so `strict` never turns a pass into a pass. It is also inert when `claimed_value` came in as a JSON number, because the respelling then happened in the JSON parser, before this tool saw it.",
+            "type": "boolean"
+          },
+          "token": {
+            "description": "The citation you used. Any form resolve accepts, including a bare cid, which answers with `degraded: true`: a bare cid asserts no location, so the cell-binding check is skipped and the grade covers the value only. A cid that is not 52 characters is refused as a damaged citation rather than as a missing one, and must not be retried.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "token",
+          "claimed_value"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "emem_memory_bundle",
+      "description": "Combine N (cell, band, tslot?) triples into ONE signed envelope. Each triple goes through the standard recall path, which materializes on a miss. The tool puts the resulting fact_cids in a content-addressed envelope, and the responder signs the full receipt. The `bundle_token` is `emem:bundle:<bundle_cid>`: one string that cites the full set. Memory algebra: the `merge` operation (https://emem.dev/docs/model.html).\n\nWhen to use: Call this when you must cite several (place, band, date) facts as one handle. You can verify the bundle offline with /v1/verify_receipt. The receipt covers all the cited fact_cids and cells. Use this instead of N calls to `emem_memory_token` when the citation is one thing. An example is \"the EUDR baseline for these 8 plots at 2020-12-31\". The limit is 256 triples for each call. The answer gives `members` and `resolved`, so you can see a bundle that resolved only in part.\n\nExample arguments: {\"triples\":[{\"cell\":\"defi.zb4d9.pefa.zf619\",\"band\":\"copdem30m.elevation_mean\"},{\"cell\":\"defi.zb493.xoso.zcb6a\",\"band\":\"indices.ndvi\"}],\"purpose\":\"audit baseline 2026\"}",
+      "inputSchema": {
+        "properties": {
+          "fact_cids": {
+            "description": "Instead of triples: the exact facts to bind, by cid. A triple is resolved through recall and can bind a newer fact than the one you showed; a cid binds that fact and no other. Pass triples or fact_cids, not both.",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 256,
+            "minItems": 1,
+            "type": "array"
+          },
+          "purpose": {
+            "description": "Optional human-readable purpose string. Included in the bundle_cid preimage so the same triples + different purposes produce distinct CIDs.",
+            "type": "string"
+          },
+          "scope": {
+            "description": "Multi-tenant scope `{user_id, agent_id, run_id, org_id}`, applied to EVERY triple's underlying recall so the whole bundle cites only facts written under that four-tuple.",
+            "type": "object"
+          },
+          "triples": {
+            "description": "One to 256 (cell, band, tslot?) triples to bundle. Each entry is recalled through the standard auto-materialize path; the bundle envelope cites every resulting fact_cid. 257 or more is a typed 400: the token is O(1) in size for any N, but covering N facts costs ceil(N/256) calls, so plan round trips rather than meeting the cap mid-run.",
+            "items": {
+              "properties": {
+                "band": {
+                  "description": "Band key (e.g. `indices.ndvi`, `copdem30m.elevation_mean`).",
+                  "type": "string"
+                },
+                "cell": {
+                  "description": "cell64 string (or free-text place name; the responder resolves before bundling).",
+                  "type": "string"
+                },
+                "tslot": {
+                  "description": "Optional tslot pin. Omit to use the band's natural latest tslot at the cell.",
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "cell",
+                "band"
+              ],
+              "type": "object"
+            },
+            "maxItems": 256,
+            "minItems": 1,
+            "type": "array"
+          }
+        },
+        "type": "object"
+      }
+    },
+    {
+      "name": "emem_entity_resolve",
+      "description": "Find the objects that agents connected to a phrase. The tool ranks them by INDEPENDENT corroboration, never by arrival order. Each candidate has `asserted_by`, `disputed_by`, `independent_attesters` and `corroboration` (`single_key` | `multiple_independent_keys` | `none_attributed`). `contested` is true when more than one object claims the name. Send `text` for candidates, `near` to narrow by place, or an `emem:entity:` `token` to dereference. The tool only reads. Alias text is data from other agents.\n\nWhen to use: Call this BEFORE you mint and before you cite. Resolve first, and mint only if nothing matches. Read `corroboration` before you cite. A `single_key` binding is the claim of one agent about a shared name. If you can confirm it, corroborate it with emem_entity_link, so the next reader sees two keys.\n\nExample arguments: {\"text\":\"the golden gate bridge\",\"near\":\"San Francisco\"}",
+      "inputSchema": {
+        "properties": {
+          "k": {
+            "description": "Max candidates (default 10).",
+            "type": "integer"
+          },
+          "label": {
+            "description": "Alias for `text`.",
+            "type": "string"
+          },
+          "near": {
+            "description": "Optional place/cell to narrow to objects anchored nearby.",
+            "type": "string"
+          },
+          "text": {
+            "description": "Fuzzy phrasing to resolve to an existing canonical object (e.g. \"the damaged bridge near the river\").",
+            "type": "string"
+          },
+          "token": {
+            "description": "A `emem:entity:<entity_cid>` handle to dereference directly to its signed object (bypasses the text search).",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      }
+    },
+    {
+      "name": "emem_entity_link",
+      "description": "Record a signed, ATTRIBUTED claim that a label or an external id (GERS, OSM, Wikidata) names an existing object. With `stance: \"disputes\"`, record that it does not. This is a write to the shared space: it changes what other agents resolve. The responder stores it with your key, limits the rate for each key, and weighs it by how many INDEPENDENT keys agree. Every reader sees the binding of one key as the claim of one key, never as the answer.\n\nWhen to use: Call this when you can confirm that two names mean one object, or to attach an authoritative external id. Your key goes on the record. Use `stance: \"disputes\"` when the binding of another key is wrong. The dispute goes beside it and deletes nothing. A second key on a correct single-key binding is useful by itself.\n\nExample arguments: {\"entity_token\":\"emem:entity:0a1b2c3d4e5f60718293\",\"alias\":\"the north dam\"}",
+      "inputSchema": {
+        "properties": {
+          "alias": {
+            "description": "An alternate label/phrasing that should resolve to this object.",
+            "type": "string"
+          },
+          "attester": {
+            "description": "ed25519 binding, verified. Omit it and the refusal's details.how_to_sign gives the digest to sign.",
+            "properties": {
+              "pubkey_b32": {
+                "type": "string"
+              },
+              "sig_b32": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "pubkey_b32",
+              "sig_b32"
+            ],
+            "type": "object"
+          },
+          "entity_cid": {
+            "description": "The canonical object to attach an equivalence to. Provide entity_cid OR entity_token.",
+            "type": "string"
+          },
+          "entity_token": {
+            "description": "A `emem:entity:<entity_cid>` handle for the same.",
+            "type": "string"
+          },
+          "external_ids": {
+            "description": "Stable ids to bind to this object.",
+            "properties": {
+              "gers": {
+                "type": "string"
+              },
+              "osm": {
+                "type": "string"
+              },
+              "wikidata": {
+                "type": "string"
+              }
+            },
+            "type": "object"
+          },
+          "stance": {
+            "description": "`asserts` (default): this phrasing denotes this object. `disputes`: it does not. Both are attributed to your key and recorded append-only; a dispute is shown beside the binding it answers and deletes nothing.",
+            "enum": [
+              "asserts",
+              "disputes"
+            ],
+            "type": "string"
+          }
+        },
+        "type": "object"
+      }
+    },
+    {
+      "name": "emem_find_similar",
+      "description": "Find the k nearest cells in the corpus by cell embedding or by an inline vector. The answer has `neighbors`, nearest first, each with `cell`, `score`, `lat`/`lng` and `band_used`, and a signed receipt over the vectors it read. `mode` sets the scoring. cosine is exact fp32. hamming counts sign bits and scans many more cells for the same budget. hamming_then_rerank does both. `k` is 1 to 1000, default 10. The tool ranks only what the corpus holds. When the KEY has no vector, it materializes that one band for the key, signs it, reports it in `materialize_notes`, and tries again. It never materializes neighbours. Thus an empty result means that no attested vector is near, not that no place is similar.\n\nWhen to use: Call this for 'find places like X' or 'where else looks like this', or with an embedding. `key` is a cell64 or `inline:[x,y,...]`. The default band is `geotessera` (the 128-D Tessera foundation embedding). For the 1152-D fusion of 9 years (2017 to 2025), send `band: \"geotessera.multi_year\"`.\n\nExample arguments: {\"key\":\"defi.zb64a.cAzU.zfa27\",\"k\":10}",
+      "inputSchema": {
+        "properties": {
+          "as_of_signed_at": {
+            "description": "Bi-temporal transaction-time bound (RFC 3339). Also applied to candidates BEFORE cosine. Same Lance-bypass note as as_of_tslot.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "as_of_tslot": {
+            "description": "Bi-temporal valid-time bound. Applied to candidate cells BEFORE cosine scoring, a cell with no fact whose tslot ≤ as_of_tslot under the scoring band is dropped from the candidate pool (undecidable→drop). When set, the Lance ANN fast-path is bypassed (the index has no signed_at column); brute-force k-NN runs instead so as_of is honoured truthfully.",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "band": {
+            "default": "geotessera",
+            "description": "vector band to scan (default: 128-D Tessera foundation embedding). For mode=hamming/hamming_then_rerank you can pass either the cosine band (e.g. 'geotessera') or its binary sibling ('geotessera.bin128'), the responder picks the right one.",
+            "type": "string"
+          },
+          "cell": {
+            "description": "Alias for `key`.",
+            "type": "string"
+          },
+          "cell64": {
+            "description": "Alias for `key`.",
+            "type": "string"
+          },
+          "filter": {
+            "description": "Claim-algebra predicate evaluated against every candidate before ranking. A cell with no fact for the filter's band is DROPPED rather than treated as false, so 'places like X where NDVI > 0.5' never silently includes cells with no NDVI.",
+            "type": "object"
+          },
+          "k": {
+            "default": 10,
+            "description": "How many neighbours to return.",
+            "maximum": 1000,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "key": {
+            "description": "cell64 (look up that cell's vector) or 'inline:[x,y,...]' literal vector",
+            "type": "string"
+          },
+          "mode": {
+            "default": "cosine",
+            "description": "Scoring mode. cosine = fp32 over full vector (precise, ~256 B/cell scan). hamming = sign-bit popcount over the binary sibling band (~16 B/cell, ~1000× faster, ~65% recall@10). hamming_then_rerank = triage with Hamming on 4·k candidates then re-rank by cosine, matches cosine precision at ~16× less work.",
+            "enum": [
+              "cosine",
+              "hamming",
+              "hamming_then_rerank"
+            ],
+            "type": "string"
+          },
+          "scope": {
+            "description": "Multi-tenant scope `{user_id, agent_id, run_id, org_id}`. Setting it bypasses the ANN index entirely, because that index carries no scope column, and runs the brute-force scan instead: the tenant filter is honoured truthfully, and the call is slower.",
+            "type": "object"
+          }
+        },
+        "required": [
+          "key"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "emem_intent",
+      "description": "State what you want in one typed object and get the answer. You do not choose a primitive. `type` selects the intent AND the other fields that the tool reads. Send only the fields in its row. The plan runs in the same call: you get results, not a list of calls.\n\ntype | needs | optional | answers\nwhere_is | description | | cell64 for a named place\nwhat_is_here | cell OR place | description | what is attested at a location\nis_like | a, b | | cosine similarity of two cells\ndid_change | cell, band, window | | delta for one band over [start,end] tslots\nfind_like | key | k, filter | nearest cells by embedding\nconfirm | claim, cell | | verdict and the signed facts behind it\nask | description | place/cell/lat+lng | free-text question, packaged answer\narea_over_time | geometry, bbox OR areas; start_date, end_date | index, max_scenes | index of an area for each overpass, with spread and anomaly\n\nAn unknown or missing `type` returns a `needs_intent_type` envelope with the valid values. It is not a hard error.\n\nWhen to use: Call this when the question matches one of the eight rows and you prefer to state the goal. Otherwise call the primitive. A band at a cell is emem_recall. A region is emem_recall_polygon. A free-text question about a place is emem_ask (type:\"ask\" sends it there). `window` takes tslots, not dates: get them from emem_trajectory. `areas` puts up to 6 areas on one chart. You can call a tool that this text names but your list does not show, by name, through tools/call.\n\nExample arguments: {\"type\":\"did_change\",\"cell\":\"defi.zb64a.cAzU.zfa27\",\"band\":\"indices.ndvi\",\"window\":[20245,20620]}",
+      "inputSchema": {
+        "description": "A tagged union on `type`; fields of other intents are ignored.",
+        "properties": {
+          "a": {
+            "description": "is_like only: cell64 of the first place in the pair.",
+            "type": "string"
+          },
+          "areas": {
+            "description": "area_over_time: up to 6 {id,geometry|bbox} on one chart",
+            "maxItems": 6,
+            "type": "array"
+          },
+          "b": {
+            "description": "is_like only: cell64 of the second place. The answer is a cosine similarity in [-1,1] over the two cells' embeddings.",
+            "type": "string"
+          },
+          "band": {
+            "description": "did_change only: which band to test, e.g. \"indices.ndvi\". One band per call; the answer is a delta over `window`, not a whole-cell diff.",
+            "type": "string"
+          },
+          "bbox": {
+            "type": "object"
+          },
+          "cell": {
+            "description": "cell64 address, e.g. \"defi.zb64a.cAzU.zfa27\". Required by did_change and confirm. Optional for what_is_here and ask: supply it to skip geocoding, omit it and give `place` instead.",
+            "type": "string"
+          },
+          "claim": {
+            "description": "confirm only: the claim to test at `cell`, e.g. {\"band\":\"indices.ndvi\",\"op\":\"gt\",\"value\":0.4}. The answer is a verdict plus the signed facts it rests on.",
+            "properties": {
+              "agg": {
+                "description": "How a `window` reduces: any/all quantify over the facts in it; mean/min/max compare the reduced value against `value`.",
+                "enum": [
+                  "any",
+                  "all",
+                  "mean",
+                  "min",
+                  "max"
+                ],
+                "type": "string"
+              },
+              "band": {
+                "description": "Band to test, e.g. \"indices.ndvi\".",
+                "type": "string"
+              },
+              "op": {
+                "description": "Comparison. These ten spellings and no others: `greater_than`, `>` and `gte` are all rejected. in/ni take an array `value` (member / not member). exists and absent ask only whether the band is attested here.",
+                "enum": [
+                  "eq",
+                  "ne",
+                  "lt",
+                  "le",
+                  "gt",
+                  "ge",
+                  "in",
+                  "ni",
+                  "exists",
+                  "absent"
+                ],
+                "type": "string"
+              },
+              "tslot": {
+                "description": "Test at one tslot. Omit for the latest. Mutually exclusive with `window`.",
+                "type": "integer"
+              },
+              "value": {
+                "description": "Right-hand side. A number for the ordering ops, an array for in/ni. REQUIRED by the parser even for exists/absent, which then ignore it — omitting it fails the whole intent with `missing field value`.",
+                "type": [
+                  "string",
+                  "number",
+                  "boolean",
+                  "array",
+                  "null"
+                ]
+              },
+              "window": {
+                "description": "Test across [start, end] tslots instead of one. Requires `agg` to say how the values across the window collapse to a verdict.",
+                "items": {
+                  "type": "integer"
+                },
+                "maxItems": 2,
+                "minItems": 2,
+                "type": "array"
+              }
+            },
+            "required": [
+              "band",
+              "op",
+              "value"
+            ],
+            "type": "object"
+          },
+          "description": {
+            "description": "where_is: the place to resolve, e.g. \"Mount Everest\". ask: the user's question, forwarded verbatim. what_is_here: optional free text used as the question and, if `place` is absent, as the place. Ignored by the other intents.",
+            "type": "string"
+          },
+          "end_date": {
+            "description": "YYYY-MM-DD",
+            "type": "string"
+          },
+          "filter": {
+            "description": "find_like only: optional claim constraining which cells may be returned. Same object as `claim` below, same ops, same required fields.",
+            "properties": {
+              "agg": {
+                "description": "How a `window` reduces to a single verdict.",
+                "enum": [
+                  "any",
+                  "all",
+                  "mean",
+                  "min",
+                  "max"
+                ],
+                "type": "string"
+              },
+              "band": {
+                "description": "Band the neighbour must satisfy, e.g. \"indices.ndvi\".",
+                "type": "string"
+              },
+              "op": {
+                "description": "Comparison. Symbolic only: `gt`, not `greater_than` or `>`.",
+                "enum": [
+                  "eq",
+                  "ne",
+                  "lt",
+                  "le",
+                  "gt",
+                  "ge",
+                  "in",
+                  "ni",
+                  "exists",
+                  "absent"
+                ],
+                "type": "string"
+              },
+              "tslot": {
+                "description": "Test at one tslot. Mutually exclusive with `window`.",
+                "type": "integer"
+              },
+              "value": {
+                "description": "Right-hand side. Required by the parser even for exists/absent, which ignore it.",
+                "type": [
+                  "string",
+                  "number",
+                  "boolean",
+                  "array",
+                  "null"
+                ]
+              },
+              "window": {
+                "description": "Test across [start, end] tslots instead of one. Requires `agg`.",
+                "items": {
+                  "type": "integer"
+                },
+                "maxItems": 2,
+                "minItems": 2,
+                "type": "array"
+              }
+            },
+            "required": [
+              "band",
+              "op",
+              "value"
+            ],
+            "type": "object"
+          },
+          "geometry": {
+            "description": "area_over_time: GeoJSON Polygon; or bbox {min_lat,min_lng,max_lat,max_lng}.",
+            "type": "object"
+          },
+          "index": {
+            "enum": [
+              "ndvi",
+              "ndwi",
+              "ndmi",
+              "lswi",
+              "evi",
+              "nbr",
+              "ndti",
+              "ndsi",
+              "mndwi",
+              "vv",
+              "vh",
+              "vh_vv"
+            ],
+            "type": "string"
+          },
+          "k": {
+            "description": "find_like only: how many neighbours to return.",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "key": {
+            "description": "find_like only: cell64 to search from, ranked by embedding cosine.",
+            "type": "string"
+          },
+          "lat": {
+            "description": "ask only: latitude, paired with `lng`, when you want to pin the location by coordinate rather than by name or cell64.",
+            "maximum": 90,
+            "minimum": -90,
+            "type": "number"
+          },
+          "lng": {
+            "description": "ask only: longitude, paired with `lat`.",
+            "maximum": 180,
+            "minimum": -180,
+            "type": "number"
+          },
+          "max_scenes": {
+            "maximum": 96,
+            "minimum": 3,
+            "type": "integer"
+          },
+          "place": {
+            "description": "Free-text place name for what_is_here and ask when you have a name but no cell64, e.g. \"Ashok Nagar, Ranchi\". The responder geocodes it. Ignored when `cell` is present.",
+            "type": "string"
+          },
+          "start_date": {
+            "description": "YYYY-MM-DD",
+            "type": "string"
+          },
+          "type": {
+            "description": "Which intent; the table in the description gives each row's fields.",
+            "enum": [
+              "where_is",
+              "what_is_here",
+              "is_like",
+              "did_change",
+              "find_like",
+              "confirm",
+              "ask",
+              "area_over_time"
+            ],
+            "type": "string"
+          },
+          "window": {
+            "description": "did_change only: exactly two tslots, [start, end], band-tempo-relative integers from the emem epoch (NOT unix seconds or a date string). Get valid tslots for a cell from emem_trajectory.",
+            "items": {
+              "type": "integer"
+            },
+            "maxItems": 2,
+            "minItems": 2,
+            "type": "array"
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "type": "object"
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "io.github.Vortx-AI/emem",
+    "version": "2.4.6",
+    "remoteUrl": "https://emem.dev/mcp",
+    "publishedAt": "2026-11-20T09:28:08.998186Z",
+    "fetchedAt": "2026-11-25T11:03:46.215Z",
+    "toolsSha256": "6ad9d13152b1c9f33ea2a0a04aaa872aef0b539c5f29168ac31db744020ba33a"
+  }
+}

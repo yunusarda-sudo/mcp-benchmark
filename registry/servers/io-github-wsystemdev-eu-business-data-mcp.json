@@ -1,0 +1,510 @@
+{
+  "$schema": "../schema.json",
+  "name": "io.github.wsystemdev/eu-business-data-mcp",
+  "title": "EU e-invoicing and business checks (EN 16931, Peppol, VAT, sanctions)",
+  "category": "Developer Tools & DevOps",
+  "description": "EN 16931/XRechnung e-invoice validate+create, Peppol routing, EU VAT/EORI, sanctions, KYB. Free tier",
+  "repository": "https://github.com/wsystemdev/eu-business-data-mcp",
+  "tools": [
+    {
+      "name": "verify_vat",
+      "description": "Validate an EU VAT number against the official European Commission VIES service (27 EU states + XI Northern Ireland).\nUse when asked whether a VAT ID is valid/active, before zero-rated reverse-charge B2B invoices, or to get a company's\nregistered name/address from its VAT number. Input: VAT with country prefix, e.g. 'IE6388047V', 'DE811193231' (spaces/dots ok).\nReturns status: valid | invalid | invalid_format | member_state_unavailable (VIES/member state down - retry later, valid=null) | error,\nplus name, address (if the member state discloses them; DE/ES often don't) and consultation_number (audit proof) when requester is set.\nUK (GB) VAT checks are coming soon: until HMRC live access is granted, GB numbers return\nstatus member_state_unavailable, valid=null, error HMRC_LIVE_ACCESS_PENDING (not charged). For >1 number use verify_batch.",
+      "inputSchema": {
+        "properties": {
+          "vat": {
+            "title": "Vat",
+            "type": "string",
+            "description": "VAT number with country prefix, e.g. 'IE6388047V' or 'DE811193231'; spaces and dots are ignored."
+          },
+          "requester": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": "HU33119856",
+            "title": "Requester",
+            "description": "Optional: your own EU VAT number, so VIES returns a consultation number as audit proof."
+          }
+        },
+        "required": [
+          "vat"
+        ],
+        "title": "verify_vatArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "verify_batch",
+      "description": "Validate up to 100 EU VAT numbers in one call via VIES (supplier/customer list cleanup, onboarding, invoice runs).\nSame per-item result as verify_vat; items with member_state_unavailable should be retried later\n(GB items stay member_state_unavailable until HMRC live access is granted; they are not charged).",
+      "inputSchema": {
+        "properties": {
+          "vats": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Vats",
+            "type": "array",
+            "description": "List of up to 100 VAT numbers with country prefix; extra items are ignored."
+          },
+          "requester": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": "HU33119856",
+            "title": "Requester",
+            "description": "Optional: your own EU VAT number, so VIES returns consultation numbers as audit proof."
+          }
+        },
+        "required": [
+          "vats"
+        ],
+        "title": "verify_batchArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "lookup_company",
+      "description": "Look up a company in official European business registers by name or registry number.\ncountry: FR (SIREN), NO (org.nr), FI (Y-tunnus), CZ (ICO), PL (KRS number or name; names via GLEIF LEI index + KRS record), EE, SK (ICO or name), BE (enterprise number, BE VAT or name), or any other ISO code / 'LEI' (GLEIF).\nName searches return the exact legal entity first (before branches and similar names).\nReturns legal name, ID, status/active, address, VAT ID, activity code and official source link.\nEach result has origin (national_register|lei_index|register_snapshot), served_from (upstream|cache), cache_age_seconds,\ndata_source (legacy: live|cache|register_snapshot), data_as_of and match {type id|exact|fuzzy, score}; a name that only\nfuzzy-matches below match_threshold (85) gives status not_found with candidates in near_matches.\nGLEIF answers (DE, NL, other countries) carry coverage {scope: lei_holders_only}: companies without an LEI are not covered.\nIf the upstream register itself rate-limits, status is error with error_code upstream_rate_limited and retry_after (seconds).\nIf the register or GLEIF is down (5xx, timeout, connection error, or a non-JSON page), status is error with\nerror and error_code upstream_unavailable, a human message naming the register, and retry_after; this is not not_found.\nUse to confirm a company exists and is active, find its registry number, or map a name to a VAT ID.\nFree: basic company search costs 0 units and does not use the free tool-call allowance; it is only rate-limited.",
+      "inputSchema": {
+        "properties": {
+          "query": {
+            "title": "Query",
+            "type": "string",
+            "description": "Company name or official registry number (e.g. a French SIREN, Polish KRS, Czech ICO or Belgian enterprise number)."
+          },
+          "country": {
+            "default": "",
+            "title": "Country",
+            "type": "string",
+            "description": "Register to search: FR, NO, FI, CZ, PL (KRS or name), EE, SK, BE, another ISO country code, or 'LEI' for GLEIF."
+          },
+          "limit": {
+            "default": 3,
+            "title": "Limit",
+            "type": "integer",
+            "description": "Maximum number of matches to return (default 3)."
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "title": "lookup_companyArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "screen_sanctions",
+      "description": "Screen a person or company name against official EU, UN, OFAC SDN and UK sanctions lists.\nFuzzy matching with transliteration; returns candidate matches with 0-100 scores, list, programme, DOB.\nA potential match needs human review; this is a screening aid, not legal advice.",
+      "inputSchema": {
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string",
+            "description": "Person or company name to screen."
+          },
+          "threshold": {
+            "default": 85,
+            "title": "Threshold",
+            "type": "number",
+            "description": "Minimum fuzzy match score from 0 to 100 (default 85); lower finds more possible matches."
+          },
+          "birth_year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Birth Year",
+            "description": "Optional birth year of a person, to narrow matches."
+          },
+          "country": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Country",
+            "description": "Optional ISO two-letter country code, to narrow matches."
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "screen_sanctionsArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "kyb_check",
+      "description": "One-call KYB check of a supplier/customer: EU VAT validation (VIES) + official business register\n+ EU/UN/OFAC/UK sanctions screening, returning a pass / review / fail verdict with reasons.\nUse for a fast onboarding go/no-go. For an audit-ready report that also covers EORI, GLEIF LEI, Peppol and a 0-100 risk\nscore use due_diligence_report; to learn how to invoice a buyer use einvoice_route.\ncompany: a VAT ID ('FR40303265045'), a company name, or a registry id; country: optional ISO code (e.g. 'NO').",
+      "inputSchema": {
+        "properties": {
+          "company": {
+            "title": "Company",
+            "type": "string",
+            "description": "Company VAT number (best) or company name."
+          },
+          "country": {
+            "default": "",
+            "title": "Country",
+            "type": "string",
+            "description": "Optional ISO two-letter country code when a name is given."
+          },
+          "requester": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": "HU33119856",
+            "title": "Requester",
+            "description": "Optional: your own EU VAT number, so VIES returns a consultation number as audit proof."
+          }
+        },
+        "required": [
+          "company"
+        ],
+        "title": "kyb_checkArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "verify_eori",
+      "description": "Validate an EU EORI (customs Economic Operators Registration and Identification) number, e.g. 'SE5560360793',\n'DE1234567890123', against the official European Commission EOS service. Use for import/export, customs declarations\nand freight-forwarder onboarding. Returns valid/invalid and trader name/address only when the trader consented to publication.\nUK (GB) EORIs are not in EOS (HMRC checks those); XI EORIs are.",
+      "inputSchema": {
+        "properties": {
+          "eori": {
+            "title": "Eori",
+            "type": "string",
+            "description": "EORI number with country prefix, e.g. 'SE5560360793'."
+          }
+        },
+        "required": [
+          "eori"
+        ],
+        "title": "verify_eoriArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "verify_eori_batch",
+      "description": "Validate up to 100 EU EORI numbers in one call via the official EC EOS service (customs / import-export KYB).",
+      "inputSchema": {
+        "properties": {
+          "eoris": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Eoris",
+            "type": "array",
+            "description": "List of up to 100 EORI numbers with country prefix."
+          }
+        },
+        "required": [
+          "eoris"
+        ],
+        "title": "verify_eori_batchArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "validate_einvoice",
+      "description": "Validate an EU e-invoice XML (UBL 2.1 Invoice/CreditNote or UN/CEFACT CII, e.g. XRechnung, Factur-X/ZUGFeRD XML) against the\nofficial CEN EN 16931 rules and, for XRechnung, the KoSIT XRechnung 3.0 rules. Returns valid, and every error with its rule ID\n(e.g. BR-CO-10), a plain-English message, XPath and a fix hint. rules: auto | en16931 | xrechnung. Slovak sellers also get eFaktúra field\nchecks (FR SR transposition v1.13, warnings with ruleset SK-FS); Norwegian sellers get NO-LAW field checks. Peppol-specific rules are not checked yet.\nFor PDFs use the REST endpoint POST /einvoice/validate. fixes lists concrete fixes for the errors (path, current, suggested,\nexplanation, apply safe|amounts|manual). autofix=true applies the safe ones to a copy and returns it in autofix.xml with its new\nresult (the original is unchanged); allow_amount_changes=true also applies total fixes that change the amount due (reported).",
+      "inputSchema": {
+        "properties": {
+          "xml": {
+            "title": "Xml",
+            "type": "string",
+            "description": "The e-invoice XML as text: UBL 2.1 Invoice/CreditNote or UN/CEFACT CII (XRechnung, Factur-X/ZUGFeRD XML)."
+          },
+          "rules": {
+            "default": "auto",
+            "title": "Rules",
+            "type": "string",
+            "description": "Rule set: 'auto' (detect from the invoice, default), 'en16931' or 'xrechnung'."
+          },
+          "autofix": {
+            "default": false,
+            "title": "Autofix",
+            "type": "boolean",
+            "description": "If true, apply the safe fixes to a copy and return the fixed XML in autofix.xml (the input is never changed)."
+          },
+          "allow_amount_changes": {
+            "default": false,
+            "title": "Allow Amount Changes",
+            "type": "boolean",
+            "description": "If true together with autofix, also apply fixes that change amounts (e.g. recomputed totals)."
+          }
+        },
+        "required": [
+          "xml"
+        ],
+        "title": "validate_einvoiceArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "parse_einvoice",
+      "description": "Read an incoming EU e-invoice into one JSON shape: seller, buyer, dates, references, totals, VAT breakdown, payment/IBAN, lines and\nattachments. Accepts UBL 2.1 Invoice/CreditNote or UN/CEFACT CII XML (XRechnung, Peppol BIS 3, Factur-X XML) in xml, or a ZUGFeRD/Factur-X\nPDF as base64 in pdf_base64. Use when asked to read, extract or book a received e-invoice. Values are returned as written in the invoice;\nthis does NOT validate it (use validate_einvoice for that).",
+      "inputSchema": {
+        "properties": {
+          "xml": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Xml",
+            "description": "Invoice XML as text (UBL or CII). Give either xml or pdf_base64."
+          },
+          "pdf_base64": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Pdf Base64",
+            "description": "Base64 of a Factur-X/ZUGFeRD PDF with embedded XML. Give either xml or pdf_base64."
+          }
+        },
+        "title": "parse_einvoiceArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "create_einvoice",
+      "description": "Create a validated EU e-invoice from simple JSON: UBL 2.1 (format en16931|xrechnung|peppol-bis3), UN/CEFACT CII (cii|xrechnung-cii)\nor a ZUGFeRD 2.3 / Factur-X EN 16931 PDF/A-3 hybrid (zugferd|factur-x|zugferd-xrechnung; returns pdf_base64 + the embedded CII xml).\ninvoice = {format, invoice_number, type_code? (380 invoice, 381 credit note + preceding_invoice),\nissue_date (YYYY-MM-DD), due_date?, tax_point_date?, delivery_date?, currency (EUR), buyer_reference?, seller: {name, vat_id, street, city,\npostal_code, country, email, phone, contact_name, company_id?, company_id_scheme?, legal_form?}, buyer: {...}, lines: [{description, quantity, unit_price, unit?, vat_category (S|Z|E|AE|K|G|O), vat_rate}],\npayment: {iban, bic?, terms?}, allowances?/charges? [{amount|percent+base_amount, reason, reason_code, vat_category, vat_rate}]\n(also per line)}. Totals and VAT breakdown are computed; returns {valid, xml, totals, errors, fixes}. autofix=true\napplies the safe fixes (date formats, codes, VAT ID format, misnamed fields) first and returns the corrected input in autofix.invoice.",
+      "inputSchema": {
+        "properties": {
+          "invoice": {
+            "additionalProperties": true,
+            "title": "Invoice",
+            "type": "object",
+            "description": "Invoice as simple JSON: format, invoice_number, issue_date, currency, seller, buyer, lines, payment (see the tool description)."
+          },
+          "autofix": {
+            "default": false,
+            "title": "Autofix",
+            "type": "boolean",
+            "description": "If true, first apply safe input fixes (date formats, codes, VAT ID format, misnamed fields); the corrected input is in autofix.invoice."
+          }
+        },
+        "required": [
+          "invoice"
+        ],
+        "title": "create_einvoiceArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "einvoice_route",
+      "description": "'Can I e-invoice this company?' id = EU VAT number (e.g. 'BE0403170701') or Peppol id ('0208:0403170701').\nReturns VIES VAT status, Peppol registration (Peppol Directory, then SML/SMP; BIS 3 invoice support), the country's B2B e-invoice mandate\n(dates, format, source) and the recommended format for create_einvoice. France's PPF directory is not included yet.\nNot a risk check: for a counterparty verdict use kyb_check (quick) or due_diligence_report (full report).",
+      "inputSchema": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string",
+            "description": "Buyer's EU VAT number (e.g. 'BE0403170701') or Peppol participant id (e.g. '0208:0403170701')."
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "title": "einvoice_routeArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "send_einvoice_sandbox",
+      "description": "SANDBOX ONLY - never reaches a real buyer. Safe send: first checks the buyer VAT in VIES, whether the buyer can be\nreached on Peppol, and the buyer name against EU/UN/OFAC/UK sanctions lists, then creates + validates the EN 16931 invoice\n(same JSON as create_einvoice), and returns one preflight verdict: ok, warn or block, with a plain-English message per check\nand, for each invoice error, what is wrong, which field and how to fix it. A block (invalid VAT, close sanctions match,\ninvoice errors) stops the send. Otherwise it routes, hands off to the transport and returns an Ed25519-signed evidence\nreceipt (JWS). preflight_only=true: run only the checks and return the verdict, send nothing (use before every send).\nchecks: subset of [\"vat\",\"peppol\",\"sanctions\"] (default all; validation always runs). transport: \"mock\" (simulated,\ndefault), \"recommand\" or \"e-invoice-be\" (the UBL is really submitted to that Peppol access point's sandbox, addressed to\nW System's own sandbox company). Use it to build and test an integration; real Peppol sending is the REST API POST /einvoice/send with mode=live, after a Peppol mandate and KYC review.\nautofix=true (only with preflight_only=true): run the checks on a copy with the safe fixes applied and return it in\nautofix.invoice; review it, then send that corrected invoice. A send never changes the invoice.",
+      "inputSchema": {
+        "properties": {
+          "invoice": {
+            "additionalProperties": true,
+            "title": "Invoice",
+            "type": "object",
+            "description": "Invoice as simple JSON (same shape as create_einvoice)."
+          },
+          "transport": {
+            "default": "mock",
+            "title": "Transport",
+            "type": "string",
+            "description": "Sandbox transport: 'mock' (simulated, default), 'recommand' or 'e-invoice-be' (partner sandbox); never reaches a real buyer."
+          },
+          "preflight_only": {
+            "default": false,
+            "title": "Preflight Only",
+            "type": "boolean",
+            "description": "If true, only check the buyer (VAT, Peppol, sanctions) and the invoice; nothing is sent."
+          },
+          "checks": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Checks",
+            "description": "Optional subset of buyer checks: any of 'vat', 'peppol', 'sanctions' (default all; invoice validation always runs)."
+          },
+          "autofix": {
+            "default": false,
+            "title": "Autofix",
+            "type": "boolean",
+            "description": "Only with preflight_only=true: run the checks on a copy with safe fixes applied and return it in autofix.invoice."
+          }
+        },
+        "required": [
+          "invoice"
+        ],
+        "title": "send_einvoice_sandboxArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "due_diligence_report",
+      "description": "Counterparty due-diligence report in one call: VIES VAT, official business register, EU/UN/OFAC/UK sanctions,\nEC EORI, GLEIF LEI and Peppol e-invoice route, with deterministic risk flags, 0-100 risk score, pass/review/fail\nverdict, sources and UTC timestamp. company: VAT ID (best), registry number or name; country: ISO code for names.\nUse when you need the evidence for a file or a risk review; for a fast onboarding verdict use kyb_check (fewer sources).",
+      "inputSchema": {
+        "properties": {
+          "company": {
+            "title": "Company",
+            "type": "string",
+            "description": "Company VAT number (best) or company name."
+          },
+          "country": {
+            "default": "",
+            "title": "Country",
+            "type": "string",
+            "description": "Optional ISO two-letter country code when a name is given."
+          }
+        },
+        "required": [
+          "company"
+        ],
+        "title": "due_diligence_reportArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "check_fr_pa_registry",
+      "description": "Is this e-invoicing platform on France's official list of Plateformes Agréées (PA)? name = platform or company name\n(e.g. 'Pennylane'), website = its site (e.g. 'https://www.acubeapi.com/'); give at least one. Checks the DGFiP lists on\nimpots.gouv.fr: registered PAs (with registration date) and operators awaiting interoperability tests. Returns\non_official_list, status (approved | awaiting_interop_tests | possible_match | not_found), scored matches, list date and the\nofficial source. Use for supplier due diligence before the French reform (receive from 1 Sep 2026, SMEs issue from\n1 Sep 2027). A 'solution compatible' is not a PA itself. Unofficial copy; the official lists prevail.",
+      "inputSchema": {
+        "properties": {
+          "name": {
+            "default": "",
+            "title": "Name",
+            "type": "string",
+            "description": "Platform or company name to look up (give name, website or both)."
+          },
+          "website": {
+            "default": "",
+            "title": "Website",
+            "type": "string",
+            "description": "Platform website or domain, e.g. 'example.fr'."
+          },
+          "limit": {
+            "default": 5,
+            "title": "Limit",
+            "type": "integer",
+            "description": "Maximum number of matches to return (1-20, default 5)."
+          }
+        },
+        "title": "check_fr_pa_registryArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "check_invoice",
+      "description": "Check a RECEIVED invoice before booking or paying it (accounts payable). Give the invoice XML (UBL / CII, XRechnung, Peppol, Factur-X XML)\nin xml, or a ZUGFeRD / Factur-X / plain PDF as base64 in pdf_base64. Runs EN 16931 / XRechnung validation, the supplier VAT ID in VIES\n(and the VIES name against the invoice), the supplier name against EU/UN/OFAC/UK sanctions, arithmetic (lines, VAT, totals, amount due),\nIBAN checksum and country, dates, and (my_vat) whether it is addressed to you. With an API key it also checks the account's invoice history:\nduplicates and a changed bank account for a known supplier (payment fraud), and saves the result (GET /inbox/invoices).\nReturns verdict ok | review | hold (hold = don't pay yet), ok_to_pay, summary and issues in plain English.",
+      "inputSchema": {
+        "properties": {
+          "xml": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Xml",
+            "description": "Received invoice XML as text (UBL or CII). Give either xml or pdf_base64."
+          },
+          "pdf_base64": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Pdf Base64",
+            "description": "Base64 of a received PDF invoice (ZUGFeRD / Factur-X with embedded XML, or a plain PDF)."
+          },
+          "my_vat": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "My Vat",
+            "description": "Optional: your own VAT ID, to warn when the invoice is addressed to another company."
+          }
+        },
+        "title": "check_invoiceArguments",
+        "type": "object"
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "io.github.wsystemdev/eu-business-data-mcp",
+    "version": "1.1.0",
+    "remoteUrl": "https://api.wsystem.dev/mcp/",
+    "publishedAt": "2026-11-24T15:29:47.329514Z",
+    "fetchedAt": "2026-11-25T11:03:46.215Z",
+    "toolsSha256": "a2eb03041c5b3e4ac4a134caef2232eab18e14ab2901e84f0175306a35b4fc73"
+  }
+}

@@ -1,0 +1,2425 @@
+{
+  "$schema": "../schema.json",
+  "name": "com.mangoinventory/mango-inventory",
+  "title": "Mango Inventory",
+  "category": "E-Commerce & Retail",
+  "description": "Inventory for organisations with a lot of equipment: set up, import, check out, report, by chat.",
+  "tools": [
+    {
+      "name": "search_items",
+      "description": "Search inventory items. `search` matches exact item codes and barcode labels first (e.g. \"BM-002\" printed on an asset tag), then names: word-prefix (\"Lap\" matches all laptops) plus an accent-insensitive substring pass (\"stuhl\" finds \"Stühle\" and \"Bürostuhl\"). The query is never shortened, so \"Stühle\" does not find \"Bürostuhl\": a shorter stem matches more. An empty result [] means no match. Filters, combinable with `search` and with each other: currentHolderId (a person resource id, or \"me\" for the connected user), categoryId, currentLocationId, status. categoryId and currentLocationId include the whole subtree by default (a top-level category returns its subcategories' items, a building its rooms' items); categoryMatch / currentLocationMatch \"exact\" limits the match to that node. Every non-draft item has a category; inventory_overview returns the category tree and list_resources the location and people trees whose node ids these filters take. No arguments lists the newest items. In results, `status` is the item's CONDITION (available = not defect/lost/retired), so an available item may still be borrowed (`currentHolder`). A row without `trackingMode` is one physical item; a \"quantity\" row is a stock pool whose count is `quantity`. `primaryCode` is the code printed on the asset tag, the one way to tell two identical models apart. `webUrl` / `listUrl` open the record and the filtered list in the web app. Rows carry no photo: get_item (one item) and show_items (a picker of several) return photos. Drafts (unreviewed captures, `isDraft`) are personal: results include only the connected user's own drafts, never another user's (admins included), not even by exact code or id.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "search": {
+            "description": "Item code (exact match, e.g. BM-002) or name words (word-prefix plus accent-insensitive substring)",
+            "type": "string"
+          },
+          "currentHolderId": {
+            "description": "Filter by current holder: a person resource id, or the literal \"me\" for the connected user",
+            "type": "string"
+          },
+          "categoryId": {
+            "description": "Filter by category id. Includes the whole subtree by default — see categoryMatch",
+            "type": "string"
+          },
+          "categoryMatch": {
+            "description": "How categoryId matches. \"subtree\" (default) = that category AND all its subcategories, which is almost always what a person means. \"exact\" = only items filed directly on that category",
+            "type": "string",
+            "enum": [
+              "subtree",
+              "exact"
+            ]
+          },
+          "currentLocationId": {
+            "description": "Filter by current location: a location resource id. Includes the whole subtree by default — see currentLocationMatch",
+            "type": "string"
+          },
+          "currentLocationMatch": {
+            "description": "How currentLocationId matches. \"subtree\" (default) = that place AND everything inside it, so a building returns its rooms' items. \"exact\" = only items sitting on that place itself",
+            "type": "string",
+            "enum": [
+              "subtree",
+              "exact"
+            ]
+          },
+          "status": {
+            "description": "Filter by condition. \"available\" means not defect/lost/retired — the item may still be borrowed.",
+            "type": "string",
+            "enum": [
+              "available",
+              "in_repair",
+              "defect",
+              "lost",
+              "retired"
+            ]
+          },
+          "page": {
+            "description": "0-based page index",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "pageSize": {
+            "description": "Items per page, max 50 (default 20)",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50
+          }
+        }
+      }
+    },
+    {
+      "name": "show_items",
+      "description": "Show a set of inventory items as a visual picker: a photo list in which each row carries the item's name, the code printed on its asset tag, its condition and where it is. It suits a choice between items or a request to see them (\"which drill can I take?\", \"show me the beamers in the Aula\"), and items that share a name, which the photos, codes and rooms tell apart. `itemIds` are ids from search_items rows (up to 24, shown in the given order); `title` is an optional caption; `total` is the size of the full result when only part of it is shown (the card says \"Showing 8 of 40\"). Every row carries `photoUrl`, the item's main photo (absent when it has none); this tool and get_item are the only tools that return item photos, and get_item shows a single item. Display only: it writes nothing and does not search. Personal drafts are never shown. Hosts that render widgets draw the picker; other clients receive the same rows as text.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "itemIds": {
+            "maxItems": 24,
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Item ids from search_items rows, in display order (max 24)"
+          },
+          "title": {
+            "description": "Short caption naming the list, e.g. \"Beamers in Room 204\"",
+            "type": "string"
+          },
+          "total": {
+            "description": "Total matches behind this selection when only some are shown; the card says \"Showing 8 of 40\"",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "itemIds"
+        ]
+      }
+    },
+    {
+      "name": "inventory_overview",
+      "description": "The shape of the whole inventory in one call: the category tree with an item count on every node (each count covers the node's whole subtree), `statusCounts` per condition (available | in_repair | defect | lost | retired), and `assignedToMe`, how many items the connected user holds, and the first few of them in `assignedItems`. It answers \"what do we own?\", \"how many X do we have?\" (the count on X's node, no paging through search_items) and \"what is broken?\". `myPersonId` is the person RECORD behind the connected login, which is what \"me\" means in search_items and assign_item. Every number is org-wide and counts published items only; the connected user's own unfinished captures are the separate `draftCount`. A categoryId from the tree is the search_items filter for the items behind a count.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {}
+      }
+    },
+    {
+      "name": "get_item",
+      "description": "Get one inventory item by id: name, description, status, category and its four relations (home location, current location, current holder, responsible person) with resolved names, plus `photoUrl`, the item's main photo (absent when it has none). Hosts that render widgets draw the result as an item card; show_items draws several items. `status` is the item's CONDITION (available = not defect/lost/retired), so an available item may still be borrowed (`currentHolder`; check_item_availability has the full picture). Packed items (see pack_item) also carry `container` plus `effectiveLocation`/`effectiveHolder`, the position followed from the container while the item's own currentLocation/currentHolder are empty, and `compartment` { id, name } when they sit in one of the container's compartments (a named spot inside it, e.g. a vehicle's «GR4»; absent = directly in the container). Container items carry `holdsItems: true`, `compartments` [{ id, name }] in their order when they have any (the names pack_item's `compartment` takes), `contentsCount`, and `packedStock` when quantity-tracked stock sits inside them: [{ itemId, name, primaryCode?, quantity, compartmentName? }]. A quantity-tracked item whose units sit inside containers carries `packed`: one row per container and compartment { containerId, containerName, containerPath?, compartmentName?, quantity, effectiveLocationName?, effectiveHolderName? }; its `quantity` total counts them. This is the only tool that returns the item's custom field values (serial number, warranty, purchase price, whatever the organization defined): `customFields`, one entry per stored value with the org's own `label`, its `type`, the `value`, and `fieldDefId`, which joins it to the definitions get_item_requirements returns; a `date` value carries `valueIso`, the plain calendar day, and a `currency` value its `currencyCode` (absent = CHF). Values the connected user may not see are absent, not redacted. Drafts (unreviewed captures) are personal: another user's draft is not found even by id (standard not-found) until it is published.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "itemId": {
+            "type": "string",
+            "description": "Item id"
+          }
+        },
+        "required": [
+          "itemId"
+        ]
+      }
+    },
+    {
+      "name": "check_item_availability",
+      "description": "Check whether an item is currently available: status, who holds it, where it is, how many tickets are open on it, how many of its maintenance checks are overdue and how many active orders request it. Status defect or in_repair, an open ticket other than a maintenance check that is not yet due, overdueMaintenance > 0 or requestedInOrders > 0 each make assign_item answer requiresAcknowledgment when it sets a holder. For quantity-tracked items the result also carries totalQuantity and distribution: one row per stocked level, locations AND people holding stock, with { locationId, name, kind: location|person, quantity, available, reserved?, minStock?, isLow? }, the same row shape transfer_stock and adjust_stock return after a write. available = quantity minus what active orders reserved, floored at 0; isLow compares AVAILABLE against that level's threshold, so a full shelf with heavy reservations IS low. minStock and isLow appear together and only where a threshold exists: an absent isLow means no threshold is set there, not that the level is healthy. reserved is absent when 0; person rows carry neither (orders deliver to places, and person-held stock cannot carry a threshold). locationId is the id adjust_stock, set_min_stock and transfer_stock take. Units inside containers (a bag, a vehicle compartment) are not in distribution: they come under packed, one row per container and compartment { containerId, containerName, containerPath?, compartmentName?, quantity, effectiveLocationName?, effectiveHolderName? } (absent when none), and totalQuantity counts them. Packed units are moved in the app's stock section; transfer_stock and adjust_stock work on places and people only.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "itemId": {
+            "type": "string",
+            "description": "Item id"
+          }
+        },
+        "required": [
+          "itemId"
+        ]
+      }
+    },
+    {
+      "name": "search_resources",
+      "description": "Find the resource id of ONE person or ONE location by name. `type` is required (\"person\" or \"location\"); returns the 10 best matches; name search only (no code or id lookup), and an empty query returns nothing. These ids are what assign_item, adjust_stock, transfer_stock, set_min_stock, create_order (deliverToResourceId), create_item (homeLocationId) and create_location / create_person (parent) take. A \"person\" here is a PERSON RECORD (someone items can be assigned to), NOT a login account; member userIds come from list_members. Every row carries `path`, the ancestor names root to parent (\"Schulhaus B\" → \"1. Obergeschoss\" for a room, a department chain for a person), and `parentId`; when several locations share a name, the path tells them apart. An empty result [] means no match. list_resources returns both whole trees without a name.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "person",
+              "location"
+            ]
+          },
+          "query": {
+            "type": "string",
+            "description": "Name to search for"
+          }
+        },
+        "required": [
+          "type",
+          "query"
+        ]
+      }
+    },
+    {
+      "name": "list_resources",
+      "description": "The organization's PLACES and PEOPLE in one call, the structural twin of inventory_overview: \"what rooms do we have?\", \"who is in the organization?\", \"what is in the Schulhaus Dorf?\". Returns `locations` and `people` as NESTED trees (buildings → floors → rooms; departments → people), each node carrying `id`, `name` and `count`. A node id is the search_items filter for the items behind a count: currentLocationId for a place, currentHolderId for a person; the two match exactly. A LOCATION's count covers its whole subtree (a building counts its rooms' items, as search_items does by default); a PERSON's count is what that one person holds, since currentHolderId matches one person and never a subtree. Person nodes also carry `email`, `hasAccount` (the record is linked to a login account; member userIds come from list_members) and `isMe` for the connected user's own record. `assignable: false` marks a record items cannot be assigned to; search_resources never returns those. `type` limits the answer to one tree. `truncated: true` means the organization is bigger than one bounded pass, and the counts are lower bounds.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "type": {
+            "description": "Only this tree; absent = both",
+            "type": "string",
+            "enum": [
+              "person",
+              "location"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "get_item_requirements",
+      "description": "Get what creating an inventory item needs. Without arguments: the organization's category tree plus the required fields that apply to ALL items. With categoryId: that category's full field list (required and optional, with types and select options); the fieldDefIds are the keys of customFields in create_item and preview_item_create. A category is required for every item except a draft (isDraft: true). The server checks that a category exists, not that it fits the item: an item filed under an unfitting category shows there for everyone. create_category adds a new category.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "categoryId": {
+            "description": "Category id (from the no-argument call) to get that category's full field list",
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "preview_item_create",
+      "description": "Preview an item creation without writing anything (read-only). It takes create_item's arguments, all optional: partial values are valid. Returns the resolved proposal, the applicable field definitions and the required fields still missing (`missingRequired`); without a categoryId it adds `missingCategory` and the category list. In hosts that render widgets (e.g. ChatGPT) the result is an editable confirm card: missing values are filled and a category is picked on the card, and its 'Create item' button calls create_item itself. Hosts without widgets receive the same proposal as data.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "name": {
+            "description": "Proposed item name; the card asks for it when absent",
+            "type": "string"
+          },
+          "categoryId": {
+            "description": "Category id (from get_item_requirements); without it the card shows a category picker",
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "customFields": {
+            "description": "Proposed field values keyed by fieldDefId (from get_item_requirements) — same shape as create_item's customFields",
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              ]
+            }
+          },
+          "homeLocationId": {
+            "description": "Home location resource id (from search_resources); absent = the category or organization default",
+            "type": "string"
+          },
+          "responsiblePersonId": {
+            "description": "Responsible person resource id (optional)",
+            "type": "string"
+          },
+          "trackingMode": {
+            "description": "\"quantity\" for quantity-tracked stock (consumables) instead of a serialized single item",
+            "type": "string",
+            "enum": [
+              "quantity"
+            ]
+          },
+          "quantity": {
+            "description": "Initial stock amount — required with trackingMode \"quantity\"",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "minStock": {
+            "description": "Optional restock threshold for quantity-tracked stock",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        }
+      }
+    },
+    {
+      "name": "create_item",
+      "description": "Create an inventory item. Requires the manager role. A category is required unless isDraft is true: a call without categoryId returns { missingCategory, categories } and writes nothing. The server checks that the category exists, not that it fits the item. Required fields per category come from get_item_requirements; when some are missing the call returns { missingFields } and creates nothing, and the same call with those values in customFields (keys = fieldDefId) creates the item. isDraft: true saves an incomplete draft without the required-field and category checks, which the user finishes in the app. At the organization's item allowance the call returns { itemLimitReached } and creates nothing; drafts do not count against the allowance and can still be saved at it. For quantity-tracked stock (consumables like paper or markers) pass trackingMode \"quantity\" with quantity and an optional minStock. With clientRequestId a repeated call returns the existing item instead of a duplicate; without it every call creates a new item. preview_item_create renders the same proposal as an editable confirm card in widget hosts; its button calls this tool.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Item name (required)"
+          },
+          "categoryId": {
+            "description": "Category id (from get_item_requirements); required unless isDraft is true",
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "customFields": {
+            "description": "Field values keyed by fieldDefId (from get_item_requirements). Dates as a plain calendar day \"YYYY-MM-DD\" (a full timestamp works too, but only WITH an explicit offset — this server has no timezone and does no conversion), selects as one of the listed options, multiselect as an ARRAY of option strings, currency as a plain number in the field's own currency (see its currencyCode; default CHF), url as a full http(s) link (protocol added when missing).",
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              ]
+            }
+          },
+          "homeLocationId": {
+            "description": "Home location resource id (from search_resources); absent = the category or organization default",
+            "type": "string"
+          },
+          "responsiblePersonId": {
+            "description": "Responsible person resource id (optional)",
+            "type": "string"
+          },
+          "trackingMode": {
+            "description": "\"quantity\" for quantity-tracked stock (consumables) instead of a serialized single item",
+            "type": "string",
+            "enum": [
+              "quantity"
+            ]
+          },
+          "quantity": {
+            "description": "Initial stock amount — required with trackingMode \"quantity\"",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "minStock": {
+            "description": "Optional restock threshold for quantity-tracked stock",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "isDraft": {
+            "description": "Save as an incomplete draft (skips the required-fields check; the user finishes it in the app)",
+            "type": "boolean"
+          },
+          "clientRequestId": {
+            "description": "A unique id for this creation (e.g. a UUID). A repeated call with the SAME id returns the existing item instead of creating a duplicate; a new id creates a new item.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ]
+      }
+    },
+    {
+      "name": "assign_item",
+      "description": "Assign or move an item: set its current location, current holder, responsible person or home location. An omitted field stays unchanged; null clears the current location or the current holder. The home location and the responsible person can never be cleared (every item has both); the literal \"default\" for responsiblePersonId removes the override, and the item follows its category's or the organization's default again. Both PERSON fields take the literal \"me\" for the connected user's own person record (the same shorthand as in search_items). Returns the updated item. Setting a holder on an item with open tickets, overdue maintenance or the status defect or in_repair writes nothing and returns { requiresAcknowledgment: true, warnings } (warnings.itemStatus names the status); the same call with acknowledgeWarnings: true performs it. Setting a holder on an item that an active order requests (not yet picked) returns { requiresAcknowledgment: true, requested }; the same call with acknowledgeRequested: true performs it. Setting a current location or holder on a packed item unpacks it first. Requires the manager role: a member cannot assign anything, not even to themselves with \"me\". Idempotent: unchanged values change nothing.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "itemId": {
+            "type": "string",
+            "description": "Item id"
+          },
+          "currentLocationId": {
+            "description": "Location resource id, or null to clear",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "currentHolderId": {
+            "description": "Person resource id who borrows the item, the literal \"me\" for the connected user, or null to clear",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "responsiblePersonId": {
+            "description": "Person resource id, the literal \"me\" for the connected user, or the literal \"default\" to hand the item back to the category/organization default chain. It cannot be cleared",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "homeLocationId": {
+            "description": "Location resource id (cannot be cleared)",
+            "type": "string"
+          },
+          "acknowledgeWarnings": {
+            "description": "true performs the call despite the warnings a previous requiresAcknowledgment result named",
+            "type": "boolean"
+          },
+          "acknowledgeRequested": {
+            "description": "true performs the assignment despite the active order requests a previous requiresAcknowledgment result named",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "itemId"
+        ]
+      }
+    },
+    {
+      "name": "pack_item",
+      "description": "Pack an item into a container: a case, cart, box or vehicle that is itself an inventory item (e.g. the voltmeter into the experiment case). While packed, the item's location and holder FOLLOW the container: one assign_item call on the container moves or lends the whole kit, and item reads show the followed position as effectiveLocation/effectiveHolder. A container can have named compartments (a vehicle's «Fahrerhaus», «GR1»…«GR7»; get_item on the container lists them as `compartments`): `compartment` takes a name (case-insensitive) or an id; an unknown name is refused with `unknownCompartment` and the container's `validNames`. `compartment: null` puts the item directly in the container, outside any compartment (also from a compartment of the same container). Without `compartment`, re-packing into the same container keeps the item's compartment, and packing into another container puts it directly in it. Packing clears the item's own current location and holder, so an item someone holds is taken from them. Both sides must be serialized items in this organization: quantity-tracked stock goes into a container from the item's stock section in the app (it reads back as `packed` on get_item / check_item_availability). Containers nest up to three levels (compartments are not a level). Refused: lost/retired items, items reserved for an active order (also a container that holds such an item, since packing moves its contents too) and containers switched to «cannot hold items». Requires the manager role. Idempotent: re-packing into the same container and compartment changes nothing. unpack_item reverses it.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "itemId": {
+            "type": "string",
+            "description": "Item id to pack"
+          },
+          "containerId": {
+            "type": "string",
+            "description": "Item id of the container to pack it into"
+          },
+          "compartment": {
+            "description": "Compartment of the container, by name (case-insensitive) or id; null = directly in the container, outside any compartment. Absent = the current compartment (same container) or directly in another container",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "itemId",
+          "containerId"
+        ]
+      }
+    },
+    {
+      "name": "unpack_item",
+      "description": "Take an item out of its container. Its current location and holder are set from the container's effective position at that moment (a snapshot: it stops following the container). No change if the item is not packed. Setting a current location or holder on a packed item with assign_item unpacks it first, in the same call. Requires the manager role.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "itemId": {
+            "type": "string",
+            "description": "Item id"
+          }
+        },
+        "required": [
+          "itemId"
+        ]
+      }
+    },
+    {
+      "name": "transfer_stock",
+      "description": "Move an amount of a quantity-tracked item's stock from one place or person to another (e.g. 3 packs of printer paper from the storeroom to room 201, or 5 markers to a teacher). Quantity-tracked items only; assign_item moves serialized items. Location and person ids come from search_resources or from check_item_availability's distribution. Returns every stocked level after the move as distribution: { locationId, name, kind: location|person, quantity, available, reserved?, minStock?, isLow? }, the same row shape check_item_availability returns, so isLow shows whether either end is now low (isLow counts AVAILABLE stock: on hand minus what orders reserved). Amounts reserved for orders or exceeding the source location's stock are rejected. When the item has overdue maintenance the call writes nothing and returns { requiresAcknowledgment: true, warnings }; the same call with acknowledgeWarnings: true performs it. Requires the manager role. Not idempotent: a repeated call moves the stock again.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "itemId": {
+            "type": "string",
+            "description": "Item id (must be a quantity-tracked item)"
+          },
+          "fromLocationId": {
+            "type": "string",
+            "description": "Source location or person resource id (where the stock is now)"
+          },
+          "toLocationId": {
+            "type": "string",
+            "description": "Destination location or person resource id"
+          },
+          "amount": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991,
+            "description": "How many units to move (integer, at least 1)"
+          },
+          "acknowledgeWarnings": {
+            "description": "true performs the call despite the warnings a previous requiresAcknowledgment result named",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "itemId",
+          "fromLocationId",
+          "toLocationId",
+          "amount"
+        ]
+      }
+    },
+    {
+      "name": "create_ticket",
+      "description": "Create a defect or maintenance ticket on an item. The organization's default assignee rules apply, and the assignee is emailed straight away. setItemStatus also sets the item's condition in the same call (like the web report form, where a defect report usually marks the item \"defect\"); members may use it, unlike set_item_status. With clientRequestId a repeated call returns the existing ticket instead of a duplicate; without it every call creates a new ticket. Quantity-tracked items take no tickets (refused with quantityItem).",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "itemId": {
+            "type": "string",
+            "description": "Item id"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "defect",
+              "maintenance"
+            ]
+          },
+          "title": {
+            "type": "string",
+            "description": "Short ticket title"
+          },
+          "description": {
+            "type": "string"
+          },
+          "priority": {
+            "type": "string",
+            "enum": [
+              "low",
+              "normal",
+              "high"
+            ]
+          },
+          "setItemStatus": {
+            "description": "Also set the item's condition in the same operation; absent = the item status stays unchanged. set_item_status covers the other status changes.",
+            "type": "string",
+            "enum": [
+              "defect",
+              "in_repair"
+            ]
+          },
+          "clientRequestId": {
+            "description": "A unique id for this request (e.g. a UUID). A repeated call with the SAME id returns the existing ticket instead of creating a duplicate; a new id creates a new ticket.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "itemId",
+          "type",
+          "title"
+        ]
+      }
+    },
+    {
+      "name": "list_tickets",
+      "description": "List defect and maintenance tickets, newest first, capped at about 500 (`truncated` when cut; filters narrow it). Filters: itemId, statuses (open, in_progress, done, wontfix; \"open tickets\" usually means open + in_progress), type, and a text search over title and description. Every row carries `createdAt` (when the problem was reported, the sort key) and `reporterName` (absent when nobody reported it: a maintenance plan created it, or it came from a logged-out QR report). Dates come twice, the epoch and its ISO twin: `createdAtIso` / `closedAtIso` are UTC instants, `dueAtIso` is a plain calendar day; the server does no timezone conversion. A ticket has no printed code: `webUrl` is its page in the web app and `id` the handle for update_ticket, add_comment and list_comments. The rows are the tickets the connected user sees in the app.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "itemId": {
+            "description": "Only tickets on this item",
+            "type": "string"
+          },
+          "statuses": {
+            "description": "Only these statuses — \"open tickets\" usually means [\"open\", \"in_progress\"]",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "open",
+                "in_progress",
+                "done",
+                "wontfix"
+              ]
+            }
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "defect",
+              "maintenance",
+              "inspection",
+              "other"
+            ]
+          },
+          "search": {
+            "description": "Text search over ticket title and description",
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "update_ticket",
+      "description": "Update a ticket: change its status (open, in_progress, done, wontfix) and/or edit title, description, priority or due date. Closing = status done (resolved) or wontfix (will not be handled); restoreItemStatus: true on a close also sets the item back to \"available\" (typical after a repair). The due date is `dueDate`, a calendar day (\"2026-08-11\"); the legacy `dueAt` epoch still works; exactly one of the two, and null on either clears the date. Status and due-date changes appear in the ticket's timeline under the connected user's name. Only the reporter, the assignee (or a member of the assigned team) or a ticket manager (responsibleForTickets) can update it; viewers never can. Ticket ids come from list_tickets. Returns the updated ticket in the list_tickets row shape (`createdAt`, `reporterName`, `webUrl` and the ISO date twins included). Idempotent.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "ticketId": {
+            "type": "string",
+            "description": "Ticket id (from list_tickets)"
+          },
+          "status": {
+            "description": "New status — done = resolved, wontfix = closed without handling",
+            "type": "string",
+            "enum": [
+              "open",
+              "in_progress",
+              "done",
+              "wontfix"
+            ]
+          },
+          "restoreItemStatus": {
+            "description": "When closing: also set the item back to \"available\" (typical after a repair)",
+            "type": "boolean"
+          },
+          "title": {
+            "type": "string"
+          },
+          "description": {
+            "description": "New description, or null to clear",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "priority": {
+            "description": "New priority, or null to clear",
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "low",
+                  "normal",
+                  "high"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "dueAt": {
+            "description": "Due date as epoch milliseconds at UTC midnight of the day, or null to clear (legacy form of `dueDate`; exactly one of the two)",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "dueDate": {
+            "description": "Due date as a calendar day, \"YYYY-MM-DD\" (e.g. \"2026-08-11\"), or null to clear. A full timestamp is accepted only WITH an explicit offset (\"2026-08-11T00:00:00+02:00\"), and the server takes the calendar day as seen in that offset; it does no timezone conversion of its own, so an offset-less timestamp is refused. Passing both dueAt and dueDate is an error",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "ticketId"
+        ]
+      }
+    },
+    {
+      "name": "set_item_status",
+      "description": "Set an item's operational status (condition): available, in_repair, defect, lost or retired, e.g. defect or lost, or available again after a repair. The change goes into the item's activity timeline under the connected user's name, with the optional note. It creates no ticket; create_ticket reports an issue that needs handling and can set the status in the same call (setItemStatus). Requires the manager role; create_ticket is open to members. Quantity-tracked items have no status (refused with quantityItem). Retiring a container that still holds items is refused with containerHasContents; unpack_item empties it, or the app retires it and unpacks its contents in place. Idempotent: the same status again changes nothing.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "itemId": {
+            "type": "string",
+            "description": "Item id"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "available",
+              "in_repair",
+              "defect",
+              "lost",
+              "retired"
+            ]
+          },
+          "note": {
+            "description": "Short reason, shown in the item's activity timeline",
+            "type": "string"
+          }
+        },
+        "required": [
+          "itemId",
+          "status"
+        ]
+      }
+    },
+    {
+      "name": "list_orders",
+      "description": "List orders (material and item requests) in the organization, newest first, grouped by active vs closed. Order managers see all orders; other members see only orders they requested or are assigned to (`isManager` says which view this is). Each row: id, status, requester, deliver-to target, the free-text request, the requested lines (a specific item, any instance of a model (`modelId`), any item of a category (`categoryId`), or free text; each with its `quantity` where one was given: \"5 Packungen Kopierpapier\" is quantity 5), `neededByAt` (when the requester needs it; absent when not given), the assignee and `webUrl`, the order's page in the web app. Every date comes twice, the epoch and its ISO twin: `neededByAtIso` is a plain calendar day (\"2026-08-11\"), `createdAtIso` / `closedAtIso` are UTC instants; the server does no timezone conversion. Statuses: \"open\" = requested, nobody has started fulfilling it; \"in_fulfillment\" = an order manager is working on it; \"fulfilled\" (delivered), \"rejected\" (declined by a manager) and \"cancelled\" (withdrawn by the requester) are closed. \"Open orders\" in the everyday sense are open + in_fulfillment. `status` filters the reads themselves, so it reaches older orders of that status rather than narrowing a capped page. Caps: the newest 100 per active status (open, in_fulfillment) and the newest 50 per closed status (fulfilled, rejected, cancelled), with the closed rows then cut to 50 in total; `truncated: true` means the organization has more orders than returned. An order has no printed code; its `id` is the handle for order tool calls.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "status": {
+            "description": "Only orders with this status (absent = all)",
+            "type": "string",
+            "enum": [
+              "open",
+              "in_fulfillment",
+              "fulfilled",
+              "rejected",
+              "cancelled"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "create_order",
+      "description": "Create an order: a request for items or material (any member can order; order managers fulfill). `lines` holds one entry per thing, each with an optional `quantity`: \"5 Packungen Kopierpapier\" is { description: \"Packungen Kopierpapier\", quantity: 5 }; a specific inventory item is { itemId, quantity } (ids from search_items); \"any two of this drill model\" is { modelId, quantity: 2 } (search_items rows carry the modelId); \"any five from this category\" is { categoryId, quantity: 5 } (category ids from get_item_requirements). For a model or category line the store picks the concrete items, and a line with nothing free is allowed. `request` is free text around it (\"für das Schulzimmer 201\"); at least one of request / lines / itemIds is required. `neededBy` is a calendar day (\"2026-08-11\"); the server has no timezone and does no conversion, so a full timestamp is accepted only WITH an explicit offset (\"2026-08-11T00:00:00+02:00\"). The legacy `neededByAt` epoch still works; exactly one of the two. The result echoes `neededByAtIso`, the day that landed, and `webUrl`, the new order's page in the web app; `orderId` is the handle for follow-up calls. `deliverToResourceId` is the person or location the items go to (ids from search_resources); absent = the connected user. With clientRequestId a repeated call returns the existing order instead of a duplicate; without it every call creates a new order.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "request": {
+            "description": "Free-text description of what is needed (at least one of request/lines/itemIds is required)",
+            "type": "string"
+          },
+          "lines": {
+            "description": "The requested lines, one entry per thing: a specific inventory item, any instance of a model, any item of a category, or free text, each with an optional quantity",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "itemId": {
+                  "description": "This one inventory item (an id from search_items) — exactly one of itemId / modelId / categoryId / description per line",
+                  "type": "string"
+                },
+                "modelId": {
+                  "description": "Any instance of this model, the store picks which (the modelId of a search_items row) — e.g. \"2 Akku-Bohrschrauber\" when it does not matter which two",
+                  "type": "string"
+                },
+                "categoryId": {
+                  "description": "Any item of this category, subcategories included, the store picks which (a category id from get_item_requirements) — e.g. \"5 Stichsägeblätter\"",
+                  "type": "string"
+                },
+                "description": {
+                  "description": "Free text for something that is not in the inventory, e.g. \"Packungen Kopierpapier\"",
+                  "type": "string"
+                },
+                "quantity": {
+                  "description": "How many (a whole number ≥ 1). Meaningful for material and stock, not for one serialized machine",
+                  "type": "number"
+                }
+              }
+            }
+          },
+          "itemIds": {
+            "description": "Shorthand for quantity-less inventory item lines; equivalent to lines: [{ itemId }]",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "neededByAt": {
+            "description": "When the requester needs it, as epoch milliseconds at UTC midnight of that day (legacy form of `neededBy`; exactly one of the two)",
+            "type": "number"
+          },
+          "neededBy": {
+            "description": "When the requester needs it, as a calendar day: \"YYYY-MM-DD\" (e.g. \"2026-08-11\"). This server has no timezone and does no conversion, so a relative date (\"bis Dienstag\") is resolved by the caller. A full timestamp is accepted only WITH an explicit offset (\"2026-08-11T00:00:00+02:00\"), and its calendar day is taken as seen in that offset; an offset-less timestamp is refused. Passing both neededByAt and neededBy is an error",
+            "type": "string"
+          },
+          "deliverToResourceId": {
+            "description": "Person or location resource id to deliver to; absent = the connected user",
+            "type": "string"
+          },
+          "clientRequestId": {
+            "description": "A unique id for this request (e.g. a UUID). A repeated call with the SAME id returns the existing order instead of creating a duplicate; a new id creates a new order.",
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "fulfill_order",
+      "description": "Mark an order as fulfilled (delivered); order managers only. Fulfilling transfers reserved stock to the order's target. Three checks answer { requiresAcknowledgment: true, ... } and write nothing; the same call with the named acknowledgment performs it: requested lines that are short (an item line never picked, or a model or category line with fewer picked items than its quantity) come back as `uncovered` (acknowledgeIncomplete: true); picked items that are meanwhile lost/retired come back as `unusableItems` (acknowledgeUnusableItemIds takes their ids); picked items with open issues (status defect or in_repair, an open ticket, or an overdue maintenance check) come back as `itemsWithIssues`, each with its status, the first issue's title and the count (acknowledgeSafetyItemIds). Fails on already-closed orders. Irreversible: a closed order cannot be reopened.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "orderId": {
+            "type": "string",
+            "description": "Order id (from list_orders)"
+          },
+          "acknowledgeIncomplete": {
+            "description": "true closes the order despite the uncovered lines a previous requiresAcknowledgment result named",
+            "type": "boolean"
+          },
+          "acknowledgeUnusableItemIds": {
+            "description": "The unusable item ids a previous requiresAcknowledgment result named; the order closes despite them",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "acknowledgeSafetyItemIds": {
+            "description": "The ids from a previous result's itemsWithIssues; the items are handed out despite their issues",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "orderId"
+        ]
+      }
+    },
+    {
+      "name": "reject_order",
+      "description": "Reject (decline) an order; order managers only. A non-empty reason is required; the requester is notified with it. Releases any reserved stock. Fails on already-closed orders. Irreversible: a closed order cannot be reopened.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "orderId": {
+            "type": "string",
+            "description": "Order id (from list_orders)"
+          },
+          "reason": {
+            "type": "string",
+            "description": "Required non-empty reason shown to the requester in their notification"
+          }
+        },
+        "required": [
+          "orderId",
+          "reason"
+        ]
+      }
+    },
+    {
+      "name": "cancel_order",
+      "description": "Cancel (withdraw) an order. Only the requester can cancel their OWN order, and only while it is still open; once fulfillment has started the requester cannot cancel it; an order manager can still decline it (reject_order). Releases any reserved stock. Irreversible: a closed order cannot be reopened.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "orderId": {
+            "type": "string",
+            "description": "Order id (from list_orders)"
+          }
+        },
+        "required": [
+          "orderId"
+        ]
+      }
+    },
+    {
+      "name": "stocktaking_status",
+      "description": "Stocktaking overview: without sessionId, all stocktaking sessions with live progress; with sessionId, the per-location and per-counter breakdown of that session. \"pending\" = not yet counted, \"missing\" = counted as absent: a CLOSED session can have missing items (missing > 0 while pending = 0 is a completed count that found items missing, not a contradiction). Each session carries a `name`; its `id` is the handle for the sessionId argument.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "sessionId": {
+            "description": "Stocktaking session id",
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "get_setup_status",
+      "description": "The organization's setup state: name, type, default language, default home location, in-app setup-step progress, whether sample data is active, and counts. Categories, locations and people are each counted over the newest 500 rows, so a bigger organization reads as exactly 500, a lower bound rather than the total; members and items are exact (items = published items, personal drafts excluded); pending invites are exact and returned to admins only. `availableSetupTemplates` lists the templates get_setup_template serves.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {}
+      }
+    },
+    {
+      "name": "scaffold_categories",
+      "description": "Create a whole category tree with custom field definitions in one call. Without confirm: true it is a dry run that writes NOTHING and returns the plan: per node, created vs already exists (same-name nodes at the same tree position are reused, never duplicated). The SAME call with confirm: true commits the whole tree atomically. parentName references another entry in the same call (names are unique per call; existing parents included as entries are matched and reused). Each category may carry `fields` (custom field definitions) and defaultHomeLocationName (an existing location's exact name). orgWideFields apply to ALL items. A field whose label already exists at the same scope is reused; a type mismatch is reported as a conflict and skipped on commit. get_setup_template returns starting trees in this input shape. At most 100 categories and 200 fields (orgWideFields included) per call. Requires the manager role. Idempotent: a repeated commit reuses every node.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "categories": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "description": "Category name (unique within this call)"
+                },
+                "parentName": {
+                  "description": "Name of the parent category — another entry in this call (omit for top level)",
+                  "type": "string"
+                },
+                "fields": {
+                  "description": "Custom field definitions for this category",
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "label": {
+                        "type": "string",
+                        "description": "Field label shown in the app"
+                      },
+                      "type": {
+                        "type": "string",
+                        "enum": [
+                          "text",
+                          "number",
+                          "currency",
+                          "date",
+                          "select",
+                          "multiselect",
+                          "boolean",
+                          "url"
+                        ],
+                        "description": "Value type — immutable after creation. currency = money amount (numeric value, rendered code-first like CHF 1'200.50; without currencyCode a new field gets the organization's default currency); url = http(s) link (clickable in the app); multiselect = several options at once (value is an array of option strings)"
+                      },
+                      "required": {
+                        "description": "Required fields make items incomplete until filled",
+                        "type": "boolean"
+                      },
+                      "options": {
+                        "description": "Allowed values — required for select and multiselect, forbidden otherwise",
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "currencyCode": {
+                        "description": "ISO 4217 code for currency fields only (e.g. EUR) — absent = the organization's default currency (defaultCurrency in get_setup_status), which is written into the new field. All of the field's values are amounts in THIS one currency.",
+                        "type": "string"
+                      },
+                      "unique": {
+                        "description": "Enforce distinct values across the organization (text/number only — e.g. serial or inventory numbers)",
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "label",
+                      "type"
+                    ]
+                  }
+                },
+                "defaultHomeLocationName": {
+                  "description": "Exact name of an EXISTING location new items of this category should live in by default",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "name"
+              ]
+            },
+            "description": "The whole tree as a flat list, parents referenced by name"
+          },
+          "orgWideFields": {
+            "description": "Field definitions that apply to ALL items regardless of category",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "label": {
+                  "type": "string",
+                  "description": "Field label shown in the app"
+                },
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "text",
+                    "number",
+                    "currency",
+                    "date",
+                    "select",
+                    "multiselect",
+                    "boolean",
+                    "url"
+                  ],
+                  "description": "Value type — immutable after creation. currency = money amount (numeric value, rendered code-first like CHF 1'200.50; without currencyCode a new field gets the organization's default currency); url = http(s) link (clickable in the app); multiselect = several options at once (value is an array of option strings)"
+                },
+                "required": {
+                  "description": "Required fields make items incomplete until filled",
+                  "type": "boolean"
+                },
+                "options": {
+                  "description": "Allowed values — required for select and multiselect, forbidden otherwise",
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "currencyCode": {
+                  "description": "ISO 4217 code for currency fields only (e.g. EUR) — absent = the organization's default currency (defaultCurrency in get_setup_status), which is written into the new field. All of the field's values are amounts in THIS one currency.",
+                  "type": "string"
+                },
+                "unique": {
+                  "description": "Enforce distinct values across the organization (text/number only — e.g. serial or inventory numbers)",
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "label",
+                "type"
+              ]
+            }
+          },
+          "confirm": {
+            "description": "true commits the plan; absent or false = dry run, nothing written",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "categories"
+        ]
+      }
+    },
+    {
+      "name": "scaffold_locations",
+      "description": "Create a whole location tree (buildings, floors, rooms, storage places) in one call, with the same contract as scaffold_categories: without confirm: true it is a dry run that writes nothing (existing same-name locations at the same position are reused, never duplicated); the SAME call with confirm: true commits the tree atomically. parentName references another entry in the same call (existing parents included as entries are reused). Each location is one explicit entry: a range such as \"rooms 201 to 210\" is ten entries. At most 200 locations per call. Requires the manager role. Idempotent: a repeated commit reuses every node.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "locations": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "description": "Location name (unique within this call)"
+                },
+                "parentName": {
+                  "description": "Name of the parent location — another entry in this call (omit for top level)",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "name"
+              ]
+            },
+            "description": "The whole tree as a flat list, parents referenced by name"
+          },
+          "confirm": {
+            "description": "true commits the plan; absent or false = dry run, nothing written",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "locations"
+        ]
+      }
+    },
+    {
+      "name": "scaffold_models",
+      "description": "Create item models («Modelle») in one call: one model per article type whose pieces share a name and settings, e.g. «Arbeitshose» in sizes XS to 8XL, or 16 identical radios. Same contract as scaffold_categories: without confirm: true it is a dry run that writes nothing; the SAME call with confirm: true commits. Per model: name, categoryId, and how its pieces are named: nameSuffix \"none\" (every piece carries the model's name), \"text\" (each piece keeps its own suffix from its row: «Funkgerät 3») or \"field\" with nameSuffixFieldId (a select, text or number field: «Arbeitshose XL»); variantValues, the values a field may take on this model (the sizes it exists in); defaultFieldValues, the values every new piece gets. An existing model of the same name is reused, never duplicated; one whose settings differ (category, name suffix, allowed values, or a named default) is reported as a conflict and left as it is. Models are created last to first, so the app's model list opens on the first one. plan_import adds the pieces: the model's name in a blueprintName column and the size in its field's column. Model pictures are added in the app. At most 50 models per call. Requires the manager role. Idempotent: a repeated commit reuses every model.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "models": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "description": "Model name (unique within this call)"
+                },
+                "categoryId": {
+                  "type": "string",
+                  "description": "Category id (from scaffold_categories or get_item_requirements)"
+                },
+                "nameSuffix": {
+                  "description": "How its pieces are named: \"none\" = the model name, \"text\" = each piece its own suffix, \"field\" = the value of nameSuffixFieldId. Default \"none\" (\"field\" when nameSuffixFieldId is set)",
+                  "type": "string",
+                  "enum": [
+                    "none",
+                    "text",
+                    "field"
+                  ]
+                },
+                "nameSuffixFieldId": {
+                  "description": "A field id (from get_item_requirements) or \"field:<label>\" — a select, text or number field of the category whose value ends each piece's name",
+                  "type": "string"
+                },
+                "variantValues": {
+                  "description": "Allowed values per field — the sizes or variants",
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "field": {
+                        "type": "string",
+                        "description": "A field id (from get_item_requirements) or \"field:<label>\""
+                      },
+                      "values": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        },
+                        "description": "The values this field may take on the model (select: its options)"
+                      }
+                    },
+                    "required": [
+                      "field",
+                      "values"
+                    ]
+                  }
+                },
+                "defaultFieldValues": {
+                  "description": "Values every new piece of this model gets",
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "field": {
+                        "type": "string",
+                        "description": "A field id (from get_item_requirements) or \"field:<label>\""
+                      },
+                      "value": {
+                        "type": "string",
+                        "description": "The value as text: a date as \"YYYY-MM-DD\" (a calendar day, no time zone to convert), a number as \"12.5\", a select value as one of its options, a multi-select value as several of its options separated by \";\" (\"HDMI; VGA\" — not commas: an option name may itself contain a comma)"
+                      }
+                    },
+                    "required": [
+                      "field",
+                      "value"
+                    ]
+                  }
+                }
+              },
+              "required": [
+                "name",
+                "categoryId"
+              ]
+            },
+            "description": "The models, at most 50 per call"
+          },
+          "confirm": {
+            "description": "true commits the plan; absent or false = dry run, nothing written",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "models"
+        ]
+      }
+    },
+    {
+      "name": "create_category",
+      "description": "Create ONE category, optionally under a parent category id (ids from get_item_requirements). scaffold_categories creates a whole tree with a dry run and reuses existing nodes. Not idempotent: a repeated call creates a same-name sibling. Requires the manager role.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Category name"
+          },
+          "parentId": {
+            "description": "Parent category id (omit for top level)",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ]
+      }
+    },
+    {
+      "name": "update_category",
+      "description": "Update a category (ids from get_item_requirements), any combination in one call: rename it; holdsItems, the container switch for its items (true = its items can hold other items: vehicles, cases, carts; false = its items are not offered as containers, even where a parent category says yes, but an item that already holds things or whose own switch says yes stays a container; null = follow the parent category again); defaultHomeLocationId, where its new items live (a location id from search_resources; null clears it); hideFieldIds / showFieldIds, inherited fields (org-wide or from a parent category; a field id or \"field:<label>\") this category and its sub-categories do not use: the field disappears from their items, and their values are kept and come back when it is shown again. A field defined ON this category cannot be hidden. Moving a category is app-only. Nothing is written if one part is refused. Requires the manager role. Idempotent.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "categoryId": {
+            "type": "string",
+            "description": "Category id"
+          },
+          "name": {
+            "description": "New name",
+            "type": "string"
+          },
+          "holdsItems": {
+            "description": "Container switch: true = its items can hold other items, false = its items are not offered as containers (an item that already holds things or whose own switch says yes stays one), null = follow the parent category",
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "defaultHomeLocationId": {
+            "description": "Location id new items of this category live in; null clears it",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "hideFieldIds": {
+            "description": "Inherited fields (ids or \"field:<label>\") this category and its sub-categories do not use",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "showFieldIds": {
+            "description": "Hidden fields (ids or \"field:<label>\") to show again",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "categoryId"
+        ]
+      }
+    },
+    {
+      "name": "archive_category",
+      "description": "Archive a category that nothing uses, e.g. a starter category the organization does not need. Refused, with nothing written, while anything still uses it: items (drafts too), sub-categories, item models, fields defined on it, a maintenance plan that selects it, or an item kit that lists it; the answer names what. An archived category leaves every list and picker, and the app has no way to bring it back. Repeating the call on an archived category answers alreadyArchived and writes nothing. Requires the manager role.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "categoryId": {
+            "type": "string",
+            "description": "Category id"
+          }
+        },
+        "required": [
+          "categoryId"
+        ]
+      }
+    },
+    {
+      "name": "create_field_def",
+      "description": "Create ONE custom field definition for items, on a category (categoryId) or org-wide (no categoryId: applies to ALL items). Types: text, number, currency (money amount, numeric value; per-field currencyCode, default = the organization's default currency), date, select (with options), multiselect (several options at once, value = array of option strings), boolean, url (http(s) link). `required` makes items incomplete until filled; `unique` (text/number) enforces distinct values across the organization, e.g. serial or inventory numbers. scaffold_categories creates several fields at once. Not idempotent: a repeated call creates a second field. Requires the manager role.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "categoryId": {
+            "description": "Category id — omit for an org-wide field",
+            "type": "string"
+          },
+          "label": {
+            "type": "string",
+            "description": "Field label shown in the app"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "text",
+              "number",
+              "currency",
+              "date",
+              "select",
+              "multiselect",
+              "boolean",
+              "url"
+            ]
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "options": {
+            "description": "Allowed values — required for select and multiselect, forbidden otherwise",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "currencyCode": {
+            "description": "ISO 4217 code for currency fields only (e.g. EUR) — absent = the organization's default currency (defaultCurrency in get_setup_status), which is written into the new field. All of the field's values are amounts in THIS one currency; values render code-first (EUR 1'234.50).",
+            "type": "string"
+          },
+          "unique": {
+            "description": "Enforce distinct values (text/number only)",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "label",
+          "type"
+        ]
+      }
+    },
+    {
+      "name": "update_field_def",
+      "description": "Update a custom field definition: rename the label, flip required, replace a select's options, or change a currency field's currencyCode. The TYPE is immutable, because changing it would invalidate every stored value; a different type means a new field (archiving the old one happens in the app). Changing currencyCode relabels existing values without converting them: the numbers stay as entered. Field ids come from get_item_requirements. Requires the manager role. Idempotent.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "fieldDefId": {
+            "type": "string",
+            "description": "Field definition id"
+          },
+          "label": {
+            "description": "New label",
+            "type": "string"
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "options": {
+            "description": "Replacement option list (select/multiselect fields only)",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "currencyCode": {
+            "description": "ISO 4217 code (currency fields only), e.g. EUR or CHF. The organization's default currency applies only when a field is created. Relabels existing values, never converts them.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "fieldDefId"
+        ]
+      }
+    },
+    {
+      "name": "create_location",
+      "description": "Create ONE location, optionally under a parent location id (ids from search_resources). scaffold_locations creates a whole tree with a dry run and reuses existing nodes. Not idempotent: a repeated call creates a same-name sibling. Requires the manager role.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Location name"
+          },
+          "parentId": {
+            "description": "Parent location resource id (omit for top level)",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ]
+      }
+    },
+    {
+      "name": "create_person",
+      "description": "Create a person record: someone items can be assigned to. This is NOT a login account; create_invite invites someone into the app, and an accepted invite links to a person record (matched by email where possible). Optional email and parent person id (grouping, e.g. a department). Not idempotent: a repeated call creates a second record. Requires the manager role.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Person name"
+          },
+          "email": {
+            "description": "Email (used to link an account later)",
+            "type": "string"
+          },
+          "parentId": {
+            "description": "Parent person resource id for grouping (omit for top level)",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ]
+      }
+    },
+    {
+      "name": "set_org_type",
+      "description": "Set the organization's type: school, company, publicAdmin, publicWorks, club or other. It tailors the in-app experience. Idempotent. Only the organization's creator or an admin can set it.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "orgType": {
+            "type": "string",
+            "enum": [
+              "school",
+              "company",
+              "publicAdmin",
+              "publicWorks",
+              "club",
+              "other"
+            ]
+          }
+        },
+        "required": [
+          "orgType"
+        ]
+      }
+    },
+    {
+      "name": "set_org_defaults",
+      "description": "Set organization-wide defaults, any combination in one call: defaultHomeLocationId (where new items live by default; a location resource id), defaultResponsiblePersonId (who is responsible for every item that names nobody; a PERSON resource id), defaultLanguage (en/de/fr/es/it: emails and new members), defaultCurrency (ISO 4217 code such as EUR: the currency a NEW currency field gets when none is named; existing fields keep theirs), orderDefaultAssigneeUserId and ticketDefaultAssignees (who handles incoming orders / tickets of a type by default; userIds from list_members; the target must already be responsible for orders/tickets there, see responsibleForOrders/responsibleForTickets). Admin only. Idempotent.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "defaultHomeLocationId": {
+            "description": "Location resource id new items default to",
+            "type": "string"
+          },
+          "defaultResponsiblePersonId": {
+            "description": "Person resource id (from search_resources) who is responsible for every item that names nobody — the last link of the chain blueprint > category > organization. The person must have a member account in this organization. It can be repointed but never cleared: the organization always has one",
+            "type": "string"
+          },
+          "defaultLanguage": {
+            "type": "string",
+            "enum": [
+              "en",
+              "de",
+              "fr",
+              "es",
+              "it"
+            ]
+          },
+          "defaultCurrency": {
+            "description": "ISO 4217 code (e.g. CHF, EUR, GBP, USD) that a new currency field gets when it is created without currencyCode. Changing it never touches existing fields or their values",
+            "type": "string"
+          },
+          "orderDefaultAssigneeUserId": {
+            "description": "userId (from list_members) who handles incoming orders by default",
+            "type": "string"
+          },
+          "ticketDefaultAssignees": {
+            "description": "Per-ticket-type default handlers",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "ticketType": {
+                  "type": "string",
+                  "enum": [
+                    "defect",
+                    "maintenance",
+                    "inspection",
+                    "other"
+                  ]
+                },
+                "userId": {
+                  "type": "string",
+                  "description": "userId from list_members"
+                }
+              },
+              "required": [
+                "ticketType",
+                "userId"
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "create_invite",
+      "description": "Invite someone into the organization by email, with a role: owner (admin), manager, member or viewer. An invite grants access to the organization's data at that role once accepted. The result says whether the invite email was queued; when it was not (no email configured, delivery failure) the invite still exists, and its link can be shared from the app's Members page. A live pending invite for the same address is refused (invitePending), so a repeated call never duplicates. Admin only.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "email": {
+            "type": "string",
+            "description": "Invitee email address"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "owner",
+              "manager",
+              "member",
+              "viewer"
+            ],
+            "description": "Role in the organization — owner is the admin role"
+          }
+        },
+        "required": [
+          "email",
+          "role"
+        ]
+      }
+    },
+    {
+      "name": "list_members",
+      "description": "List the organization's members: userId, name, email, role (owner = admin, manager, member, viewer) and whether they are responsible for orders/tickets. The userIds are what set_org_defaults, add_team_member and list_activity's actorUserId take. Members are login accounts; the person records items get assigned to come from search_resources.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {}
+      }
+    },
+    {
+      "name": "sample_data",
+      "description": "Load or clear the sample data: a small example inventory (categories, places, people, items and a few tickets, all marked as samples) for a new organization to look around in. action \"add\" loads it; while it is loaded a second add changes nothing. packKey picks the set (absent = the set that fits this organization). Sample items do not count against the item allowance. action \"remove\" deletes exactly the sample records, including ones edited since they were loaded, and nothing restores them as they were; records the organization created stay, and a sample category or place that its own records use is archived instead. A big set finishes removing in the background (outcome \"removing\"). Owner only.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "add",
+              "remove"
+            ],
+            "description": "add = load the sample set, remove = delete it again"
+          },
+          "packKey": {
+            "description": "Only for add: which sample set; absent = the set that fits this organization",
+            "type": "string",
+            "enum": [
+              "general",
+              "school",
+              "construction",
+              "club",
+              "publicSector",
+              "trades",
+              "office",
+              "industry",
+              "fireService"
+            ]
+          }
+        },
+        "required": [
+          "action"
+        ]
+      }
+    },
+    {
+      "name": "update_item",
+      "description": "Update an inventory item: rename it, edit the description (null clears it), and set custom field values (keys = fieldDefId from get_item_requirements; null clears a value). Unchanged values are skipped, and every real change lands in the item's activity timeline under the connected user's name. If the edit would clear required values the call returns { missingFields } and changes nothing. Items that belong to a model cannot be renamed here (the model owns the name). Other tools change the rest: set_item_status the status, assign_item location and holder, adjust_stock and transfer_stock stock amounts; the category changes in the app only. Requires the manager role. Idempotent.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "itemId": {
+            "type": "string",
+            "description": "Item id"
+          },
+          "name": {
+            "description": "New item name",
+            "type": "string"
+          },
+          "description": {
+            "description": "New description, or null to clear",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "customFields": {
+            "description": "Field values keyed by fieldDefId (from get_item_requirements); null clears a value. Dates as a plain calendar day \"YYYY-MM-DD\" (a full timestamp works too, but only WITH an explicit offset — this server has no timezone and does no conversion), selects as one of the listed options, multiselect as an ARRAY of option strings, currency as a plain number in the field's own currency (see its currencyCode; default CHF), url as a full http(s) link (protocol added when missing).",
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          }
+        },
+        "required": [
+          "itemId"
+        ]
+      }
+    },
+    {
+      "name": "my_tasks",
+      "description": "Everything on the connected user's plate right now (\"what's on my plate?\", \"what should I do today?\"). One merged list, exactly what the app's My-tasks page shows: tickets assigned to them or their teams, orders they should fulfill, stocktaking rooms to count, low-stock restock signals, maintenance-run batches (one row per plan with openCount) and pending setup handovers. section \"mine\" = theirs to act on; section \"team\" = a teammate took team work over (holder says who). In section \"mine\" the maintenance row REPLACES the plan's individual run tickets: they are not in this list, because the plan is what a person acts on, and the per-check rows behind openCount are not returned. In section \"team\", run tickets a teammate took over stay individual rows, because the holder is per ticket. Rows carry the ids follow-up calls take (ticketId, orderId, planId, sessionId, ...) and a title where the task has one. Dates come twice, epoch and ISO twin: `dueAtIso` is a plain calendar day, `sinceIso` the UTC instant the work started waiting (`sinceMs` is a moment, not a duration); the server does no timezone conversion. An empty list means nothing is on their plate.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {}
+      }
+    },
+    {
+      "name": "maintenance_status",
+      "description": "Maintenance status: \"what maintenance is due?\" (overdue / this month / next quarter). Without arguments: the organization overview with counts (overdue, dueSoon, blocked), one card per maintenance plan in `plans` (name, assignee, matchedCount / overdueCount / dueSoonCount / openTicketCount), the due list for the next ~90 days sorted soonest first (each row names its plan, its item and, when a run ticket exists, its ticketId) and the blocked rows. A maintenance plan holds its checks together and is the level a person acts on, so the plan cards summarize what the due list details per item. Every plan has exactly ONE default assignee (a person or a team), so all its checks land on the same target by design. With itemId: that item's maintenance plans with last completed, next due and open ticket. Every date comes twice, epoch and ISO twin: `nextDueAtIso`, `openTicketDueAtIso` and the due list's `dueAtIso` are plain calendar days, `lastCompletedAtIso` is a UTC instant; the server does no timezone conversion. Read-only report: recording a check as done (walking its checklist) and creating or editing plans happen in the app only.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "itemId": {
+            "description": "Item id: returns that item's plan rows instead of the org overview",
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "add_comment",
+      "description": "Leave a comment on exactly ONE of an item, a ticket or an order: exactly one of itemId / ticketId / orderId plus the text (\"note on the beamer: lamp flickers\"). The comment appears in that record's activity timeline under the connected user's name, marked \"(via AI agent)\", and notifies the people involved (item holder and responsible person, ticket reporter and assignee, order participants). Order comments require being an order participant (requester, assignee or an order manager). Plain text only: @-mentions are not supported. list_comments reads the thread back with the same one target id. Not idempotent: a repeated call posts a second comment.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "itemId": {
+            "description": "Item id (exactly one target)",
+            "type": "string"
+          },
+          "ticketId": {
+            "description": "Ticket id (exactly one target)",
+            "type": "string"
+          },
+          "orderId": {
+            "description": "Order id (exactly one target)",
+            "type": "string"
+          },
+          "text": {
+            "type": "string",
+            "description": "The comment text (plain text)"
+          }
+        },
+        "required": [
+          "text"
+        ]
+      }
+    },
+    {
+      "name": "list_comments",
+      "description": "Read the comments on exactly ONE of an item, a ticket or an order (the same one-target shape add_comment takes). Newest first, capped at 50 (`truncated` says the cap was hit). Each comment carries `authorName`, the `text`, `createdAt` with its UTC ISO twin `createdAtIso` (the server does no timezone conversion), and `editedAt` when it was changed after posting. `viaAgent: true` marks a comment an AI agent wrote on that person's behalf, including comments written through this connection; without it the person typed it themselves. The comments are the ones the connected user sees in the app: order comments require being an order participant (requester, assignee or an order manager).",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "itemId": {
+            "description": "Item id (exactly one target)",
+            "type": "string"
+          },
+          "ticketId": {
+            "description": "Ticket id (exactly one target), from list_tickets",
+            "type": "string"
+          },
+          "orderId": {
+            "description": "Order id (exactly one target), from list_orders",
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "list_activity",
+      "description": "The organization's audit trail: \"what changed on this item?\", \"what did somebody do last week?\", \"who moved this and when?\". Newest first, one merged feed over item, ticket and order events: assignments, moves, status and category changes, renames, quantity adjustments and stock moves, pack/unpack, code attach/detach, custom-field edits, ticket transitions and checklist results, order transitions. Filters: `itemId` (that one item's history), `actorUserId` (one person; ids from list_members), `sources` ([\"items\"], [\"tickets\"], [\"orders\"]), `types` (item event types) and a date window: `since` / `until` as calendar days (\"2026-08-01\"), `until` included. The server has no timezone and does no conversion; the legacy `dateFrom` / `dateTo` epochs still work, exactly one of each pair. Each row is one flat sentence: `atIso` when, `actorName` who (`viaAgent: true` = done through an AI agent), `type` what happened, `subject` what it happened to, `field` which attribute (the org's own label for a custom field), `from` / `to` the two ends of the change, `amount` where a number moved, and `webUrl`, the record's page in the web app. A row with `featureLocked: true` belongs to a module the organization's plan does not include (maintenance, orders): it is kept because history is a record, and it has no `webUrl`, since there is nothing to open. `limit` is 20 by default, max 50; `nextCursor` pages further back. The filters run after a page is cut, so a filtered page can be EMPTY while `isDone` is false: that page held no match, and older pages may; `isDone: true` means nothing older is left. Requires the manager role.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "itemId": {
+            "description": "Only this item's history (implies sources: [\"items\"])",
+            "type": "string"
+          },
+          "actorUserId": {
+            "description": "Only this person's actions: the userId from list_members",
+            "type": "string"
+          },
+          "sources": {
+            "description": "Which records to read events from; absent = all three",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "items",
+                "tickets",
+                "orders"
+              ]
+            }
+          },
+          "types": {
+            "description": "Only these ITEM event types — e.g. [\"assigned\", \"moved\", \"status_changed\", \"quantity_adjusted\", \"custom_field_changed\"]. An unknown value returns an error naming the whole valid set. Does not filter ticket or order rows",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "since": {
+            "description": "Only events from this calendar day onward, \"YYYY-MM-DD\". The server has no timezone and does no conversion",
+            "type": "string"
+          },
+          "until": {
+            "description": "Only events up to and INCLUDING this calendar day, \"YYYY-MM-DD\"",
+            "type": "string"
+          },
+          "dateFrom": {
+            "description": "Lower bound as epoch milliseconds (legacy form of `since`; exactly one of the two)",
+            "type": "number"
+          },
+          "dateTo": {
+            "description": "Upper bound as epoch milliseconds (legacy form of `until`; exactly one of the two)",
+            "type": "number"
+          },
+          "limit": {
+            "description": "Rows per page, default 20, max 50",
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "cursor": {
+            "description": "The `nextCursor` of a previous call; pages further back in time",
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "adjust_stock",
+      "description": "Correct a quantity-tracked item's stock at ONE location: \"we used up 12 batteries\", \"50 arrived\", \"recounted: there are 7\". Exactly one of delta (relative: negative = used up, positive = received) or setTo (absolute recount). kind states the intent (usage | receipt | correction; inferred from the argument shape when absent); reason is a short note for the activity timeline. A negative delta past the location's unreserved stock is rejected (the error names the amounts); a setTo recount always records the count, even below reservations. A restock task opens automatically when a location's AVAILABLE stock (on hand minus what active orders reserved) drops below its threshold, so a location can be low with a full shelf. The result returns every stocked level as distribution: { locationId, name, kind: location|person, quantity, available, reserved?, minStock?, isLow? }, the same row shape check_item_availability returns, so isLow shows whether this adjustment took the location under its threshold. transfer_stock moves stock between locations; serialized items change through assign_item and set_item_status. Requires the manager role. Not idempotent: a repeated delta applies twice (a repeated setTo does not change the count again).",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "itemId": {
+            "type": "string",
+            "description": "Item id (must be a quantity-tracked item)"
+          },
+          "locationId": {
+            "type": "string",
+            "description": "Location (or stock-holding person) resource id, from search_resources or check_item_availability's distribution"
+          },
+          "delta": {
+            "description": "Relative change: negative = used up, positive = received (exactly one of delta/setTo)",
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "setTo": {
+            "description": "Absolute recount — the new quantity at this location",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "kind": {
+            "description": "Intent for the activity timeline; inferred from the argument shape when absent",
+            "type": "string",
+            "enum": [
+              "usage",
+              "receipt",
+              "correction"
+            ]
+          },
+          "reason": {
+            "description": "Short reason, shown in the item's activity timeline",
+            "type": "string"
+          }
+        },
+        "required": [
+          "itemId",
+          "locationId"
+        ]
+      }
+    },
+    {
+      "name": "set_min_stock",
+      "description": "Set or clear the restock threshold (minimum stock) for a quantity-tracked item at ONE location: \"alert us when Room 201 drops below 5\". Thresholds are per item PER LOCATION, so locationId is required alongside itemId: every row of check_item_availability's distribution carries the locationId of a level that stocks the item, and search_resources (type: \"location\") returns the id of a location that does not stock it yet. minStock is a number, or null to clear the threshold. \"Low\" is measured against AVAILABLE stock, the shelf count MINUS what active orders reserved: 14 on hand with 10 reserved against a threshold of 5 IS low (4 available); check_item_availability reports that verdict per level as isLow. While the location is low a restock task is open for the order handlers; raising, lowering or clearing the threshold re-evaluates it immediately. Person-held stock cannot carry a threshold. Requires the manager role. Idempotent: the same value again changes nothing.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "itemId": {
+            "type": "string",
+            "description": "Item id (must be a quantity-tracked item)"
+          },
+          "locationId": {
+            "type": "string",
+            "description": "Location resource id, from check_item_availability's distribution or search_resources"
+          },
+          "minStock": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The threshold, or null to clear it"
+          }
+        },
+        "required": [
+          "itemId",
+          "locationId",
+          "minStock"
+        ]
+      }
+    },
+    {
+      "name": "create_team",
+      "description": "Create an assignment team: a named group of members that tickets and orders can be assigned to (\"create a facilities team\"). Team members see assigned team work in their tasks; the first to act takes it over. add_team_member adds members (userIds from list_members). Admin only. Not idempotent: a repeated call creates a same-name twin.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Team name"
+          }
+        },
+        "required": [
+          "name"
+        ]
+      }
+    },
+    {
+      "name": "add_team_member",
+      "description": "Add an organization member to a team. userId is the member's userId from list_members, NOT a person-resource id from search_resources; teamId comes from list_teams or create_team. Idempotent: re-adding an existing member changes nothing. A full team is refused with teamMemberCap, which carries the cap. Admin only.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "teamId": {
+            "type": "string",
+            "description": "Team id (from list_teams or create_team)"
+          },
+          "userId": {
+            "type": "string",
+            "description": "Member userId (from list_members)"
+          }
+        },
+        "required": [
+          "teamId",
+          "userId"
+        ]
+      }
+    },
+    {
+      "name": "list_teams",
+      "description": "The organization's teams with member counts: each team's `name` and its `id`, the teamId add_team_member takes (\"which teams do we have?\"). Any member may read; team membership details are on the app's Members page.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {}
+      }
+    },
+    {
+      "name": "get_setup_template",
+      "description": "Starting templates for setting up an organization's inventory: per kind of organization a category tree with custom field definitions, typical locations, quantity-tracked consumable examples, naming conventions and the questions that shape a setup. Without arguments: the template catalog (id, title, org-type fit, summary). With templateId: the full template, whose structured slices match the scaffold_categories / scaffold_locations inputs, with names as {en, de, fr, es, it} records. Pure product data: it reads nothing from the organization and writes nothing.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "templateId": {
+            "description": "Template id from the catalog (absent = the catalog of all templates)",
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "plan_import",
+      "description": "Dry-run an import of a whole list with the product's own importer (the same one the app's import screen uses); it writes NOTHING. Arguments: the data rows (cells as strings, header row left out) and one `columns` entry per cell position with its target: name, description, category, homeLocation, currentLocation, responsiblePerson, currentHolder, blueprintName (an item model, by name), container (the item this row's item sits in: a vehicle, case or cart, named by the name or code of ANOTHER ROW of this file or of an existing item; a vehicle is an item with its own row, never a location), compartment (its compartment, e.g. «GR1», «Fahrerhaus»; created on the container when missing), code (a printed code or serial, the lasting way to tell identical pieces apart), quantity / minStock (stock items), trackingMode (quantity, menge, stückzahl, stueckzahl, bestand, pool (stock: a count of identical pieces) or serialized, serialisiert, einzeln, einzelstück, einzelstueck, unit (single pieces); a quantity or minStock value alone already makes a stock item), status, a fieldDefId from get_item_requirements or \"field:<label>\"; null skips a column. Categories and locations are matched by name, paths split by `separator` (\"Fahrzeuge/Anhänger\"); a name that matches nothing is listed under toCreate and would be created by the import itself (a typo shows up there too). scaffold_categories creates categories and typed fields beforehand, scaffold_models item models. Dates as \"YYYY-MM-DD\" or \"DD.MM.YYYY\" only: other forms are dropped (see problems). Rows without a code are matched to existing items BY NAME, so every code-less name must be unique in the file, one stock article in several places aside (e.g. «Helm TLF», «Helm KLF» for two helmets). Single items are packed into their container; a stock row's count goes into it. One stock article in several places: one row per place, all with the SAME name (and the same code, if it has one), each with its own container, compartment and count; at most one of them without a container, whose count is the stock at the item's home. They become ONE stock item: the dry run shows the row without a container (else the first) as create and the others as place, and lists each article's places and total under stockGroups. Identical single pieces are not grouped: each needs its own name or code. The result says per row what would be created, updated or skipped, every value that would be dropped and why, what would be placed in which container and compartment and which compartments would be created, blockers that must be fixed first, columns the organization's plan cannot import, and whether the import lands past the plan's item allowance (allowed once: after that no published item can be added until the organization upgrades). It returns a planHash, which run_import takes with the same arguments. At most 1000 rows per call; the app's import screen takes longer lists as a CSV file. entity \"persons\" or \"locations\" imports people or places instead (targets: name, parentPath, email). Any member can plan; running needs the manager role.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "fileName": {
+            "type": "string",
+            "description": "The source file's name (shown in the app's import history), e.g. Inventar 2024.xlsx"
+          },
+          "entity": {
+            "description": "What the rows are: \"items\" (default), \"persons\" (people) or \"locations\" (places)",
+            "type": "string",
+            "enum": [
+              "items",
+              "persons",
+              "locations"
+            ]
+          },
+          "columns": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "header": {
+                  "type": "string",
+                  "description": "The column's header as in the file"
+                },
+                "target": {
+                  "description": "Import target (see the tool description), a field definition id, \"field:<label>\", or null to skip the column",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "header",
+                "target"
+              ]
+            },
+            "description": "One entry per cell position of a row, in the same order"
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "description": "The data rows of the source file, cells as strings, header row left out. At most 1000 rows per call"
+          },
+          "keepOrder": {
+            "description": "Items are imported last row first by default, so the file's first row is the newest item and the app's list opens on it; true keeps the file order",
+            "type": "boolean"
+          },
+          "separator": {
+            "description": "Path separator in category and location cells (default \"/\": \"Fahrzeuge/Anhänger\")",
+            "type": "string"
+          }
+        },
+        "required": [
+          "fileName",
+          "columns",
+          "rows"
+        ]
+      }
+    },
+    {
+      "name": "run_import",
+      "description": "Run an import: the SAME arguments as plan_import, plus its planHash and a clientRequestId (e.g. a UUID). Everything lands in ONE import batch. If anything changed since the plan (the rows, or the organization now answers differently) it returns planChanged with the new outcome and writes nothing. A large list can return done: false; the same call with the same arguments and clientRequestId continues where it stopped and never duplicates. clientRequestId identifies the batch: the same id continues it, a new id starts a new batch (still checked against planHash). With a container column, the answer repeats the placements and the stock groups. Every created item's history shows the connected user's name with \"(via AI agent)\"; the import appears in the app's import history (webUrl), where it can be undone. Requires the manager role.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "fileName": {
+            "type": "string",
+            "description": "The source file's name (shown in the app's import history), e.g. Inventar 2024.xlsx"
+          },
+          "entity": {
+            "description": "What the rows are: \"items\" (default), \"persons\" (people) or \"locations\" (places)",
+            "type": "string",
+            "enum": [
+              "items",
+              "persons",
+              "locations"
+            ]
+          },
+          "columns": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "header": {
+                  "type": "string",
+                  "description": "The column's header as in the file"
+                },
+                "target": {
+                  "description": "Import target (see the tool description), a field definition id, \"field:<label>\", or null to skip the column",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "header",
+                "target"
+              ]
+            },
+            "description": "One entry per cell position of a row, in the same order"
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "description": "The data rows of the source file, cells as strings, header row left out. At most 1000 rows per call"
+          },
+          "keepOrder": {
+            "description": "Items are imported last row first by default, so the file's first row is the newest item and the app's list opens on it; true keeps the file order",
+            "type": "boolean"
+          },
+          "separator": {
+            "description": "Path separator in category and location cells (default \"/\": \"Fahrzeuge/Anhänger\")",
+            "type": "string"
+          },
+          "planHash": {
+            "type": "string",
+            "description": "The planHash plan_import returned for these arguments"
+          },
+          "clientRequestId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "One id per import batch (e.g. a UUID); the same id continues a run that answered done: false"
+          }
+        },
+        "required": [
+          "fileName",
+          "columns",
+          "rows",
+          "planHash",
+          "clientRequestId"
+        ]
+      }
+    },
+    {
+      "name": "check_fit",
+      "description": "Whether Mango Inventory fits an organization. Works without an account. Takes what is known: the kind of organization, about how many items and people, the needs as keys from the list, and other needs as free text. The answer says what is covered (each with its help page), what is not built and what exists instead, notes about size, the monthly price of the plan that covers the needs when itemCount is given, and the next step.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "orgType": {
+            "description": "school, company, publicAdmin (public administration), publicWorks (public works, utilities, fire brigades), club, or other.",
+            "type": "string",
+            "enum": [
+              "school",
+              "company",
+              "publicAdmin",
+              "publicWorks",
+              "club",
+              "other"
+            ]
+          },
+          "itemCount": {
+            "description": "About how many things they want to track. Each piece counts once; a stock of identical consumables tracked as a quantity counts as one item.",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10000000
+          },
+          "people": {
+            "description": "About how many people will use it or hold items.",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10000000
+          },
+          "needs": {
+            "maxItems": 60,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "items_fields",
+                "item_models",
+                "qr_labels_scanning",
+                "checkout_return",
+                "people_places",
+                "containers",
+                "kit_lists",
+                "quantities_stock",
+                "orders_reservations",
+                "defects_tickets",
+                "maintenance_inspections",
+                "stocktaking",
+                "history",
+                "receipt_confirmation",
+                "import_export",
+                "single_sign_on",
+                "directory_sync",
+                "roles_permissions",
+                "mobile_app",
+                "notifications",
+                "languages",
+                "ai_assistant",
+                "offline",
+                "gps_tracking",
+                "erp_accounting_sync",
+                "signatures",
+                "wash_cycles",
+                "key_cabinet",
+                "selling_goods"
+              ]
+            },
+            "description": "The needs, as keys from this list (keys of things that are not built are valid; the answer says which are not): items_fields = Items with categories and their own fields; item_models = Item models: many pieces of one article, with sizes or variants; qr_labels_scanning = Printable QR labels and scanning with the phone; checkout_return = Check-out and return to people, places or teams; people_places = People, rooms, buildings, sites and teams; containers = Containers: vehicles, cases, carts and their contents; kit_lists = Kit lists: what belongs in a vehicle, case or bag; quantities_stock = Consumables and stock counted in quantities, with minimum levels; orders_reservations = Orders and reservations: people request items, someone hands them out; defects_tickets = Defect reports and tickets; maintenance_inspections = Maintenance and safety inspections on a schedule, with checklists; stocktaking = Stocktaking: counting everything by scan; history = History: who had what, and when; receipt_confirmation = Receipt confirmation: the person confirms they received an item; import_export = Import from Excel or CSV, export to Excel, CSV or a ZIP; single_sign_on = Single sign-on with Microsoft or Google; directory_sync = Directory sync: people and groups from Microsoft Entra or Google Workspace; roles_permissions = Fine-grained roles and field visibility for larger teams; mobile_app = An app for the phone; notifications = Notifications by email and on the phone; languages = The app in German, English, French, Italian or Spanish; ai_assistant = Working through an AI assistant (ChatGPT, Claude, Copilot or another MCP client); offline = Working without an internet connection; gps_tracking = GPS or live location tracking; erp_accounting_sync = A link to an ERP, accounting or other business system; signatures = Signatures on hand-over; wash_cycles = Counting wash cycles of textiles; key_cabinet = Key management with a key cabinet or locking plan; selling_goods = Stock of goods you sell: a shop, sales or invoicing."
+          },
+          "otherNeeds": {
+            "description": "Needs that fit no key, in the user's words, without names: up to 5, each up to 200 characters. The team reads them.",
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 4000
+            }
+          },
+          "language": {
+            "description": "Language of the help-page links: en (default), de, fr, it or es.",
+            "type": "string",
+            "enum": [
+              "en",
+              "de",
+              "fr",
+              "it",
+              "es"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "quote",
+      "description": "The price of Mango Inventory. Works without an account. Takes how many items will be tracked and, optionally, the needs (the same keys as check_fit) and a currency. The answer names the plan that covers the needs, its monthly price for that many items, what the next plan adds, and whether the inventory fits the 50 items that are free to try. The server computes every number from the current price list.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "itemCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10000000,
+            "description": "How many things they want to track. Each piece counts once; a stock of identical consumables tracked as a quantity counts as one item."
+          },
+          "needs": {
+            "maxItems": 60,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "items_fields",
+                "item_models",
+                "qr_labels_scanning",
+                "checkout_return",
+                "people_places",
+                "containers",
+                "kit_lists",
+                "quantities_stock",
+                "orders_reservations",
+                "defects_tickets",
+                "maintenance_inspections",
+                "stocktaking",
+                "history",
+                "receipt_confirmation",
+                "import_export",
+                "single_sign_on",
+                "directory_sync",
+                "roles_permissions",
+                "mobile_app",
+                "notifications",
+                "languages",
+                "ai_assistant",
+                "offline",
+                "gps_tracking",
+                "erp_accounting_sync",
+                "signatures",
+                "wash_cycles",
+                "key_cabinet",
+                "selling_goods"
+              ]
+            },
+            "description": "The needs, as keys from this list (keys of things that are not built are valid; the answer says which are not): items_fields = Items with categories and their own fields; item_models = Item models: many pieces of one article, with sizes or variants; qr_labels_scanning = Printable QR labels and scanning with the phone; checkout_return = Check-out and return to people, places or teams; people_places = People, rooms, buildings, sites and teams; containers = Containers: vehicles, cases, carts and their contents; kit_lists = Kit lists: what belongs in a vehicle, case or bag; quantities_stock = Consumables and stock counted in quantities, with minimum levels; orders_reservations = Orders and reservations: people request items, someone hands them out; defects_tickets = Defect reports and tickets; maintenance_inspections = Maintenance and safety inspections on a schedule, with checklists; stocktaking = Stocktaking: counting everything by scan; history = History: who had what, and when; receipt_confirmation = Receipt confirmation: the person confirms they received an item; import_export = Import from Excel or CSV, export to Excel, CSV or a ZIP; single_sign_on = Single sign-on with Microsoft or Google; directory_sync = Directory sync: people and groups from Microsoft Entra or Google Workspace; roles_permissions = Fine-grained roles and field visibility for larger teams; mobile_app = An app for the phone; notifications = Notifications by email and on the phone; languages = The app in German, English, French, Italian or Spanish; ai_assistant = Working through an AI assistant (ChatGPT, Claude, Copilot or another MCP client); offline = Working without an internet connection; gps_tracking = GPS or live location tracking; erp_accounting_sync = A link to an ERP, accounting or other business system; signatures = Signatures on hand-over; wash_cycles = Counting wash cycles of textiles; key_cabinet = Key management with a key cabinet or locking plan; selling_goods = Stock of goods you sell: a shop, sales or invoicing."
+          },
+          "currency": {
+            "description": "chf (default), eur, gbp or usd. The four have the same numbers.",
+            "type": "string",
+            "enum": [
+              "chf",
+              "eur",
+              "gbp",
+              "usd"
+            ]
+          }
+        },
+        "required": [
+          "itemCount"
+        ]
+      }
+    },
+    {
+      "name": "find_docs",
+      "description": "Find the Mango Inventory help pages that answer a question. Works without an account. Takes the question in a few words (in any of the help languages or in English) and the language for the links. Returns up to five help pages with the section that matched.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "question": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300,
+            "description": "The question in a few words, e.g. \"vans with their equipment\" or \"safety inspections\". Up to 300 characters."
+          },
+          "language": {
+            "description": "Language of the help-page links: en (default), de, fr, it or es.",
+            "type": "string",
+            "enum": [
+              "en",
+              "de",
+              "fr",
+              "it",
+              "es"
+            ]
+          }
+        },
+        "required": [
+          "question"
+        ]
+      }
+    },
+    {
+      "name": "tell_us",
+      "description": "Pass a message to the Mango Inventory team: what a visitor came for, or what is missing. Works without an account; signed-in connections have send_feedback. Takes the need in a few words, what was missing, the outcome and, with source \"user\", the user's own words. The text is stored for the team as written, with Mango Inventory keys and tokens redacted and control characters stripped; over the public rate limits a message is answered as received but not stored. Answers { received: true } with a short note. Not idempotent: each call is a new message.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "lookingFor": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4000,
+            "description": "What the user was looking for, paraphrased, without names. Up to 300 characters."
+          },
+          "missing": {
+            "description": "What was missing or unclear for them. Up to 1000 characters.",
+            "type": "string",
+            "maxLength": 4000
+          },
+          "outcome": {
+            "description": "foundIt = Mango Inventory covers it; partly = some of it; notHere = it does not.",
+            "type": "string",
+            "enum": [
+              "foundIt",
+              "partly",
+              "notHere"
+            ]
+          },
+          "source": {
+            "description": "agent (default) = the agent's own summary; user = the user asked for it to be passed on.",
+            "type": "string",
+            "enum": [
+              "agent",
+              "user"
+            ]
+          },
+          "userWords": {
+            "description": "Only with source \"user\": their words, without names. Up to 300 characters.",
+            "type": "string",
+            "maxLength": 4000
+          },
+          "model": {
+            "description": "The AI model sending it, if known. Up to 80 characters.",
+            "type": "string",
+            "maxLength": 4000
+          }
+        },
+        "required": [
+          "lookingFor"
+        ]
+      }
+    },
+    {
+      "name": "create_account",
+      "description": "Create a Mango Inventory account in the user's name. Works without an account. Needs the user's name, email address and organization name; language, organization type and currency are optional. Mango Inventory sends ONE email to the address; its button confirms the address and signs the user in. The call returns no password, key or link. Once the address is confirmed, any account tool (for example get_setup_status) brings up the client's normal sign-in step (in Claude Code: /mcp), and after it every tool works. Until the button is pressed nothing can be done in the account, and an account that is never confirmed does nothing. The answer is the same whether or not the address already had an account; a refusal names its reason (invalid or disposable address, a domain that receives no mail, an invalid name, a rate limit). Idempotent: a repeat for the same address creates no second account. On a signed-in connection it answers signedIn and creates nothing.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "email": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 254,
+            "description": "The user's email address, as given."
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4000,
+            "description": "The user's name, as given. Up to 100 characters."
+          },
+          "orgName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4000,
+            "description": "The organization's name, as given. Up to 100 characters."
+          },
+          "language": {
+            "description": "Their language for the email and the app: en (default), de, fr, it or es.",
+            "type": "string",
+            "enum": [
+              "en",
+              "de",
+              "fr",
+              "it",
+              "es"
+            ]
+          },
+          "orgType": {
+            "description": "The kind of organization, if known (as in check_fit).",
+            "type": "string",
+            "enum": [
+              "school",
+              "company",
+              "publicAdmin",
+              "publicWorks",
+              "club",
+              "other"
+            ]
+          },
+          "currency": {
+            "description": "Their currency, if known: chf (default), eur, gbp or usd.",
+            "type": "string",
+            "enum": [
+              "chf",
+              "eur",
+              "gbp",
+              "usd"
+            ]
+          }
+        },
+        "required": [
+          "email",
+          "name",
+          "orgName"
+        ]
+      }
+    },
+    {
+      "name": "send_feedback",
+      "description": "Send a report about these tools to the Mango Inventory team, who read the stored reports to fix the tools: a tool that failed unexpectedly, an answer or error that made no sense, something the user needed that no tool offers, a workaround that was needed, or a message the user asked to pass on (source \"user\", their words in userWords). The report is stored and, within daily mail caps, emailed to the team as written, with Mango Inventory keys, tokens and bearer headers redacted and control characters stripped. Over 5 reports an hour or 20 a day per credential (40 a day per organization) a report is answered as received but not stored (`throttled: true`). A field over its stated length is cut (`shortened`); only a field over 4,000 characters is refused. Not idempotent: each call is a new report. Works on read-only connections; it changes none of the organization's data.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "summary": {
+            "type": "string",
+            "maxLength": 4000,
+            "description": "One sentence: what did not work. Up to 200 characters."
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "missing",
+              "broken",
+              "confusing",
+              "idea"
+            ],
+            "description": "missing = a capability the user needed does not exist; broken = a tool failed or gave a wrong result; confusing = a description, answer or error was misleading; idea = a suggestion."
+          },
+          "impact": {
+            "type": "string",
+            "enum": [
+              "blocked",
+              "worked_around",
+              "friction",
+              "none"
+            ],
+            "description": "What it did to the task: blocked = it could not be done; worked_around = done another way; friction = done, but harder than it should be; none = no effect (an idea)."
+          },
+          "goal": {
+            "type": "string",
+            "maxLength": 4000,
+            "description": "What the user wanted, paraphrased, without names. Up to 300 characters."
+          },
+          "tool": {
+            "type": "string",
+            "maxLength": 4000,
+            "description": "The tool involved, e.g. run_import. Up to 60 characters."
+          },
+          "whatHappened": {
+            "type": "string",
+            "maxLength": 4000,
+            "description": "The error text, what was expected and what came back. Up to 1000 characters."
+          },
+          "workaround": {
+            "type": "string",
+            "maxLength": 4000,
+            "description": "What was done instead, if anything. Up to 500 characters."
+          },
+          "suggestion": {
+            "type": "string",
+            "maxLength": 4000,
+            "description": "What would have made it easy. Up to 500 characters."
+          },
+          "source": {
+            "description": "agent (default) = the agent noticed it; user = the user asked for it to be passed on.",
+            "type": "string",
+            "enum": [
+              "agent",
+              "user"
+            ]
+          },
+          "userWords": {
+            "type": "string",
+            "maxLength": 4000,
+            "description": "Only with source \"user\": their words, without names. Up to 300 characters."
+          },
+          "model": {
+            "type": "string",
+            "maxLength": 4000,
+            "description": "The AI model sending the report, if known. Up to 80 characters."
+          }
+        },
+        "required": [
+          "summary",
+          "kind",
+          "impact",
+          "goal"
+        ]
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "com.mangoinventory/mango-inventory",
+    "version": "1.0.2",
+    "remoteUrl": "https://mcp.mangoinventory.com/mcp",
+    "publishedAt": "2026-11-19T20:16:05.717388Z",
+    "fetchedAt": "2026-11-25T11:03:46.215Z",
+    "toolsSha256": "c933791bdc4b10382a6faa7ae3c9035077ecf097259db616b1f5395b9ff8cd84"
+  }
+}

@@ -1,0 +1,812 @@
+{
+  "$schema": "../schema.json",
+  "name": "fr.francestack/tax-payroll",
+  "title": "FranceStack Tax & Payroll",
+  "category": "Other",
+  "description": "French tax, salary, URSSAF, severance, unemployment benefit; free questions if info missing (x402)",
+  "tools": [
+    {
+      "name": "list_france_calculators",
+      "description": "Free. Lists every available French tax and payroll calculator with its MCP tool name, price, input schema, example input, real example output and unsupported cases. Call it first if you are unsure which tool fits the user’s question.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "france_income_tax",
+      "description": "Computes French personal income tax (impôt sur le revenu, IR) for a tax household: number of tax shares (parts, quotient familial), gross tax on the official DGFiP progressive scale, family-quotient cap (including the single-parent case T cap), décote, net tax payable, average rate and marginal rate (TMI). Income years 2024, 2025. Input: household net taxable income, or declared salaries (the 10% deduction is applied). Use when a user asks how much French income tax a household pays, its marginal tax bracket (TMI), its number of tax shares, or the effect of marriage or children on the tax. Deterministic code, no LLM, exact decimal arithmetic. Matches all 7,095 values of the official DGFiP tax tables (brochure pratique 2025 and 2026) to the euro, and 15 cases checked on the official impots.gouv.fr simulator. Not supported (refused for free with HTTP 422): non-residents, overseas departments, alternating-custody children, extra half-shares (disability, veterans, box L), exceptional income taxed with the quotient system, tax credits and reductions, incomes above the high-income contribution thresholds (CEHR/CDHR). Price: 0.005 USDC per successful call, paid with x402 over MCP. Missing or invalid fields are reported for free with the questions to ask the user; you never pay for an error. Returns JSON (also in structuredContent): calculateur, resultat, detail (step by step), hypotheses, bareme (version, effective date, sources), estimation_indicative, avertissement, lien_verification. Full output schema and a real example: list_france_calculators.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "annee_revenus": {
+            "description": "Income year (année des revenus), e.g. 2025 for the return filed in 2026. Supported: 2024, 2025.",
+            "type": "integer",
+            "minimum": 2000,
+            "maximum": 2100
+          },
+          "situation_familiale": {
+            "description": "Marital status on 31 December of the income year: celibataire (single), divorce_separe (divorced or separated), marie_pacse (married or civil partnership, joint return), veuf (widowed).",
+            "type": "string",
+            "enum": [
+              "celibataire",
+              "divorce_separe",
+              "marie_pacse",
+              "veuf"
+            ]
+          },
+          "enfants_a_charge": {
+            "description": "Number of dependent children fully or mainly in the household (minors, or adult children attached to the tax household). Do not count alternating-custody children.",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 20
+          },
+          "parent_isole": {
+            "description": "Required if single or divorced with at least one child: true if the parent lives alone with the children, without a partner (box T, parent isolé).",
+            "type": "boolean"
+          },
+          "revenu_net_imposable": {
+            "description": "Household net taxable income in EUR (revenu net imposable, after all allowances, as shown on the tax notice). Give either this field or salaires_declares.",
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100000000
+          },
+          "salaires_declares": {
+            "description": "Alternative to revenu_net_imposable: net taxable salaries declared by each filer in EUR, before the 10% standard deduction (one value, or two for a married/PACS couple). Salaries only; for other income use revenu_net_imposable.",
+            "minItems": 1,
+            "maxItems": 2,
+            "type": "array",
+            "items": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 100000000
+            }
+          },
+          "nombre_declarants_65_ans_ou_plus": {
+            "description": "Required with salaires_declares: number of filers aged 65 or over on 31 December of the income year (0, 1 or 2), for the elderly allowance.",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2
+          },
+          "cas_particuliers": {
+            "description": "Required. Special situations that apply, or [] if none: enfant_residence_alternee (alternating custody), invalidite_ou_ancien_combattant (disability or veteran card), personne_invalide_a_charge (disabled dependant), case_L (lived alone and raised a child alone 5+ years), enfant_majeur_marie_ou_charge_de_famille (attached married adult child), deces_conjoint_dans_annee (spouse died during the year), domicile_outre_mer (overseas department), non_resident, revenus_exceptionnels_ou_differes (exceptional or deferred income). Any listed situation is refused for free (HTTP 422).",
+            "maxItems": 9,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "enfant_residence_alternee",
+                "invalidite_ou_ancien_combattant",
+                "personne_invalide_a_charge",
+                "case_L",
+                "enfant_majeur_marie_ou_charge_de_famille",
+                "deces_conjoint_dans_annee",
+                "domicile_outre_mer",
+                "non_resident",
+                "revenus_exceptionnels_ou_differes"
+              ]
+            }
+          },
+          "nombre_parts_declare": {
+            "description": "Optional cross-check: number of tax shares shown on the tax return or notice. If it differs from the computed number, the request is refused for free (HTTP 422).",
+            "type": "number",
+            "minimum": 1,
+            "maximum": 30,
+            "multipleOf": 0.25
+          }
+        },
+        "required": [
+          "annee_revenus",
+          "situation_familiale",
+          "enfants_a_charge",
+          "cas_particuliers"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "france_micro_entrepreneur_contributions",
+      "description": "What a French micro-entrepreneur (auto-entrepreneur) pays to URSSAF for a month, quarter or year: social contributions (with or without ACRE, by business start date), training contribution (CFP), chamber tax, optional flat-rate income tax (versement libératoire), net income. Years 2025, 2026. Optional: VAT franchise check (franchise en base de TVA, 2026) — must I charge VAT, since when, margin left. Use when a user asks how much URSSAF contributions an auto-entrepreneur owes on a given turnover, what the ACRE reduction changes, how much remains as net income, or whether they must charge VAT (set verifier_franchise_tva = true). Deterministic code, no LLM, exact decimal arithmetic. Cross-checked on 2,000 cases against URSSAF's official engine (modele-social) and on 15 cases from the official URSSAF simulator; VAT franchise checked on the official worked examples of the tax doctrine (BOFiP). Not supported (refused for free with HTTP 422): mixed activities, furnished rentals and holiday lets, overseas departments, Alsace-Moselle craftspeople, lawyers and artist-authors, periods straddling the end of ACRE, ACRE in 2025, minimum-contribution option, exit from the micro regime, VAT check for years other than 2026. CFE and business expenses are not included. Price: 0.005 USDC per successful call, paid with x402 over MCP. Missing or invalid fields are reported for free with the questions to ask the user; you never pay for an error. Returns JSON (also in structuredContent): calculateur, resultat, detail (step by step), hypotheses, bareme (version, effective date, sources), estimation_indicative, avertissement, lien_verification. Full output schema and a real example: list_france_calculators.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "activite": {
+            "description": "Activity category: vente_marchandises_commercant (sale of goods, restaurants, lodging by a trader), vente_marchandises_artisan (resale of goods by a craftsperson), prestations_services_commercant (commercial services, BIC), prestations_services_artisan (craft services, BIC), liberale_non_reglementee (other services or non-regulated liberal profession, BNC), liberale_reglementee_cipav (regulated liberal profession under CIPAV, BNC).",
+            "type": "string",
+            "enum": [
+              "vente_marchandises_commercant",
+              "vente_marchandises_artisan",
+              "prestations_services_commercant",
+              "prestations_services_artisan",
+              "liberale_non_reglementee",
+              "liberale_reglementee_cipav"
+            ]
+          },
+          "chiffre_affaires": {
+            "description": "Turnover excluding VAT actually collected during the period, in EUR (chiffre d’affaires encaissé).",
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10000000
+          },
+          "periode": {
+            "description": "Declaration period: mois (month), trimestre (calendar quarter) or annee (calendar year).",
+            "type": "string",
+            "enum": [
+              "mois",
+              "trimestre",
+              "annee"
+            ]
+          },
+          "annee": {
+            "description": "Calendar year of the period. Supported: 2025, 2026.",
+            "type": "integer",
+            "minimum": 2000,
+            "maximum": 2100
+          },
+          "mois": {
+            "description": "Required if periode = mois: month number 1 to 12.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 12
+          },
+          "trimestre": {
+            "description": "Required if periode = trimestre: calendar quarter 1 to 4.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 4
+          },
+          "date_debut_activite": {
+            "description": "Business start date (YYYY-MM-DD). Determines the ACRE period and the first-year chamber tax exemption.",
+            "type": "string",
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+          },
+          "acre": {
+            "description": "true if the entrepreneur was granted ACRE (reduced contribution rates for business creators).",
+            "type": "boolean"
+          },
+          "versement_liberatoire": {
+            "description": "true if the entrepreneur opted for the flat-rate income tax paid with contributions (versement libératoire).",
+            "type": "boolean"
+          },
+          "chiffre_affaires_n_moins_2_superieur_5000": {
+            "description": "Required for trade and craft activities after the first calendar year: true if turnover two years before was at least EUR 5,000 (otherwise the chamber tax is not due).",
+            "type": "boolean"
+          },
+          "verifier_franchise_tva": {
+            "description": "Optional: true to also check the VAT franchise (franchise en base de TVA): must the entrepreneur charge VAT, since when, margin left before the threshold. 2026 only.",
+            "type": "boolean"
+          },
+          "tva_chiffre_affaires_cumule_annee": {
+            "description": "Required for the VAT check unless periode = annee: turnover excluding VAT collected since 1 January of the year up to today, including the declared period, in EUR.",
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10000000
+          },
+          "tva_chiffre_affaires_annee_precedente": {
+            "description": "Required for the VAT check if the business started before the year: turnover excluding VAT of the previous calendar year, in EUR.",
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10000000
+          },
+          "tva_activite_saisonniere": {
+            "description": "Required for the VAT check if the business started this year or last year: true for a seasonal activity (thresholds are then not prorated).",
+            "type": "boolean"
+          },
+          "cas_particuliers": {
+            "description": "Required. Special situations that apply, or [] if none: activite_mixte (several activity categories), location_meublee (furnished rental, holiday let, B&B), outre_mer (overseas department), alsace_moselle (craftsperson in Alsace or Moselle), double_immatriculation_cci_cma (registered with both CCI and CMA), cotisations_minimales (minimum contributions option), conjoint_collaborateur (collaborating spouse), sortie_regime_micro (turnover ceilings exceeded two years in a row), avocat_ou_artiste_auteur (lawyer or artist-author). Any listed situation is refused for free (HTTP 422).",
+            "maxItems": 9,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "activite_mixte",
+                "location_meublee",
+                "outre_mer",
+                "alsace_moselle",
+                "double_immatriculation_cci_cma",
+                "cotisations_minimales",
+                "conjoint_collaborateur",
+                "sortie_regime_micro",
+                "avocat_ou_artiste_auteur"
+              ]
+            }
+          }
+        },
+        "required": [
+          "activite",
+          "chiffre_affaires",
+          "periode",
+          "annee",
+          "date_debut_activite",
+          "acre",
+          "versement_liberatoire",
+          "cas_particuliers"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "france_gross_to_net_salary",
+      "description": "French private-sector gross-to-net salary (salaire brut → net), mainland France, 2026 rules, CDI or CDD, full-time or part-time (temps partiel): employee contributions, net pay, net taxable pay, optional tax withholding (prélèvement à la source), RGDU reduction, employer cost (executive/cadre contributions included). For a CDD: end-of-contract bonus (prime de précarité), paid-leave indemnity, CPF-CDD, monthly average and contract total. Use when a user asks for the net salary from a gross salary in France (CDI or CDD, full-time or part-time), the total cost of an employee for the employer, the end-of-contract bonus of a fixed-term contract, or the amount of employer and employee social contributions. Deterministic code, no LLM: uses URSSAF's official payroll engine (modele-social). Official 2026 rates re-applied by hand in tests, official RGDU formula and example, and 30 cases checked on the official URSSAF salary simulator (15 full-time CDI, 15 CDD and part-time). Not supported (refused for free with HTTP 422): temporary agency work (intérim), CDD à objet défini, fixed-term contracts ended early, overtime, incomplete months, fixed-days (forfait jours), apprentices and interns, company officers (SAS president), Alsace-Moselle, overseas departments, salaries below the minimum wage (SMIC, prorated for part-time), years other than those listed. Price: 0.005 USDC per successful call, paid with x402 over MCP. Missing or invalid fields are reported for free with the questions to ask the user; you never pay for an error. Returns JSON (also in structuredContent): calculateur, resultat, detail (step by step), hypotheses, bareme (version, effective date, sources), estimation_indicative, avertissement, lien_verification. Full output schema and a real example: list_france_calculators.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "salaire_brut": {
+            "description": "Gross salary in EUR for the period (monthly or annual, see periode), including bonuses paid in the period.",
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "maximum": 1000000
+          },
+          "periode": {
+            "description": "mois (monthly gross salary) or annee (annual gross salary).",
+            "type": "string",
+            "enum": [
+              "mois",
+              "annee"
+            ]
+          },
+          "annee": {
+            "description": "Year. Supported: 2026.",
+            "type": "integer",
+            "minimum": 2000,
+            "maximum": 2100
+          },
+          "mois": {
+            "description": "Required if periode = mois: payroll month 1 to 12.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 12
+          },
+          "type_contrat": {
+            "description": "CDI (permanent contract) or CDD (fixed-term contract). A CDD requires periode = mois and the cdd_* fields.",
+            "type": "string",
+            "enum": [
+              "CDI",
+              "CDD"
+            ]
+          },
+          "temps_partiel_heures_par_semaine": {
+            "description": "Optional: weekly hours for a part-time employee (1 to 34.99). Omit for full-time (35 h). The minimum wage check and the RGDU are prorated.",
+            "type": "number",
+            "minimum": 1,
+            "maximum": 34.99
+          },
+          "cdd_motif": {
+            "description": "Required for a CDD: reason for the fixed-term contract: accroissement_activite (temporary increase in activity), remplacement (replacing an absent employee), saisonnier (seasonal work: no end-of-contract bonus, no CPF-CDD), usage (CDD d’usage: no end-of-contract bonus).",
+            "type": "string",
+            "enum": [
+              "accroissement_activite",
+              "remplacement",
+              "saisonnier",
+              "usage"
+            ]
+          },
+          "cdd_duree_mois": {
+            "description": "Required for a CDD: total contract length in months (0.25 to 36, e.g. 1.5 for six weeks).",
+            "type": "number",
+            "minimum": 0.25,
+            "maximum": 36
+          },
+          "cdd_jours_conges_pris": {
+            "description": "Required for a CDD: paid-leave days taken during the contract, in working days (0 if none). Untaken leave is paid as a 10 % indemnity at the end.",
+            "type": "number",
+            "minimum": 0,
+            "maximum": 75
+          },
+          "cdd_suivi_d_un_cdi": {
+            "description": "Required for a CDD: true if the CDD is immediately followed by a CDI with the same employer (no end-of-contract indemnities).",
+            "type": "boolean"
+          },
+          "cdd_job_vacances_jeune": {
+            "description": "Required for a CDD: true for a school or university student’s holiday job (no end-of-contract bonus).",
+            "type": "boolean"
+          },
+          "statut_cadre": {
+            "description": "true if the employee has executive status (cadre).",
+            "type": "boolean"
+          },
+          "effectif": {
+            "description": "Company headcount band: moins_de_5 (under 5), de_5_a_10, de_11_a_19, de_20_a_49, de_50_a_149, de_150_a_249, 250_et_plus.",
+            "type": "string",
+            "enum": [
+              "moins_de_5",
+              "de_5_a_10",
+              "de_11_a_19",
+              "de_20_a_49",
+              "de_50_a_149",
+              "de_150_a_249",
+              "250_et_plus"
+            ]
+          },
+          "mutuelle_part_salariale": {
+            "description": "Monthly employee share of the company health insurance (mutuelle) on the payslip, in EUR (0 if none).",
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1000
+          },
+          "mutuelle_part_patronale": {
+            "description": "Monthly employer share of the company health insurance (mutuelle), in EUR (0 if none).",
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1000
+          },
+          "taux_versement_mobilite_pourcent": {
+            "description": "Required if the company has 11 or more employees: transport levy rate (versement mobilité) of the workplace municipality, in percent (0 if none).",
+            "type": "number",
+            "minimum": 0,
+            "maximum": 5
+          },
+          "taux_atmp_pourcent": {
+            "description": "Optional: workplace accident insurance rate (taux AT/MP) of the establishment, in percent. If omitted, the national average (2.08 %) is used; it only affects employer cost.",
+            "type": "number",
+            "minimum": 0,
+            "maximum": 30
+          },
+          "taux_prelevement_source_pourcent": {
+            "description": "Optional: employee income tax withholding rate (taux de prélèvement à la source), in percent. If given, the withholding and net pay after tax are returned.",
+            "type": "number",
+            "minimum": 0,
+            "maximum": 60
+          },
+          "cas_particuliers": {
+            "description": "Required. Special situations that apply, or [] if none: interim (temporary agency work), cdd_objet_defini (CDD à objet défini), cdd_rupture_anticipee (CDD ended before its term), forfait_jours (fixed-days arrangement), heures_supplementaires (overtime this period), mois_incomplet (incomplete month, absence, sick leave), apprenti_stagiaire (apprentice or intern), dirigeant_assimile_salarie (company officer), alsace_moselle, outre_mer (overseas department), prevoyance_avec_part_salariale (provident scheme with employee share), avantages_en_nature (benefits in kind), exoneration_specifique (specific employer exemption), deduction_forfaitaire_specifique (specific flat-rate deduction). Any listed situation is refused for free (HTTP 422).",
+            "maxItems": 14,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "interim",
+                "cdd_objet_defini",
+                "cdd_rupture_anticipee",
+                "forfait_jours",
+                "heures_supplementaires",
+                "mois_incomplet",
+                "apprenti_stagiaire",
+                "dirigeant_assimile_salarie",
+                "alsace_moselle",
+                "outre_mer",
+                "prevoyance_avec_part_salariale",
+                "avantages_en_nature",
+                "exoneration_specifique",
+                "deduction_forfaitaire_specifique"
+              ]
+            }
+          }
+        },
+        "required": [
+          "salaire_brut",
+          "periode",
+          "annee",
+          "type_contrat",
+          "statut_cadre",
+          "effectif",
+          "mutuelle_part_salariale",
+          "mutuelle_part_patronale",
+          "cas_particuliers"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "france_working_days",
+      "description": "French public holidays (jours fériés) and working days for mainland France and Alsace-Moselle, 2000-2027: list a year's holidays, count calendar, working (jours ouvrés) and business days (jours ouvrables) between two dates, or add N working days to a date (start date not counted). Labour Code rules (L3133-1, L3134-13), Easter-based dates, holidays worked by the company and extra days off taken into account. Use when a user needs the French public holidays of a year, the number of working days (jours ouvrés or ouvrables) in a period, for example for payroll, paid leave or a fixed-term contract, or the date reached after N working days. Deterministic code, no LLM. Every holiday date 2000-2027 for mainland France and Alsace-Moselle matches the official government calendar (calendrier.api.gouv.fr) and the service-public.fr tables; counts are cross-checked by an independent day-by-day enumeration. Not supported (refused for free with HTTP 422): overseas departments and territories (outre-mer), years outside the covered range, periods over 10 years, legal or court deadlines (procedural deadline rules differ). Price: 0.001 USDC per successful call, paid with x402 over MCP. Missing or invalid fields are reported for free with the questions to ask the user; you never pay for an error. Returns JSON (also in structuredContent): calculateur, resultat, detail (step by step), hypotheses, bareme (version, effective date, sources), estimation_indicative, avertissement, lien_verification. Full output schema and a real example: list_france_calculators.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "operation": {
+            "description": "liste_feries (public holidays of a year), compter_jours (count days between two dates), or ajouter_jours (date reached after adding N working or business days).",
+            "type": "string",
+            "enum": [
+              "liste_feries",
+              "compter_jours",
+              "ajouter_jours"
+            ]
+          },
+          "zone": {
+            "description": "Workplace location: metropole (mainland France outside Alsace-Moselle), alsace_moselle (Bas-Rhin, Haut-Rhin, Moselle), or outre_mer (overseas, refused for free).",
+            "type": "string",
+            "enum": [
+              "metropole",
+              "alsace_moselle",
+              "outre_mer"
+            ]
+          },
+          "annee": {
+            "description": "Required for liste_feries: year, 2000 to 2027.",
+            "type": "integer",
+            "minimum": 1900,
+            "maximum": 2200
+          },
+          "date_debut": {
+            "description": "Required for compter_jours: start date YYYY-MM-DD (included).",
+            "type": "string"
+          },
+          "date_fin": {
+            "description": "Required for compter_jours: end date YYYY-MM-DD (included).",
+            "type": "string"
+          },
+          "date_depart": {
+            "description": "Required for ajouter_jours: starting date YYYY-MM-DD (not counted; counting starts the next day).",
+            "type": "string"
+          },
+          "nombre_jours": {
+            "description": "Required for ajouter_jours: number of days to add, 1 to 1000.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000
+          },
+          "type_jours": {
+            "description": "Required for ajouter_jours: ouvres (working days, the days normally worked, Monday to Friday by default) or ouvrables (Monday to Saturday).",
+            "type": "string",
+            "enum": [
+              "ouvres",
+              "ouvrables"
+            ]
+          },
+          "vendredi_saint_chome": {
+            "description": "Required for alsace_moselle: true if Good Friday (Vendredi saint) is a holiday in the workplace town (by law, towns with a Protestant church or a mixed church).",
+            "type": "boolean"
+          },
+          "jours_travailles": {
+            "description": "Optional (working days only): weekdays normally worked, in French (lundi, mardi, mercredi, jeudi, vendredi, samedi, dimanche). Default Monday to Friday.",
+            "minItems": 1,
+            "maxItems": 7,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "dimanche",
+                "lundi",
+                "mardi",
+                "mercredi",
+                "jeudi",
+                "vendredi",
+                "samedi"
+              ]
+            }
+          },
+          "feries_travailles": {
+            "description": "Optional: public holidays worked in the company (e.g. lundi_pentecote for the solidarity day). Codes: jour_an, vendredi_saint, lundi_paques, victoire_1945, ascension, lundi_pentecote, fete_nationale, assomption, toussaint, armistice_1918, noel, saint_etienne. May 1st is always a day off. Default: none.",
+            "maxItems": 12,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "jour_an",
+                "vendredi_saint",
+                "lundi_paques",
+                "victoire_1945",
+                "ascension",
+                "lundi_pentecote",
+                "fete_nationale",
+                "assomption",
+                "toussaint",
+                "armistice_1918",
+                "noel",
+                "saint_etienne"
+              ]
+            }
+          },
+          "autres_jours_non_travailles": {
+            "description": "Optional (working days only): other days off to exclude, YYYY-MM-DD (bridge days, collective-agreement holidays).",
+            "maxItems": 366,
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "operation",
+          "zone"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "france_severance_pay",
+      "description": "French severance pay for a CDI, 2026: statutory dismissal indemnity (indemnité de licenciement) or minimum rupture conventionnelle amount (seniority counted like the Labour Ministry simulator, full-time parental leave counted half), then the tax and social split of the amount paid: tax-exempt part, contribution base, CSG/CRDS, net, 40% employer levy. Use when a user is dismissed, negotiates a rupture conventionnelle, or an employer budgets a departure in France: minimum amount due, how much is tax-free, how much CSG/CRDS is withheld, and the employer cost. Deterministic code, no LLM. Seniority and statutory amounts match the Labour Ministry simulator (code.travail.gouv.fr) on 15 recorded cases, including its exact month counting; the tax and social split reproduces every worked example of the official social security doctrine (BOSS) and service-public.fr; 2026 parameters (PASS 48,060 EUR, 40% levy from the 2026 social security financing act) are sourced. Not supported (refused for free with HTTP 422): end of fixed-term or temp contracts, serious misconduct (faute grave, answered for free: no statutory indemnity), occupational unfitness, redundancy plans (PSE) and redeployment leave, retirement, mixed full-time/part-time careers, collective agreement formulas (the agent supplies the branch amount), contracts ending outside 2026, amounts above 10 PASS. Price: 0.02 USDC per successful call, paid with x402 over MCP. Missing or invalid fields are reported for free with the questions to ask the user; you never pay for an error. Returns JSON (also in structuredContent): calculateur, resultat, detail (step by step), hypotheses, bareme (version, effective date, sources), estimation_indicative, avertissement, lien_verification. Full output schema and a real example: list_france_calculators.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "type_rupture": {
+            "description": "licenciement (dismissal of a CDI employee), rupture_conventionnelle (mutual termination of a CDI), or fin_cdd_ou_interim (refused for free).",
+            "type": "string",
+            "enum": [
+              "licenciement",
+              "rupture_conventionnelle",
+              "fin_cdd_ou_interim"
+            ]
+          },
+          "motif_licenciement": {
+            "description": "Required for licenciement: personnel, economique, inaptitude_non_professionnelle, inaptitude_professionnelle (refused) or faute_grave_ou_lourde (answered for free: no statutory indemnity).",
+            "type": "string",
+            "enum": [
+              "personnel",
+              "economique",
+              "inaptitude_non_professionnelle",
+              "inaptitude_professionnelle",
+              "faute_grave_ou_lourde"
+            ]
+          },
+          "cadre_licenciement_economique": {
+            "description": "Required for economic dismissal: hors_pse, csp (security contract), pse or conge_reclassement (both refused).",
+            "type": "string",
+            "enum": [
+              "hors_pse",
+              "csp",
+              "pse",
+              "conge_reclassement"
+            ]
+          },
+          "date_entree": {
+            "description": "Contract start date YYYY-MM-DD (first fixed-term contract if it was followed by the CDI without interruption).",
+            "type": "string"
+          },
+          "date_notification": {
+            "description": "Required for licenciement: date the dismissal letter was sent, YYYY-MM-DD (the 8-month seniority condition is checked at this date).",
+            "type": "string"
+          },
+          "date_fin_contrat": {
+            "description": "Contract end date YYYY-MM-DD: end of notice period (theoretical end if notice was waived by the employer, for non-occupational unfitness or CSP), or the termination date set in the rupture conventionnelle. Must be in 2026.",
+            "type": "string"
+          },
+          "absences_non_comptees": {
+            "description": "Absences of a month or more that do not count toward seniority, as a list of {motif, duree_mois (whole months)}; empty list if none. motif: maladie_non_professionnelle, accident_de_trajet, conge_sabbatique, conge_creation_entreprise, conge_parental_temps_plein (counted half), conge_sans_solde, greve, mise_a_pied.",
+            "maxItems": 30,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "motif": {
+                  "type": "string",
+                  "enum": [
+                    "maladie_non_professionnelle",
+                    "accident_de_trajet",
+                    "conge_sabbatique",
+                    "conge_creation_entreprise",
+                    "conge_parental_temps_plein",
+                    "conge_sans_solde",
+                    "greve",
+                    "mise_a_pied"
+                  ]
+                },
+                "duree_mois": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 600
+                }
+              },
+              "required": [
+                "motif",
+                "duree_mois"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "salaires_mensuels_bruts": {
+            "description": "Gross monthly salaries including bonuses, oldest to most recent: the 12 months before the dismissal notice (rupture conventionnelle: before the end of the contract), or all months worked if fewer; months before a sick leave if any.",
+            "minItems": 1,
+            "maxItems": 12,
+            "type": "array",
+            "items": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 100000000
+            }
+          },
+          "primes_annuelles_3_derniers_mois": {
+            "description": "Total annual or exceptional bonuses included in the last 3 salaries (0 if none); counted as 1/12 per month.",
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100000000
+          },
+          "alternance_temps_plein_partiel": {
+            "description": "True if the employee alternated full-time and part-time periods (refused for free).",
+            "type": "boolean"
+          },
+          "indemnite_conventionnelle_branche": {
+            "description": "Severance amount in EUR set by the industry-wide collective agreement if higher than the statutory one, or \"aucune\" (none), or \"inconnue\" (unknown: only the statutory minimum is returned, without the tax and social split).",
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 100000000
+              },
+              {
+                "type": "string",
+                "enum": [
+                  "aucune",
+                  "inconnue"
+                ]
+              }
+            ]
+          },
+          "secteur_hors_ani": {
+            "description": "Required for rupture_conventionnelle with a branch amount: true if the employer is agricultural, a liberal profession, social economy, health and social sector, or a private household (minimum is then the statutory amount).",
+            "type": "boolean"
+          },
+          "montant_specifique_branche_rupture_conventionnelle": {
+            "description": "Optional, rupture_conventionnelle: specific amount set by the branch agreement for mutual termination, if any (used for the CSG/CRDS threshold).",
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100000000
+          },
+          "indemnite_versee": {
+            "description": "Optional: gross amount actually paid or negotiated, EUR. Default: the minimum due.",
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100000000
+          },
+          "remuneration_brute_annee_precedente": {
+            "description": "Gross pay received in the calendar year before the termination, EUR (0 if none). Not needed when the branch amount is unknown.",
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100000000
+          },
+          "droit_pension_retraite": {
+            "description": "Required for rupture_conventionnelle: true if, at the termination date, the employee is entitled to claim a pension from a mandatory basic scheme (fully taxable then).",
+            "type": "boolean"
+          },
+          "annee_versement": {
+            "description": "Optional: year the indemnity is paid. Default: year of the contract end; only 2026 is supported.",
+            "type": "integer",
+            "minimum": 2000,
+            "maximum": 2100
+          }
+        },
+        "required": [
+          "type_rupture",
+          "date_entree",
+          "date_fin_contrat",
+          "absences_non_comptees",
+          "salaires_mensuels_bruts",
+          "primes_annuelles_3_derniers_mois",
+          "alternance_temps_plein_partiel",
+          "indemnite_conventionnelle_branche"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "france_unemployment_benefit",
+      "description": "French unemployment benefit (allocation chômage, ARE) after a dismissal, mutual termination (rupture conventionnelle) or end of fixed-term contract, for contracts ending Sep-Dec 2026: eligibility, daily reference wage, gross and net daily and monthly amounts (3% pension deduction, CSG/CRDS limited so the benefit stays above the daily minimum wage), duration (new 2026 caps after rupture conventionnelle), 30% reduction after month 6, waiting periods and first paid day. Use when a user losing a job in France asks how much unemployment benefit they will receive, for how long, and from when, or an employer or adviser compares exit options. Deterministic code, no LLM. Rules from the Unédic regulation consolidated on 1 Sep 2026 and circular 2026-06; amounts, durations, rounding and start dates match the official France Travail simulator on 15 recorded cases (one documented gap: the simulator still uses the old cap after rupture conventionnelle). Refused for free (HTTP 422): resignation, temp agency or entertainment workers, overseas, rights still running, pension recipients, kept jobs, sick leave with reduced pay, contracts ending outside Sep-Dec 2026, and edge cases where official sources disagree (stated in the refusal). Price: 0.03 USDC per successful call, paid with x402 over MCP. Missing or invalid fields are reported for free with the questions to ask the user; you never pay for an error. Returns JSON (also in structuredContent): calculateur, resultat, detail (step by step), hypotheses, bareme (version, effective date, sources), estimation_indicative, avertissement, lien_verification. Full output schema and a real example: list_france_calculators.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "motif_fin_contrat": {
+            "description": "licenciement, licenciement_economique, rupture_conventionnelle, fin_cdd; demission or autre are refused.",
+            "type": "string",
+            "enum": [
+              "licenciement",
+              "licenciement_economique",
+              "rupture_conventionnelle",
+              "fin_cdd",
+              "demission",
+              "autre"
+            ]
+          },
+          "date_naissance": {
+            "description": "Birth date YYYY-MM-DD.",
+            "type": "string"
+          },
+          "date_fin_contrat": {
+            "description": "Contract end date YYYY-MM-DD, notice included; 2026-09-01 to 2026-12-31.",
+            "type": "string"
+          },
+          "periodes_emploi": {
+            "description": "Jobs in the last 24 months (36 if 55+): {debut, fin, salaire_brut total gross pay of the period}.",
+            "minItems": 1,
+            "maxItems": 30,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "debut": {
+                  "type": "string"
+                },
+                "fin": {
+                  "type": "string"
+                },
+                "salaire_brut": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 10000000
+                }
+              },
+              "required": [
+                "debut",
+                "fin",
+                "salaire_brut"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "heures_hebdomadaires": {
+            "description": "Weekly hours (35 if full time).",
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "maximum": 48
+          },
+          "duree_hebdomadaire_reference": {
+            "description": "Optional: full-time weekly hours in the company, default 35.",
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "maximum": 48
+          },
+          "primo_entrant": {
+            "description": "True if no unemployment rights opened in the last 20 years.",
+            "type": "boolean"
+          },
+          "indemnite_conges_payes": {
+            "description": "Paid-leave compensation paid at contract end(s) in the last 182 days, EUR.",
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10000000
+          },
+          "indemnites_supra_legales": {
+            "description": "Severance above the statutory minimum, EUR (0 if none).",
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10000000
+          },
+          "delai_attente_deja_applique": {
+            "description": "True if a 7-day waiting period was applied in the last 12 months.",
+            "type": "boolean"
+          },
+          "alsace_moselle": {
+            "description": "True if under the Alsace-Moselle local scheme (net then not computed).",
+            "type": "boolean"
+          },
+          "situations_particulieres": {
+            "description": "Special situations (refused), empty list if none.",
+            "maxItems": 7,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "droits_chomage_en_cours",
+                "pension_vieillesse_ou_invalidite",
+                "emploi_conserve",
+                "salaire_reduit_arret_ou_activite_partielle",
+                "conge_ou_arret_entre_deux_contrats",
+                "interim_ou_intermittent",
+                "outre_mer"
+              ]
+            }
+          },
+          "date_inscription": {
+            "description": "Optional: France Travail registration date; default the day after the contract end.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "motif_fin_contrat",
+          "date_naissance",
+          "date_fin_contrat",
+          "periodes_emploi",
+          "heures_hebdomadaires",
+          "primo_entrant",
+          "indemnite_conges_payes",
+          "indemnites_supra_legales",
+          "delai_attente_deja_applique",
+          "alsace_moselle",
+          "situations_particulieres"
+        ],
+        "additionalProperties": false
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "fr.francestack/tax-payroll",
+    "version": "0.10.0",
+    "remoteUrl": "https://tax.francestack.fr/mcp",
+    "publishedAt": "2026-11-19T20:32:43.475121Z",
+    "fetchedAt": "2026-11-25T11:03:46.215Z",
+    "toolsSha256": "fd3b5f7c482b19c53aa6672dad0d165cbf990f8cf4c6a71c6c6cdf672638fc63"
+  }
+}

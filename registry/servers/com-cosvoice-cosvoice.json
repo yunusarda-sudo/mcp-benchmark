@@ -1,0 +1,909 @@
+{
+  "$schema": "../schema.json",
+  "name": "com.cosvoice/cosvoice",
+  "title": "CosVoice",
+  "category": "Communication & Alerting",
+  "description": "An office for your AI Bot: a real phone number and email address, calls and mail, written summaries.",
+  "repository": "https://github.com/CosVoice/cosvoice-mcp",
+  "tools": [
+    {
+      "name": "get_account",
+      "description": "Who this key belongs to and whether a line exists yet.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "search_numbers",
+      "description": "Find available phone numbers in a US area code for a new line.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "area_code": {
+            "type": "string",
+            "pattern": "^[2-9][0-9]{2}$",
+            "description": "Three-digit area code to search, e.g. '415'."
+          },
+          "country": {
+            "type": "string",
+            "enum": [
+              "US",
+              "CA"
+            ],
+            "description": "Country of the area code. Defaults to US."
+          }
+        },
+        "required": [
+          "area_code"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "create_line",
+      "description": "Set up the phone line: claim a number (pick one from search_numbers or just give an area code), name the persona, and register the owner's mobile. An account can own several lines; each needs its own paid plan (if none is waiting, this returns a checkout link). Ask the owner before opting them in to texts.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Persona name, e.g. 'Lloyd'."
+          },
+          "handle": {
+            "type": "string",
+            "description": "Short handle for handle@cosvoice.com. Defaults from name."
+          },
+          "phone_number": {
+            "type": "string",
+            "description": "E.164 from search_numbers."
+          },
+          "area_code": {
+            "type": "string",
+            "description": "Three-digit area code to pick a number in, when phone_number is not given."
+          },
+          "owner_name": {
+            "type": "string",
+            "description": "The owner's name, as the line should say it on calls."
+          },
+          "owner_phone": {
+            "type": "string",
+            "description": "Owner's mobile. Calls/texts from it are treated as instructions."
+          },
+          "timezone": {
+            "type": "string",
+            "default": "America/Los_Angeles",
+            "description": "The owner's IANA time zone, e.g. 'America/New_York'. Used for dates, reservations and the morning brief."
+          },
+          "voice": {
+            "type": "string",
+            "enum": [
+              "eve",
+              "ara",
+              "rex",
+              "sal",
+              "carina",
+              "celeste",
+              "rigel",
+              "luna",
+              "lux",
+              "atlas",
+              "leo",
+              "iris",
+              "ursa",
+              "lumen",
+              "castor",
+              "naksh",
+              "perseus",
+              "zenith",
+              "helios",
+              "kepler",
+              "cosmo",
+              "altair",
+              "orion",
+              "zagan",
+              "helix",
+              "sirius"
+            ],
+            "description": "Voice id for the line. Omit for the default voice."
+          },
+          "notify_email": {
+            "type": "string",
+            "description": "Inbox where the owner gets call summaries and notices."
+          },
+          "agent_email": {
+            "type": "string",
+            "description": "An inbox your agent reads (e.g. an AgentMail address). Owner instructions are emailed there instantly, with an hourly digest of anything unacknowledged, plus every call debrief."
+          },
+          "plan": {
+            "type": "string",
+            "enum": [
+              "starter",
+              "plus",
+              "pro"
+            ],
+            "default": "starter",
+            "description": "starter $29/100 min · plus $79/300 min · pro $199/1000 min; overage $0.25/min."
+          },
+          "founding": {
+            "type": "boolean",
+            "description": "No longer offered. Ignored."
+          },
+          "sms_opt_in": {
+            "type": "boolean",
+            "description": "Owner agreed to receive texts from the line (delivery starts once carrier registration is complete)."
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_line",
+      "description": "Number, email identity, persona, owner, and minutes remaining this period.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "place_call",
+      "description": "Have the line call a real number and hold a live voice conversation on the owner's behalf. Brief it like a human assistant: who to ask for, what you want, acceptable fallbacks, what to do on voicemail. Set connect_owner when the owner wants to be put through once a human is reached (the line waits on hold, then rings the owner). Asynchronous: poll get_call or wait for the call.completed webhook.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "to": {
+            "type": "string",
+            "description": "Number to call. US or Canada only, in any common format, e.g. '+14155550123' or '(415) 555-0123'."
+          },
+          "purpose": {
+            "type": "string",
+            "maxLength": 1200,
+            "description": "The job in plain English, with fallbacks and what to do on voicemail. Up to 1,200 characters; a longer purpose is refused with an error, never trimmed."
+          },
+          "callee_name": {
+            "type": "string",
+            "description": "Who or which business is being called, e.g. 'Dr. Patel's office'."
+          },
+          "desired_resolution": {
+            "type": "string",
+            "description": "What a good outcome looks like, in one sentence."
+          },
+          "slots": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Facts the line may use on the call, as name and value pairs, e.g. { order_number: '48213', appointment_day: 'Tuesday' }. Never a card number: the line does not read cards out."
+          },
+          "paths": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "What to do if the call goes a certain way, as situation and instruction pairs, e.g. { 'closed today': 'ask when they reopen' }."
+          },
+          "max_minutes": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10,
+            "description": "No call runs longer than 10 minutes."
+          },
+          "connect_owner": {
+            "type": "boolean",
+            "description": "Hold-and-bridge. The line works the phone menu and waits on hold; when a person who can help is on the line it says 'one moment' and rings the owner's mobile, joining the two. The line drops off. Use when the owner wants to talk themselves but not wait. Needs owner_phone on the line."
+          }
+        },
+        "required": [
+          "to",
+          "purpose"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "book_reservation",
+      "description": "Reserve a table by phone: the line calls the venue, negotiates the time, answers the host's questions (name, callback, email), records policies, and never pays. Give the venue's phone number, party size, date/time, and the acceptable window or fallbacks. Returns reservation_id and call_id; read the outcome with get_call or list_reservations before telling the owner anything is confirmed. Statuses: confirmed, alternative_confirmed, waitlisted, hold, requires_online, needs_owner, callback_later, no_availability, declined_by_venue, voicemail, not_reached.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "venue_name": {
+            "type": "string",
+            "description": "Name of the restaurant."
+          },
+          "venue_phone": {
+            "type": "string",
+            "description": "The restaurant's phone number. US or Canada only, in any common format, e.g. '+14155550123' or '(415) 555-0123'."
+          },
+          "party_size": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 40,
+            "description": "Number of people, 1 to 40."
+          },
+          "date": {
+            "type": "string",
+            "description": "'Friday', 'tomorrow', '9/12', or '2026-09-12'. Resolved in the owner's timezone."
+          },
+          "time": {
+            "type": "string",
+            "description": "e.g. '7:30pm'. 5–11 without am/pm is treated as evening."
+          },
+          "name": {
+            "type": "string",
+            "description": "Name for the booking; defaults to the owner."
+          },
+          "name_spelling": {
+            "type": "string",
+            "description": "Letter-by-letter if unusual, e.g. 'F-A-T-H-O-L-L-A-H-I'."
+          },
+          "earliest": {
+            "type": "string",
+            "description": "Earliest acceptable time."
+          },
+          "latest": {
+            "type": "string",
+            "description": "Latest acceptable time."
+          },
+          "fallback_times": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Other acceptable times, best first, e.g. ['7pm', '8:15pm']. Up to five are used."
+          },
+          "prefer": {
+            "type": "string",
+            "enum": [
+              "earlier",
+              "later",
+              "closest"
+            ],
+            "description": "Which way to lean when the exact time is taken. Defaults to closest."
+          },
+          "seating": {
+            "type": "string",
+            "enum": [
+              "any",
+              "indoor",
+              "outdoor",
+              "bar"
+            ],
+            "description": "Seating preference. Defaults to any."
+          },
+          "occasion": {
+            "type": "string",
+            "description": "The occasion, if the host should know, e.g. 'birthday'."
+          },
+          "dietary": {
+            "type": "string",
+            "description": "Allergies or dietary needs to mention."
+          },
+          "accept_waitlist": {
+            "type": "boolean",
+            "default": true,
+            "description": "Take a waitlist spot when no table is free. Default true."
+          },
+          "accept_next_day": {
+            "type": "boolean",
+            "default": false,
+            "description": "Accept a table on the following day when the requested day is full. Default false."
+          },
+          "owner_phone_ok": {
+            "type": "boolean",
+            "description": "Allow giving the owner's mobile as the reservation contact (default: the line's number and email).",
+            "default": false
+          },
+          "notes": {
+            "type": "string",
+            "description": "Anything else the host might ask: high chair, accessibility, corkage."
+          },
+          "max_minutes": {
+            "type": "integer",
+            "minimum": 2,
+            "maximum": 10,
+            "description": "Time limit for the call in minutes, 2 to 10. Default 6."
+          }
+        },
+        "required": [
+          "venue_name",
+          "venue_phone",
+          "party_size",
+          "date",
+          "time"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "list_reservations",
+      "description": "Recent reservation requests with their status and the venue's stated policies.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50,
+            "default": 10,
+            "description": "How many to return, newest first. 1 to 50, default 10."
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_call",
+      "description": "Status, structured notes, outcome, transcript, and annotations for one call.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "call_id": {
+            "type": "string",
+            "description": "Id of the call, from place_call, book_reservation, list_calls or a call.completed event."
+          }
+        },
+        "required": [
+          "call_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "list_calls",
+      "description": "Recent calls with summaries, newest first.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50,
+            "default": 10,
+            "description": "How many to return, newest first. 1 to 50, default 10."
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "annotate_call",
+      "description": "Attach a note to a call (what you did about it, a decision, context for the owner). Shows in the dashboard next to the debrief.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "call_id": {
+            "type": "string",
+            "description": "Id of the call to annotate."
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 4000,
+            "description": "The note, up to 4,000 characters."
+          }
+        },
+        "required": [
+          "call_id",
+          "note"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "send_text",
+      "description": "Send an SMS from the line's number. Respects STOP opt-outs. Read the delivery field in the result: while CosVoice's carrier registration (10DLC) is in progress, texts from the line may be filtered by US carriers and not arrive; texts to the line and calls always work.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "to": {
+            "type": "string",
+            "description": "Mobile number to text. US or Canada only, in any common format, e.g. '+14155550123' or '(415) 555-0123'."
+          },
+          "body": {
+            "type": "string",
+            "maxLength": 1200,
+            "description": "The message, up to 1,200 characters."
+          }
+        },
+        "required": [
+          "to",
+          "body"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "ack_instructions",
+      "description": "Mark owner instructions (texts the owner sent to the line) as handled so they stop being attached to tool results. Pass the ids from the OWNER INSTRUCTIONS notice, or all: true.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Instruction ids to acknowledge."
+          },
+          "all": {
+            "type": "boolean",
+            "description": "Acknowledge everything pending."
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "list_messages",
+      "description": "Recent texts to and from the line.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50,
+            "default": 20,
+            "description": "How many to return, newest first. 1 to 50, default 20."
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "list_emails",
+      "description": "Email received at and sent from the line's address, newest first (direction inbound|outbound), with forwarding status.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50,
+            "default": 20,
+            "description": "How many to return, newest first. 1 to 50, default 20."
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_email",
+      "description": "Full text of one email the line received.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "email_id": {
+            "type": "string",
+            "description": "Id of the email, from list_emails or an email.received event."
+          }
+        },
+        "required": [
+          "email_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "send_email",
+      "description": "Send an email from the line's own address (handle@cosvoice.com). Reply to a message the line received by passing reply_to_email_id (recipient and subject fill in, threading is kept), or write to the owner. The line may only email people who have emailed it first, its owner, or its Bot inbox. Plain text; keep it short and sign as the line.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "reply_to_email_id": {
+            "type": "string",
+            "description": "Id of a received email to reply to."
+          },
+          "to": {
+            "type": "string",
+            "description": "Recipient. Optional when replying."
+          },
+          "subject": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "Subject line, up to 200 characters. Optional when replying: the original subject is kept."
+          },
+          "body": {
+            "type": "string",
+            "maxLength": 8000,
+            "description": "The message in plain text, up to 8,000 characters."
+          }
+        },
+        "required": [
+          "body"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "forward_email",
+      "description": "Forward one received email to one of the line's own inboxes: its forwarding, notification or Bot inbox, or the owner's sign-in address (defaults to the forwarding inbox). It cannot forward to any other address, and a new inbox must be confirmed by its owner first.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "email_id": {
+            "type": "string",
+            "description": "Id of the received email to forward."
+          },
+          "to": {
+            "type": "string",
+            "description": "One of the line's own inboxes. Omit to use the forwarding inbox, or the notification inbox when no forwarding inbox is set."
+          }
+        },
+        "required": [
+          "email_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "list_contacts",
+      "description": "Owner, approved, VIP, and blocked numbers.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "add_contact",
+      "description": "Teach the line a number. Roles: approved (greeted as someone the owner knows), vip (treated as urgent, told the owner will see it right away), blocked (turned away before the line answers). No role connects a caller to the owner: the line takes the details and the owner gets the written summary.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "The person's or business's name."
+          },
+          "phone": {
+            "type": "string",
+            "description": "Their phone number. US or Canada only, in any common format, e.g. '+14155550123' or '(415) 555-0123'."
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "approved",
+              "vip",
+              "blocked"
+            ],
+            "default": "approved",
+            "description": "approved (default), vip or blocked. See the tool description for what each does."
+          },
+          "notes": {
+            "type": "string",
+            "maxLength": 300,
+            "description": "Context the line should have when this number calls or is called, up to 300 characters."
+          }
+        },
+        "required": [
+          "name",
+          "phone"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "remove_contact",
+      "description": "Remove a number from the contacts list (not the owner).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "phone": {
+            "type": "string",
+            "description": "The number to remove, as it appears in list_contacts."
+          }
+        },
+        "required": [
+          "phone"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_settings",
+      "description": "Persona, voice, greeting, standing instructions, owner, notifications, forwarding, webhook, Bot push, SMS consent.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "update_settings",
+      "description": "Change any of: name, voice, greeting, instructions, owner_name, owner_phone, timezone, notify_email, agent_email, morning_brief (daily digest on/off), morning_brief_hour (0–23 local), forward_email, forward_mode (relay|raw|off), sms_opt_in, answer_rings (0|1|2). Only the fields you pass change.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "The line's persona name, as it introduces itself."
+          },
+          "voice": {
+            "type": "string",
+            "enum": [
+              "eve",
+              "ara",
+              "rex",
+              "sal",
+              "carina",
+              "celeste",
+              "rigel",
+              "luna",
+              "lux",
+              "atlas",
+              "leo",
+              "iris",
+              "ursa",
+              "lumen",
+              "castor",
+              "naksh",
+              "perseus",
+              "zenith",
+              "helios",
+              "kepler",
+              "cosmo",
+              "altair",
+              "orion",
+              "zagan",
+              "helix",
+              "sirius"
+            ],
+            "description": "Voice id for the line."
+          },
+          "greeting": {
+            "type": "string",
+            "maxLength": 300,
+            "description": "What the line says first on every call it answers, including calls forwarded from the owner's mobile. Up to 300 characters. Empty restores the default."
+          },
+          "instructions": {
+            "type": "string",
+            "maxLength": 12000,
+            "description": "Standing context for every call, in plain English. Up to 12,000 characters (about 2,000 words); a longer text is refused with an error, never trimmed."
+          },
+          "owner_name": {
+            "type": "string",
+            "description": "The owner's name, as the line says it."
+          },
+          "owner_phone": {
+            "type": "string",
+            "description": "The owner's mobile, US or Canada. A Bot can set it only while it is empty; after that the owner changes it in Settings."
+          },
+          "timezone": {
+            "type": "string",
+            "description": "The owner's IANA time zone, e.g. 'America/Chicago'."
+          },
+          "notify_email": {
+            "type": "string",
+            "description": "Inbox for call summaries and notices. A Bot can set it only while it is empty; after that the owner changes it in Settings."
+          },
+          "agent_email": {
+            "type": "string",
+            "description": "An inbox your Bot reads. Owner instructions and call summaries are copied there."
+          },
+          "morning_brief": {
+            "type": "boolean",
+            "description": "Daily morning brief email (calls, texts, bookings, what is waiting on the owner). Default on."
+          },
+          "morning_brief_hour": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 23,
+            "description": "Local hour for the brief. Default 7."
+          },
+          "forward_email": {
+            "type": "string",
+            "description": "Inbox that mail sent to the line's address is forwarded to. A Bot can set it only while it is empty, and a new inbox must be confirmed by its owner before mail goes there."
+          },
+          "forward_mode": {
+            "type": "string",
+            "enum": [
+              "relay",
+              "raw",
+              "off"
+            ],
+            "description": "relay (default): the text is re-sent by CosVoice, replies go to the original sender, attachments are dropped. raw: the original message is forwarded intact where the inbox allows it, otherwise relay is used. off: nothing is forwarded; mail stays readable with list_emails."
+          },
+          "sms_opt_in": {
+            "type": "boolean",
+            "description": "True once the owner has agreed to receive texts from the line. Ask the owner first."
+          },
+          "plan": {
+            "type": "string",
+            "enum": [
+              "starter",
+              "plus",
+              "pro"
+            ],
+            "description": "Not changeable here. A plan change alters what the owner's card is charged, so the owner does it under Settings, Plan. Sending a different plan returns an error with that link."
+          },
+          "voice_style": {
+            "type": "string",
+            "enum": [
+              "warm",
+              "brisk",
+              "formal",
+              "playful"
+            ],
+            "description": "How the line carries itself on calls."
+          },
+          "voice_speed": {
+            "type": "number",
+            "minimum": 0.8,
+            "maximum": 1.2,
+            "description": "Speaking speed; 1.0 is natural."
+          },
+          "answer_rings": {
+            "type": "integer",
+            "enum": [
+              0,
+              1,
+              2
+            ],
+            "description": "When the line picks up an inbound call: 0 right away, 1 at the end of the first ring (default), 2 after two rings. Forwarded missed calls always answer right away."
+          },
+          "pronunciations": {
+            "type": "array",
+            "maxItems": 20,
+            "items": {
+              "type": "object",
+              "properties": {
+                "word": {
+                  "type": "string",
+                  "description": "The word or name as written."
+                },
+                "sayAs": {
+                  "type": "string",
+                  "description": "How to say it, spelled by sound."
+                }
+              },
+              "required": [
+                "word",
+                "sayAs"
+              ]
+            },
+            "description": "How to say names, e.g. { word: 'Fathollahi', sayAs: 'fat-oh-LAH-hee' }."
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "set_bot_push",
+      "description": "Have CosVoice start YOU the moment something arrives, instead of you polling. Give it the webhook URL and key of a routine of yours that has a Webhook trigger (Grok Bot: Routines → New → trigger Webhook; the URL and a crsr_ key appear). CosVoice POSTs a JSON body with what_to_do plus the ids when the owner texts an instruction, an email arrives, or a call finishes; that body becomes the routine's input. Pass an empty url to turn it off. events limits which moments wake you (default instruction, email, call); add \"message\" to also be started when anyone other than the owner texts the line. When you pass a key, CosVoice sends a test push at once and returns the result in test: read it, a saved key is not a working key until the routine has accepted one.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "The https:// webhook URL of your routine. An empty string turns Bot push off."
+          },
+          "key": {
+            "type": "string",
+            "description": "Bearer key for that URL (for Grok, the crsr_… key shown with the webhook)."
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "instruction",
+                "email",
+                "call",
+                "message"
+              ]
+            },
+            "description": "Which moments wake you. Default: instruction, email, call. Add message for texts from anyone other than the owner."
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "set_webhook",
+      "description": "Set (or clear with an empty url) the HTTPS webhook that receives call.completed, message.received, and email.received. Returns the signing secret once.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "The https:// URL that receives the signed events. An empty string clears it. A Grok routine URL does not belong here: it needs its key, so use set_bot_push."
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "list_history",
+      "description": "Unified history of calls, texts, and email with optional search. The same table as the dashboard.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "all",
+              "call",
+              "message",
+              "email"
+            ],
+            "description": "Which records to return. Defaults to all."
+          },
+          "query": {
+            "type": "string",
+            "description": "Search text, up to 120 characters. Matched against call summaries and purposes, text bodies, email subjects and senders, and phone numbers."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200,
+            "default": 50,
+            "description": "How many to return, newest first. 1 to 200, default 50."
+          },
+          "format": {
+            "type": "string",
+            "enum": [
+              "json",
+              "csv"
+            ],
+            "description": "json (default) or csv."
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "recent_activity",
+      "description": "Everything since a timestamp: calls, texts, emails. Catch-up when webhooks were missed.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "since": {
+            "type": "string",
+            "description": "ISO 8601 timestamp, e.g. '2026-11-20T05:00:00Z'. Defaults to 24 hours ago. Up to 50 of each kind are returned."
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "list_integrations",
+      "description": "Partner integrations available through this line (groceries, food, reservations, travel…), with status and connect links. Partner tools appear as <partner>__<tool>.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "com.cosvoice/cosvoice",
+    "version": "1.0.1",
+    "remoteUrl": "https://cosvoice.com/mcp",
+    "publishedAt": "2026-11-20T06:55:22.612125Z",
+    "fetchedAt": "2026-11-25T11:03:46.215Z",
+    "toolsSha256": "d51af03486a1fc55ba1ded59def6da523dcab00b7328f4c9d8d05b9cbd97cfde"
+  }
+}

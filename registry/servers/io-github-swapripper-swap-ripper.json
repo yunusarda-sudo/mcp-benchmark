@@ -1,0 +1,976 @@
+{
+  "$schema": "../schema.json",
+  "name": "io.github.swapripper/swap-ripper",
+  "title": "Swap Ripper",
+  "category": "Developer Tools & DevOps",
+  "description": "Pay x402 (HTTP 402) invoices from any chain, plus cross-chain swaps on 25+ chains. No API key.",
+  "repository": "https://github.com/swapripper/swap-ripper",
+  "tools": [
+    {
+      "name": "pay",
+      "description": "One tool for any payment request. Pass whatever you were asked to pay: a Swap Ripper paywalled API URL (it buys access and returns an access_key), an x402 / HTTP 402 invoice, a Swap Ripper payment link, a Solana Pay link (solana:...), an Ethereum payment link (ethereum:..., EIP-681, any supported EVM chain), a Bitcoin link (bitcoin:...), plain text like 'send 20 USDC to 0xabc... on base', or {to, token, chain, amount}. Swap Ripper works out who gets what, then pays it EXACTLY using whatever token you hold on any chain. Call with only `request` to see what it understood; add pay_with_token, pay_with_chain and refund_address to get a deposit address.",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "request"
+        ],
+        "properties": {
+          "request": {
+            "description": "The payment request: link, URI, 402 body, plain text, or {to, token, chain, amount}.",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "object"
+              }
+            ]
+          },
+          "amount": {
+            "type": "string",
+            "description": "Only if the request has no amount: how much the recipient should get."
+          },
+          "pay_with_token": {
+            "type": "string",
+            "description": "Token you hold and will pay with, e.g. 'SOL', 'USDC', 'ETH'."
+          },
+          "pay_with_chain": {
+            "type": "string",
+            "description": "Chain you pay from, e.g. 'solana'."
+          },
+          "refund_address": {
+            "type": "string",
+            "description": "Your address on the paying chain, for automatic refunds."
+          },
+          "wallet": {
+            "type": "string",
+            "description": "x402 only: YOUR address on the invoice's network (your x402 client signs from it)."
+          },
+          "access_key": {
+            "type": "string",
+            "description": "Paywalled APIs only: an existing access_key to top up."
+          },
+          "speed": {
+            "type": "string",
+            "enum": [
+              "best_price",
+              "fast"
+            ],
+            "description": "Optional. Default 'best_price': Swap Ripper quotes two networks at once and uses whichever is cheaper for you (and the other if one fails); the reply's route_choice shows both. 'fast' forces the ~seconds Relay route."
+          },
+          "request_id": {
+            "type": "string",
+            "description": "Recommended: your own unique ID for this payment (e.g. a UUID). Retrying with the same request_id returns the SAME payment instructions, so you never pay twice."
+          },
+          "test": {
+            "type": "boolean",
+            "description": "Test mode: true = no real money. You get a fake deposit address that completes by itself in ~15s, so you can test status, invoices, receipts and webhooks for free."
+          },
+          "slippage_bps": {
+            "type": "integer",
+            "description": "Max slippage in basis points (default 100 = 1%, range 10-500)."
+          },
+          "referrer": {
+            "type": "string",
+            "description": "Optional: your NEAR account (e.g. 'myagent.near'). You earn 1/3 of the service fee on every swap routed with it. The user pays the same."
+          }
+        }
+      }
+    },
+    {
+      "name": "get_quote",
+      "description": "Live price for swapping any token to any token across 25+ chains (BTC, ETH, SOL, Base, Arbitrum, BNB, Tron, NEAR, Zcash, TON, Sui, XRP...). No addresses or keys needed, nothing committed. Includes a price_check against market rates and a best_price_check that quotes a competing network (Relay) at the same moment, so you can see proof you are getting the better deal.",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "from_token",
+          "to_token",
+          "amount"
+        ],
+        "properties": {
+          "from_token": {
+            "type": "string",
+            "description": "Token to send: symbol ('USDC', 'ETH', 'BTC'), 'SYMBOL@chain', 'SYMBOL on chain', or an asset_id from search_tokens."
+          },
+          "from_chain": {
+            "type": "string",
+            "description": "Chain the token is sent from, e.g. 'solana', 'base', 'ethereum', 'bitcoin'. Needed when the symbol exists on several chains."
+          },
+          "to_token": {
+            "type": "string",
+            "description": "Token to receive (same formats as from_token)."
+          },
+          "to_chain": {
+            "type": "string",
+            "description": "Chain to receive on."
+          },
+          "amount": {
+            "type": "string",
+            "description": "Amount of from_token to send, as a human-readable decimal string, e.g. '25' or '0.015'. Not base units."
+          },
+          "slippage_bps": {
+            "type": "integer",
+            "description": "Max slippage in basis points (default 100 = 1%, range 10-500)."
+          },
+          "referrer": {
+            "type": "string",
+            "description": "Optional: your NEAR account (e.g. 'myagent.near'). You earn 1/3 of the service fee on every swap routed with it. The user pays the same."
+          },
+          "recipient": {
+            "type": "string",
+            "description": "Optional (with refund_address): destination address, for an exact quote."
+          },
+          "refund_address": {
+            "type": "string",
+            "description": "Optional (with recipient): refund address on the source chain."
+          }
+        }
+      }
+    },
+    {
+      "name": "create_swap",
+      "description": "Lock a quote and get a one-time deposit address. Send exactly `send_exactly` of the source token there and the output lands at `recipient` automatically, usually in under a minute. Non-custodial, no API key, no wallet connection, automatic refund on failure. For EVM sources, `deposit_tx` is a ready-to-sign transaction.",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "from_token",
+          "to_token",
+          "amount",
+          "recipient",
+          "refund_address"
+        ],
+        "properties": {
+          "from_token": {
+            "type": "string",
+            "description": "Token to send: symbol ('USDC', 'ETH', 'BTC'), 'SYMBOL@chain', 'SYMBOL on chain', or an asset_id from search_tokens."
+          },
+          "from_chain": {
+            "type": "string",
+            "description": "Chain the token is sent from, e.g. 'solana', 'base', 'ethereum', 'bitcoin'. Needed when the symbol exists on several chains."
+          },
+          "to_token": {
+            "type": "string",
+            "description": "Token to receive (same formats as from_token)."
+          },
+          "to_chain": {
+            "type": "string",
+            "description": "Chain to receive on."
+          },
+          "amount": {
+            "type": "string",
+            "description": "Amount of from_token to send, as a human-readable decimal string, e.g. '25' or '0.015'. Not base units."
+          },
+          "slippage_bps": {
+            "type": "integer",
+            "description": "Max slippage in basis points (default 100 = 1%, range 10-500)."
+          },
+          "referrer": {
+            "type": "string",
+            "description": "Optional: your NEAR account (e.g. 'myagent.near'). You earn 1/3 of the service fee on every swap routed with it. The user pays the same."
+          },
+          "recipient": {
+            "type": "string",
+            "description": "Address that receives the output, ON THE DESTINATION CHAIN."
+          },
+          "refund_address": {
+            "type": "string",
+            "description": "Address for automatic refunds, ON THE SOURCE CHAIN. Usually the sending wallet."
+          },
+          "speed": {
+            "type": "string",
+            "enum": [
+              "best_price",
+              "fast"
+            ],
+            "description": "Optional. Default 'best_price': Swap Ripper quotes two networks at once and uses whichever is cheaper for you (and the other if one fails); the reply's route_choice shows both. 'fast' forces the ~seconds Relay route."
+          },
+          "request_id": {
+            "type": "string",
+            "description": "Recommended: your own unique ID for this payment (e.g. a UUID). Retrying with the same request_id returns the SAME payment instructions, so you never pay twice."
+          },
+          "test": {
+            "type": "boolean",
+            "description": "Test mode: true = no real money. You get a fake deposit address that completes by itself in ~15s, so you can test status, invoices, receipts and webhooks for free."
+          }
+        }
+      }
+    },
+    {
+      "name": "pay_exact",
+      "description": "Make sure a recipient gets EXACTLY a set amount (e.g. 10 USDC on Base), paid with whatever token and chain you hold (e.g. SOL on Solana). Ideal for paying invoices, topping up an x402/agent wallet, or funding gas on another chain. Returns the exact amount to send and a deposit address.",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "token",
+          "amount_out",
+          "pay_with_token",
+          "recipient",
+          "refund_address"
+        ],
+        "properties": {
+          "token": {
+            "type": "string",
+            "description": "Token the recipient must receive, e.g. 'USDC'."
+          },
+          "chain": {
+            "type": "string",
+            "description": "Chain the recipient receives on, e.g. 'base'."
+          },
+          "amount_out": {
+            "type": "string",
+            "description": "Exact amount the recipient must receive, e.g. '10'."
+          },
+          "pay_with_token": {
+            "type": "string",
+            "description": "Token you will pay with, e.g. 'SOL'."
+          },
+          "pay_with_chain": {
+            "type": "string",
+            "description": "Chain you pay from, e.g. 'solana'."
+          },
+          "slippage_bps": {
+            "type": "integer",
+            "description": "Max slippage in basis points (default 100 = 1%, range 10-500)."
+          },
+          "recipient": {
+            "type": "string",
+            "description": "Address that receives the output, ON THE DESTINATION CHAIN."
+          },
+          "refund_address": {
+            "type": "string",
+            "description": "Address for automatic refunds, ON THE SOURCE CHAIN. Usually the sending wallet."
+          },
+          "speed": {
+            "type": "string",
+            "enum": [
+              "best_price",
+              "fast"
+            ],
+            "description": "Optional. Default 'best_price': Swap Ripper quotes two networks at once and uses whichever is cheaper for you (and the other if one fails); the reply's route_choice shows both. 'fast' forces the ~seconds Relay route."
+          },
+          "request_id": {
+            "type": "string",
+            "description": "Recommended: your own unique ID for this payment (e.g. a UUID). Retrying with the same request_id returns the SAME payment instructions, so you never pay twice."
+          },
+          "test": {
+            "type": "boolean",
+            "description": "Test mode: true = no real money. You get a fake deposit address that completes by itself in ~15s, so you can test status, invoices, receipts and webhooks for free."
+          },
+          "referrer": {
+            "type": "string",
+            "description": "Optional: your NEAR account (e.g. 'myagent.near'). You earn 1/3 of the service fee on every swap routed with it. The user pays the same."
+          }
+        }
+      }
+    },
+    {
+      "name": "fund_x402",
+      "description": "Hit a '402 Payment Required' (x402) paywall but your funds are on another chain or token? Paste the 402 response (body JSON or base64 PAYMENT-REQUIRED header, x402 v1 or v2). Swap Ripper reads the invoice, picks the right network and token (e.g. USDC on Base), and tops up YOUR wallet there with an exact amount, paid from any token on any chain (SOL, ETH, BTC, USDC on Solana...). Default top-up ~$5 so dozens of future 402 calls need no swap. Call with only payment_required to decode the invoice and see options; add pay_with_token, wallet and refund_address to get a deposit address.",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "payment_required"
+        ],
+        "properties": {
+          "payment_required": {
+            "description": "The 402 response body (object or JSON string) or the base64 PAYMENT-REQUIRED header value.",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "object"
+              }
+            ]
+          },
+          "wallet": {
+            "type": "string",
+            "description": "YOUR address on the invoice's network (the wallet your x402 client signs with)."
+          },
+          "pay_with_token": {
+            "type": "string",
+            "description": "Token you hold and will pay with, e.g. 'SOL' or 'USDC'."
+          },
+          "pay_with_chain": {
+            "type": "string",
+            "description": "Chain you pay from, e.g. 'solana'."
+          },
+          "refund_address": {
+            "type": "string",
+            "description": "Your address on the paying chain, for automatic refunds."
+          },
+          "top_up_usd": {
+            "type": "number",
+            "description": "Minimum top-up in USD (1-500, default 5). The invoice amount is used if larger."
+          },
+          "prefer_network": {
+            "type": "string",
+            "description": "Optional: which of the invoice's networks to fund, e.g. 'base' or 'solana'."
+          },
+          "slippage_bps": {
+            "type": "integer",
+            "description": "Max slippage in basis points (default 100 = 1%, range 10-500)."
+          },
+          "speed": {
+            "type": "string",
+            "enum": [
+              "best_price",
+              "fast"
+            ],
+            "description": "Optional. Default 'best_price': Swap Ripper quotes two networks at once and uses whichever is cheaper for you (and the other if one fails); the reply's route_choice shows both. 'fast' forces the ~seconds Relay route."
+          },
+          "request_id": {
+            "type": "string",
+            "description": "Recommended: your own unique ID for this payment (e.g. a UUID). Retrying with the same request_id returns the SAME payment instructions, so you never pay twice."
+          },
+          "test": {
+            "type": "boolean",
+            "description": "Test mode: true = no real money. You get a fake deposit address that completes by itself in ~15s, so you can test status, invoices, receipts and webhooks for free."
+          },
+          "referrer": {
+            "type": "string",
+            "description": "Optional: your NEAR account (e.g. 'myagent.near'). You earn 1/3 of the service fee on every swap routed with it. The user pays the same."
+          }
+        }
+      }
+    },
+    {
+      "name": "create_payment_link",
+      "description": "Create a shareable payment link that is also a trackable invoice. The payer can pay with ANY token on ANY chain; you receive exactly the token you choose (e.g. 50 USDC on Base). Returns an invoice_id: call check_payment to see when it is paid, then get_receipt for signed proof. Great for agents that sell services to humans or other agents. No account needed.",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "token",
+          "recipient"
+        ],
+        "properties": {
+          "token": {
+            "type": "string",
+            "description": "Token to receive, e.g. 'USDC'."
+          },
+          "chain": {
+            "type": "string",
+            "description": "Chain to receive on, e.g. 'base'."
+          },
+          "amount": {
+            "type": "string",
+            "description": "Optional fixed amount, e.g. '50'. Leave empty to let the payer choose."
+          },
+          "recipient": {
+            "type": "string",
+            "description": "Your address on that chain."
+          },
+          "label": {
+            "type": "string",
+            "description": "Optional note shown to the payer, e.g. 'Invoice #12' (max 80 chars)."
+          },
+          "test": {
+            "type": "boolean",
+            "description": "Test invoice: only test-mode payments count toward it (great for building and testing your flow for free)."
+          },
+          "webhook_url": {
+            "type": "string",
+            "description": "Optional https URL. When the invoice is paid, Swap Ripper POSTs a signed notification (with the receipt) to it, so you don't have to poll."
+          },
+          "referrer": {
+            "type": "string",
+            "description": "Optional: your NEAR account (e.g. 'myagent.near'). You earn 1/3 of the service fee on every swap routed with it. The user pays the same."
+          }
+        }
+      }
+    },
+    {
+      "name": "check_payment",
+      "description": "Check whether an invoice (from create_payment_link) has been paid. Returns unpaid / processing / paid, every payment attempt with its status and blockchain transaction, and how to get a signed receipt. Use it to deliver your service only after you've been paid.",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "invoice_id"
+        ],
+        "properties": {
+          "invoice_id": {
+            "type": "string",
+            "description": "The invoice_id returned by create_payment_link (starts with 'inv_')."
+          }
+        }
+      }
+    },
+    {
+      "name": "get_receipt",
+      "description": "Get a clean, digitally signed receipt for a completed swap or payment: what was paid, what was received, by whom, on which chains, with transaction hashes and the fee. Share it with your owner, a seller or another agent; anyone can confirm it's genuine with verify_receipt.",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "deposit_address"
+        ],
+        "properties": {
+          "deposit_address": {
+            "type": "string",
+            "description": "The deposit_address of the swap or payment."
+          },
+          "deposit_memo": {
+            "type": "string",
+            "description": "deposit_memo, if one was returned."
+          }
+        }
+      }
+    },
+    {
+      "name": "verify_receipt",
+      "description": "Confirm that a Swap Ripper receipt is genuine and unchanged. Pass the receipt object and signature exactly as get_receipt returned them.",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "receipt",
+          "signature"
+        ],
+        "properties": {
+          "receipt": {
+            "description": "The receipt object (or its JSON text).",
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "string"
+              }
+            ]
+          },
+          "signature": {
+            "type": "string",
+            "description": "The signature string."
+          }
+        }
+      }
+    },
+    {
+      "name": "create_paywall",
+      "description": "For API/website OWNERS: put a paywall in front of any https API in seconds, no code. Set a price per pack (e.g. 1 USDC for 1000 calls) and your wallet. You get a gateway_url: agents calling it get HTTP 402 with buying instructions, pay with ANY coin on any chain (money goes straight to you), then their calls are forwarded to your API. Returns an admin_key for stats and an off switch. Add listed=true to appear in the public directory, test=true to try it free.",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "upstream_url",
+          "price_per_pack",
+          "calls_per_pack",
+          "recipient"
+        ],
+        "properties": {
+          "upstream_url": {
+            "type": "string",
+            "description": "Your API's base URL (https), e.g. https://api.example.com/v1. Paths and queries after the gateway URL are appended."
+          },
+          "price_per_pack": {
+            "type": "string",
+            "description": "Price of one pack, in the token you receive, e.g. '1'. Must be worth at least $1."
+          },
+          "calls_per_pack": {
+            "type": "integer",
+            "description": "Calls included in one pack, e.g. 1000."
+          },
+          "recipient": {
+            "type": "string",
+            "description": "Your wallet address on the chain you receive on."
+          },
+          "token": {
+            "type": "string",
+            "description": "Token you receive (default USDC)."
+          },
+          "chain": {
+            "type": "string",
+            "description": "Chain you receive on (default base)."
+          },
+          "name": {
+            "type": "string",
+            "description": "Short name shown to buyers, e.g. 'Weather API'."
+          },
+          "description": {
+            "type": "string",
+            "description": "What your API does (shown in the directory)."
+          },
+          "upstream_header": {
+            "type": "string",
+            "description": "Optional secret header added to forwarded calls so only Swap Ripper can reach your API, e.g. 'Authorization: Bearer abc123'."
+          },
+          "listed": {
+            "type": "boolean",
+            "description": "List in the public directory (find_paywalls)."
+          },
+          "test": {
+            "type": "boolean",
+            "description": "Test paywall: only free test-mode payments count."
+          }
+        }
+      }
+    },
+    {
+      "name": "find_paywalls",
+      "description": "Search the public directory of paywalled APIs (data, tools, services) that accept any coin. Returns name, price per call and gateway_url; buy with buy_access or by handing the gateway_url to the pay tool.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Words to search for, e.g. 'weather' or 'news'. Empty lists the newest."
+          }
+        }
+      }
+    },
+    {
+      "name": "buy_access",
+      "description": "Buy a pack of calls for a paywalled API (from a 402 response, find_paywalls or a gateway_url). Returns an access_key and a payment link payable with any coin. Add pay_with_token, pay_with_chain and refund_address to get deposit instructions right away. Pass an existing access_key to top it up. Credits activate automatically once paid; then send header X-Access-Key on calls to the gateway_url.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "paywall_id": {
+            "type": "string",
+            "description": "e.g. pw_abc123... (or use gateway_url)."
+          },
+          "gateway_url": {
+            "type": "string",
+            "description": "The paywalled URL you called."
+          },
+          "access_key": {
+            "type": "string",
+            "description": "Optional: an existing key to top up."
+          },
+          "pay_with_token": {
+            "type": "string"
+          },
+          "pay_with_chain": {
+            "type": "string"
+          },
+          "refund_address": {
+            "type": "string"
+          },
+          "speed": {
+            "type": "string",
+            "enum": [
+              "best_price",
+              "fast"
+            ],
+            "description": "Optional. Default 'best_price': Swap Ripper quotes two networks at once and uses whichever is cheaper for you (and the other if one fails); the reply's route_choice shows both. 'fast' forces the ~seconds Relay route."
+          },
+          "request_id": {
+            "type": "string",
+            "description": "Recommended: your own unique ID for this payment (e.g. a UUID). Retrying with the same request_id returns the SAME payment instructions, so you never pay twice."
+          }
+        }
+      }
+    },
+    {
+      "name": "access_status",
+      "description": "Check how many paid calls an access_key has left, and whether any purchased packs are still waiting for payment (it activates them automatically once paid).",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "access_key"
+        ],
+        "properties": {
+          "access_key": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "paywall_stats",
+      "description": "For paywall owners: packs sold, calls sold and served, revenue tally, and settings. Requires admin_key.",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "paywall_id",
+          "admin_key"
+        ],
+        "properties": {
+          "paywall_id": {
+            "type": "string"
+          },
+          "admin_key": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "set_paywall_enabled",
+      "description": "For paywall owners: enabled=false stops new sales and paid calls instantly; listed=true/false shows or hides it in the public directory. Requires admin_key.",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "paywall_id",
+          "admin_key",
+          "enabled"
+        ],
+        "properties": {
+          "paywall_id": {
+            "type": "string"
+          },
+          "admin_key": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "listed": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    {
+      "name": "create_spending_policy",
+      "description": "For agent OWNERS. Create spending limits (max per payment, max per day, optional allowed chains, tokens and recipients) and get a policy-locked connection URL to give your agent. Every swap and payment through that URL is checked first and refused if it breaks a rule. Also returns a private admin_key for the spending log and an off switch. Swap Ripper never holds funds.",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "max_per_payment_usd",
+          "max_per_day_usd"
+        ],
+        "properties": {
+          "max_per_payment_usd": {
+            "type": "number",
+            "description": "Largest single payment allowed, in USD, e.g. 20."
+          },
+          "max_per_day_usd": {
+            "type": "number",
+            "description": "Total allowed per UTC day, in USD, e.g. 100."
+          },
+          "allowed_chains": {
+            "description": "Optional list of chains money may move on, e.g. ['base','solana']. Empty = any.",
+            "anyOf": [
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              {
+                "type": "string"
+              }
+            ]
+          },
+          "allowed_tokens": {
+            "description": "Optional list of tokens the agent may send, e.g. ['USDC']. Empty = any.",
+            "anyOf": [
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              {
+                "type": "string"
+              }
+            ]
+          },
+          "allowed_recipients": {
+            "description": "Optional list of addresses the agent may pay. Empty = any.",
+            "anyOf": [
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              {
+                "type": "string"
+              }
+            ]
+          },
+          "label": {
+            "type": "string",
+            "description": "Optional name, e.g. 'research agent'."
+          },
+          "expires_in_days": {
+            "type": "integer",
+            "description": "1-365, default 365."
+          }
+        }
+      }
+    },
+    {
+      "name": "policy_status",
+      "description": "See a spending policy's limits, how much was spent today and how much is left. Owners who pass admin_key also get the spending log (last 50 payments).",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "policy_id"
+        ],
+        "properties": {
+          "policy_id": {
+            "type": "string",
+            "description": "The policy_id (starts with 'pol_')."
+          },
+          "admin_key": {
+            "type": "string",
+            "description": "Owner only: the admin_key, to include the spending log."
+          }
+        }
+      }
+    },
+    {
+      "name": "set_policy_enabled",
+      "description": "Owner kill switch. enabled=false instantly blocks every swap and payment through the policy; enabled=true turns it back on. Requires admin_key.",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "policy_id",
+          "admin_key",
+          "enabled"
+        ],
+        "properties": {
+          "policy_id": {
+            "type": "string"
+          },
+          "admin_key": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    {
+      "name": "refuel_gas",
+      "description": "Stuck without gas? Get a small amount of the native gas token (ETH on Base/Arbitrum/Optimism/Ethereum, SOL, BNB, POL, AVAX, TRX, TON, SUI...) delivered to any address, paid with whatever token you hold on any chain. Default $3 worth.",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "chain",
+          "recipient",
+          "pay_with_token",
+          "refund_address"
+        ],
+        "properties": {
+          "chain": {
+            "type": "string",
+            "description": "Chain that needs gas, e.g. 'base', 'solana', 'arbitrum'."
+          },
+          "recipient": {
+            "type": "string",
+            "description": "Address that needs gas, on that chain."
+          },
+          "usd_amount": {
+            "type": "number",
+            "description": "How much gas in USD (1-50, default 3)."
+          },
+          "pay_with_token": {
+            "type": "string",
+            "description": "Token you pay with, e.g. 'USDC'."
+          },
+          "pay_with_chain": {
+            "type": "string",
+            "description": "Chain you pay from, e.g. 'solana'."
+          },
+          "refund_address": {
+            "type": "string",
+            "description": "Your address on the paying chain, for automatic refunds."
+          },
+          "slippage_bps": {
+            "type": "integer",
+            "description": "Max slippage in basis points (default 100 = 1%, range 10-500)."
+          },
+          "speed": {
+            "type": "string",
+            "enum": [
+              "best_price",
+              "fast"
+            ],
+            "description": "Optional. Default 'best_price': Swap Ripper quotes two networks at once and uses whichever is cheaper for you (and the other if one fails); the reply's route_choice shows both. 'fast' forces the ~seconds Relay route."
+          },
+          "request_id": {
+            "type": "string",
+            "description": "Recommended: your own unique ID for this payment (e.g. a UUID). Retrying with the same request_id returns the SAME payment instructions, so you never pay twice."
+          },
+          "test": {
+            "type": "boolean",
+            "description": "Test mode: true = no real money. You get a fake deposit address that completes by itself in ~15s, so you can test status, invoices, receipts and webhooks for free."
+          },
+          "referrer": {
+            "type": "string",
+            "description": "Optional: your NEAR account (e.g. 'myagent.near'). You earn 1/3 of the service fee on every swap routed with it. The user pays the same."
+          }
+        }
+      }
+    },
+    {
+      "name": "quote_from_text",
+      "description": "Get a quote from a plain-English request like '25 USDC on solana to ETH on base' or 'swap 0.1 BTC for SOL'. Same output as get_quote.",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "request"
+        ],
+        "properties": {
+          "request": {
+            "type": "string",
+            "description": "e.g. '25 USDC on solana to ETH on base'"
+          },
+          "referrer": {
+            "type": "string",
+            "description": "Optional: your NEAR account (e.g. 'myagent.near'). You earn 1/3 of the service fee on every swap routed with it. The user pays the same."
+          }
+        }
+      }
+    },
+    {
+      "name": "referral_stats",
+      "description": "See how many swaps and how much volume your referrer account has routed, and estimated earnings. Fees are paid on-chain to your NEAR account automatically.",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "referrer"
+        ],
+        "properties": {
+          "referrer": {
+            "type": "string",
+            "description": "Optional: your NEAR account (e.g. 'myagent.near'). You earn 1/3 of the service fee on every swap routed with it. The user pays the same."
+          }
+        }
+      }
+    },
+    {
+      "name": "get_swap_status",
+      "description": "Check a swap by deposit address. Set wait_seconds (up to 25) and the server waits for the status to change before answering, so you need fewer calls. Statuses: PENDING_DEPOSIT, PROCESSING, SUCCESS, INCOMPLETE_DEPOSIT, REFUNDED, FAILED. `final=true` means done.",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "deposit_address"
+        ],
+        "properties": {
+          "deposit_address": {
+            "type": "string",
+            "description": "deposit_address returned by create_swap or pay_exact."
+          },
+          "deposit_memo": {
+            "type": "string",
+            "description": "deposit_memo, if one was returned."
+          },
+          "wait_seconds": {
+            "type": "integer",
+            "description": "0-25. Server-side wait for a status change (long-poll)."
+          },
+          "route": {
+            "type": "string",
+            "enum": [
+              "best_price",
+              "fast"
+            ],
+            "description": "Pass 'fast' if the swap was created with speed='fast' (the reply says route='fast')."
+          }
+        }
+      }
+    },
+    {
+      "name": "compare_quotes",
+      "description": "Quote up to 10 routes in a single call (e.g. pay with USDC on Solana vs USDC on Base vs ETH) and get the best one by USD output. Saves round trips.",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "routes"
+        ],
+        "properties": {
+          "routes": {
+            "type": "array",
+            "maxItems": 10,
+            "description": "List of {from_token, from_chain, to_token, to_chain, amount}.",
+            "items": {
+              "type": "object",
+              "required": [
+                "from_token",
+                "to_token",
+                "amount"
+              ],
+              "properties": {
+                "from_token": {
+                  "type": "string",
+                  "description": "Token to send: symbol ('USDC', 'ETH', 'BTC'), 'SYMBOL@chain', 'SYMBOL on chain', or an asset_id from search_tokens."
+                },
+                "from_chain": {
+                  "type": "string",
+                  "description": "Chain the token is sent from, e.g. 'solana', 'base', 'ethereum', 'bitcoin'. Needed when the symbol exists on several chains."
+                },
+                "to_token": {
+                  "type": "string",
+                  "description": "Token to receive (same formats as from_token)."
+                },
+                "to_chain": {
+                  "type": "string",
+                  "description": "Chain to receive on."
+                },
+                "amount": {
+                  "type": "string",
+                  "description": "Amount of from_token to send, as a human-readable decimal string, e.g. '25' or '0.015'. Not base units."
+                }
+              }
+            }
+          },
+          "referrer": {
+            "type": "string",
+            "description": "Optional: your NEAR account (e.g. 'myagent.near'). You earn 1/3 of the service fee on every swap routed with it. The user pays the same."
+          }
+        }
+      }
+    },
+    {
+      "name": "get_prices",
+      "description": "Free USD prices for tokens across 25+ chains in one call. No API key, no rate-limit sign-up. Filter by symbols (e.g. ['BTC','ETH','SOL']) and/or chain.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "symbols": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Symbols to price. Empty = all."
+          },
+          "chain": {
+            "type": "string",
+            "description": "Optional chain filter."
+          }
+        }
+      }
+    },
+    {
+      "name": "search_tokens",
+      "description": "Find supported tokens by symbol and/or chain. Returns symbol, chain, asset_id, decimals, contract and USD price.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Symbol or part of it, e.g. 'USDC'. Empty = all."
+          },
+          "chain": {
+            "type": "string",
+            "description": "Optional chain filter, e.g. 'solana', 'base'."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Max results (1-100, default 25)."
+          }
+        }
+      }
+    },
+    {
+      "name": "list_chains",
+      "description": "Every supported blockchain with example tokens and accepted chain-name aliases.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "io.github.swapripper/swap-ripper",
+    "version": "1.5.2",
+    "remoteUrl": "https://swap-ripper.szydlow45.workers.dev/mcp",
+    "publishedAt": "2026-11-25T01:59:34.882371Z",
+    "fetchedAt": "2026-11-25T11:03:46.215Z",
+    "toolsSha256": "af3131a193232ccd5d3a60c8d73a1df56d75765babaa486d0ace98788bb9b579"
+  }
+}

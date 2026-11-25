@@ -1,0 +1,1005 @@
+{
+  "$schema": "../schema.json",
+  "name": "is.envelop.unisafe/insight",
+  "title": "unisafe LP insight",
+  "category": "AI, LLMs & Agents",
+  "description": "Uniswap v4 LP managers for agents: history, strategies, Watcher, cloud executor, create for USDC.",
+  "tools": [
+    {
+      "name": "get_position_history",
+      "description": "Every position of a manager, or one position by salt: when it opened, its pool, its lifetime fees and its events. Answered from the index, falling back to the Envelop history API and then to a log scan; the answer says which one served it and how current that source is.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "chainId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "EVM chain id, e.g. 42161 for Arbitrum One"
+          },
+          "manager": {
+            "type": "string",
+            "pattern": "^0x[0-9a-fA-F]{40}$",
+            "description": "Manager NFT contract address"
+          },
+          "salt": {
+            "type": "string",
+            "pattern": "^0x[0-9a-fA-F]{64}$",
+            "description": "Position key"
+          }
+        },
+        "required": [
+          "chainId",
+          "manager"
+        ]
+      }
+    },
+    {
+      "name": "list_managers",
+      "description": "Every unisafe LP manager (Stable and Volatile) the wallet currently owns, on every chain the Envelop oracle indexes, with the app link for each — the way in when you know the owner and not the managers. Other Envelop wNFTs the wallet holds are left out. An empty list means it owns none; when the oracle cannot answer this is an error, not an empty list.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "owner": {
+            "type": "string",
+            "pattern": "^0x[0-9a-fA-F]{40}$",
+            "description": "Wallet address that owns the managers (an EOA or a smart account)"
+          }
+        },
+        "required": [
+          "owner"
+        ]
+      }
+    },
+    {
+      "name": "list_operators",
+      "description": "Addresses currently authorised to rebalance a manager's positions. They can never withdraw — that is enforced by the contract. On the scan path the answer may be `partial`, which means a revoked operator could still be listed; from the index it never is.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "chainId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "EVM chain id, e.g. 42161 for Arbitrum One"
+          },
+          "manager": {
+            "type": "string",
+            "pattern": "^0x[0-9a-fA-F]{40}$",
+            "description": "Manager NFT contract address"
+          }
+        },
+        "required": [
+          "chainId",
+          "manager"
+        ]
+      }
+    },
+    {
+      "name": "rank_pools",
+      "description": "Fee APR over the last 24 hours for each pool this manager is configured with, best first — the Uniswap gateway's figure, or the subgraph's last complete day for a pool the gateway does not list (`aprSource`). Only the manager's own pools are candidates: a move can target a pool only if the owner fixed it into the set when the manager was created. Pools that could not be scored are listed separately with the reason — a pool missing from the ranking is not a bad pool. `gatewayStale` / `gatewayDataAt` say when the gateway's figures are older than they should be.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "chainId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "EVM chain id, e.g. 42161 for Arbitrum One"
+          },
+          "manager": {
+            "type": "string",
+            "pattern": "^0x[0-9a-fA-F]{40}$",
+            "description": "Manager NFT contract address"
+          }
+        },
+        "required": [
+          "chainId",
+          "manager"
+        ]
+      }
+    },
+    {
+      "name": "suggest_move",
+      "description": "Compares the position's current pool against the rest of the manager's set and, when the gap is worth it, returns the numbers for a move: destination pool, ticks, and how much liquidity. A pool sharing no currency with the position is suggested only when the manager (v2.2) can bridge to it through another of its own pools; the answer then names that bridge. It returns NUMBERS, never calldata — pass them to the local envelop-mcp-lp server's propose_move, which re-derives each one against chain state and puts it through the policy and the price-oracle guard before anything is signed. The full ranking and the caveats come back with every answer so the suggestion can be disagreed with.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "chainId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "EVM chain id, e.g. 42161 for Arbitrum One"
+          },
+          "manager": {
+            "type": "string",
+            "pattern": "^0x[0-9a-fA-F]{40}$",
+            "description": "Manager NFT contract address"
+          },
+          "salt": {
+            "type": "string",
+            "pattern": "^0x[0-9a-fA-F]{64}$",
+            "description": "Position key"
+          },
+          "minGainPct": {
+            "description": "Minimum APR advantage, in percentage points, before moving is suggested. Default 1.",
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "chainId",
+          "manager",
+          "salt"
+        ]
+      }
+    },
+    {
+      "name": "get_prices",
+      "description": "What things are worth on a chain: token USD prices (the Uniswap gateway's map; the native token, address zero, priced as the chain's WETH), the gas price, and the typical USD cost of each operator operation at it (recenter, move, allocate, reinvest, claim). For weighing whether an operation pays before simulating it — a simulation's own gas estimate is better once there is one. `tokens` narrows the map and lists the ones it cannot price; `derived` names known stablecoins the gateway left unpriced, priced from a stablecoin they are pooled with; `stale` marks a copy served while a refresh fails; `gatewayStale: true` means the gateway's last answer (`gatewayDataAt`) is over 3 hours old, so the prices are that old answer's, not current.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "chainId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "EVM chain id, e.g. 42161 for Arbitrum One"
+          },
+          "tokens": {
+            "description": "Token addresses to price; all known when omitted",
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^0x[0-9a-fA-F]{40}$"
+            }
+          }
+        },
+        "required": [
+          "chainId"
+        ]
+      }
+    },
+    {
+      "name": "list_strategies",
+      "description": "The strategies the Envelop Think Tank factory has released (the shelf on unisafe's landing and /strategies): id, title, chain, product (stable/volatile), pools, the paper run's live numbers and the backtest, and `blocked` — null when it may be started now, otherwise why not. `fresh` says how old the shelf is. Free, read-only. Next: get_strategy(id) for one in full.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "get_strategy",
+      "description": "One strategy by id (think-tank/<slug>) or slug: the shelf entry, its playbook, its `actions`, its agent rules (strategy.json + STRATEGY.md) — returned only when they hash to the sha256 the shelf publishes, otherwise `rules.ok: false` with the reason — and its manager template (the pools a manager for it is created with). `next` says how to run it: prepare_create_manager with this strategy, then deposit and an operator, and watch_strategy for the Watcher.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 220,
+            "description": "think-tank/<slug> or <slug>"
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    },
+    {
+      "name": "watch_terms",
+      "description": "The Watcher (Сторож) follows a manager's positions against a Think Tank strategy and says when the strategy calls for an action (Telegram to the owner; in `agent` mode it audits the owner's agent). Price per manager per period in USDC (`priceUsdc` 0 = free beta), `periodDays`, how payment is taken (x402, in USDC) and the Telegram bot.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "watch_strategy",
+      "description": "Whether the Watcher can follow a strategy, and how: `action` recenter (it says when to recenter) or notify (it says the position is out of range), and the wait before it speaks. `ok: false` with a reason — do not ask the owner to sign or pay for it.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 220,
+            "description": "think-tank/<slug> or <slug>"
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    },
+    {
+      "name": "watch_status",
+      "description": "A manager's watches (strategy, positions, mode, status, paid `until`) and the Watcher's current advice per position (`due` = act now, `waiting` = out of range, inside the strategy's wait), plus the owner's shared strategy bindings. Public.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "chainId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "EVM chain id, e.g. 42161 for Arbitrum One"
+          },
+          "manager": {
+            "type": "string",
+            "pattern": "^0x[0-9a-fA-F]{40}$",
+            "description": "Manager NFT contract address"
+          }
+        },
+        "required": [
+          "chainId",
+          "manager"
+        ]
+      }
+    },
+    {
+      "name": "watch_prepare",
+      "description": "Step 1 of starting (Watch), stopping (Unwatch) or sharing (Bind) a watch. Returns EIP-712 `typedData` for the manager's OWNER (ownerOf(1) — `signer` names them) to sign with their own wallet, valid 10 minutes, and `next`: the tool to pass {chainId, message, signature} to — watch_subscribe, watch_cancel or watch_bind. This server signs nothing and an agent's own key is not the owner's unless it owns the manager.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "Watch",
+              "Unwatch",
+              "Bind"
+            ],
+            "description": "Watch = start or update watching (may cost); Unwatch = stop; Bind = share which positions follow a strategy (free)"
+          },
+          "chainId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "The manager's chain"
+          },
+          "manager": {
+            "type": "string",
+            "pattern": "^0x[0-9a-fA-F]{40}$",
+            "description": "Manager NFT contract address"
+          },
+          "strategy": {
+            "type": "string",
+            "pattern": "^think-tank\\/[a-z0-9][a-z0-9-]{0,199}$",
+            "description": "Strategy id, think-tank/<slug> (list_strategies)"
+          },
+          "positions": {
+            "description": "Position salts (get_position_history). Watch: 1–32; Bind: 0–32 (none forgets the binding); Unwatch: none",
+            "maxItems": 32,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^0x[0-9a-fA-F]{64}$"
+            }
+          },
+          "mode": {
+            "description": "Watch only. owner (default) — the Watcher tells the owner when to act; agent — the owner's agent acts and the Watcher audits it",
+            "type": "string",
+            "enum": [
+              "owner",
+              "agent"
+            ]
+          }
+        },
+        "required": [
+          "kind",
+          "chainId",
+          "manager",
+          "strategy"
+        ]
+      }
+    },
+    {
+      "name": "watch_subscribe",
+      "description": "Step 2 of a Watch: the owner-signed message from watch_prepare. Free inside the manager's paid period or during the beta; otherwise one period costs the `priceUsdc` watch_terms returns, paid by x402. Without payment the result is an error whose structuredContent is the x402 PaymentRequired: an x402 MCP client retries with the payment in _meta[\"x402/payment\"]; any other client POSTs `payBody` to `payUrl` and pays its HTTP 402 with an x402 wallet. `extend: true` buys one more period now. Returns the watch and a Telegram link for the owner.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "chainId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "The manager's chain (the typed data domain's chainId)"
+          },
+          "message": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {},
+            "description": "`typedData.message` from watch_prepare, unchanged"
+          },
+          "signature": {
+            "type": "string",
+            "pattern": "^0x[0-9a-fA-F]+$",
+            "description": "The owner's EIP-712 signature over that typed data"
+          },
+          "extend": {
+            "description": "Pay for one more period even inside a paid one",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "chainId",
+          "message",
+          "signature"
+        ]
+      }
+    },
+    {
+      "name": "watch_cancel",
+      "description": "Stop watching a manager for a strategy: the owner-signed `Unwatch` message from watch_prepare(kind: Unwatch). A paid period is not refunded and stays usable.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "chainId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "The manager's chain (the typed data domain's chainId)"
+          },
+          "message": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {},
+            "description": "`typedData.message` from watch_prepare, unchanged"
+          },
+          "signature": {
+            "type": "string",
+            "pattern": "^0x[0-9a-fA-F]+$",
+            "description": "The owner's EIP-712 signature over that typed data"
+          }
+        },
+        "required": [
+          "chainId",
+          "message",
+          "signature"
+        ]
+      }
+    },
+    {
+      "name": "watch_bind",
+      "description": "Free. The owner-signed `Bind` from watch_prepare(kind: Bind): which positions of the manager follow which strategy, so every browser (and agent) sees it. No positions forgets the binding. No watching, no payment.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "chainId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "The manager's chain (the typed data domain's chainId)"
+          },
+          "message": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {},
+            "description": "`typedData.message` from watch_prepare, unchanged"
+          },
+          "signature": {
+            "type": "string",
+            "pattern": "^0x[0-9a-fA-F]+$",
+            "description": "The owner's EIP-712 signature over that typed data"
+          }
+        },
+        "required": [
+          "chainId",
+          "message",
+          "signature"
+        ]
+      }
+    },
+    {
+      "name": "prepare_set_operator",
+      "description": "Returns an UNSIGNED transaction {chainId, to, data, value} plus `simulation` — an eth_call of exactly it from `from` (ok, or the revert decoded by name) — `warnings` and `next`. This server signs nothing: the sender signs and sends it with their own wallet and pays the gas. Owner only. An operator may rebalance (allocate, recenter, move, claim, reinvest) inside the manager's pools and can never withdraw. To hand a manager to an operator agent, allow the address of the local envelop-mcp-lp server's operator wallet.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "chainId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "EVM chain id: 8453 Base, 42161 Arbitrum, 130 Unichain (1 = Ethereum mainnet, your gas)"
+          },
+          "manager": {
+            "type": "string",
+            "pattern": "^0x[0-9a-fA-F]{40}$",
+            "description": "Manager NFT contract address"
+          },
+          "operator": {
+            "type": "string",
+            "pattern": "^0x[0-9a-fA-F]{40}$",
+            "description": "The operator address to allow or revoke (for an agent: the operator wallet of the local envelop-mcp-lp server)"
+          },
+          "allowed": {
+            "type": "boolean",
+            "description": "true adds the operator, false revokes it"
+          },
+          "from": {
+            "type": "string",
+            "pattern": "^0x[0-9a-fA-F]{40}$",
+            "description": "The address that will send the transaction — the manager owner (ownerOf(1)). The simulation runs from it."
+          }
+        },
+        "required": [
+          "chainId",
+          "manager",
+          "operator",
+          "allowed",
+          "from"
+        ]
+      }
+    },
+    {
+      "name": "prepare_deposit",
+      "description": "Returns an UNSIGNED transaction {chainId, to, data, value} plus `simulation` — an eth_call of exactly it from `from` (ok, or the revert decoded by name) — `warnings` and `next`. This server signs nothing: the sender signs and sends it with their own wallet and pays the gas. A plain transfer to the manager (an ERC-20 `transfer`, or a native value send) — managers do not pull, so there is no approve. Amount in raw base units. The funds land idle; an operator or the owner then allocates them into positions.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "chainId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "EVM chain id: 8453 Base, 42161 Arbitrum, 130 Unichain (1 = Ethereum mainnet, your gas)"
+          },
+          "manager": {
+            "type": "string",
+            "pattern": "^0x[0-9a-fA-F]{40}$",
+            "description": "Manager NFT contract address"
+          },
+          "token": {
+            "type": "string",
+            "pattern": "^0x[0-9a-fA-F]{40}$",
+            "description": "Token to deposit; 0x0000000000000000000000000000000000000000 for the native coin"
+          },
+          "amount": {
+            "type": "string",
+            "pattern": "^[0-9]{1,78}$",
+            "description": "Raw base units as a decimal string (USDC 1.5 = \"1500000\"), never a decimal"
+          },
+          "from": {
+            "type": "string",
+            "pattern": "^0x[0-9a-fA-F]{40}$",
+            "description": "The wallet the funds come from — anyone may fund a manager, only the owner may take funds out"
+          }
+        },
+        "required": [
+          "chainId",
+          "manager",
+          "token",
+          "amount",
+          "from"
+        ]
+      }
+    },
+    {
+      "name": "prepare_withdraw",
+      "description": "Returns an UNSIGNED transaction {chainId, to, data, value} plus `simulation` — an eth_call of exactly it from `from` (ok, or the revert decoded by name) — `warnings` and `next`. This server signs nothing: the sender signs and sends it with their own wallet and pays the gas. Owner only. Moves idle balance (not in a position) out of the manager to `recipient`, one row per token, through the owner escape hatch `executeEncodedTxBatch`. Liquidity inside positions is withdrawn in the app's Withdraw page, which plans it against live prices.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "chainId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "EVM chain id: 8453 Base, 42161 Arbitrum, 130 Unichain (1 = Ethereum mainnet, your gas)"
+          },
+          "manager": {
+            "type": "string",
+            "pattern": "^0x[0-9a-fA-F]{40}$",
+            "description": "Manager NFT contract address"
+          },
+          "recipient": {
+            "type": "string",
+            "pattern": "^0x[0-9a-fA-F]{40}$",
+            "description": "Where the funds go"
+          },
+          "items": {
+            "minItems": 1,
+            "maxItems": 16,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "token": {
+                  "type": "string",
+                  "pattern": "^0x[0-9a-fA-F]{40}$",
+                  "description": "Token; 0x0…0 for the native coin"
+                },
+                "amount": {
+                  "type": "string",
+                  "pattern": "^[0-9]{1,78}$",
+                  "description": "Raw base units as a decimal string (USDC 1.5 = \"1500000\"), never a decimal"
+                }
+              },
+              "required": [
+                "token",
+                "amount"
+              ]
+            },
+            "description": "Idle balances to take out, one row per token"
+          },
+          "from": {
+            "type": "string",
+            "pattern": "^0x[0-9a-fA-F]{40}$",
+            "description": "The address that will send the transaction — the manager owner (ownerOf(1)). The simulation runs from it."
+          }
+        },
+        "required": [
+          "chainId",
+          "manager",
+          "recipient",
+          "items",
+          "from"
+        ]
+      }
+    },
+    {
+      "name": "prepare_create_manager",
+      "description": "Returns an UNSIGNED transaction {chainId, to, data, value} plus `simulation` — an eth_call of exactly it from `from` (ok, or the revert decoded by name) — `warnings` and `next`. This server signs nothing: the sender signs and sends it with their own wallet and pays the gas. LPManagerFactory.createManagerNondeterministic on Base, Arbitrum, Unichain or Ethereum; `from` pays its gas. To create without gas of your own on Base, Arbitrum or Unichain, use quote_create_manager → create_manager instead (Envelop's relayer, paid in USDC; mainnet has no relayer). Anyone may send it; the manager NFT goes to `owner`. Either `strategy` (a Think Tank id: its template fixes product and pools) or `product` + `pools`. The pool set is fixed forever; the chain's price oracle is wired in. The new address is the `proxy` of the factory's EnvelopV2Deployment event in the receipt.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "chainId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "EVM chain id: 8453 Base, 42161 Arbitrum, 130 Unichain (1 = Ethereum mainnet, your gas)"
+          },
+          "owner": {
+            "type": "string",
+            "pattern": "^0x[0-9a-fA-F]{40}$",
+            "description": "Who receives the manager NFT. Explicit on purpose: a smart account on one chain may not exist on another"
+          },
+          "from": {
+            "type": "string",
+            "pattern": "^0x[0-9a-fA-F]{40}$",
+            "description": "Who sends (and pays gas for) the transaction; any address — the factory is permissionless and the NFT still goes to `owner`"
+          },
+          "strategy": {
+            "description": "A Think Tank strategy id (think-tank/<slug>) — its manager template supplies product and pools; chainId must be the strategy's chain",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 220
+          },
+          "product": {
+            "description": "Without `strategy`: which manager",
+            "type": "string",
+            "enum": [
+              "stable",
+              "volatile"
+            ]
+          },
+          "pools": {
+            "description": "Without `strategy`: the manager's pool set, 1–32, fixed forever at creation",
+            "minItems": 1,
+            "maxItems": 32,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "currency0": {
+                  "type": "string",
+                  "pattern": "^0x[0-9a-fA-F]{40}$"
+                },
+                "currency1": {
+                  "type": "string",
+                  "pattern": "^0x[0-9a-fA-F]{40}$"
+                },
+                "fee": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 1000000
+                },
+                "tickSpacing": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 32767
+                },
+                "hooks": {
+                  "description": "Must be zero (hooked pools are not created here)",
+                  "type": "string",
+                  "pattern": "^0x[0-9a-fA-F]{40}$"
+                },
+                "tickLower": {
+                  "description": "Stable only: the manager's fixed range in this pool",
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "tickUpper": {
+                  "description": "Stable only",
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": [
+                "currency0",
+                "currency1",
+                "fee",
+                "tickSpacing"
+              ]
+            }
+          },
+          "name": {
+            "description": "Display name, up to 31 UTF-8 bytes",
+            "type": "string",
+            "maxLength": 64
+          }
+        },
+        "required": [
+          "chainId",
+          "owner",
+          "from"
+        ]
+      }
+    },
+    {
+      "name": "quote_create_manager",
+      "description": "Free. Step 1 of having a manager created WITHOUT gas of your own on Base, Arbitrum or Unichain: Envelop's relayer sends LPManagerFactory.createManagerNondeterministic and the manager NFT goes to `owner` (explicit — never assumed to be the payer). Either `strategy` (a Think Tank id) or `product` + `pools`. Returns quoteId, the price in USDC (gas × 1.2 × fee + L1 fee, × 1.5, at least $0.10 — usually exactly $0.10), the networks to pay on (USDC on Base or Arbitrum), expiresAt (≈2 minutes), the relayer's address, balance and how many creations it has gas for on that chain, and payUrl. Refused, with nothing to pay, when the creation would revert or the relayer is out of gas. Next: create_manager(quoteId).",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "chainId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Where the manager is created: 8453 Base, 42161 Arbitrum, 130 Unichain (Ethereum mainnet: prepare_create_manager, your own gas)"
+          },
+          "owner": {
+            "type": "string",
+            "pattern": "^0x[0-9a-fA-F]{40}$",
+            "description": "Who receives the manager NFT. Explicit on purpose: a smart account on one chain may not exist on another"
+          },
+          "strategy": {
+            "description": "A Think Tank strategy id (think-tank/<slug>) — its manager template supplies product and pools; chainId must be the strategy's chain",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 220
+          },
+          "product": {
+            "description": "Without `strategy`: which manager",
+            "type": "string",
+            "enum": [
+              "stable",
+              "volatile"
+            ]
+          },
+          "pools": {
+            "description": "Without `strategy`: the manager's pool set, 1–32, fixed forever at creation",
+            "minItems": 1,
+            "maxItems": 32,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "currency0": {
+                  "type": "string",
+                  "pattern": "^0x[0-9a-fA-F]{40}$"
+                },
+                "currency1": {
+                  "type": "string",
+                  "pattern": "^0x[0-9a-fA-F]{40}$"
+                },
+                "fee": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 1000000
+                },
+                "tickSpacing": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 32767
+                },
+                "hooks": {
+                  "description": "Must be zero (hooked pools are not created here)",
+                  "type": "string",
+                  "pattern": "^0x[0-9a-fA-F]{40}$"
+                },
+                "tickLower": {
+                  "description": "Stable only: the manager's fixed range in this pool",
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "tickUpper": {
+                  "description": "Stable only",
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": [
+                "currency0",
+                "currency1",
+                "fee",
+                "tickSpacing"
+              ]
+            }
+          },
+          "name": {
+            "description": "Display name, up to 31 UTF-8 bytes",
+            "type": "string",
+            "maxLength": 64
+          }
+        },
+        "required": [
+          "chainId",
+          "owner"
+        ]
+      }
+    },
+    {
+      "name": "create_manager",
+      "description": "Step 2: pay the quote and have the relayer create the manager. Costs the quoted USDC (usually $0.10, never above what quote_create_manager said without asking again). Without payment the result is an error whose structuredContent is the x402 PaymentRequired: an x402 MCP client retries with the payment in _meta[\"x402/payment\"]; any other client POSTs to `payUrl` and pays its HTTP 402 with an x402 wallet. If gas rose since the quote a new PaymentRequired comes back and nothing is charged. One quote creates one manager; calling again returns the operation. Returns the operation: status (sent/done/failed), the manager address (from the factory's EnvelopV2Deployment event) once mined, the transaction.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "quoteId": {
+            "type": "string",
+            "pattern": "^q_[0-9a-f]{24}$",
+            "description": "quoteId from quote_create_manager"
+          }
+        },
+        "required": [
+          "quoteId"
+        ]
+      }
+    },
+    {
+      "name": "get_operation",
+      "description": "Free. The state of quoteId: quoted / expired before payment; paid, sent, done (with `manager`, its app link and the transaction) or failed (with the reason — a creation that fails after payment is refunded by hand).",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "quoteId": {
+            "type": "string",
+            "pattern": "^q_[0-9a-f]{24}$",
+            "description": "quoteId from quote_create_manager"
+          }
+        },
+        "required": [
+          "quoteId"
+        ]
+      }
+    },
+    {
+      "name": "relayer_status",
+      "description": "Free. Envelop's relayer address and, per chain (Base, Arbitrum, Unichain): its ETH balance, the typical cost of one creation in wei and USD, how many creations it has gas for (`capacity`) and `status` — ok, low (< 5), empty, paused or unavailable. Anyone may top the relayer up; it is the same snapshot the site footer shows.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "executor_terms",
+      "description": "Free. Envelop's cloud executor runs a manager on a strategy as its OPERATOR — allocate, recenter, move, claim, reinvest, never withdraw — for owners who cannot run the local envelop-mcp-lp server (claude.ai chat, a phone, any agent with only this URL). Returns the operator address the owner allows, the chains, the price (each sent operation: its gas × 1.5, at least a per-chain minimum), top-up limits, the mandate defaults and the conditions (credit is per manager and not refunded).",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "executor_prepare",
+      "description": "Free. Builds the EIP-712 Mandate the manager's OWNER signs to let the cloud executor run it: manager, strategy and its sha256, operations and USDC a day, expiry. Checks the manager (type from its implementation) and that the strategy fits it. Also says whether the executor is already the manager's operator — if not, the owner first sends setOperator(operator, true) (prepare_set_operator). Sign `typedData` with eth_signTypedData_v4 within 10 minutes, then executor_subscribe.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "chainId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "8453 Base, 42161 Arbitrum, 130 Unichain, 1 Ethereum"
+          },
+          "manager": {
+            "type": "string",
+            "pattern": "^0x[0-9a-fA-F]{40}$",
+            "description": "The manager address"
+          },
+          "strategy": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 220,
+            "description": "envelop/follow-price (Volatile), envelop/compound (Stable), or a Think Tank id think-tank/<slug> (list_strategies)"
+          },
+          "maxOpsPerDay": {
+            "description": "Operations a day the executor may send (default 6, or the strategy's own lower budget)",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 48
+          },
+          "maxUsdcPerDay": {
+            "description": "USDC a day it may charge the manager's credit (default 2)",
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "maximum": 1000
+          },
+          "days": {
+            "description": "How long the mandate runs (default 90)",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 366
+          }
+        },
+        "required": [
+          "chainId",
+          "manager",
+          "strategy"
+        ]
+      }
+    },
+    {
+      "name": "executor_subscribe",
+      "description": "Free. Hands the owner-signed Mandate to the executor. Refused unless the signer is the manager's ownerOf(1), the signature is under 10 minutes old and new, the strategy still hashes to what was signed, and the executor is already the manager's operator. Returns the status and `telegram`: a t.me link the owner opens to get the executor's notes (acted, held a decision, stopped) — handed out only here. Then executor_topup — without credit the executor only observes.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "chainId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "8453 Base, 42161 Arbitrum, 130 Unichain, 1 Ethereum"
+          },
+          "message": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {},
+            "description": "The typed data's `message`, exactly as signed"
+          },
+          "signature": {
+            "type": "string",
+            "pattern": "^0x[0-9a-fA-F]+$",
+            "description": "The owner's eth_signTypedData_v4 signature"
+          }
+        },
+        "required": [
+          "chainId",
+          "message",
+          "signature"
+        ]
+      }
+    },
+    {
+      "name": "executor_topup",
+      "description": "Adds prepaid USDC credit to a manager the executor runs; each sent operation is charged from it (gas × 1.5, at least the chain's minimum). Without payment the result is an error whose structuredContent is the x402 PaymentRequired: an x402 MCP client retries with _meta[\"x402/payment\"]; any other client POSTs to `payUrl` and pays its HTTP 402. Anyone may pay; the credit only ever pays for this manager's operations and is not refunded.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "chainId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "8453 Base, 42161 Arbitrum, 130 Unichain, 1 Ethereum"
+          },
+          "manager": {
+            "type": "string",
+            "pattern": "^0x[0-9a-fA-F]{40}$",
+            "description": "The manager address"
+          },
+          "amountUsdc": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 1000,
+            "description": "USDC to add (2–200 by default; executor_terms)"
+          }
+        },
+        "required": [
+          "chainId",
+          "manager",
+          "amountUsdc"
+        ]
+      }
+    },
+    {
+      "name": "executor_status",
+      "description": "Free. Whether the executor runs this manager (and why not), the mandate, the credit left, today's operations and charges, the last ledger entries (top-ups, charges with their transactions) and the engine's recent notes (held decisions, refusals).",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "chainId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "8453 Base, 42161 Arbitrum, 130 Unichain, 1 Ethereum"
+          },
+          "manager": {
+            "type": "string",
+            "pattern": "^0x[0-9a-fA-F]{40}$",
+            "description": "The manager address"
+          }
+        },
+        "required": [
+          "chainId",
+          "manager"
+        ]
+      }
+    },
+    {
+      "name": "executor_cancel",
+      "description": "Free. Without `signature`: returns the EIP-712 Revoke typed data for the owner to sign. With `message` + `signature`: stops the executor on this manager. The owner can also stop it without us at any time: setOperator(operator, false).",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "chainId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "8453 Base, 42161 Arbitrum, 130 Unichain, 1 Ethereum"
+          },
+          "manager": {
+            "type": "string",
+            "pattern": "^0x[0-9a-fA-F]{40}$",
+            "description": "The manager address"
+          },
+          "message": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {},
+            "description": "The typed data's `message`, exactly as signed"
+          },
+          "signature": {
+            "type": "string",
+            "pattern": "^0x[0-9a-fA-F]+$",
+            "description": "The owner's eth_signTypedData_v4 signature"
+          }
+        },
+        "required": [
+          "chainId",
+          "manager"
+        ]
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "is.envelop.unisafe/insight",
+    "version": "0.9.0",
+    "remoteUrl": "https://unisafe.envelop.is/mcp",
+    "publishedAt": "2026-11-25T06:23:31.190419Z",
+    "fetchedAt": "2026-11-25T11:03:46.215Z",
+    "toolsSha256": "e0414588ce6d7e8a8f28edc23f533fcbda3da15731b942ea9765a3b1f65a20f1"
+  }
+}
