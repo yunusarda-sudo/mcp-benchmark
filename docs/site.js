@@ -81,8 +81,11 @@
 
     // Auditor State
     const jsonInput = document.getElementById('json-input');
-    const presetSelector = document.getElementById('preset-selector');
-    const btnAudit = document.getElementById('btn-audit');
+    const presetChips = document.getElementById('preset-chips');
+    const sourceStatus = document.getElementById('audit-source-status');
+    const jsonError = document.getElementById('json-error');
+    const editorDrawer = document.getElementById('editor-drawer');
+    const onlyIssuesToggle = document.getElementById('only-issues');
     const btnAutoFix = document.getElementById('btn-autofix');
     const btnFormat = document.getElementById('btn-format');
     const btnClear = document.getElementById('btn-clear');
@@ -101,44 +104,86 @@
       malicious: 'Prompt Injection & Secret Leak',
     };
 
-    function labelPresetOptions() {
-      Array.from(presetSelector.options).forEach(opt => {
-        const base = PRESET_LABELS[opt.value] || opt.value;
-        opt.textContent = base;
-        try {
-          const lib = window.McpBenchmark;
-          const result = lib.benchmarkServer(lib.extractTools(lib.PRESETS[opt.value]));
-          opt.textContent = `${base} (${result.grade} · ${result.overallTQI})`;
-        } catch (err) {
-          console.warn('Could not score preset', opt.value, err);
-        }
-      });
+    const AUTO_AUDIT_DELAY_MS = 350;
+    const MAX_UPLOAD_BYTES = 2 * 1024 * 1024;
+    let currentSource = { label: 'Your JSON', kind: 'pasted' };
+    let autoAuditTimer = null;
+
+    function presetScore(name) {
+      try {
+        const lib = window.McpBenchmark;
+        return lib.benchmarkServer(lib.extractTools(lib.PRESETS[name]));
+      } catch (err) {
+        console.warn('Could not score preset', name, err);
+        return null;
+      }
+    }
+
+    function renderPresetChips() {
+      presetChips.replaceChildren(...Object.entries(PRESET_LABELS).map(([name, label]) => {
+        const result = presetScore(name);
+        const chip = el('button', 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-800/80 hover:bg-slate-700 border border-slate-700 text-slate-200 transition');
+        chip.type = 'button';
+        chip.dataset.preset = name;
+        chip.append(el('span', '', label));
+        if (result) chip.append(el('span', `font-bold ${gradeTextClass(result.grade)}`, result.grade));
+        chip.addEventListener('click', () => loadPreset(name));
+        return chip;
+      }));
+    }
+
+    function setSource(label, kind) {
+      currentSource = { label, kind };
+    }
+
+    function renderSourceStatus(toolCount) {
+      const kindLabel = { example: 'Example', registry: 'Registry', file: 'File', pasted: 'Pasted' }[currentSource.kind] || '';
+      sourceStatus.replaceChildren(
+        el('span', 'text-slate-500', 'Auditing '),
+        el('strong', 'text-white font-semibold', currentSource.label),
+        el('span', 'ml-2 px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 text-[10px] uppercase tracking-wide text-slate-400', kindLabel),
+      );
+      document.getElementById('char-count').textContent = `${toolCount} tool${toolCount === 1 ? '' : 's'}`;
+    }
+
+    function loadJsonText(text, label, kind) {
+      jsonInput.value = text;
+      setSource(label, kind);
+      editorDrawer.open = false;
+      runAudit();
     }
 
     function loadPreset(name) {
       const preset = window.McpBenchmark.PRESETS[name];
-      if (preset) {
-        jsonInput.value = JSON.stringify(preset, null, 2);
-        runAudit();
-      }
+      if (preset) loadJsonText(JSON.stringify(preset, null, 2), PRESET_LABELS[name] || name, 'example');
     }
 
     function runAudit() {
+      const text = jsonInput.value.trim();
+      if (!text) {
+        jsonError.textContent = '';
+        resetScorecard();
+        sourceStatus.textContent = 'Nothing to audit yet. Search the registry, upload a file or paste JSON.';
+        document.getElementById('char-count').textContent = '0 tools';
+        return;
+      }
       try {
-        const text = jsonInput.value.trim();
-        if (!text) {
-          showToast('Editor is empty. Paste a tool schema or select a preset.', 'info');
-          return;
-        }
-        const raw = JSON.parse(text);
-        const tools = window.McpBenchmark.extractTools(raw);
+        const tools = window.McpBenchmark.extractTools(JSON.parse(text));
         const result = window.McpBenchmark.benchmarkServer(tools);
+        jsonError.textContent = '';
         currentAuditResult = result;
         renderScorecard(result);
-        document.getElementById('char-count').textContent = `${tools.length} tool(s) evaluated`;
+        renderSourceStatus(tools.length);
       } catch (err) {
-        showToast(err.message, 'error');
+        jsonError.textContent = err.message;
+        sourceStatus.replaceChildren(el('span', 'text-rose-400', `Can't read this JSON: ${err.message}`));
+        if (!editorDrawer.open) editorDrawer.open = true;
       }
+    }
+
+    function scheduleAutoAudit() {
+      clearTimeout(autoAuditTimer);
+      autoAuditTimer = setTimeout(runAudit, AUTO_AUDIT_DELAY_MS);
     }
 
     function resetScorecard() {
@@ -153,8 +198,9 @@
       });
       document.getElementById('token-total').textContent = '—';
       updateCostEstimate();
-      document.getElementById('findings-count').textContent = '0 findings';
+      document.getElementById('findings-count').textContent = '0 issues';
       document.getElementById('findings-list').replaceChildren();
+      btnAutoFix.disabled = true;
     }
 
     function buildFindingItem(f) {
@@ -166,7 +212,7 @@
       const item = el('div', 'p-3 rounded-xl bg-slate-950/80 border border-slate-800 text-xs space-y-1');
       const head = el('div', 'flex items-center justify-between gap-2');
       head.append(
-        el('span', 'font-mono text-slate-200 font-bold', `[${f.toolName}] ${f.code}`),
+        el('span', 'font-mono text-slate-200 font-bold', f.code),
         el('span', `px-2 py-0.5 rounded text-[10px] font-bold uppercase border ${badgeColor}`, f.severity)
       );
       item.append(
@@ -175,6 +221,77 @@
         el('p', 'text-emerald-400/90 font-medium text-[11px]', `💡 ${f.suggestion}`)
       );
       return item;
+    }
+
+    function gradeTextClass(grade) {
+      if (grade === 'A+' || grade === 'A') return 'text-emerald-400';
+      if (grade === 'B') return 'text-cyan-400';
+      if (grade === 'C') return 'text-yellow-400';
+      return 'text-rose-400';
+    }
+
+    function gradeBarClass(grade) {
+      if (grade === 'A+' || grade === 'A') return 'bg-emerald-500';
+      if (grade === 'B') return 'bg-cyan-500';
+      if (grade === 'C') return 'bg-yellow-500';
+      return 'bg-rose-500';
+    }
+
+    const MAX_ISSUES_SHOWN_OPEN = 6;
+    const SEVERITY_ORDER = ['critical', 'high', 'warning', 'info'];
+
+    function buildAuditToolRow(tool, index) {
+      const lib = window.McpBenchmark;
+      const score = tool.metrics.overallScore;
+      const grade = lib.gradeFromScore(score);
+      const issues = tool.diagnostics || [];
+
+      const row = el('details', 'tool-row group rounded-xl border border-slate-800 bg-slate-950/60 open:bg-slate-950/90');
+      // Rows are sorted worst-first: always expand the worst one, others only when short.
+      row.open = issues.length > 0 && (index === 0 || issues.length <= MAX_ISSUES_SHOWN_OPEN);
+      const summary = el('summary', 'cursor-pointer list-none grid grid-cols-[minmax(0,1fr)_auto] sm:grid-cols-[minmax(0,1fr)_9rem_5rem_6rem] items-center gap-x-4 gap-y-1 px-3 py-2.5 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500');
+      const name = el('span', 'font-mono text-sm text-slate-100 truncate', tool.toolName);
+      name.title = tool.toolName;
+      const scoreCell = el('span', 'flex items-center gap-2');
+      const track = el('span', 'hidden sm:block flex-1 h-1.5 rounded-full bg-slate-800 overflow-hidden');
+      const fill = el('span', `block h-full rounded-full ${gradeBarClass(grade)}`);
+      fill.style.width = `${score}%`;
+      track.append(fill);
+      scoreCell.append(el('span', `font-bold text-sm ${gradeTextClass(grade)}`, grade), el('span', 'text-xs text-slate-400 font-mono', String(score)), track);
+      const issueText = issues.length === 0 ? 'No issues' : `${issues.length} issue${issues.length === 1 ? '' : 's'}`;
+      summary.append(
+        name,
+        scoreCell,
+        el('span', 'hidden sm:block text-xs text-slate-500 font-mono text-right', `${tool.tokenCount} tok`),
+        el('span', `col-span-2 sm:col-span-1 text-xs sm:text-right ${issues.length ? 'text-amber-300' : 'text-emerald-400/80'}`, issueText),
+      );
+      row.append(summary);
+      if (issues.length) {
+        const body = el('div', 'px-3 pb-3 space-y-2');
+        const rank = d => SEVERITY_ORDER.indexOf(d.severity) === -1 ? SEVERITY_ORDER.length : SEVERITY_ORDER.indexOf(d.severity);
+        [...issues].sort((a, b) => rank(a) - rank(b)).forEach(d => body.appendChild(buildFindingItem(d)));
+        row.append(body);
+      }
+      return row;
+    }
+
+    function renderToolBreakdown(result) {
+      const findingsList = document.getElementById('findings-list');
+      const totalIssues = result.tools.reduce((n, t) => n + (t.diagnostics || []).length, 0);
+      document.getElementById('findings-count').textContent = `${totalIssues} issue${totalIssues === 1 ? '' : 's'}`;
+      btnAutoFix.disabled = totalIssues === 0;
+
+      const sorted = [...result.tools].sort((a, b) =>
+        (b.diagnostics || []).length - (a.diagnostics || []).length || a.metrics.overallScore - b.metrics.overallScore);
+      const visible = onlyIssuesToggle.checked ? sorted.filter(t => (t.diagnostics || []).length) : sorted;
+
+      if (totalIssues === 0) {
+        const ok = el('div', 'p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs');
+        ok.textContent = `✅ All ${result.tools.length} tool definition(s) pass every check.`;
+        findingsList.replaceChildren(ok, ...visible.map(buildAuditToolRow));
+        return;
+      }
+      findingsList.replaceChildren(...visible.map(buildAuditToolRow));
     }
 
     function renderScorecard(result) {
@@ -188,12 +305,11 @@
       circle.style.strokeDashoffset = maxOffset - (maxOffset * progress);
 
       // Grade color
-      let colorClass = 'text-emerald-400';
       let strokeColor = '#10b981';
-      if (result.grade === 'B') { colorClass = 'text-cyan-400'; strokeColor = '#06b6d4'; }
-      else if (result.grade === 'C') { colorClass = 'text-yellow-400'; strokeColor = '#eab308'; }
-      else if (result.grade === 'D' || result.grade === 'F') { colorClass = 'text-rose-400'; strokeColor = '#f43f5e'; }
-      document.getElementById('score-grade').className = `text-3xl font-black ${colorClass}`;
+      if (result.grade === 'B') strokeColor = '#06b6d4';
+      else if (result.grade === 'C') strokeColor = '#eab308';
+      else if (result.grade === 'D' || result.grade === 'F') strokeColor = '#f43f5e';
+      document.getElementById('score-grade').className = `text-3xl font-black ${gradeTextClass(result.grade)}`;
       circle.style.stroke = strokeColor;
 
       // Bars
@@ -210,25 +326,50 @@
 
       updateCostEstimate();
 
-      // Diagnostics list
-      const findingsList = document.getElementById('findings-list');
-      findingsList.replaceChildren();
+      renderToolBreakdown(result);
+    }
 
-      const allFindings = result.tools.flatMap(t => (t.diagnostics || []).map(d => ({ ...d, toolName: t.toolName })));
-      document.getElementById('findings-count').textContent = `${allFindings.length} issue(s)`;
+    // Official Anthropic list prices, USD per 1M tokens, checked against
+    // https://platform.claude.com/docs/en/about-claude/pricing on PRICES_CHECKED_ON.
+    // cacheWrite = 5-minute cache write, cacheRead = cache hit. Haiku uses its <=100k-token prompt tier.
+    const PRICES_CHECKED_ON = '2026-11-24';
+    const PRICES_SOURCE_URL = 'https://platform.claude.com/docs/en/about-claude/pricing';
+    const MODEL_PRICES = [
+      { id: 'claude-fable-5-2', label: 'Claude Fable 5.2', input: 8.0, cacheWrite: 10.0, cacheRead: 0.20 },
+      { id: 'claude-opus-5-5', label: 'Claude Opus 5.5', input: 4.0, cacheWrite: 5.0, cacheRead: 0.20 },
+      { id: 'claude-sonnet-5-5', label: 'Claude Sonnet 5.5', input: 2.0, cacheWrite: 2.5, cacheRead: 0.10 },
+      { id: 'claude-haiku-5-5', label: 'Claude Haiku 5.5', input: 0.10, cacheWrite: 0.125, cacheRead: 0.01 },
+    ];
+    const DEFAULT_MODEL_ID = 'claude-sonnet-5-5';
+    const CUSTOM_MODEL_ID = 'custom';
+    const costCustomRateInput = document.getElementById('cost-custom-rate');
 
-      if (allFindings.length === 0) {
-        const ok = el('div', 'p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs flex items-center gap-2');
-        ok.append(el('span', '', '✅'), el('span', '', 'Zero diagnostics! All tool definitions meet production strictness standards.'));
-        findingsList.appendChild(ok);
-      } else {
-        allFindings.forEach(f => findingsList.appendChild(buildFindingItem(f)));
+    function populateModelSelector() {
+      const option = (value, text) => { const o = el('option', null, text); o.value = value; return o; };
+      const group = el('optgroup');
+      group.label = `Claude (list price, checked ${PRICES_CHECKED_ON})`;
+      MODEL_PRICES.forEach(m => group.appendChild(option(m.id, `${m.label} · $${m.input.toFixed(2)}/M`)));
+      modelCostSelector.replaceChildren(group, option(CUSTOM_MODEL_ID, 'Other provider · custom $/M'));
+      modelCostSelector.value = DEFAULT_MODEL_ID;
+      const source = document.getElementById('cost-price-source');
+      const link = el('a', 'underline hover:text-slate-300', 'Anthropic pricing');
+      link.href = PRICES_SOURCE_URL;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      source.replaceChildren('Prices: ', link, `, checked ${PRICES_CHECKED_ON}.`);
+    }
+
+    function selectedPricing() {
+      if (modelCostSelector.value === CUSTOM_MODEL_ID) {
+        const rate = Number(costCustomRateInput.value);
+        return { input: Number.isFinite(rate) && rate >= 0 ? rate : 0, cacheWrite: null, cacheRead: null };
       }
+      return MODEL_PRICES.find(m => m.id === modelCostSelector.value) || MODEL_PRICES[0];
     }
 
     const costSessionsInput = document.getElementById('cost-sessions');
     const costTurnsInput = document.getElementById('cost-turns');
-    const COST_FIELD_IDS = ['cost-projection', 'cost-per-session', 'cost-tokens-turn', 'cost-tokens-session', 'cost-tokens-month'];
+    const COST_FIELD_IDS = ['cost-projection', 'cost-per-session', 'cost-cached', 'cost-tokens-turn', 'cost-tokens-session', 'cost-tokens-month'];
     const tokenFormat = new Intl.NumberFormat('en-US');
     const compactFormat = new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 });
 
@@ -248,22 +389,35 @@
         COST_FIELD_IDS.forEach(id => { document.getElementById(id).textContent = '—'; });
         return;
       }
-      const ratePerMillion = parseFloat(modelCostSelector.value);
+      const pricing = selectedPricing();
       const sessions = readPositiveInt(costSessionsInput, 1000, 100000000);
       const turns = readPositiveInt(costTurnsInput, 15, 1000);
       const report = window.McpBenchmark.estimateTokenEconomics(
         currentAuditResult.totalTokens, currentAuditResult.toolsAnalyzed, sessions, turns);
       const monthlyTokens = report.tokensPer1000Sessions;
-      const sessionCost = (report.tokensPer10TurnSession / 1000000) * ratePerMillion;
+      const perMillion = tokens => tokens / 1000000;
+      const sessionCost = perMillion(report.tokensPer10TurnSession) * pricing.input;
 
       document.getElementById('cost-tokens-turn').textContent = tokenFormat.format(report.tokensPerTurn);
       document.getElementById('cost-tokens-session').textContent = tokenFormat.format(report.tokensPer10TurnSession);
       document.getElementById('cost-tokens-month').textContent = compactFormat.format(monthlyTokens);
-      document.getElementById('cost-projection').textContent = formatUsd((monthlyTokens / 1000000) * ratePerMillion);
+      document.getElementById('cost-projection').textContent = formatUsd(perMillion(monthlyTokens) * pricing.input);
+      const cachedOut = document.getElementById('cost-cached');
+      if (pricing.cacheWrite === null) {
+        cachedOut.textContent = 'Caching: enter provider rates';
+      } else {
+        const cachedSession = perMillion(report.tokensPerTurn) * (pricing.cacheWrite + (turns - 1) * pricing.cacheRead);
+        cachedOut.textContent = `${formatUsd(cachedSession * sessions)} / mo with caching`;
+      }
       document.getElementById('cost-per-session').textContent = `${formatUsd(sessionCost)} / session`;
     }
 
-    modelCostSelector.addEventListener('change', updateCostEstimate);
+    populateModelSelector();
+    modelCostSelector.addEventListener('change', () => {
+      costCustomRateInput.classList.toggle('hidden', modelCostSelector.value !== CUSTOM_MODEL_ID);
+      updateCostEstimate();
+    });
+    costCustomRateInput.addEventListener('input', updateCostEstimate);
     costSessionsInput.addEventListener('input', updateCostEstimate);
     costTurnsInput.addEventListener('input', updateCostEstimate);
 
@@ -276,7 +430,7 @@
         const fixedRaw = window.McpBenchmark.replaceTools(raw, fixedTools);
         jsonInput.value = JSON.stringify(fixedRaw, null, 2);
         runAudit();
-        showToast(`✨ Automatically repaired ${changeCount} schema issue(s)!`);
+        showToast(changeCount ? `✨ Repaired ${changeCount} schema issue(s). Remaining findings need a human edit.` : 'Nothing auto-fixable here; the remaining findings need a human edit.', changeCount ? 'success' : 'info');
       } catch (e) {
         showToast('Invalid JSON: ' + e.message, 'error');
       }
@@ -296,9 +450,9 @@
     // Clear
     btnClear.addEventListener('click', () => {
       jsonInput.value = '';
-      document.getElementById('char-count').textContent = '0 tools loaded';
-      resetScorecard();
-      showToast('Editor cleared', 'info');
+      setSource('Your JSON', 'pasted');
+      runAudit();
+      jsonInput.focus();
     });
 
     function badgeColorForGrade(grade) {
@@ -369,8 +523,123 @@
       showToast('SARIF report downloaded!');
     });
 
-    presetSelector.addEventListener('change', (e) => loadPreset(e.target.value));
-    btnAudit.addEventListener('click', runAudit);
+    jsonInput.addEventListener('input', () => {
+      if (currentSource.kind !== 'pasted') setSource('Your JSON', 'pasted');
+      scheduleAutoAudit();
+    });
+    onlyIssuesToggle.addEventListener('change', () => { if (currentAuditResult) renderToolBreakdown(currentAuditResult); });
+    document.getElementById('btn-paste').addEventListener('click', () => {
+      editorDrawer.open = true;
+      jsonInput.select();
+      jsonInput.focus();
+    });
+
+    // Upload + drag and drop
+    const fileInput = document.getElementById('file-input');
+    const auditSource = document.getElementById('audit-source');
+    const dropOverlay = document.getElementById('drop-overlay');
+
+    async function loadFile(file) {
+      if (!file) return;
+      if (file.size > MAX_UPLOAD_BYTES) {
+        showToast(`${file.name} is larger than 2 MB.`, 'error');
+        return;
+      }
+      try {
+        loadJsonText(await file.text(), file.name, 'file');
+      } catch (err) {
+        showToast(`Could not read ${file.name}: ${err.message}`, 'error');
+      }
+    }
+
+    document.getElementById('btn-upload').addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', () => { loadFile(fileInput.files[0]); fileInput.value = ''; });
+    let dragDepth = 0;
+    auditSource.addEventListener('dragenter', (e) => { e.preventDefault(); dragDepth += 1; dropOverlay.classList.remove('hidden'); });
+    auditSource.addEventListener('dragover', (e) => e.preventDefault());
+    auditSource.addEventListener('dragleave', () => { dragDepth = Math.max(0, dragDepth - 1); if (!dragDepth) dropOverlay.classList.add('hidden'); });
+    auditSource.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dragDepth = 0;
+      dropOverlay.classList.add('hidden');
+      loadFile(e.dataTransfer.files[0]);
+    });
+
+    // Registry search (combobox)
+    const auditSearch = document.getElementById('audit-search');
+    const auditResults = document.getElementById('audit-search-results');
+    const MAX_SEARCH_RESULTS = 8;
+    let searchMatches = [];
+    let activeMatch = -1;
+
+    function findServers(query) {
+      const q = query.trim().toLowerCase();
+      if (!q) return [];
+      const list = window.ECOSYSTEM_DATA || [];
+      const scored = [];
+      for (const server of list) {
+        const name = `${server.title || ''} ${server.name}`.toLowerCase();
+        const toolHit = (server.tools || []).some(t => String(t.name || t).toLowerCase().includes(q));
+        if (name.includes(q)) scored.push([name.startsWith(q) ? 0 : 1, server]);
+        else if (toolHit) scored.push([2, server]);
+      }
+      return scored.sort((a, b) => a[0] - b[0] || b[1].tqi - a[1].tqi).slice(0, MAX_SEARCH_RESULTS).map(([, s]) => s);
+    }
+
+    function closeSearchResults() {
+      auditResults.classList.add('hidden');
+      auditSearch.setAttribute('aria-expanded', 'false');
+      auditSearch.removeAttribute('aria-activedescendant');
+      activeMatch = -1;
+    }
+
+    function highlightMatch(index) {
+      activeMatch = index;
+      [...auditResults.children].forEach((li, i) => li.setAttribute('aria-selected', String(i === index)));
+      const active = auditResults.children[index];
+      if (active) {
+        auditSearch.setAttribute('aria-activedescendant', active.id);
+        active.scrollIntoView({ block: 'nearest' });
+      }
+    }
+
+    function chooseServer(server) {
+      closeSearchResults();
+      auditSearch.value = '';
+      loadServerToAuditor(server);
+    }
+
+    function renderSearchResults() {
+      searchMatches = findServers(auditSearch.value);
+      if (!auditSearch.value.trim()) { closeSearchResults(); return; }
+      if (!searchMatches.length) {
+        auditResults.replaceChildren(el('li', 'px-3 py-2 text-xs text-slate-400', 'No registry server matches. Try a tool name, or upload your own JSON.'));
+      } else {
+        auditResults.replaceChildren(...searchMatches.map((server, i) => {
+          const li = el('li', 'flex items-center justify-between gap-3 px-3 py-2 rounded-lg cursor-pointer text-sm aria-selected:bg-slate-800 hover:bg-slate-800');
+          li.id = `audit-match-${i}`;
+          li.setAttribute('role', 'option');
+          li.setAttribute('aria-selected', 'false');
+          const left = el('span', 'min-w-0');
+          left.append(el('span', 'block text-slate-100 truncate', server.title || server.name), el('span', 'block text-[11px] text-slate-500 font-mono truncate', `${server.name} · ${server.toolsCount} tools`));
+          li.append(left, el('span', `shrink-0 font-bold ${gradeTextClass(server.grade)}`, `${server.grade} · ${server.tqi}`));
+          li.addEventListener('mousedown', (e) => { e.preventDefault(); chooseServer(server); });
+          return li;
+        }));
+      }
+      auditResults.classList.remove('hidden');
+      auditSearch.setAttribute('aria-expanded', 'true');
+      activeMatch = -1;
+    }
+
+    auditSearch.addEventListener('input', renderSearchResults);
+    auditSearch.addEventListener('blur', () => setTimeout(closeSearchResults, 100));
+    auditSearch.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowDown' && searchMatches.length) { e.preventDefault(); highlightMatch((activeMatch + 1) % searchMatches.length); }
+      else if (e.key === 'ArrowUp' && searchMatches.length) { e.preventDefault(); highlightMatch((activeMatch - 1 + searchMatches.length) % searchMatches.length); }
+      else if (e.key === 'Enter' && searchMatches.length) { e.preventDefault(); chooseServer(searchMatches[Math.max(activeMatch, 0)]); }
+      else if (e.key === 'Escape') { closeSearchResults(); }
+    });
 
     // Leaderboard State & Pagination
     let activeCategory = 'all';
@@ -719,7 +988,7 @@
     }
 
     async function loadServerToAuditor(server) {
-      showToast(`Loading ${server.name} tools...`, 'info');
+      sourceStatus.textContent = `Loading ${server.title || server.name} from the registry…`;
       try {
         const url = `https://raw.githubusercontent.com/yunusarda-sudo/mcp-benchmark/main/registry/servers/${encodeURIComponent(server.slug)}.json`;
         const options = typeof AbortSignal !== 'undefined' && AbortSignal.timeout ? { signal: AbortSignal.timeout(10000) } : {};
@@ -727,9 +996,8 @@
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
         if (!data || !Array.isArray(data.tools)) throw new Error('response has no tools array');
-        jsonInput.value = JSON.stringify(data.tools, null, 2);
         switchTab('auditor');
-        runAudit();
+        loadJsonText(JSON.stringify(data.tools, null, 2), server.title || server.name, 'registry');
         showToast(`⚡ Successfully loaded ${data.tools.length} tool(s) from ${server.name}!`);
       } catch (err) {
         const reason = err && err.name === 'TimeoutError' ? 'request timed out' : (err && err.message ? err.message : 'unknown error');
@@ -811,5 +1079,5 @@
     renderLeaderboardHeader();
     renderLeaderboardSummary();
     renderLeaderboard();
-    labelPresetOptions();
+    renderPresetChips();
     loadPreset('betterstack');

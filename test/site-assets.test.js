@@ -27,7 +27,7 @@ test('docs/styles.css is committed, non-empty compiled Tailwind output', () => {
   const css = read('styles.css');
   assert.ok(css.length > 0, 'styles.css is empty');
   assert.ok(css.includes('.bg-emerald-500'), 'missing .bg-emerald-500');
-  assert.ok(css.includes('.lg\\:col-span-6'), 'missing .lg\\:col-span-6');
+  assert.ok(css.includes('.lg\\:col-span-7'), 'missing .lg\\:col-span-7');
   assert.ok(css.includes('.bg-\\[\\#070b14\\]'), 'missing arbitrary value class .bg-[#070b14]');
 });
 
