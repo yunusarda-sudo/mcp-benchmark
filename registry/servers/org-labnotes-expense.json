@@ -1,0 +1,483 @@
+{
+  "$schema": "../schema.json",
+  "name": "org.labnotes/expense",
+  "title": "Expense",
+  "category": "Productivity & Notes",
+  "description": "Personal expense tracker: capture receipts, log IRS mileage, reconcile statements, export reports.",
+  "tools": [
+    {
+      "name": "capture_receipt",
+      "description": "Capture a receipt from a base64 image/PDF or a URL: extract the merchant, amount and category (reusing the merchant's previous category when known), store the image, and create the expense. A non-USD amount is converted to USD at the ECB reference rate for the expense date. Returns the extracted fields and the new expense id.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "imageData": {
+            "description": "Base64-encoded receipt image (PNG/JPEG/HEIC/WebP) or PDF bytes.",
+            "type": "string"
+          },
+          "mime": {
+            "description": "MIME type of imageData, e.g. image/png or application/pdf. Guessed from filename when omitted.",
+            "type": "string"
+          },
+          "filename": {
+            "description": "Original filename; used for the stored image name.",
+            "type": "string"
+          },
+          "url": {
+            "description": "URL of a receipt image or PDF to fetch instead of imageData.",
+            "type": "string"
+          },
+          "merchant": {
+            "description": "Merchant override (otherwise extracted).",
+            "type": "string"
+          },
+          "amount": {
+            "description": "Amount as a decimal string in `currency`, e.g. \"42.50\" (otherwise extracted).",
+            "type": "string"
+          },
+          "currency": {
+            "description": "ISO 4217 code of the amount's currency, e.g. \"EUR\". Defaults to the currency extracted from the receipt, else USD. A non-USD amount is stored as its USD conversion.",
+            "type": "string"
+          },
+          "category": {
+            "description": "Category override (otherwise resolved from the merchant's history, then the extraction suggestion).",
+            "type": "string"
+          },
+          "date": {
+            "description": "Expense date YYYY-MM-DD. Omitted dates the expense today in UTC, per the server instructions.",
+            "type": "string",
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+          },
+          "report": {
+            "description": "Report name to file under.",
+            "type": "string"
+          },
+          "description": {
+            "description": "Description or memo.",
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "log_mileage",
+      "description": "Log a driving trip: geocode the stops, compute the route distance and the amount at the IRS rate for the trip's date and type, and create the mileage expense. The trip runs one way, from the first stop to the last; pass roundTrip true when the drive returns to its first stop.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "locations": {
+            "minItems": 2,
+            "maxItems": 12,
+            "type": "array",
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 300,
+                  "description": "Address to geocode."
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "address": {
+                      "type": "string",
+                      "maxLength": 300
+                    },
+                    "lat": {
+                      "description": "Pre-known latitude — skips geocoding.",
+                      "type": "number"
+                    },
+                    "lng": {
+                      "description": "Pre-known longitude — skips geocoding.",
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "address"
+                  ]
+                }
+              ]
+            },
+            "description": "Ordered trip stops: start, intermediate stops, end. Each is an address string or a pre-geocoded { address, lat, lng }."
+          },
+          "date": {
+            "description": "Trip date YYYY-MM-DD. Omitted dates the trip today in UTC, per the server instructions.",
+            "type": "string",
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+          },
+          "type": {
+            "description": "IRS trip type — picks the rate for the trip's date (defaults to business).",
+            "type": "string",
+            "enum": [
+              "business",
+              "charity",
+              "medical",
+              "moving"
+            ]
+          },
+          "report": {
+            "description": "Report name to file under.",
+            "type": "string"
+          },
+          "category": {
+            "description": "Category name.",
+            "type": "string"
+          },
+          "description": {
+            "description": "Description or memo.",
+            "type": "string"
+          },
+          "roundTrip": {
+            "description": "One way by default: the trip starts at the first stop and ends at the last. Pass true when the drive returns to the first stop (a closed loop), which roughly doubles the distance for a there-and-back pair.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "locations"
+        ]
+      }
+    },
+    {
+      "name": "list_expenses",
+      "description": "Query expenses with optional filters (date range, category, merchant, report, unreported-only, type). Returns newest first. Amounts are decimal strings.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "dateFrom": {
+            "description": "Inclusive start date YYYY-MM-DD.",
+            "type": "string",
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+          },
+          "dateTo": {
+            "description": "Inclusive end date YYYY-MM-DD.",
+            "type": "string",
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+          },
+          "category": {
+            "description": "Exact category name (case-insensitive).",
+            "type": "string"
+          },
+          "merchant": {
+            "description": "Substring match on merchant (receipts) or stop addresses (mileage).",
+            "type": "string"
+          },
+          "report": {
+            "description": "Exact report name.",
+            "type": "string"
+          },
+          "unreported": {
+            "description": "Only expenses not in any report.",
+            "type": "boolean"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "receipt",
+              "mileage"
+            ]
+          },
+          "limit": {
+            "description": "Max rows (default 100).",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 500
+          }
+        }
+      }
+    },
+    {
+      "name": "expense_summary",
+      "description": "Totals for expenses matching the filters: overall count + sum, and per-category breakdown. The answer to \"how much did I spend on X?\".",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "dateFrom": {
+            "description": "Inclusive start date YYYY-MM-DD.",
+            "type": "string",
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+          },
+          "dateTo": {
+            "description": "Inclusive end date YYYY-MM-DD.",
+            "type": "string",
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+          },
+          "category": {
+            "description": "Exact category name (case-insensitive).",
+            "type": "string"
+          },
+          "merchant": {
+            "description": "Substring match on merchant (receipts) or stop addresses (mileage).",
+            "type": "string"
+          },
+          "report": {
+            "description": "Exact report name.",
+            "type": "string"
+          },
+          "unreported": {
+            "description": "Only expenses not in any report.",
+            "type": "boolean"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "receipt",
+              "mileage"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "list_reports",
+      "description": "All reports with their expense counts and exact totals.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {}
+      }
+    },
+    {
+      "name": "create_report",
+      "description": "Create a report (e.g. \"Q3 2026\") to group expenses. Fails if the name already exists.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Report name."
+          }
+        },
+        "required": [
+          "name"
+        ]
+      }
+    },
+    {
+      "name": "close_report",
+      "description": "Close (or reopen) a report. A closed report refuses every expense filed to it until it is reopened, so closing asks the user to confirm first; a client that cannot answer the prompt passes confirm: true. Reopening needs no confirmation.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "closed": {
+            "description": "Default true.",
+            "type": "boolean"
+          },
+          "confirm": {
+            "description": "Confirmation for closing, for clients that cannot answer the interactive prompt.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name"
+        ]
+      }
+    },
+    {
+      "name": "add_to_report",
+      "description": "Move an expense into a report. Also renames the stored receipt image to the dated convention name when the expense has a date and original filename.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "expenseId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "report": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Report name."
+          }
+        },
+        "required": [
+          "expenseId",
+          "report"
+        ]
+      }
+    },
+    {
+      "name": "export_report",
+      "description": "Render a report as a PDF (the same layout as the web export: grouped by category, mileage rows with type/rate/distance, and a 'Receipts & routes' appendix — receipt images plus a real route map per mileage trip with its date, mileage, and amount listed beside it) and return it base64-encoded. Decode and save as a .pdf file.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Report name."
+          }
+        },
+        "required": [
+          "name"
+        ]
+      }
+    },
+    {
+      "name": "list_categories",
+      "description": "The account's category names (alphabetical) — use these when categorizing expenses.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {}
+      }
+    },
+    {
+      "name": "list_merchants",
+      "description": "Merchant names previously used, most recent first.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {}
+      }
+    },
+    {
+      "name": "get_settings",
+      "description": "Account settings: the home address (start and end of every trip), the account's named locations, and the IRS mileage-rate master table (period + type).",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {}
+      }
+    },
+    {
+      "name": "reconcile",
+      "description": "Match a bank statement against logged expenses. Pass the statement as CSV or QFX/OFX text (CSV: header row optional, date/description/amount columns, signed amounts or Debit/Credit split; QFX/OFX: FITID honored). Returns matched pairs (high confidence), statement lines needing review (amount+date match but merchant differs, or ambiguous), statement lines with no matching receipt, and logged receipts with no statement line. Refund/credit lines and already-reconciled receipts are never auto-matched.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "statementCsv": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000000
+          }
+        },
+        "required": [
+          "statementCsv"
+        ]
+      }
+    },
+    {
+      "name": "apply_reconciliation",
+      "description": "Apply what a person accepted from `reconcile` and complete the run. `matches` are `{ line, expenseId }` pairs (a matched pair's line, or a review candidate) and are re-checked against a fresh match, so only an expense the statement supports for that line is accepted. `additions` are the lines with no expense behind them, filed as new expenses from the statement's own date and amount; a refund line cannot be added. Nothing is written if any row fails. Asks the user to confirm first; a client that cannot answer the prompt passes confirm: true.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "statementCsv": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000000
+          },
+          "matches": {
+            "description": "Accepted lines that have an expense behind them.",
+            "maxItems": 200,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "line": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 9007199254740991,
+                  "description": "1-based statement line number from reconcile."
+                },
+                "expenseId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "Expense id from the matched pair or a review candidate."
+                }
+              },
+              "required": [
+                "line",
+                "expenseId"
+              ]
+            }
+          },
+          "additions": {
+            "description": "Accepted lines with no expense behind them, to file as new expenses; date and amount come from the statement.",
+            "maxItems": 200,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "line": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 9007199254740991,
+                  "description": "1-based statement line number from reconcile."
+                },
+                "merchant": {
+                  "description": "Merchant; defaults to the statement's description.",
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                },
+                "category": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 100
+                },
+                "description": {
+                  "type": "string",
+                  "maxLength": 1000
+                },
+                "report": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200,
+                  "description": "Open report to file it under; list_reports shows them."
+                }
+              },
+              "required": [
+                "line",
+                "report"
+              ]
+            }
+          },
+          "fileName": {
+            "description": "Label for the run; defaults to statement.csv.",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "confirm": {
+            "description": "Confirmation for clients that cannot answer the interactive prompt.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "statementCsv"
+        ]
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "org.labnotes/expense",
+    "version": "1.0.2",
+    "remoteUrl": "https://expense.labnotes.org/mcp",
+    "publishedAt": "2026-11-26T04:41:06.166947Z",
+    "fetchedAt": "2026-11-26T10:40:47.803Z",
+    "toolsSha256": "9a3f216489a1ba5d6af9b23aebba7b9d37b42ee9fbb959215daf68846b2c34dc"
+  }
+}

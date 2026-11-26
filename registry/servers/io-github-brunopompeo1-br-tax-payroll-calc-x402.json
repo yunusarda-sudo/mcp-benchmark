@@ -1,0 +1,157 @@
+{
+  "$schema": "../schema.json",
+  "name": "io.github.brunopompeo1/br-tax-payroll-calc-x402",
+  "title": "Brazil Tax & Payroll Engine (x402)",
+  "category": "Developer Tools & DevOps",
+  "description": "Simples Nacional (Fator R), progressive INSS/IRRF, FGTS & B2B NFS-e tax engine via x402 Base USDC.",
+  "repository": "https://github.com/brunopompeo1/brazil-ai-fiscal-apis-x402",
+  "tools": [
+    {
+      "name": "calculate_simples_nacional_das",
+      "description": "Computes the monthly DAS of a Brazilian Simples Nacional company from its revenue of the last 12 months (RBT12) and the month's revenue: it picks the bracket of the chosen anexo, applies the fixed deduction to get the effective rate, and, when you send the 12-month payroll, applies the 28% Fator R rule that moves service companies between Anexo III and Anexo V. It also flags the BRL 3.6 million sublimit and the BRL 4.8 million ceiling. Use it for monthly tax provisioning, pricing a service, or deciding whether raising pro-labore to reach Fator R pays off. Do not use it for Lucro Presumido or Lucro Real companies, for an MEI, whose DAS is a fixed monthly amount, or to file or pay the DAS, which happens on PGDAS-D. Read 'simplesNacional'. Costs 0.008 USDC per call, paid with x402 v2 on Base (eip155:8453) or with a B2B X-API-Key; an unpaid call returns HTTP 402 with a PAYMENT-REQUIRED header instead of an exception, and every failure is a JSON body with 'error', so an agent loop never breaks on a thrown error. Deterministic arithmetic at the edge: nothing is stored or filed, no government system is contacted, and the same input always gives the same numbers. Results are estimates for planning and reconciliation, not a substitute for an accountant's sign-off.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "rbt12": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Gross revenue of the 12 months before the assessed month, in BRL, for example 720000. Selects the bracket; above 4800000 the company is outside the Simples and 'alert' says so."
+          },
+          "monthlyRevenue": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Revenue of the month being assessed, in BRL. The DAS is this amount times the effective rate."
+          },
+          "anexo": {
+            "type": "string",
+            "enum": [
+              "I",
+              "II",
+              "III",
+              "IV",
+              "V",
+              "auto"
+            ],
+            "default": "auto",
+            "description": "Anexo of the activity: I commerce, II industry, III and V services, IV construction, cleaning and security. 'auto' (default) chooses between III and V by Fator R, falling back to V without payroll12m."
+          },
+          "payroll12m": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Total payroll of the last 12 months, in BRL, including pro-labore and INSS employer charges. Needed for the Fator R; when given it decides between III and V even if anexo says otherwise."
+          },
+          "aiSummary": {
+            "type": "boolean",
+            "default": true,
+            "description": "When true (the default) the response carries 'aiExecutiveBrief', one Portuguese sentence of at most 35 words with the key amounts, written by an edge model with a deterministic fallback. Set false to skip it when you only need the numbers."
+          }
+        },
+        "required": [
+          "rbt12",
+          "monthlyRevenue"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "calculate_payroll_net_salary",
+      "description": "Calculates the monthly payroll deductions of one Brazilian salary or pro-labore under the 2025-2026 tables: progressive employee INSS up to the ceiling, IRRF choosing automatically whichever of the legal deductions or the BRL 607.20 simplified discount is cheaper, the resulting net salary and the employer's 8% FGTS deposit. Use it to show an employee or candidate their take-home pay, to compare CLT with pro-labore, or to check a payslip. Do not use it for 13th salary, vacation pay, termination amounts, overtime or benefits, which are not modelled, or for the employer's own 20% INSS and third-party charges, which are not returned. Read 'payrollCalc'. Costs 0.008 USDC per call, paid with x402 v2 on Base (eip155:8453) or with a B2B X-API-Key; an unpaid call returns HTTP 402 with a PAYMENT-REQUIRED header instead of an exception, and every failure is a JSON body with 'error', so an agent loop never breaks on a thrown error. Deterministic arithmetic at the edge: nothing is stored or filed, no government system is contacted, and the same input always gives the same numbers. Results are estimates for planning and reconciliation, not a substitute for an accountant's sign-off.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "grossSalary": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Monthly gross salary or pro-labore, in BRL, for example 6500."
+          },
+          "dependents": {
+            "type": "integer",
+            "minimum": 0,
+            "default": 0,
+            "description": "Number of IRRF dependents; each deducts BRL 189.59 from the tax base."
+          },
+          "otherDeductions": {
+            "type": "number",
+            "minimum": 0,
+            "default": 0,
+            "description": "Other legal monthly deductions in BRL, such as court-ordered alimony."
+          },
+          "isProLabore": {
+            "type": "boolean",
+            "default": false,
+            "description": "True for a partner's pro-labore: INSS becomes a flat 11% capped at the ceiling and no FGTS is due."
+          },
+          "aiSummary": {
+            "type": "boolean",
+            "default": true,
+            "description": "When true (the default) the response carries 'aiExecutiveBrief', one Portuguese sentence of at most 35 words with the key amounts, written by an edge model with a deterministic fallback. Set false to skip it when you only need the numbers."
+          }
+        },
+        "required": [
+          "grossSalary"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "calculate_nfse_withholdings",
+      "description": "Calculates the taxes a Brazilian company must withhold when paying a B2B service invoice (NFS-e): IRRF at 1.5% or 1%, CSRF at 4.65% split into PIS, COFINS and CSLL, INSS at 11% on labour-supply services, and ISS when the buyer retains it, applying the BRL 10.00 minimum waivers and exempting Simples Nacional providers from the federal withholdings; it returns the net amount to transfer. Use it in accounts payable before paying a supplier, or on the provider side to predict what will reach the bank. Do not use it for goods (NF-e), for payments to individuals, or to decide the municipality's ISS rate, which you must pass in. Read 'nfseRetentions'. Costs 0.008 USDC per call, paid with x402 v2 on Base (eip155:8453) or with a B2B X-API-Key; an unpaid call returns HTTP 402 with a PAYMENT-REQUIRED header instead of an exception, and every failure is a JSON body with 'error', so an agent loop never breaks on a thrown error. Deterministic arithmetic at the edge: nothing is stored or filed, no government system is contacted, and the same input always gives the same numbers. Results are estimates for planning and reconciliation, not a substitute for an accountant's sign-off.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "invoiceAmount": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Gross amount of the service invoice, in BRL, for example 15000."
+          },
+          "serviceType": {
+            "type": "string",
+            "enum": [
+              "geral",
+              "consultoria_ti_contabil",
+              "limpeza_vigilancia"
+            ],
+            "default": "consultoria_ti_contabil",
+            "description": "'consultoria_ti_contabil' (default) for professional, IT and accounting services: IRRF 1.5% + CSRF 4.65%. 'limpeza_vigilancia' for cleaning, security and labour supply: IRRF 1% + CSRF 4.65% + INSS 11%. 'geral' for other services: IRRF 1.5% only."
+          },
+          "isSimplesNacional": {
+            "type": "boolean",
+            "default": false,
+            "description": "True when the provider is a Simples Nacional company, which removes IRRF, CSRF and INSS withholding."
+          },
+          "retainIss": {
+            "type": "boolean",
+            "default": false,
+            "description": "True when the buyer withholds ISS at source, as many municipalities require for out-of-town providers."
+          },
+          "issRatePct": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 5,
+            "default": 5,
+            "description": "Municipal ISS rate in percent, between 2 and 5 by law; values above 5 are capped at 5. Used only when retainIss is true."
+          },
+          "aiSummary": {
+            "type": "boolean",
+            "default": true,
+            "description": "When true (the default) the response carries 'aiExecutiveBrief', one Portuguese sentence of at most 35 words with the key amounts, written by an edge model with a deterministic fallback. Set false to skip it when you only need the numbers."
+          }
+        },
+        "required": [
+          "invoiceAmount"
+        ],
+        "additionalProperties": false
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "io.github.brunopompeo1/br-tax-payroll-calc-x402",
+    "version": "2.7.1",
+    "remoteUrl": "https://br-tax-payroll-calc-x402.architect-x402.workers.dev/mcp",
+    "publishedAt": "2026-11-26T00:39:30.235277Z",
+    "fetchedAt": "2026-11-26T10:40:47.803Z",
+    "toolsSha256": "e77c993ae58b46ed478aa72d4177dacef91b3795c65aaaa11c82d38ad17774c8"
+  }
+}

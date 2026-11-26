@@ -1,0 +1,547 @@
+{
+  "$schema": "../schema.json",
+  "name": "com.resollo/agent-api",
+  "title": "Resollo Agent API",
+  "category": "AI, LLMs & Agents",
+  "description": "Resollo marketplace: search, seller lookup, offers, orders, draft listings. All human-approved.",
+  "tools": [
+    {
+      "name": "products.search",
+      "description": "Search active, publicly available product listings on the Resollo marketplace. Use this to browse or filter by keyword (matched at the start of a word: 'phone' finds 'phones' but not 'headphone'), category, price range, currency, or seller location. Returns only currently active, purchasable listings (never sold, expired, or moderation-hidden ones). For full details on one specific product you already have the ID for (including its Semantic Profile fields -- suitable_for, not_ideal_for, target_audience, key_strengths, evokes, is_similar_to -- which this search tool does NOT return), call products.get instead. Results are paginated via next_cursor; pass it back as the cursor argument to fetch the next page. count is the total number of matching listings across all pages, not the number returned on this page. No authentication required.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "q": {
+            "description": "Free-text search across the listing's canonical name and description, matched at the start of a word: 'phone' finds 'phone' and 'phones' but not 'headphone'.",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "category": {
+            "description": "Numeric top-level category id (see getMarketplaceInfo.categories). Subcategory ids are accepted but rolled up to their top-level parent in the response.",
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "price_min": {
+            "description": "Minimum price in the resolved `currency` (converted price, not the seller's native currency).",
+            "type": "number",
+            "minimum": 0
+          },
+          "price_max": {
+            "description": "Maximum price in the resolved `currency`.",
+            "type": "number",
+            "minimum": 0
+          },
+          "currency": {
+            "description": "ISO 4217 code used for price filtering and each result's converted_price. Defaults to the signed-in caller's own currency; for an anonymous caller it's derived like on the website (country, then browser language), falling back to marketplace.info default_currency. Must be one of getMarketplaceInfo.currencies.",
+            "type": "string",
+            "pattern": "^[A-Z]{3}$"
+          },
+          "location": {
+            "description": "Comma-separated seller-location filters. Each entry is a 2-letter ISO country code (\"HU\") or a \"COUNTRY:REGION\" pair (\"HU:BU\"). Reflects the seller's profile location, not a per-listing field.",
+            "type": "string",
+            "maxLength": 200
+          },
+          "seller_id": {
+            "description": "Restrict results to one seller's listings. The uuid is the seller.id from any search or getProduct result.",
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "sort": {
+            "default": "newest",
+            "description": "Result ordering. Never influenced by paid placement.",
+            "type": "string",
+            "enum": [
+              "newest",
+              "price_asc",
+              "price_desc"
+            ]
+          },
+          "cursor": {
+            "description": "Opaque pagination cursor from a previous response's next_cursor.",
+            "type": "string",
+            "maxLength": 2000
+          },
+          "limit": {
+            "default": 20,
+            "description": "Maximum number of results to return per page (1-50, default 20).",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50
+          }
+        }
+      }
+    },
+    {
+      "name": "products.get",
+      "description": "Fetch the full details of one specific Resollo product listing by its ID, including its Semantic Profile (suitable_for, not_ideal_for, target_audience, key_strengths, evokes, is_similar_to -- useful for judging fit against a buyer's stated needs), attributes, all image URLs, shipment prices, and the seller's accepted payment/shipment methods. Returns not_found for products that don't exist, are sold, expired, or moderation-hidden. No authentication required. Reading the fields: semantic_profile is null when Resollo's AI wasn't confident enough to write one; shipment_prices are text ranges such as '1000-3000' in shipment_prices_currency (always equal to price.currency, not converted); payment method 'card' means paying by card directly to the seller (e.g. on handover), while online card payment through Resollo is 'stripe' and needs seller.stripe_connect_active.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "productId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "description": "The product listing's uuid."
+          },
+          "currency": {
+            "description": "ISO 4217 code for the returned price fields. Same default as in search_products (the caller's own currency, else derived like on the website, else marketplace.info default_currency).",
+            "type": "string",
+            "pattern": "^[A-Z]{3}$"
+          }
+        },
+        "required": [
+          "productId"
+        ]
+      }
+    },
+    {
+      "name": "orders.place",
+      "description": "Creates a RESERVATION for the given product -- it does NOT complete a purchase and does NOT charge any payment method. After calling this tool, a human (the buyer) MUST log in to Resollo and complete payment manually through the normal checkout flow (Stripe-hosted checkout page, or cash-payment confirmation). Never tell the user their order is 'placed' or 'paid' after calling this tool -- tell them the item is reserved and they need to complete payment themselves at resollo.com to finalize it. Only fixed-price listings can be reserved this way (not auctions). Requires a signed-in Resollo user (OAuth sign-in, or an 'Authorization: Bearer <agent api key>' header). The buyer must have explicitly approved this specific order before you call this tool (confirm must be true).",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "product_id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "description": "The uuid of the fixed-price listing to reserve."
+          },
+          "payment_method": {
+            "type": "string",
+            "enum": [
+              "cash",
+              "card",
+              "bank",
+              "paypal",
+              "stripe"
+            ],
+            "description": "How buyer and seller will settle payment off-platform. Must be one the seller accepts (see get_product.seller.accepted_payment_methods)."
+          },
+          "shipment_method": {
+            "type": "string",
+            "enum": [
+              "personal",
+              "courier",
+              "postal",
+              "locker"
+            ],
+            "description": "How the item will be handed over. Must be one the seller accepts (see get_product.seller.accepted_shipment_methods)."
+          },
+          "address_key": {
+            "description": "Key of one of the buyer's own saved addresses (never a free-text address). Required unless shipment_method is `personal`; defaults to the buyer's active address when omitted.",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20
+          },
+          "quantity": {
+            "default": 1,
+            "description": "Units to reserve (1-20, default 1).",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 20
+          },
+          "comment": {
+            "description": "Optional note to the seller, attached to the order chat.",
+            "type": "string",
+            "maxLength": 500
+          },
+          "currency": {
+            "description": "Informational only, used solely to detect a currency mismatch worth surfacing to the buyer (payment_safety.currency_mismatch). Does NOT change what gets charged -- the order is always recorded and settled in the listing's own native currency regardless of this value.",
+            "type": "string",
+            "pattern": "^[A-Z]{3}$"
+          },
+          "confirm": {
+            "type": "boolean",
+            "const": true,
+            "description": "Human-confirmation gate. Must be true, and only set it after the user has explicitly approved this specific order having seen the payment-safety text. An agent must never set this on its own initiative."
+          }
+        },
+        "required": [
+          "product_id",
+          "payment_method",
+          "shipment_method",
+          "confirm"
+        ]
+      }
+    },
+    {
+      "name": "products.create",
+      "description": "Starts creating a new Resollo listing from photos. It opens a photo upload (no photos in the call), which can be completed in two ways. (1) Resollo's photo picker: in clients that support MCP Apps (e.g. Claude, ChatGPT) it appears right in the chat; otherwise give the seller upload_url, a Resollo page where they pick the photos (signed in; phone gallery or camera works). (2) Direct upload, for agents that have a tool to create the WebP files (e.g. the free photo MCP servers at github.com/resollo/mcp-servers, ImageMagick, cwebp) and can send an HTTP PUT: call with upload: 'direct' -- only then does the result include upload_id and direct_upload, and the picker stays hidden. Create each photo as WebP as direct_upload.requirements says, PUT it to direct_upload.put_urls with direct_upload.headers, then call products.createFromUpload with upload_id. Resollo never converts photos -- if you can't, use (1). Never put photo bytes into a tool argument. A photo that arrives as a file (attached, or a file pasted from the seller's file manager) reaches your tools as that file and can go through (2). Only an inline image (e.g. a screenshot or a copied image) is just pixels, not a file -- for that one, use the picker. After the upload, Resollo's own AI writes the title, description, category, condition, and a suggested price, and creates the listing as an INACTIVE draft that is NOT publicly visible. The seller MUST review and activate it themselves on resollo.com. Never tell the user the listing is 'live' or 'published'. When a picker upload finishes, the picker itself shows the seller the draft and its activation link, so you don't need to look it up or wait for it; if you need its details later, it's the newest 'inactive' listing in sellers.listings. Requires a signed-in Resollo user (OAuth sign-in, or an 'Authorization: Bearer <agent api key>' header).",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "upload": {
+            "default": "picker",
+            "description": "'picker' (default): the seller picks the photos in Resollo's photo picker. 'direct': you will upload the photos yourself (see direct_upload in the result); the picker panel then stays hidden.",
+            "type": "string",
+            "enum": [
+              "picker",
+              "direct"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "products.createFromUpload",
+      "description": "Finishes a direct upload started with products.create: after you PUT the converted photos to its direct_upload.put_urls, call this with its upload_id. Resollo's own AI then writes the listing and creates it as an INACTIVE draft (not public) -- returns product_id, the suggested content and price range, and activation_url, where the seller reviews and activates it. Uses 2 AI credits. Photos that aren't WebP within direct_upload.requirements are rejected, never converted. Also used by Resollo's photo picker panel. Requires a signed-in Resollo user.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "upload_id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "description": "The upload_id returned by products.create."
+          }
+        },
+        "required": [
+          "upload_id"
+        ]
+      }
+    },
+    {
+      "name": "sellers.status",
+      "description": "Returns the authenticated user's current listing capabilities: whether they can create a new listing right now (subscription plan limit), whether they have a payment/shipment method configured (both required before products.create will succeed), the max images and price their plan allows (max_price null = no price cap), and their remaining AI credit balance (each draft listing costs 2 credits, charged when it is created from the uploaded photos). Call this BEFORE asking the user for photos or calling products.create, so you can tell the user upfront if something would block listing creation, instead of finding out only after a failed attempt. If the credit balance is too low, ai_credits_purchase_url is the seller's resollo.com page for buying more (translate_credits_purchase_url likewise for translation credits). Read-only, no side effects.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {}
+      }
+    },
+    {
+      "name": "sellers.listings",
+      "description": "Returns the caller's own product listings in EVERY state -- active, inactive, pending moderation, rejected, and closed -- not just the publicly visible ones (soft-deleted listings are excluded). Use this to find a draft created earlier with products.create (those sit in state 'inactive' until the seller activates them) when you no longer have its product_id, or to review what the seller currently has listed. Each entry includes the listing's state, category, condition, price, quantity, and an edit_url (the seller's product page where an inactive draft is reviewed and activated). A products.create draft's price is the midpoint of Resollo's AI price suggestion; the seller can change it before activating. Optionally filter to a single state. Read-only, no side effects. Requires a signed-in Resollo user (OAuth sign-in, or an 'Authorization: Bearer <agent api key>' header).",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "state": {
+            "description": "Optional filter to a single listing state. 'inactive' is where products.create drafts sit until the seller activates them. When omitted, listings in every state are returned.",
+            "type": "string",
+            "enum": [
+              "active",
+              "inactive",
+              "pending_moderation",
+              "rejected",
+              "closed"
+            ]
+          },
+          "limit": {
+            "default": 50,
+            "description": "Maximum number of most-recent listings to return (1-100, default 50).",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          }
+        }
+      }
+    },
+    {
+      "name": "offers.make",
+      "description": "Submits a price offer (Make an Offer / bargaining) on a fixed-price Resollo listing, on behalf of the authenticated buyer. Only works on fixed-price listings where the seller has offers enabled and a fully active Stripe Connect account -- never on auctions. A product can only have one active offer at a time; if it's currently locked by someone else's in-flight offer, or isn't otherwise eligible, this returns product_not_eligible. This does NOT move any money -- it only creates a PENDING offer the seller must respond to (see offers.respond). Requires a signed-in Resollo user (OAuth sign-in, or an 'Authorization: Bearer <agent api key>' header).",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "product_id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "description": "The uuid of the fixed-price listing to bid on."
+          },
+          "offered_price": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "The price the buyer offers, in `currency_code` (or the listing's own currency if that is omitted)."
+          },
+          "currency_code": {
+            "description": "ISO 4217 code for offered_price. Defaults to the product's own listing currency if omitted.",
+            "type": "string",
+            "pattern": "^[A-Z]{3}$"
+          }
+        },
+        "required": [
+          "product_id",
+          "offered_price"
+        ]
+      }
+    },
+    {
+      "name": "offers.respond",
+      "description": "Responds to a pending Make an Offer / bargaining offer. If the caller is the SELLER of the offer, action must be 'accept', 'reject', or 'counter' (counter_price required for 'counter') and the offer must currently be pending. If the caller is the BUYER, action is 'accept_counter' (the offer must currently be countered) or 'withdraw' (the offer must be pending or countered; withdrawing a countered offer declines the counter, and the buyer can't make a new offer on that product for 48 hours). Accepting an offer or a counter-offer immediately creates a confirmed order at the agreed price -- it does NOT charge any payment method, the buyer still completes payment themselves afterwards through the normal flow, exactly like after orders.place. Requires a signed-in Resollo user (OAuth sign-in, or an 'Authorization: Bearer <agent api key>' header).",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "offer_id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "description": "The uuid of the offer to respond to."
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "accept",
+              "reject",
+              "counter",
+              "accept_counter",
+              "withdraw"
+            ],
+            "description": "Seller actions on a pending offer: accept | reject | counter (counter_price required). Buyer actions: accept_counter on a countered offer; withdraw on a pending or countered offer (declines a counter). After a withdrawal the buyer can't make a new offer on the same product for 48 hours."
+          },
+          "counter_price": {
+            "description": "The seller's counter-offer price. Required when action is `counter`.",
+            "type": "number",
+            "exclusiveMinimum": 0
+          }
+        },
+        "required": [
+          "offer_id",
+          "action"
+        ]
+      }
+    },
+    {
+      "name": "offers.list",
+      "description": "Returns the caller's most recent Make-an-Offer / bargaining offers. Pass role: 'buyer' for offers you sent, or role: 'seller' for offers received on your own listings; omit role for both. Optionally filter to a single state (pending / accepted / rejected / countered / buyer_accepted / expired). Each entry has the product, the offered price, the seller's counter price if any, and timestamps. Read-only, no side effects. Requires a signed-in Resollo user (OAuth sign-in, or an 'Authorization: Bearer <agent api key>' header).",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "role": {
+            "description": "Whose side to list from: 'buyer' returns offers you sent, 'seller' returns offers received on your listings. Omit for both, newest first (each entry's role says which side it is).",
+            "type": "string",
+            "enum": [
+              "buyer",
+              "seller"
+            ]
+          },
+          "state": {
+            "description": "Optional filter to a single offer state. When omitted, offers in every state are returned.",
+            "type": "string",
+            "enum": [
+              "pending",
+              "accepted",
+              "rejected",
+              "countered",
+              "buyer_accepted",
+              "expired",
+              "withdrawn"
+            ]
+          },
+          "limit": {
+            "default": 20,
+            "description": "Maximum number of most-recent offers to return (1-50, default 20).",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50
+          }
+        }
+      }
+    },
+    {
+      "name": "orders.status",
+      "description": "Returns the current status of one order: whether it's reserved, dispatched, paid, received, rejected, or closed (decoded booleans, not a raw state number), carrier/tracking info if dispatched, and the total price. The caller must be either the order's buyer or its seller -- returns forbidden otherwise. Read-only, no side effects. Requires a signed-in Resollo user (OAuth sign-in, or an 'Authorization: Bearer <agent api key>' header).",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "orderId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "description": "The order's uuid."
+          },
+          "currency": {
+            "description": "ISO 4217 code for the returned price fields. Same default as in search_products (the caller's own currency, else derived like on the website, else marketplace.info default_currency).",
+            "type": "string",
+            "pattern": "^[A-Z]{3}$"
+          }
+        },
+        "required": [
+          "orderId"
+        ]
+      }
+    },
+    {
+      "name": "orders.list",
+      "description": "Returns the caller's most recent orders. Pass role: 'buyer' for orders you placed, or role: 'seller' for orders on your own listings; omit role for both. Each entry has the same decoded status booleans as orders.status (reserved / dispatched / paid / received / rejected / closed), plus the product name, item count, total price (converted to the requested currency, default: your own), the other party's name, and a link to the order page. Read-only, no side effects. Requires a signed-in Resollo user (OAuth sign-in, or an 'Authorization: Bearer <agent api key>' header).",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "role": {
+            "description": "Whose side to list from: 'buyer' returns orders you placed, 'seller' returns orders on your listings. Omit for both, newest first (each entry's role says which side it is).",
+            "type": "string",
+            "enum": [
+              "buyer",
+              "seller"
+            ]
+          },
+          "currency": {
+            "description": "ISO 4217 code for the returned price fields. Same default as in search_products (the caller's own currency, else derived like on the website, else marketplace.info default_currency).",
+            "type": "string",
+            "pattern": "^[A-Z]{3}$"
+          },
+          "limit": {
+            "default": 20,
+            "description": "Maximum number of most-recent orders to return (1-50, default 20).",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50
+          }
+        }
+      }
+    },
+    {
+      "name": "orders.reject",
+      "description": "Rejects an order on behalf of the SELLER -- only allowed while the order is still RESERVED, i.e. before the seller has dispatched it or the buyer has paid. Returns order_not_reserved once the order has moved past that point (use the normal Resollo order page for anything after dispatch), and auction_order for an order created by a won auction -- the sale is binding once the auction ends, so the seller can't reject it. This does NOT move any money -- no payment has happened yet at the RESERVED stage. Requires a signed-in Resollo user (OAuth sign-in, or an 'Authorization: Bearer <agent api key>' header).",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "orderId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "description": "The uuid of the RESERVED order to reject."
+          }
+        },
+        "required": [
+          "orderId"
+        ]
+      }
+    },
+    {
+      "name": "orders.checkoutLink",
+      "description": "Creates and returns a Stripe-hosted checkout URL for a DISPATCHED, not-yet-paid order, on behalf of the BUYER -- exactly what the 'Pay with Stripe' button on the Resollo order page does. This tool NEVER charges any payment method and NEVER completes a payment itself -- it only produces a link. The human buyer must open that URL themselves and complete payment on Stripe's own hosted page. Never tell the user their order is 'paid' after calling this tool -- give them the link and tell them they still need to complete payment there. Fails with not_ready_for_payment if the seller hasn't dispatched the order yet, or already_paid if it's already been paid. Requires a signed-in Resollo user (OAuth sign-in, or an 'Authorization: Bearer <agent api key>' header).",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "orderId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "description": "The uuid of the dispatched, not-yet-paid order."
+          }
+        },
+        "required": [
+          "orderId"
+        ]
+      }
+    },
+    {
+      "name": "questions.ask",
+      "description": "Submits a public question about a product listing on behalf of the authenticated caller -- exactly the same product_questions record the web 'Ask a question' form creates. The seller can answer it on the Resollo web UI (with their own AI-drafted-answer assistant); this tool does not draft or send an answer. Question text is capped at 500 characters. Requires a signed-in Resollo user (OAuth sign-in, or an 'Authorization: Bearer <agent api key>' header).",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "product_id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "description": "The uuid of the product to ask about."
+          },
+          "question": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500,
+            "description": "The public question text (1-500 characters)."
+          }
+        },
+        "required": [
+          "product_id",
+          "question"
+        ]
+      }
+    },
+    {
+      "name": "questions.list",
+      "description": "Returns every question asked about a product listing, including the seller's answer where one exists (answer/answered_at are null for unanswered questions). Useful to check what past buyers already asked before asking a new one, or before advising a buyer on a purchase decision. Read-only, no authentication required.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "productId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "description": "The product listing's uuid."
+          }
+        },
+        "required": [
+          "productId"
+        ]
+      }
+    },
+    {
+      "name": "reviews.list",
+      "description": "Returns the reviews left for a product by past buyers (rating, message, date), plus the product's average rating and review count. Every review is tied to a real, verified order line -- only actual buyers can leave one. Useful to judge product/seller quality before advising a buyer on a purchase decision. Read-only, no authentication required.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "productId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "description": "The product listing's uuid."
+          }
+        },
+        "required": [
+          "productId"
+        ]
+      }
+    },
+    {
+      "name": "sellers.get",
+      "description": "Returns a seller's public profile -- the same information the web /user/<id> profile page shows: display name, avatar URL, about text, identity-verification badge, location (country/region/city), when they joined, accepted payment/shipment methods, whether they have a fully active Stripe Connect account, their number of currently active listings, completed-sale count, follower count, and their positive-feedback rating (0-5, null if they have no feedback yet). Useful for judging seller reputation before advising a buyer, or to get the shop_url for browsing everything they sell (pass the same seller id as search's seller_id filter). Read-only, no authentication required.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "sellerId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "description": "The seller's uuid -- the seller.id from any search or getProduct result."
+          }
+        },
+        "required": [
+          "sellerId"
+        ]
+      }
+    },
+    {
+      "name": "marketplace.info",
+      "description": "Returns the static reference data an agent needs to build valid searches and read responses without guessing: the numeric category ids and their keys/English names (use these for search's category filter), the condition codes, the list of supported ISO currency codes and the fallback default currency (search and product tools default to the caller's own currency when known), the payment- and shipment-method codes, the available sort options, the max search page size, and policy URLs (AI policy, OpenAPI spec). The photo limit per listing depends on the seller's plan -- see sellers.status max_images. Read-only, no authentication required. Safe to call once and cache for the session.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {}
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "com.resollo/agent-api",
+    "version": "3.5.0",
+    "remoteUrl": "https://www.resollo.com/api/mcp",
+    "publishedAt": "2026-11-25T13:32:25.967599Z",
+    "fetchedAt": "2026-11-26T10:40:47.803Z",
+    "toolsSha256": "bd5eb28fea536c9eefbb594a3c49ec2fcc2c673c28e74d4172cc5e863376b4da"
+  }
+}

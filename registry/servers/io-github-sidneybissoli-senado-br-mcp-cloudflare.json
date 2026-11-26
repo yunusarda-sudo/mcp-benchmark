@@ -1,0 +1,2607 @@
+{
+  "$schema": "../schema.json",
+  "name": "io.github.SidneyBissoli/senado-br-mcp-cloudflare",
+  "title": "Dados Abertos Senado BR MCP",
+  "category": "Developer Tools & DevOps",
+  "description": "MCP server for Brazilian Federal Senate open data (legislative, administrative, e-Cidadania).",
+  "repository": "https://github.com/SidneyBissoli/senado-br-mcp-cloudflare",
+  "tools": [
+    {
+      "name": "senado_tabelas_referencia",
+      "description": "Consulta tabelas de referência do Senado pelo parâmetro `tabela`. Valores: `tipos-materia` → `{ count, tipos }` (sigla/nome/descricao dos tipos de proposição, p.ex. PEC, PL, MPV) — **catálogo curado mantido neste servidor** (12 tipos mais comuns, não é a lista viva do upstream `processo/siglas`, que tem ~184 siglas); use para achar a `sigla` correta antes de `senado_buscar_materias`/`senado_search_processos`; `partidos` → `{ count, totalSenadores, partidos }` (partidos com bancada atual, ordenados por nº de senadores); `ufs` → `{ count, totalSenadores, ufs }` (as 27 UFs com a contagem de senadores em exercício); `legislatura-atual` → `{ numero, periodo, dataInicio, dataFim }` da legislatura vigente; `tipos-norma` → `{ count, tipos }` (sigla/descricao dos tipos de norma para `senado_buscar_legislacao`); `tipos-uso-palavra` → `{ count, tipos }` (codigo/descricao para interpretar `tipoUsoPalavra` em `senado_discursos_senador`). Toda resposta inclui o campo `tabela`. Para a relação nominal de parlamentares use `senado_listar_senadores`.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "tabela": {
+            "type": "string",
+            "enum": [
+              "tipos-materia",
+              "partidos",
+              "ufs",
+              "legislatura-atual",
+              "tipos-norma",
+              "tipos-uso-palavra"
+            ],
+            "description": "Qual tabela de referência consultar: tipos-materia, partidos, ufs, legislatura-atual, tipos-norma ou tipos-uso-palavra"
+          }
+        },
+        "required": [
+          "tabela"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "senado_listar_senadores",
+      "description": "Use para pedidos como 'liste os senadores em exercício', 'senadores atuais', 'lista atual de senadores' ou filtros por UF/partido. Lista senadores em exercício, fora de exercício ou de uma legislatura específica, com filtros opcionais por `nome`, `uf` e `partido`. Retorna `{ count, senadores }`, cada item com `codigo`, `nome`, `nomeCompleto`, `partido`, `uf`, `foto` e `emExercicio`, mais proveniência oficial da lista lida. `emExercicio` é a situação de HOJE: sem `legislatura`, `true` (padrão) lista os em exercício (titulares e suplentes que assumiram a vaga) e `false` lista os fora de exercício (titulares licenciados e suplentes fora da vaga — a mesma lista de `senado_senadores_afastados`); com `legislatura`, omitido traz a legislatura inteira e `true`/`false` filtra pela situação de hoje. `nome` faz correspondência parcial ignorando acentos/maiúsculas (use quando você só tem o nome e precisa do `codigo`); `uf`/`partido` filtram localmente. Use o `codigo` em `senado_obter_senador` ou `senado_votacoes_senador`.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "emExercicio": {
+            "description": "Situação de hoje: true = em exercício (padrão sem `legislatura`), false = fora de exercício. Com `legislatura`, omitido = todos",
+            "type": "boolean"
+          },
+          "legislatura": {
+            "description": "Número da legislatura (ex: 57 para 2023-2027)",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "nome": {
+            "description": "Nome ou parte do nome (busca parcial, sem acento)",
+            "type": "string"
+          },
+          "uf": {
+            "description": "Sigla do estado (ex: SP, RJ, MG)",
+            "type": "string",
+            "maxLength": 2
+          },
+          "partido": {
+            "description": "Sigla do partido (ex: PT, PL, MDB); tolera formas curtas como PODE→PODEMOS",
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "senado_obter_senador",
+      "description": "Obtém o detalhe biográfico de um senador específico. Retorna um objeto com `codigo`, `nome`, `nomeCompleto`, `nomeCivil`, `sexo`, `dataNascimento`, `naturalidade`/`ufNaturalidade`, `partido`, `uf`, `foto`, `email`, `emExercicio` e a lista `mandatos` (`legislatura`, `uf`, `participacao`, `dataInicio`, `dataFim`). `emExercicio` é derivado dos exercícios do mandato (aberto = em exercício) e vem `null` — nunca afirmado — quando os mandatos não puderam ser lidos. Código inexistente retorna erro (\"Senador com código N não encontrado\"), nunca um registro vazio. Requer `codigoSenador` — obtenha-o via `senado_listar_senadores` (filtro `nome`). Para filiações, profissões, licenças, comissões ou cargos use `senado_senador_historico` (parâmetro `tipo`).",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "codigoSenador": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Código único do senador no sistema do Senado"
+          }
+        },
+        "required": [
+          "codigoSenador"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "senado_votacoes_senador",
+      "description": "Lista as votações nominais de um senador, mostrando como votou em cada matéria. Retorna `{ periodo, count, votos }`, cada voto com `codigoSessao`, `codigoVotacao`, `data`, `materia`, `descricao`, `voto` e `resultado`, ordenados da mais recente para a mais antiga. Sem período usa o ano corrente; informe `ano` ou o par `dataInicio`/`dataFim` (YYYYMMDD). Requer `codigoSenador` (obtenha via `senado_listar_senadores`); para detalhes de uma votação específica (votos de todos os senadores) use `senado_obter_votacao` — os dois códigos são aceitos, e `codigoSessao` resolve direto.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "codigoSenador": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Código único do senador"
+          },
+          "ano": {
+            "description": "Ano das votações",
+            "type": "integer",
+            "minimum": 1900,
+            "maximum": 2100
+          },
+          "dataInicio": {
+            "description": "Data início (YYYYMMDD)",
+            "type": "string",
+            "pattern": "^\\d{8}$"
+          },
+          "dataFim": {
+            "description": "Data fim (YYYYMMDD)",
+            "type": "string",
+            "pattern": "^\\d{8}$"
+          }
+        },
+        "required": [
+          "codigoSenador"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "senado_senador_historico",
+      "description": "Histórico funcional de um senador conforme o parâmetro `tipo`. Valores: `licencas` (itens com `dataInicio`/`dataFim`/`descricao`), `comissoes` (`sigla`/`nome`/`casa`/`participacao`/datas), `cargos` (`comissao`/`cargo`/datas), `historico-academico` (cursos, registros brutos da API), `filiacoes` (`partido`/`nomePartido`/`dataFiliacao`/`dataDesfiliacao`) e `profissoes` (`nome`). Retorna `{ codigoSenador, tipo, count, itens }`, com a forma de cada item dependente do `tipo`; tipos sem registros para o senador retornam `count` 0 e `itens` vazio. Requer `codigoSenador` (obtenha via `senado_listar_senadores`). Para dados biográficos e mandatos use `senado_obter_senador`. Ex.: `{ codigoSenador: 4994, tipo: 'filiacoes' }` → histórico de partidos do senador.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "codigoSenador": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Código único do senador"
+          },
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "licencas",
+              "comissoes",
+              "cargos",
+              "historico-academico",
+              "filiacoes",
+              "profissoes"
+            ],
+            "description": "Qual histórico consultar"
+          }
+        },
+        "required": [
+          "codigoSenador",
+          "tipo"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "senado_senadores_afastados",
+      "description": "Lista os senadores atualmente afastados (fora de exercício). Retorna `{ count, senadores }`, cada item com `codigo`, `nome`, `nomeCompleto`, `partido`, `uf`, `foto` e `emExercicio` (sempre `false`). Não requer parâmetros. Atenção: é a lista BRUTA do upstream, sem recorte de legislatura — pode conter registros históricos (ex.: senadores falecidos) e inconsistências pontuais com o detalhe do parlamentar; também não traz o vínculo titular↔suplente (para saber quem assumiu a vaga, consulte os mandatos em `senado_obter_senador`). Use `codigo` em `senado_obter_senador` para o detalhe; para os senadores em exercício (e busca por nome) use `senado_listar_senadores`.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "senado_buscar_materias",
+      "description": "Busca matérias legislativas por tipo (PEC, PL, PLP, MPV), número, ano, palavras-chave, autor, período de apresentação ou situação de tramitação; informe ao menos um critério. Para pedidos como 'matérias recentes sobre X', use `palavraChave`, `ano` ou `dataInicioApresentacao`/`dataFimApresentacao`, `ordenarPor: 'dataApresentacao'`, `ordem: 'desc'` e `limite` baixo (ex: 10); não é necessário chamar detalhes para listar resultados. Retorna `{ count, total, materias[] }`, cada item com `codigo` (codigoMateria), `sigla`, `numero`, `ano`, `ementa`, `autor`, `situacao`, `dataApresentacao`, `url` e `tramitando`. Use `codigo` em `senado_obter_materia` apenas quando o usuário pedir detalhe/tramitação/textos. `limite` padrão 100 (máx. 500); ao truncar inclui `aviso`. Ex.: `{ palavraChave: 'inteligência artificial', ano: 2025, limite: 10 }` ou `{ sigla: 'PEC', numero: 45, ano: 2019 }` (datas em YYYYMMDD ou ISO).",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "sigla": {
+            "description": "Tipo: PEC, PL, PLP, MPV, PDL, PRS, etc.",
+            "type": "string"
+          },
+          "numero": {
+            "description": "Número da matéria",
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "ano": {
+            "description": "Ano da matéria",
+            "type": "integer",
+            "minimum": 1900,
+            "maximum": 2100
+          },
+          "palavraChave": {
+            "description": "Termo livre buscado nas palavras-chave do processo",
+            "type": "string"
+          },
+          "autorNome": {
+            "description": "Nome do autor",
+            "type": "string"
+          },
+          "tramitando": {
+            "description": "Apenas em tramitação",
+            "type": "boolean"
+          },
+          "dataInicioApresentacao": {
+            "description": "Data inicial de apresentação (YYYYMMDD ou YYYY-MM-DD)",
+            "type": "string",
+            "pattern": "^(\\d{8}|\\d{4}-\\d{2}-\\d{2})$"
+          },
+          "dataFimApresentacao": {
+            "description": "Data final de apresentação (YYYYMMDD ou YYYY-MM-DD)",
+            "type": "string",
+            "pattern": "^(\\d{8}|\\d{4}-\\d{2}-\\d{2})$"
+          },
+          "ordenarPor": {
+            "default": "dataApresentacao",
+            "description": "Ordenação local; padrão dataApresentacao para favorecer pedidos recentes",
+            "type": "string",
+            "enum": [
+              "relevancia",
+              "dataApresentacao"
+            ]
+          },
+          "ordem": {
+            "default": "desc",
+            "description": "Direção da ordenação quando ordenarPor=dataApresentacao",
+            "type": "string",
+            "enum": [
+              "asc",
+              "desc"
+            ]
+          },
+          "limite": {
+            "default": 100,
+            "description": "Máximo de resultados (padrão: 100)",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 500
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "senado_obter_materia",
+      "description": "Obtém dados de uma matéria pelo `codigoMateria`, conforme `secao` (padrão `detalhe`): `detalhe` → objeto com `identificacao`, `apelido`, `ementa`, `autor`, `situacao`, `localAtual`, `dataApresentacao`, `indexacao`, `classificacoes[]`, `tramitando`, `relator` (nome/partido/uf/comissão), `deliberacao` e `normaGerada`. `tramitacao` → histórico de tramitação cronológico em `tramitacoes[]` (`data`, `local`, `descricao`), com `count`/`total` (mantém os mais recentes ao truncar). `textos` → documentos da matéria em `textos[]` (`tipo`, `formato`, `identificacao`, `data`, `autoria`, `url`), do mais recente ao mais antigo. `limite` aplica-se a tramitacao/textos (padrão 100 e 50; ao truncar inclui `aviso`). Obtenha o `codigoMateria` via `senado_buscar_materias`.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "codigoMateria": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Código único da matéria"
+          },
+          "secao": {
+            "default": "detalhe",
+            "description": "detalhe (situação/relator), tramitacao (histórico) ou textos (documentos)",
+            "type": "string",
+            "enum": [
+              "detalhe",
+              "tramitacao",
+              "textos"
+            ]
+          },
+          "limite": {
+            "description": "Máximo de itens em tramitacao/textos (padrão: 100 tramitacao, 50 textos)",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000
+          }
+        },
+        "required": [
+          "codigoMateria"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "senado_obter_votacao",
+      "description": "Obtém detalhes de uma votação de **plenário**, incluindo votos nominais. `codigoVotacao` aceita OS DOIS códigos que a fonte publica para a mesma votação: o `codigoVotacao` de 4 dígitos (ex.: 7101 — o que `senado_search_votacoes` e `senado_votacoes_senador` devolvem nesse campo) ou o `codigoSessao` de 6 dígitos da sessão plenária (ex.: 581816). Com o código da votação retorna aquela votação; com o da sessão retorna `{ codigoSessao, count, votacoes }` com todas as votações da sessão. Cada votação traz placar, `resultado` legível + `resultadoCodigo` bruto, `secreta` e `votos[]` (`codigoSenador`, `nomeSenador`, `partido`, `uf`, `voto`). Resolver o código de 4 dígitos exige varrer uma janela temporal: por padrão a janela recente da fonte (~12 meses); para votação mais antiga informe `ano`. Código que não existe em nenhum dos dois espaços retorna erro — nunca lista vazia. Atenção: códigos de `senado_votacao_comissao` e o `codigoVotacao` de `senado_orientacao_bancada` pertencem a OUTROS espaços de numeração e não são válidos aqui.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "codigoVotacao": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Código da votação (4 dígitos, ex. 7101) OU o codigoSessao da sessão plenária (6 dígitos, ex. 581816) — os dois são aceitos"
+          },
+          "ano": {
+            "description": "Só para código de votação de 4 dígitos ANTERIOR aos últimos ~12 meses: o ano em que a votação ocorreu, para abrir a janela de busca",
+            "type": "integer",
+            "minimum": 1990,
+            "maximum": 2100
+          }
+        },
+        "required": [
+          "codigoVotacao"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "senado_votos_materia",
+      "description": "Obtém as votações de uma matéria pelo `codigoMateria`. Retorna `{ codigoMateria, count, votacoes }`, cada item com `data`, `descricao`, `resultado` e placar (`totalSim`/`totalNao`/`totalAbstencao`); com `incluirVotos: true` (padrão false) acrescenta `votos[]` (nome, partido, uf e voto de cada senador). Obtenha o `codigoMateria` via `senado_buscar_materias` ou `senado_obter_materia`.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "codigoMateria": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Código único da matéria"
+          },
+          "incluirVotos": {
+            "default": false,
+            "description": "Incluir votos nominais de cada senador",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "codigoMateria"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "senado_search_votacoes",
+      "description": "Busca e lista votações do plenário combinando critérios opcionais. Janela temporal: informe `dias` (últimos N dias, 1-365) para atividade recente, OU `dataInicio`/`dataFim` (YYYYMMDD) para um período arbitrário — para um ano inteiro use `dataInicio: \"AAAA0101\"` e `dataFim: \"AAAA1231\"`. Demais filtros: `idProcesso`, `codigoMateria`, `sigla`/`numero`/`ano` da matéria, `codigoParlamentar` e `siglaVotoParlamentar`. Retorna `{ count, votacoes }` ordenadas da mais recente para a mais antiga; cada item traz `codigoSessao`, `data`, `materia`, `codigoMateria`, `resultado` e placar (`totalSim`/`totalNao`/`totalAbstencao`), sem votos nominais. Use `senado_obter_votacao` com o `codigoSessao` para os votos de cada senador.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "dias": {
+            "description": "Janela: votações dos últimos N dias (ignorado se dataInicio/dataFim forem informados)",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 365
+          },
+          "dataInicio": {
+            "description": "Data início (YYYYMMDD)",
+            "type": "string",
+            "pattern": "^\\d{8}$"
+          },
+          "dataFim": {
+            "description": "Data fim (YYYYMMDD)",
+            "type": "string",
+            "pattern": "^\\d{8}$"
+          },
+          "idProcesso": {
+            "description": "ID do processo legislativo",
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "codigoMateria": {
+            "description": "Código da matéria",
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "sigla": {
+            "description": "Sigla do tipo de matéria",
+            "type": "string"
+          },
+          "numero": {
+            "description": "Número da matéria",
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "ano": {
+            "description": "Ano da matéria",
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "codigoParlamentar": {
+            "description": "Código do parlamentar",
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "siglaVotoParlamentar": {
+            "description": "Tipo de voto do parlamentar",
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "senado_listar_comissoes",
+      "description": "Lista comissões (colegiados) ativas do Senado, com filtros por `tipo` (permanente, temporaria, cpi, mista) e `ativa`. Retorna `{ count, comissoes }`, cada item com `codigo`, `sigla`, `nome`, `tipo`, `casa` e `ativa`. O endpoint só traz comissões ativas, logo `ativa=false` resulta em lista vazia. Use para descobrir a `sigla` exigida por `senado_obter_comissao` e `senado_reunioes_comissao`.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "tipo": {
+            "description": "Tipo: permanente, temporaria, cpi, mista",
+            "type": "string",
+            "enum": [
+              "permanente",
+              "temporaria",
+              "cpi",
+              "mista"
+            ]
+          },
+          "ativa": {
+            "description": "Apenas comissões ativas",
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "senado_obter_comissao",
+      "description": "Obtém dados de uma comissão pela `sigla`, conforme `secao` (padrão `resumo`): `resumo` → `{ codigo, sigla, nome, tipo, finalidade, presidente, vicePresidente, totalMembros, titulares, suplentes }` (presidente/vice com `nome`/`codigo`/`bancada`). `finalidade` só vem preenchida para colegiados temporários (CPIs, comissões temporárias e de medida provisória); para comissões permanentes (CCJ, CAE etc.) a fonte não a publica e o campo vem nulo com um `aviso` — as competências estão no Regimento Interno. `membros` → `{ sigla, secao, count, membros }`, cada membro com `codigo`, `nome`, `tipoVaga` (titular/suplente), `ativo` e `dataInicio`. A sigla é resolvida internamente para código numérico; descubra-a via `senado_listar_comissoes`.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "sigla": {
+            "type": "string",
+            "minLength": 2,
+            "description": "Sigla da comissão (ex: CCJ, CAE)"
+          },
+          "secao": {
+            "default": "resumo",
+            "description": "resumo (mesa/totais) ou membros (composição completa)",
+            "type": "string",
+            "enum": [
+              "resumo",
+              "membros"
+            ]
+          }
+        },
+        "required": [
+          "sigla"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "senado_reunioes_comissao",
+      "description": "Lista reuniões de uma comissão (pela `sigla`) num intervalo `dataInicio`/`dataFim` (YYYYMMDD) de até 30 dias; sem datas, usa os últimos 14 dias. A fonte só entrega 30 dias por pedido (e cortava o resto calada), então janelas maiores são recusadas: divida períodos longos em chamadas de até 30 dias. A agenda é lida um dia por vez; um dia que a fonte não entregar aparece em `diasNaoLidos`, com `aviso`. Retorna `{ sigla, periodo, count, reunioes, agendaPrevista?, diasNaoLidos?, aviso? }`, cada reunião com `codigo`, `descricao`, `data`, `hora`, `local`, `tipo` e `situacao`. `reunioes` traz só as de até hoje; quando o período chega ao futuro, as marcadas para depois de hoje vêm à parte em `agendaPrevista` (`count`, `reunioes`, `aviso`) — são previsão e podem mudar. Descubra a `sigla` via `senado_listar_comissoes`; use o `codigo` retornado em `senado_reuniao_comissao` para os detalhes da pauta.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "sigla": {
+            "type": "string",
+            "minLength": 2,
+            "description": "Sigla da comissão"
+          },
+          "dataInicio": {
+            "description": "Data início (YYYYMMDD)",
+            "type": "string",
+            "pattern": "^\\d{8}$"
+          },
+          "dataFim": {
+            "description": "Data fim (YYYYMMDD); no máximo 30 dias depois do início",
+            "type": "string",
+            "pattern": "^\\d{8}$"
+          }
+        },
+        "required": [
+          "sigla"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "senado_agenda_comissoes",
+      "description": "Obtém a agenda de reuniões de todas as comissões numa data (`data` YYYYMMDD; padrão: hoje), com filtro opcional `siglaComissao`. Retorna `{ data, siglaComissao, count, reunioes }`, cada reunião com `codigo`, `comissao` (`sigla`, `nome`), `descricao`, `data`, `hora`, `local`, `tipo` e `situacao`. Para o histórico de uma única comissão por período use `senado_reunioes_comissao`; para detalhes de uma reunião use `senado_reuniao_comissao` com o `codigo`.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "data": {
+            "description": "Data específica (YYYYMMDD)",
+            "type": "string",
+            "pattern": "^\\d{8}$"
+          },
+          "siglaComissao": {
+            "description": "Filtrar por comissão específica",
+            "type": "string",
+            "minLength": 2
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "senado_reuniao_comissao",
+      "description": "Detalha uma reunião de comissão. Aceita DOIS caminhos: o `codigoReuniao` direto, ou `sigla` da comissão mais `data` (YYYYMMDD) — neste segundo caso a ferramenta resolve o código sozinha, e devolve as candidatas quando o dia tem mais de uma reunião. Retorna um objeto com `codigo`, `titulo`, `comissao`, `data`, `hora`, `local`, `situacao`, `realizada`, `secreta`, `tipoPresenca` (presencial/semipresencial), `presidente`, links `urlPauta`/`urlResultado`/`urlAta` e `partes` (cada parte com `evento` e `itens` apreciados: `identificacao`, `ementa`, `autoria`, `relatoria`, `resultado`, `codigoMateria`). A API NÃO publica lista de presença da reunião (só presidente e eventuais convidados): reconstrua a presença pelos votos nominais (`senado_votacao_comissao`), por quem falou na transcrição (`senado_notas_taquigraficas` com `tipo=reuniao`) ou pela ata oficial (`urlAta`, quando publicada). Sem código à mão, prefira `sigla` + `data`; o `codigoReuniao` também sai de `senado_agenda_comissoes` ou `senado_reunioes_comissao`.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "codigoReuniao": {
+            "description": "Código da reunião (campo 'codigo' na agenda). Sem ele, informe sigla e data.",
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "sigla": {
+            "description": "Sigla da comissão (ex.: CAE) — alternativa ao código",
+            "type": "string",
+            "minLength": 2
+          },
+          "data": {
+            "description": "Data da reunião (YYYYMMDD) — usada com `sigla`; sem ela, os últimos 14 dias",
+            "type": "string",
+            "pattern": "^\\d{8}$"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "senado_requerimentos_cpi",
+      "description": "Lista requerimentos de uma CPI (Comissão Parlamentar de Inquérito) em atividade, pela `siglaCpi`, com paginação por `pagina` (índice baseado em 0, definido pelo upstream). Retorna `{ siglaCpi, pagina, count, requerimentos }`, onde `requerimentos` é a lista de registros brutos da página (campos conforme a API: tipicamente número, data, ementa, autor e situação do requerimento). `count` é o tamanho da página; uma página além do total retorna `count` 0 — use isso para saber que as páginas acabaram. Descubra as siglas via `senado_listar_comissoes` com `tipo=cpi`. Limitação conhecida: o endpoint upstream costuma responder vazio mesmo para CPIs em atividade, e não há fonte alternativa limpa na API; nesses casos o retorno traz `count` 0 e um campo `aviso` explicando — não interprete lista vazia como certeza de que a CPI não possui requerimentos.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "siglaCpi": {
+            "type": "string",
+            "minLength": 3,
+            "description": "Sigla da CPI (ex: CPIVD, CPIPED)"
+          },
+          "pagina": {
+            "default": 0,
+            "description": "Página da lista (padrão: 0)",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "siglaCpi"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "senado_distribuicao_materias",
+      "description": "Ranqueia parlamentares pela quantidade de matérias numa comissão (`siglaComissao`), medindo carga de trabalho legislativo. `tipo` escolhe o eixo: `autoria` (matérias de autoria; padrão) ou `relatoria` (matérias relatadas). Retorna `{ siglaComissao, tipo, count, parlamentares }` ordenado por `quantidade` desc, sem paginação (`count` 0 quando a comissão não tem registros), cada item com `codigo`, `nome`, `partido`, `uf` e `quantidade`. `codigoParlamentar` restringe a um parlamentar e **só tem efeito em `tipo=autoria`** (ignorado em relatoria). Descubra a `sigla` via `senado_listar_comissoes`; use o `codigo` do parlamentar em `senado_obter_senador`. Para a lista das matérias em si (não a contagem) use `senado_buscar_materias`.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "siglaComissao": {
+            "type": "string",
+            "minLength": 2,
+            "description": "Sigla da comissão (ex: CCJ, CAE)"
+          },
+          "tipo": {
+            "default": "autoria",
+            "description": "autoria = matérias de autoria por parlamentar (padrão); relatoria = matérias relatadas",
+            "type": "string",
+            "enum": [
+              "autoria",
+              "relatoria"
+            ]
+          },
+          "codigoParlamentar": {
+            "description": "Restringe a um parlamentar — efetivo apenas em tipo=autoria (ignorado em relatoria)",
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "siglaComissao"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "senado_agenda_plenario",
+      "description": "Obtém a agenda de sessões de plenário (Senado ou Congresso Nacional), por dia ou mês, com a pauta de matérias a votar. Retorna `{ data, escopo, count, sessoes }`, onde cada sessão traz `codigo`, `data`, `hora`, `tipo`, `situacao` e `pauta` (matéria, ementa, autor, parecer). Use `escopo` dia/mes/cn; sem `data` assume hoje. Para o resultado já apreciado use `senado_resultado_plenario`; detalhes de uma sessão via `senado_encontro_plenario`.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "data": {
+            "description": "Data específica (YYYYMMDD; padrão: hoje)",
+            "type": "string",
+            "pattern": "^\\d{8}$"
+          },
+          "escopo": {
+            "default": "dia",
+            "description": "dia = SF+CN no dia; mes = mês inteiro; cn = plenário do Congresso",
+            "type": "string",
+            "enum": [
+              "dia",
+              "mes",
+              "cn"
+            ]
+          },
+          "dataFim": {
+            "description": "Data fim para período do CN (YYYYMMDD; apenas escopo=cn)",
+            "type": "string",
+            "pattern": "^\\d{8}$"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "senado_resultado_plenario",
+      "description": "Resultado das sessões plenárias numa data: itens de pauta apreciados, pareceres e resultados. Retorna `{ data, escopo, count, sessoes }` (todas as sessões da data, sem paginação), com cada sessão trazendo `codigoSessao`, `numeroSessao`, `data`, `hora`, `tipo`, `casa` e `itens` (`codigoMateria`, `identificacao`, `ementa`, `resultado`, `parecer` — `resultado`/`parecer` podem vir `null` em itens ainda não deliberados). Sem sessão na data, `count` é 0 e `sessoes` vem vazio. `escopo`: sf (Senado), cn (Congresso) ou mes (resumo do mês). Para a pauta prévia use `senado_agenda_plenario`; orientação de bancada via `senado_orientacao_bancada`.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "data": {
+            "type": "string",
+            "pattern": "^\\d{8}$",
+            "description": "Data da sessão (YYYYMMDD); para escopo=mes, qualquer dia do mês"
+          },
+          "escopo": {
+            "default": "sf",
+            "description": "sf = Senado no dia; cn = Congresso no dia; mes = resumo do mês",
+            "type": "string",
+            "enum": [
+              "sf",
+              "cn",
+              "mes"
+            ]
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "senado_orientacao_bancada",
+      "description": "Orientação de bancada nas votações de plenário: como cada liderança partidária orientou o voto, com placar — essencial para análise de disciplina partidária. Retorna `{ count, votacoes }`, com cada votação trazendo `codigoVotacaoSve`, `descricao`, `materia`, `dataInicio`, `dataTermino`, `sessao`, totais (`totalSim`, `totalNao`, `totalAbstencao`, `obstrucoes`), `quorumInicial`/`quorumFinal` e `orientacoes` (`partido`, `voto`). Informe `data` (um dia) ou o período `dataInicio`/`dataFim`. O `codigoVotacaoSve` é o identificador interno do sistema de votação eletrônica e pertence a um espaço de numeração próprio: NÃO serve como entrada de `senado_obter_votacao` (use a `data` com `senado_search_votacoes` para chegar ao código da votação). Para o resultado das sessões use `senado_resultado_plenario`.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "data": {
+            "description": "Data da sessão (YYYYMMDD)",
+            "type": "string",
+            "pattern": "^\\d{8}$"
+          },
+          "dataInicio": {
+            "description": "Data início do período (YYYYMMDD)",
+            "type": "string",
+            "pattern": "^\\d{8}$"
+          },
+          "dataFim": {
+            "description": "Data fim do período (YYYYMMDD)",
+            "type": "string",
+            "pattern": "^\\d{8}$"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "senado_vetos",
+      "description": "Lista vetos presidenciais em apreciação pelo Congresso Nacional, por ano ou por status de tramitação. Retorna `{ count, total, aviso?, vetos }`, com cada veto trazendo `codigo`, `identificacao`, `ementa`, `emTramitacao`, `materiaVetada`, `tipo` (total/parcial), `assunto` e `dataLimiteVotacao` (prazo de sobrestamento de pauta). `limite` controla o corte (padrão 100; `aviso` indica truncagem). Informe `ano` OU `status` (tramitando/antes-rcn/encerrados). Para o resultado da votação de um veto use `senado_resultado_veto`.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "ano": {
+            "description": "Vetos do ano informado",
+            "type": "integer",
+            "minimum": 1990,
+            "maximum": 2100
+          },
+          "status": {
+            "description": "tramitando = pós-RCN 1/2013 em tramitação (padrão); antes-rcn = anteriores à RCN; encerrados = tramitação encerrada",
+            "type": "string",
+            "enum": [
+              "tramitando",
+              "antes-rcn",
+              "encerrados"
+            ]
+          },
+          "limite": {
+            "default": 100,
+            "description": "Máximo de resultados (padrão: 100)",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 500
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "senado_resultado_veto",
+      "description": "Obtém o resultado da apreciação de um veto presidencial. Retorna `{ codigo, tipo, resultado }`, onde `resultado` é o objeto bruto da API (sem wrappers), com campos variáveis — tipicamente identificação do veto, situação por dispositivo (ex.: \"Rejeitado\"/\"Mantido\") e link do PDF do resultado nominal (`PdfsResultadoVotacao`). A API **não** fornece placar numérico (sim/não) aqui — o detalhamento nominal está no PDF; vem **objeto vazio** quando o veto ainda não foi votado e **retorna erro** se o `codigo` não existir. `tipo` define o que `codigo` representa: `veto` (código do veto, padrão), `materia` (código do projeto vetado) ou `dispositivo` (dispositivo de veto parcial) — as três chaves apontam para o mesmo veto. Obtenha o código via `senado_vetos`. Para **listar** vetos (não o resultado de um) use `senado_vetos`.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "codigo": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Código do veto, da matéria vetada ou do dispositivo — qual deles depende de `tipo`"
+          },
+          "tipo": {
+            "default": "veto",
+            "description": "Define a chave em codigo: veto = código do veto (padrão); materia = código do projeto vetado; dispositivo = dispositivo de veto parcial",
+            "type": "string",
+            "enum": [
+              "veto",
+              "materia",
+              "dispositivo"
+            ]
+          }
+        },
+        "required": [
+          "codigo"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "senado_encontro_plenario",
+      "description": "Detalhes de um encontro legislativo (sessão de plenário). Retorna `{ codigo, secao, encontro }`, onde `encontro` é o objeto bruto da API (ou array, quando o upstream traz vários) cujos campos variam conforme a `secao` escolhida: `detalhes` (padrão) traz dados gerais da sessão (tipo, data, situação, presença); `pauta` traz as matérias previstas; `resultado` traz os itens apreciados e seus resultados; `resumo` traz uma síntese. `encontro` pode vir vazio se a seção não tiver dados, e a chamada retorna erro se o `codigo` não existir. Obtenha o `codigo` via `senado_agenda_plenario` ou `senado_resultado_plenario`.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "codigo": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Código do encontro/sessão"
+          },
+          "secao": {
+            "default": "detalhes",
+            "description": "Qual seção do encontro consultar",
+            "type": "string",
+            "enum": [
+              "detalhes",
+              "pauta",
+              "resultado",
+              "resumo"
+            ]
+          }
+        },
+        "required": [
+          "codigo"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "senado_tabelas_plenario",
+      "description": "Consulta tabelas de referência do plenário para resolver códigos/domínios, conforme `tabela`: `tipos-sessao` (espécies de sessão plenária), `tipos-comparecimento` (situações de presença) ou `legislaturas` (períodos legislativos com datas). Retorna `{ tabela, count, total, linhas }` — `count` é o nº após o corte por `limite` e `total` o disponível; `count < total` indica truncagem (aumente `limite`); `count` 0 quando o `filtro` não casa. Cada linha traz o código/sigla e a descrição do domínio (campos conforme a API). Use para interpretar campos como `tipo` de `senado_agenda_plenario`/`senado_resultado_plenario`. Para tabelas do processo legislativo (assuntos, classes, situações) use `senado_tabelas_processo`. Ex.: `{ tabela: 'legislaturas' }` ou `{ tabela: 'tipos-sessao', filtro: 'deliberativa' }`.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "tabela": {
+            "type": "string",
+            "enum": [
+              "tipos-sessao",
+              "tipos-comparecimento",
+              "legislaturas"
+            ],
+            "description": "Domínio a consultar: tipos-sessao (espécies de sessão); tipos-comparecimento (situações de presença); legislaturas (períodos com datas)"
+          },
+          "filtro": {
+            "description": "Busca textual sobre qualquer campo da linha; count 0 se nada casar",
+            "type": "string"
+          },
+          "limite": {
+            "default": 100,
+            "description": "Máximo de linhas (padrão 100, máx 500); count < total sinaliza corte",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 500
+          }
+        },
+        "required": [
+          "tabela"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "senado_search_processos",
+      "description": "Busca processos legislativos no endpoint v3 `/processo` (parâmetros complementares ao `senado_buscar_materias`). Retorna `{ count, total, aviso?, processos }`, cada item com `id`, `codigoMateria`, `identificacao`, `ementa`, `tipoDocumento`, `dataApresentacao`, `autoria` (compactada: primeiros autores + total), `totalAutores`, `tramitando` (boolean) e `normaGerada`. É obrigatório ao menos um filtro (sigla, número, ano, autor ou período). Limitado a `limite` (padrão 20, máx. 200), com `aviso` ao truncar. Use o `id` retornado em `senado_obter_processo` para detalhes. Ex.: `{ sigla: 'PL', ano: 2025, dataInicioApresentacao: '2025-03-01' }` (datas em YYYYMMDD ou ISO).",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "sigla": {
+            "description": "Sigla do tipo de processo (ex: PL, PEC)",
+            "type": "string"
+          },
+          "numero": {
+            "description": "Número do processo",
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "ano": {
+            "description": "Ano do processo",
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "autor": {
+            "description": "Nome do autor",
+            "type": "string"
+          },
+          "codigoParlamentarAutor": {
+            "description": "Código do parlamentar autor",
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "tramitando": {
+            "description": "Em tramitação (S/N)",
+            "type": "string",
+            "enum": [
+              "S",
+              "N"
+            ]
+          },
+          "dataInicioApresentacao": {
+            "description": "Data início da apresentação (YYYYMMDD ou YYYY-MM-DD)",
+            "type": "string"
+          },
+          "dataFimApresentacao": {
+            "description": "Data fim da apresentação (YYYYMMDD ou YYYY-MM-DD)",
+            "type": "string"
+          },
+          "limite": {
+            "default": 20,
+            "description": "Máximo de resultados (padrão: 20)",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "senado_obter_processo",
+      "description": "Obtém detalhes completos de um processo legislativo específico pelo seu `id`. Retorna um objeto com `id`, `codigoMateria`, `identificacao`, `sigla`, `numero`, `ano`, `objetivo`, `ementa`, `tipoConteudo`, `dataApresentacao`, `autoria`, `indexacao`, `urlDocumento`, `tramitando` (boolean) e o estado atual do processo: `situacaoAtual` (+`siglaSituacaoAtual`/`dataSituacaoAtual`), `deliberacao` (data, tipo, destino) e `normaGerada` (quando o processo virou norma). Obtenha o `idProcesso` antes via `senado_search_processos` ou `senado_buscar_materias`; para emendas, relatorias ou prazos use `senado_processo_detalhe` (parâmetro `secao`).",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "idProcesso": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "ID do processo legislativo"
+          }
+        },
+        "required": [
+          "idProcesso"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "senado_processo_detalhe",
+      "description": "Detalha um aspecto de processos legislativos conforme o parâmetro `secao`: `emendas` → emendas apresentadas (`id`, `identificacao`, `numero`, `tipo`, `autoria`, `data`, `colegiado`, `descricao`, `decisoes` (objetos com `casa`/`data`/`tipo`/`comissao`/`nomeComissao`), `url`; aceita filtro `codigoParlamentarAutor`); `relatorias` → relatorias designadas (`idProcesso`, `processo`, `relator`, `partido`, `uf`, `tipoRelator`, `comissao`, `dataDesignacao`, `dataDestituicao`, `motivoEncerramento`; aceita `codigoParlamentar`/`codigoColegiado`/`dataReferencia`); `prazos` → prazos regimentais/constitucionais (registros brutos da API; aceita `dataReferencia`). Todos aceitam `idProcesso` e/ou `codigoMateria` e período `dataInicio`/`dataFim` (YYYYMMDD ou ISO) — informe pelo menos um filtro. Retorna `{ secao, count, total, aviso?, itens }`, limitado a `limite` (padrão 100, máx. 500). Obtenha o `idProcesso` via `senado_search_processos`; tipos de prazo via `senado_tabelas_processo`. Ex.: `{ secao: 'emendas', codigoMateria: 137999 }` ou `{ secao: 'relatorias', codigoParlamentar: 4994, dataReferencia: '2025-06-01' }`.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "secao": {
+            "type": "string",
+            "enum": [
+              "emendas",
+              "relatorias",
+              "prazos"
+            ],
+            "description": "Qual aspecto detalhar: emendas, relatorias ou prazos"
+          },
+          "idProcesso": {
+            "description": "ID do processo",
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "codigoMateria": {
+            "description": "Código legado da matéria",
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "codigoParlamentarAutor": {
+            "description": "secao=emendas: código do parlamentar autor",
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "codigoParlamentar": {
+            "description": "secao=relatorias: código do parlamentar relator",
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "codigoColegiado": {
+            "description": "secao=relatorias: código do colegiado",
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "dataReferencia": {
+            "description": "secao=relatorias/prazos: vigentes nesta data (YYYYMMDD ou YYYY-MM-DD)",
+            "type": "string"
+          },
+          "dataInicio": {
+            "description": "A partir desta data (YYYYMMDD ou YYYY-MM-DD)",
+            "type": "string"
+          },
+          "dataFim": {
+            "description": "Até esta data (YYYYMMDD ou YYYY-MM-DD)",
+            "type": "string"
+          },
+          "limite": {
+            "default": 100,
+            "description": "Máximo de resultados (padrão: 100)",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 500
+          }
+        },
+        "required": [
+          "secao"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "senado_autores_atuais",
+      "description": "Lista parlamentares autores de processos em tramitação, ordenados por produção (maior número de matérias primeiro). Atenção à semântica: 'atual' significa 'com processo AINDA EM TRAMITAÇÃO', não 'mandato vigente' — a lista mistura senadores, deputados e ex-parlamentares, e a mesma pessoa pode aparecer 2× com códigos distintos (ex.: como 'Senador' e como 'Deputado', pelo `tratamento`); não use como lista de senadores em exercício (para isso, `senado_listar_senadores`). Retorna `{ count, total, autores }`, cada autor com `codigo`, `nome`, `tratamento`, `uf` e `quantidadeMaterias`. Filtros opcionais `uf` e `nome` (busca parcial sem acento); `limite` padrão 50 (máx. 1000). Use o `codigo` em `senado_obter_senador` ou `senado_search_processos` (codigoParlamentarAutor).",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "uf": {
+            "description": "Filtrar por UF (ex: SP)",
+            "type": "string",
+            "maxLength": 2
+          },
+          "nome": {
+            "description": "Filtrar por nome (busca parcial)",
+            "type": "string"
+          },
+          "limite": {
+            "default": 50,
+            "description": "Máximo de resultados (padrão: 50)",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "senado_tabelas_processo",
+      "description": "Consulta tabelas de referência do processo legislativo para resolver códigos/siglas, conforme `tabela`. Domínios de entidade: `siglas` (siglas de proposição), `assuntos`, `classes`, `destinos`, `entes`. Domínios de tipo (código→descrição): `tipos-situacao`, `tipos-decisao`, `tipos-autor`, `tipos-atualizacao`, `tipos-documento`, `tipos-conteudo-documento`, `tipos-prazo`. Retorna `{ tabela, count, total, linhas }` — `count` é o nº após o corte por `limite` e `total` o disponível; `count < total` indica truncagem (aumente `limite`); `count` 0 quando o `filtro` não casa. Cada linha traz código/sigla e descrição (campos conforme a API). Use antes de filtrar em `senado_search_processos`/`senado_processo_detalhe`. Para as tabelas do plenário (tipos de sessão, legislaturas) use `senado_tabelas_plenario`. Ex.: `{ tabela: 'tipos-prazo' }` ou `{ tabela: 'siglas', filtro: 'PEC' }`.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "tabela": {
+            "type": "string",
+            "enum": [
+              "siglas",
+              "assuntos",
+              "classes",
+              "destinos",
+              "entes",
+              "tipos-situacao",
+              "tipos-decisao",
+              "tipos-autor",
+              "tipos-atualizacao",
+              "tipos-documento",
+              "tipos-conteudo-documento",
+              "tipos-prazo"
+            ],
+            "description": "Tabela a consultar — entidades (siglas, assuntos, classes, destinos, entes) ou tipos (tipos-situacao, tipos-decisao, tipos-autor, tipos-atualizacao, tipos-documento, tipos-conteudo-documento, tipos-prazo)"
+          },
+          "filtro": {
+            "description": "Busca textual sobre sigla/descrição; count 0 se nada casar",
+            "type": "string"
+          },
+          "limite": {
+            "default": 200,
+            "description": "Máximo de linhas (padrão 200, máx 1000); count < total sinaliza corte",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000
+          }
+        },
+        "required": [
+          "tabela"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "senado_ecidadania_listar_consultas",
+      "description": "Lista consultas públicas do e-Cidadania (conjunto completo das **abertas** — toda matéria em tramitação, ~7,7 mil), em que cidadãos votam sim/não. Retorna `{ count, consultas }`, cada consulta com `id`, `materia`, `ementa`, `votosSim`/`votosNao`/`totalVotos`, `percentualSim`/`percentualNao`, `status` e `url`. Toda consulta entra como `aberta`; quando a matéria sai de tramitação ela passa a `encerrada` (o conjunto `encerrada`/`todas` cresce com o tempo). Consultas encerradas antes da 1ª ingestão não são capturadas. Aceita `limite` (padrão 20). Para o detalhe de uma consulta chame `senado_ecidadania_obter_consulta` com o `id`; para recortes analíticos (consenso/polarização) use `senado_ecidadania_consultas_analise`. Percentuais com uma casa decimal. Lida da cópia diária do dataset do projeto: cada item diz de onde e de quando veio cada bloco (`origemResumo`/`coletadoEmResumo`, `origemDetalhe`/`coletadoEmDetalhe`; `corpus` = banco do projeto, para o que a cópia ainda não tem).",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "status": {
+            "default": "aberta",
+            "description": "Filtrar por status (padrão: aberta). encerrada lista consultas cuja matéria saiu de tramitação desde a ingestão (cresce com o tempo); fechadas antes da 1ª carga não são capturadas.",
+            "type": "string",
+            "enum": [
+              "aberta",
+              "encerrada",
+              "todas"
+            ]
+          },
+          "limite": {
+            "default": 20,
+            "description": "Número máximo de resultados",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "pagina": {
+            "default": 1,
+            "description": "Página de resultados",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "senado_ecidadania_obter_consulta",
+      "description": "Obtém o detalhe de uma consulta pública específica do e-Cidadania. Retorna um objeto com `id`, `materia`, `ementa`, `votosSim`/`votosNao`/`totalVotos`, `percentualSim`/`percentualNao`, `status`, `autor`, `relator`, `url`. O portal não publica o período da consulta: `dataAbertura`/`dataEncerramento` (e `comissao`/`linkMateria`) vêm sempre `null` — a consulta abre quando a matéria entra em tramitação e encerra quando sai, refletido em `status`. O campo `comentarios` vem `null`: a página de consulta não possui recurso de comentários. O campo `relator` vem `null`: a página da consulta publica só autoria e ementa, não a relatoria — o relator da matéria sai de `senado_obter_materia` com o mesmo número (`codigoMateria` = `id`). Lida da cópia diária do dataset do projeto (a consulta que ainda não entrou nela é lida ao vivo): `serieVotos` traz os votos no tempo (`em`, `votosSim`, `votosNao`, `origem`; só quando o par muda, até 60 pontos, os mais recentes — `avisoSeries` diz quando houve corte) e `origemResumo`/`coletadoEmResumo`/`origemDetalhe`/`coletadoEmDetalhe` dizem de onde e de quando veio cada bloco. Percentuais com uma casa decimal. **Matéria oficial:** `materiasOficiais` liga a consulta à matéria no Senado (`casa` SF, `codigo` = codigoMateria) ou na Câmara (CD, id da proposição), com `identificacao` (ex.: \"PL 5905/2026\"), `metodo` (como o vínculo foi feito, nunca por nome), `situacao` da leitura na fonte oficial (`lida`/`sem-processo`/`nao-encontrada`/`pendente` = ainda não lida), `processos`, `resumoAutoria` e `autores` (cada um com `papel` — `iniciativa` = quem apresentou, `texto` = autoria do texto em tramitação, que pode ser outra Casa; `camara` na Câmara —, `codigoParlamentar` para `senado_obter_senador`, `idDeputado`, `uf`, `siglaPartido`). Siga a matéria com `senado_obter_materia`/`senado_obter_processo`. Obtenha o `id` antes via `senado_ecidadania_listar_consultas` ou `senado_ecidadania_consultas_analise`.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "ID da consulta pública"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "senado_ecidadania_consultas_analise",
+      "description": "Analisa o conjunto completo de consultas públicas **abertas** (matérias em tramitação) do e-Cidadania por grau de concordância cidadã, conforme `modo`: `consenso` → consultas com alta concentração de votos numa direção, ordenadas da maior para a menor concentração; usa `percentualMinimo` (padrão 85%). `polarizada` → consultas com votação equilibrada (~50/50), ordenadas da menor para a maior diferença sim/não; usa `margemPolarizacao` (padrão 15 pontos). Analisa por padrão consultas `aberta` (opinião pública atual). Quando a matéria sai de tramitação a consulta passa a `encerrada`, então `status: \"encerrada\"`/`\"todas\"` cobrem o conjunto que foi encerrado desde a ingestão (cresce com o tempo); fechadas antes da 1ª carga não são capturadas. Todos os modos aceitam `minimoVotos` (padrão 1000) e `limite` (padrão 10). Retorna `{ modo, criterio, count, consultas }`. É esta a ferramenta para 'consultas mais votadas', ranking ou panorama ATUAL da votação das consultas em tramitação — não confundir com `senado_ecidadania_consultas_votos`, que é o acervo HISTÓRICO (matérias já arquivadas) com quebra por UF. Para o detalhe de uma consulta use `senado_ecidadania_obter_consulta`.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "modo": {
+            "default": "consenso",
+            "description": "consenso (alta concordância) ou polarizada (~50/50)",
+            "type": "string",
+            "enum": [
+              "consenso",
+              "polarizada"
+            ]
+          },
+          "status": {
+            "default": "aberta",
+            "description": "Recorte do conjunto (padrão: aberta = opinião atual). encerrada cobre consultas que saíram de tramitação desde a ingestão (cresce com o tempo); fechadas antes da 1ª carga não são capturadas.",
+            "type": "string",
+            "enum": [
+              "aberta",
+              "encerrada",
+              "todas"
+            ]
+          },
+          "percentualMinimo": {
+            "default": 85,
+            "description": "Modo consenso: percentual mínimo numa direção",
+            "type": "integer",
+            "minimum": 50,
+            "maximum": 100
+          },
+          "margemPolarizacao": {
+            "default": 15,
+            "description": "Modo polarizada: considera polarizado se diferença ≤ este percentual",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 50
+          },
+          "minimoVotos": {
+            "default": 1000,
+            "description": "Mínimo de votos para considerar",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "limite": {
+            "default": 10,
+            "description": "Número máximo de resultados",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "senado_ecidadania_listar_ideias",
+      "description": "Lista ideias legislativas propostas por cidadãos no e-Cidadania — **conjunto completo** (corpus persistido em D1; ideias em andamento atualizadas diariamente; ~118 mil ideias, incluindo encerradas e convertidas em proposição). Retorna `{ count, ideias, avisoDatas }`, cada ideia com `id`, `titulo`, `apoios`, `status` (a categoria da listagem do portal em que a ideia aparece: `aberta` = \"Aberta\", \"Na comissão\" ou \"Aguardando envio à CDH\"; `encerrada` = \"Encerrada – sem apoio suficiente\" ou \"Não acatada\" pela CDH; `convertida` = \"Transformada em proposição\"; `removida` = retirada do portal, que não a publica mais — o corpus guarda o último estado conhecido), `url` e os campos lidos do detalhe quando o backfill já passou por ela (`dataPublicacao`, `autorUf`, `descricao`, `plConvertido`; `null` até lá; `autorUf` traz a sigla da UF ou \"Exterior\", como o portal publica, e `null` quando o portal não publica a localidade; `plConvertido`, apesar do nome, é a Sugestão gerada na CDH, \"SUG N/AAAA\", não o projeto de lei). `proposicoes` (desde a 3.21.0, ausente até o backfill ler a ideia; `[]` = lida sem proposição) lista os projetos em que a ideia foi transformada, pela CDH ou adotada por parlamentar: tipo, número, ano, quem transformou, data e link. **Datas:** `dataPublicacao` é a DATA LIMITE para receber os 20.000 apoios — a única data que o corpus guarda; o nome do campo é histórico — e por isso cai no futuro em ideia aberta; `dataCriacaoEstimada` (= data limite − 120 dias, a regra dos 4 meses do portal) é calculada pelo servidor e é estimativa, não dado da fonte; a data REAL da proposição sai em `senado_ecidadania_obter_ideia` (`dataProposta`); `avisoDatas` repete isso na resposta. Aceita filtro por `status` e `limite` (padrão 20). Para um ranking das mais apoiadas, ordene por apoios (`ordenarPor: \"apoios\"`, `ordem: \"desc\"`). Para o detalhe completo de uma ideia (texto, autor, linha do tempo, Sugestão, decisão da CDH, proposições em que virou, apoios e situação no tempo) chame `senado_ecidadania_obter_ideia` com o `id`. Sem `ordenarPor`, as mais novas primeiro. Lida da cópia diária do dataset do projeto: cada item diz de onde e de quando veio cada bloco (`origemResumo`/`coletadoEmResumo`, `origemDetalhe`/`coletadoEmDetalhe`; `corpus` = banco do projeto, para o que a cópia ainda não tem).",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "status": {
+            "description": "Filtrar por status (`removida` = retirada do portal)",
+            "type": "string",
+            "enum": [
+              "aberta",
+              "encerrada",
+              "convertida",
+              "removida",
+              "todas"
+            ]
+          },
+          "ordenarPor": {
+            "description": "Campo para ordenação (apoios é o disponível no corpus; data/comentarios só no detalhe)",
+            "type": "string",
+            "enum": [
+              "apoios",
+              "data",
+              "comentarios"
+            ]
+          },
+          "ordem": {
+            "description": "Ordem de ordenação",
+            "type": "string",
+            "enum": [
+              "asc",
+              "desc"
+            ]
+          },
+          "limite": {
+            "default": 20,
+            "description": "Número máximo de resultados",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "pagina": {
+            "default": 1,
+            "description": "Página de resultados",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "senado_ecidadania_obter_ideia",
+      "description": "Obtém o detalhe de uma ideia legislativa do e-Cidadania, lido da cópia diária do dataset do projeto (páginas do portal guardadas e lidas; a ideia que ainda não entrou nela é lida ao vivo da página). Retorna `id`, `titulo`, `descricao`, `apoios`, `status`, `origemStatus`, `autor` (\"NOME (UF)\", o nome abreviado como o portal publica), `url`, `plConvertido` (a Sugestão gerada, \"SUG n/ano\"), `dataEncerramento` (fim do período de apoio, quando encerrado) e os campos da linha do tempo do portal: `dataProposta` (data em que a ideia foi proposta, publicada pela fonte), `prazoApoios` (data limite para os 20.000 apoios), `dataMeta`/`meta` (quando alcançou a meta), `sugestao` (número, ano, data e link da Sugestão), `decisaoCdh` (a CDH transformou ou não a Sugestão), `encerramento` (apoios recebidos e fim do período), `oficina` (ideia de Oficina Legislativa), `proposicoes` (cada proposição em que a ideia virou — pela CDH ou adotada por senador/deputado —, com sigla, número, ano, parlamentar e link), `linhaDoTempo` (os acontecimentos como publicados, mais recente primeiro) e `avisos` (acontecimento que o servidor não reconheceu, copiado sem interpretação). **Situação:** `status` é a categoria do portal guardada no corpus (`aberta`/`encerrada`/`convertida`/`removida`, as mesmas de `senado_ecidadania_listar_ideias`); se a ideia ainda não está no corpus, o servidor a classifica pela linha do tempo e `origemStatus` diz isso. **Datas:** use `dataProposta`; `dataPublicacao` é a data limite (nome histórico, igual a `prazoApoios`) e `dataCriacaoEstimada` é estimativa mantida por compatibilidade. `comentarios`, `problema` e `solucao` vêm `null`: a página não os publica. **No tempo:** `serieApoios` (apoios a cada mudança: `apoios`, `desde`, `ate`, `origem`) e `situacaoNoTempo` (`portal`: a situação em que a ideia foi vista na listagem, com o intervalo; `corpus`: o status a cada mudança, desde 14/06/2026), até 60 pontos cada, os mais recentes — `avisoSeries` diz quando houve corte. **Origem:** `origemResumo`/`coletadoEmResumo` (título e apoios) e `origemDetalhe`/`coletadoEmDetalhe` (o resto) dizem de onde e de quando veio cada bloco (`listagem`/`detalhe`/`arquivo` = página guardada; `ao-vivo` = o arquivo ainda não leu a página da ideia, então o detalhe é lido na hora; `corpus` = idem, mas a leitura na hora falhou — aí linha do tempo, autor e data da proposta faltam, e `avisoDetalhe` diz por quê). **Matéria oficial:** `materiasOficiais` liga cada proposição gerada pela ideia (pelo link publicado) à matéria no Senado (`casa` SF, `codigo` = codigoMateria) ou na Câmara (CD, id da proposição), com `identificacao` (ex.: \"PL 5905/2026\"), `metodo` (como o vínculo foi feito, nunca por nome), `situacao` da leitura na fonte oficial (`lida`/`sem-processo`/`nao-encontrada`/`pendente` = ainda não lida), `processos`, `resumoAutoria` e `autores` (cada um com `papel` — `iniciativa` = quem apresentou, `texto` = autoria do texto em tramitação, que pode ser outra Casa; `camara` na Câmara —, `codigoParlamentar` para `senado_obter_senador`, `idDeputado`, `uf`, `siglaPartido`). Siga a matéria com `senado_obter_materia`/`senado_obter_processo`. Obtenha o `id` antes via `senado_ecidadania_listar_ideias`.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "ID da ideia legislativa"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "senado_ecidadania_listar_eventos",
+      "description": "Lista eventos interativos do e-Cidadania (audiências públicas, sabatinas, lives) — conjunto completo (corpus persistido em D1, atualizado semanalmente; ~milhares de eventos, incluindo encerrados). Retorna `{ count, eventos }`, cada evento com `id`, `titulo`, `data`, `hora`, `comissao` (sigla), `comentarios`, `status` (`agendado`/`encerrado`/`cancelado`) e `url`; aceita filtro por `status`, por `comissao` (sigla) e `limite` (padrão 20). Para um ranking dos mais comentados, ordene por comentários (`ordenarPor: \"comentarios\"`, `ordem: \"desc\"`). Para o detalhe completo de um evento use `senado_ecidadania_obter_evento`. Lida da cópia diária do dataset do projeto: cada item diz de onde e de quando veio cada bloco (`origemResumo`/`coletadoEmResumo`, `origemDetalhe`/`coletadoEmDetalhe`, `origemComentarios`/`coletadoEmComentarios`; `corpus` = banco do projeto, para o que a cópia ainda não tem).",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "status": {
+            "description": "Filtrar por status",
+            "type": "string",
+            "enum": [
+              "agendado",
+              "encerrado",
+              "todos"
+            ]
+          },
+          "comissao": {
+            "description": "Sigla da comissão",
+            "type": "string"
+          },
+          "ordenarPor": {
+            "description": "Ordenar por data ou número de comentários",
+            "type": "string",
+            "enum": [
+              "data",
+              "comentarios"
+            ]
+          },
+          "ordem": {
+            "default": "desc",
+            "description": "Ordem (padrão desc)",
+            "type": "string",
+            "enum": [
+              "asc",
+              "desc"
+            ]
+          },
+          "limite": {
+            "default": 20,
+            "description": "Número máximo de resultados",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "senado_ecidadania_obter_evento",
+      "description": "Obtém o detalhe completo de um evento interativo do e-Cidadania (audiência, sabatina, live). Retorna um objeto com `id`, `titulo`, `descricao`, `data`, `hora`, `comissao` e `comissaoNomeCompleto`, `local`, `status` (`agendado`/`encerrado`/`cancelado`), `comentarios`, `url`, mais `pauta` (até 15 itens), `convidados` e `videoUrl` (embed do YouTube quando houver, senão `null`) — campos não preenchidos vêm `null` e `id` inexistente retorna erro. Lido da cópia diária do dataset do projeto (o evento que ainda não entrou nela é lido ao vivo); `origemResumo`/`origemDetalhe`/`origemComentarios` e os `coletadoEm…` correspondentes dizem de onde e de quando veio cada bloco. Obtenha o `id` antes via `senado_ecidadania_listar_eventos`. Para apenas listar/rankear eventos (sem descrição/pauta/convidados) use `senado_ecidadania_listar_eventos`, não esta.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Identificador do evento (campo `id` de senado_ecidadania_listar_eventos)"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "senado_ecidadania_sugerir_tema_enquete",
+      "description": "Sugere temas para uma enquete pública mensal (seleção de pauta): analisa o conjunto completo de consultas (abertas) e as ideias do e-Cidadania e elege as de maior engajamento cidadão, filtrando por polarização/consenso e participação mínima. Retorna `{ criteriosAplicados, totalAnalisados, count, totalQualificados, sugestoes }` (até 10), cada sugestão com `tipo` (`consulta`/`ideia`), `id`, `titulo`, `motivo`, `metricas` (participação/polarização) e `url`, ordenadas por participação. `count` é o número de sugestões retornadas (≤10) e `totalQualificados` é quantas passaram nos critérios. Critérios opcionais em `criterios`: `evitarPolarizacao`/`evitarConsenso` (padrão true), `minimoParticipacao` (padrão 500), `apenasEmTramitacao` (padrão true → considera só consultas abertas, com base no status real). Para investigar uma sugestão, use `senado_ecidadania_obter_consulta` ou `senado_ecidadania_obter_ideia` conforme o `tipo`.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "criterios": {
+            "description": "Critérios de seleção do tema (polarização, consenso, participação mínima, tramitação)",
+            "type": "object",
+            "properties": {
+              "evitarPolarizacao": {
+                "default": true,
+                "description": "Evita temas com ~50/50",
+                "type": "boolean"
+              },
+              "evitarConsenso": {
+                "default": true,
+                "description": "Evita temas com >85%",
+                "type": "boolean"
+              },
+              "minimoParticipacao": {
+                "default": 500,
+                "description": "Mínimo de votos/apoios",
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "apenasEmTramitacao": {
+                "default": true,
+                "description": "Apenas matérias em tramitação",
+                "type": "boolean"
+              }
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "senado_ecidadania_consultas_votos",
+      "description": "Acervo **histórico** de votos das consultas públicas do e-Cidadania, com **quebra por UF** (fonte: CSV Arquimedes; ~15 mil matérias, atualizado semanalmente). Use apenas quando o pedido for pelo acervo/arquivo histórico ou por votos por estado (UF); para 'consultas mais votadas', ranking ou opinião ATUAL das consultas em tramitação use `senado_ecidadania_consultas_analise`. Diferente de `senado_ecidadania_listar_consultas` (consultas em tramitação): aqui o conjunto é o **arquivo** de matérias já consultadas — `status` vem como `Descontinuado` no arquivo de origem, por isso é tratado como acervo, não como opinião atual. Retorna `{ count, referencePeriod, consultas }`, cada item com `id`, `materia`, `ementa`, `autoria`, `votosSim`/`votosNao`/`totalVotos`, `votosPorUf` (`{ UF: { sim, nao } }`) e `url`. Use `ordenarPor` (`total`/`sim`/`nao`, padrão `total`) e `ordem` para ranking; `uf` para recortar e **ranquear por aquele estado** (só matérias com votos na UF, e cada item ganha `recorteUf`); `materia` para filtrar por código (numérico) ou trecho do nome/ementa; `limite` (padrão 20). Cada matéria traz `origem` (`csv` = versão do CSV guardada no arquivo do projeto; `corpus`) e `coletadoEm` (quando aquela versão foi baixada).",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "ordenarPor": {
+            "default": "total",
+            "description": "Métrica do ranking (padrão: total de votos)",
+            "type": "string",
+            "enum": [
+              "total",
+              "sim",
+              "nao"
+            ]
+          },
+          "ordem": {
+            "default": "desc",
+            "description": "Ordem (padrão desc)",
+            "type": "string",
+            "enum": [
+              "asc",
+              "desc"
+            ]
+          },
+          "uf": {
+            "description": "Sigla da UF (ex.: SP) — filtra e ranqueia por votos daquele estado",
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 2
+          },
+          "materia": {
+            "description": "Filtro por código da matéria (numérico) ou trecho do nome/ementa",
+            "type": "string"
+          },
+          "limite": {
+            "default": 20,
+            "description": "Número máximo de resultados",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "senado_discursos_senador",
+      "description": "Lista pronunciamentos de um senador, filtráveis por período e casa. `tipo` (padrão `discursos`) alterna entre `discursos` (falas próprias) e `apartes` (intervenções em falas de outros) — muda a fonte upstream e o conteúdo, mantendo a mesma estrutura. Retorna `{ codigoSenador, tipo, count, discursos, periodosNaoLidos?, aviso? }` sem paginação (`count` 0 e lista vazia quando não há pronunciamentos no período), cada item com `codigo`, `data`, `casa`, `tipoUsoPalavra`, `resumo`, `indexacao`, `url` e `nomeParlamentar` — sem o texto integral. ATENÇÃO: para `tipo=discursos`, omitir `dataInicio`/`dataFim` faz a fonte retornar SOMENTE os últimos 30 dias (frequentemente vazio) — para o histórico, informe o período explícito (ex.: desde o início do mandato; períodos de mais de 1 ano são lidos ano a ano por dentro, e um ano que a fonte não entregar aparece em `periodosNaoLidos`); `apartes` traz o histórico completo sem período e, com período, só os apartes dentro dele. Obtenha o `codigoSenador` via `senado_listar_senadores` e o texto completo em `senado_discurso_texto` (campo `codigo`). Para discursos de todos os senadores num período use `senado_discursos_plenario`, não esta.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "codigoSenador": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Código único do senador"
+          },
+          "tipo": {
+            "default": "discursos",
+            "description": "discursos = pronunciamentos próprios (padrão); apartes = intervenções em discursos de outros — altera a fonte e o conteúdo retornado",
+            "type": "string",
+            "enum": [
+              "discursos",
+              "apartes"
+            ]
+          },
+          "casa": {
+            "description": "Restringe à casa: SF (Senado Federal) ou CN (Congresso Nacional); vazio traz ambas",
+            "type": "string"
+          },
+          "dataInicio": {
+            "description": "Início do período (YYYYMMDD); use junto com dataFim. Para tipo=discursos, sem período a fonte retorna só os últimos 30 dias",
+            "type": "string",
+            "pattern": "^\\d{8}$"
+          },
+          "dataFim": {
+            "description": "Fim do período (YYYYMMDD); para tipo=discursos, omitir o período limita a resposta aos últimos 30 dias",
+            "type": "string",
+            "pattern": "^\\d{8}$"
+          }
+        },
+        "required": [
+          "codigoSenador"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "senado_discursos_plenario",
+      "description": "Lista todos os discursos realizados em plenário num período de datas (`dataInicio`/`dataFim` obrigatórias, formato YYYYMMDD). Retorna `{ periodo, count, discursos }`, cada item com `codigo`, `data`, `casa`, `tipoUsoPalavra`, `resumo`, `indexacao`, `url`, `nomeParlamentar`, `codigoParlamentar`, `partido` e `uf`. Para discursos de um parlamentar específico use `senado_discursos_senador`; obtenha o texto integral com `senado_discurso_texto`.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "dataInicio": {
+            "type": "string",
+            "pattern": "^\\d{8}$",
+            "description": "Data início (YYYYMMDD)"
+          },
+          "dataFim": {
+            "type": "string",
+            "pattern": "^\\d{8}$",
+            "description": "Data fim (YYYYMMDD)"
+          }
+        },
+        "required": [
+          "dataInicio",
+          "dataFim"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "senado_discurso_texto",
+      "description": "Obtém o texto integral de um único pronunciamento pelo `codigoPronunciamento`. Retorna `{ codigoPronunciamento, texto }`, onde `texto` é a transcrição completa (string, podendo ter dezenas de KB — não é truncada nem paginada); `codigo` inexistente ou discurso sem texto retorna erro. Obtenha o `codigoPronunciamento` antes via `senado_discursos_senador` ou `senado_discursos_plenario` (campo `codigo`). Para apenas listar/filtrar discursos (resumo, data, autor) use aquelas ferramentas; esta traz o texto de um discurso já identificado.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "codigoPronunciamento": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Código do pronunciamento (campo `codigo` de senado_discursos_senador ou senado_discursos_plenario); um por discurso"
+          }
+        },
+        "required": [
+          "codigoPronunciamento"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "senado_listar_blocos",
+      "description": "Lista todos os blocos parlamentares do Senado e seus partidos membros. Retorna `{ count, blocos }`, onde cada bloco traz `codigo`, `nome`, `nomeApelido`, `dataCriacao`, `dataExtincao` e a lista `partidos` (cada um com `sigla`, `nome`, `dataAdesao`, `dataDesligamento`). A lista inclui a composição HISTÓRICA de cada bloco: partido com `dataDesligamento` preenchida já saiu (a composição atual são os com `dataDesligamento` null) e o mesmo partido pode repetir com períodos de adesão distintos — sem esse filtro um partido parece estar em 2 blocos ao mesmo tempo. Use para descobrir o `codigo` de um bloco e depois detalhá-lo via `senado_obter_bloco`; para lideranças use `senado_liderancas`.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "senado_obter_bloco",
+      "description": "Obtém detalhes de um bloco parlamentar específico pelo seu código. Retorna um objeto com `codigo`, `nome`, `nomeApelido`, `dataCriacao`, `dataExtincao` e `partidos` (array com `sigla`, `nome`, `dataAdesao`, `dataDesligamento`); `dataExtincao` é `null` para blocos vigentes. `partidos` é a composição HISTÓRICA: quem tem `dataDesligamento` preenchida já saiu do bloco (composição atual = `dataDesligamento` null). Obtenha o parâmetro `codigo` primeiro via `senado_listar_blocos`; código inexistente retorna erro (\"Bloco parlamentar não encontrado\").",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "codigo": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Código do bloco parlamentar"
+          }
+        },
+        "required": [
+          "codigo"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "senado_liderancas",
+      "description": "Lista as lideranças do Senado, da Câmara e do Congresso Nacional (líderes, vice-líderes etc.). Retorna `{ count, liderancas }`, cada item com `tipo`, `descricao`, `unidadeLideranca`, `casa`, `dataDesignacao`, `dataTermino`, `numeroOrdemViceLider`, `bloco` (`codigo`/`nome`/`sigla` — preenchido quando a liderança é de bloco; o `codigo` serve em `senado_obter_bloco`), `partido` (`codigo`/`sigla`/`nome` — a unidade liderada, quando liderança de partido) e `parlamentar` (`codigo`, `nome`, `partido` de filiação, `uf`). A fonte NÃO publica a UF do parlamentar (vem sempre `null`) — obtenha-a via `senado_obter_senador` pelo `codigo`. Filtre por `casa` (SF/CN/CD), `codigoParlamentar`, `vigente` (S/N) ou `siglaTipoLideranca`; sem filtros retorna todas as casas. Para a composição de blocos use `senado_listar_blocos`.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "casa": {
+            "description": "Casa legislativa (SF=Senado, CN=Congresso, CD=Câmara dos Deputados)",
+            "type": "string"
+          },
+          "codigoParlamentar": {
+            "description": "Código do parlamentar",
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "vigente": {
+            "description": "Apenas vigentes (S/N)",
+            "type": "string"
+          },
+          "siglaTipoLideranca": {
+            "description": "Tipo de liderança (ex: LIDER, VICE-LIDER)",
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "senado_mesa",
+      "description": "Lista os membros da Mesa Diretora (presidente, vice-presidentes, secretários). O parâmetro `casa` (padrão `senado`) escolhe entre `senado` (Mesa do Senado Federal) e `congresso` (Mesa do Congresso Nacional). Retorna `{ casa, mesa, count, membros }`, cada membro com `cargo`, `codigo`, `nome`, `partido` e `uf`. Para lideranças partidárias use `senado_liderancas`.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "casa": {
+            "default": "senado",
+            "description": "senado (Mesa do SF) ou congresso (Mesa do CN)",
+            "type": "string",
+            "enum": [
+              "senado",
+              "congresso"
+            ]
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "senado_orcamento_parlamentar",
+      "description": "Emendas parlamentares ao orçamento da União, conforme `tipo` (padrão `emendas`). `tipo: emendas` (proposição) → `{ tipo, count, emendas }`, cada item (lote de emendas de um autor) com `autor`, `codigoAutor`, `quantidadeEmendas`, `anoExecucao`, `materia` (peça orçamentária, p.ex. `LOA 29/2023`), `tipoPl`, `dataOperacao` e `ativo`. `tipo: oficios` (execução — indicação de destino de emendas já aprovadas) → `{ tipo, ano, count, total, aviso?, oficios }`, cada ofício com `id`, `autor`, `protocolo`, `dataInclusao` e `quantidadeEmendas`; filtre pelo `ano` do orçamento da emenda (recomendado — a base cobre vários anos), pagine com `limite`/`pagina`, e use `incluirEmendas: true` para o detalhe de cada emenda (favorecido, CNPJ, órgão, nota de empenho). Nota: no modo oficios, o ofício é o documento de execução que indica o destino do recurso de uma emenda já aprovada (posterior à proposição); a data do ofício difere do ano do orçamento. Para a execução do orçamento interno do próprio Senado (despesas/receitas) use `senado_execucao_orcamentaria`.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "tipo": {
+            "default": "emendas",
+            "description": "emendas (lotes de emendas propostas) ou oficios (ofícios de indicação de destino)",
+            "type": "string",
+            "enum": [
+              "emendas",
+              "oficios"
+            ]
+          },
+          "ano": {
+            "description": "Ano do orçamento da emenda (filtra tipo=oficios pelo ano das emendas)",
+            "type": "integer",
+            "minimum": 1990,
+            "maximum": 2100
+          },
+          "limite": {
+            "default": 50,
+            "description": "Máximo de ofícios por página (tipo=oficios; padrão 50)",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 500
+          },
+          "pagina": {
+            "default": 1,
+            "description": "Página de ofícios (tipo=oficios; padrão 1)",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "incluirEmendas": {
+            "default": false,
+            "description": "tipo=oficios: incluir o detalhe das emendas (favorecido, CNPJ, nota de empenho)",
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "senado_buscar_legislacao",
+      "description": "Busca normas jurídicas federais **já promulgadas** (leis, decretos, leis complementares, emendas constitucionais etc.) combinando os filtros `tipo`, `numero`, `ano` e `data` em modo AND; informe ao menos um: uma chamada sem nenhum filtro retorna erro determinístico, não uma lista vazia. Somente leitura, sem efeitos colaterais; consulta ao vivo à base oficial de dados abertos, cujos resultados podem variar entre chamadas. Retorna `{ count, normas }` sem paginação: `count` é o total de normas que casam (0, sem erro, quando nenhuma casa) e cada item traz `codigo`, `tipo`, `descricaoTipo`, `numero`, `ano`, `data` (ISO AAAA-MM-DD), `norma`, `ementa` e `apelido`, com `null` nos campos ausentes. Passe o `codigo` a `senado_obter_legislacao` para obter a indexação temática e a URL do texto integral. Para **proposições ainda em tramitação** (PEC, PL, PLP, MPV) use `senado_buscar_materias`; esta ferramenta cobre apenas normas já promulgadas.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "tipo": {
+            "description": "Sigla oficial da espécie normativa: LEI, DEC (decreto), LCP (lei complementar), EMC (emenda constitucional), entre outras; catálogo completo em senado_tabelas_referencia (tabela=tipos-norma). Omitir alarga a busca a todas as espécies.",
+            "type": "string"
+          },
+          "numero": {
+            "description": "Número sequencial da norma (inteiro > 0), ex.: 14133 para a Lei n. 14.133/2021. Combina com `tipo` e `ano` em modo AND.",
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "ano": {
+            "description": "Ano de assinatura/promulgação da norma, entre 1900 e 2100; ex.: 2021.",
+            "type": "integer",
+            "minimum": 1900,
+            "maximum": 2100
+          },
+          "data": {
+            "description": "Data exata de assinatura no formato compacto AAAAMMDD (8 dígitos, sem separadores), ex.: 20210401. Atenção: difere do campo `data` retornado, que vem em ISO AAAA-MM-DD.",
+            "type": "string",
+            "pattern": "^\\d{8}$"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "senado_obter_legislacao",
+      "description": "Obtém o detalhe de uma norma federal já promulgada pelo seu `codigo` interno. Somente leitura, sem efeitos colaterais; consulta ao vivo à base oficial de dados abertos. Retorna um objeto com `codigo`, `tipo`, `descricaoTipo`, `numero`, `ano`, `data` (ISO AAAA-MM-DD), `norma`, `apelido`, `ementa`, `indexacao` (termos temáticos) e `url` do texto integral — campos ausentes na norma vêm `null`, e `codigo` inexistente retorna erro \"Norma não encontrada\", não um objeto vazio. Obtenha o `codigo` antes via `senado_buscar_legislacao` (é o identificador interno da norma, não o número da lei). Para localizar normas por tipo/número/ano use `senado_buscar_legislacao`; esta serve só para o detalhe de uma norma já identificada.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "codigo": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Identificador interno da norma no acervo do Senado (inteiro > 0) — o campo `codigo` retornado por senado_buscar_legislacao. Não confundir com o número da lei: a Lei n. 14.133/2021 tem numero=14133, mas seu codigo interno é outro valor."
+          }
+        },
+        "required": [
+          "codigo"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "senado_votacao_comissao",
+      "description": "Lista votações em comissões. O parâmetro `por` (padrão `comissao`) define o eixo da consulta: `por: comissao` → exige `siglaComissao`; lista as votações daquela comissão. `por: senador` → exige `codigoSenador`; lista os votos do senador em comissões (filtro opcional `comissao`). `por: materia` → exige `sigla`, `numero` e `ano` (ex.: PL 2630/2020); lista as votações da proposição em comissões (filtro opcional `comissao`). Em todos os casos aceita período opcional `dataInicio`/`dataFim` (YYYYMMDD, filtrado pela data da reunião) e retorna `{ por, ...contexto, count, votacoes }`, cada votação com `codigo`, `data`, `comissao`, `reuniao`, `materia`, `descricao`, totais publicados pela fonte (`totalSim`/`totalNao`/`totalAbstencao`; contados dos votos, com `placarComputado: true`, só quando a fonte não os traz) e `votos` (senador, partido, voto). Sem paginação. Períodos amplos podem estourar o tempo-limite da consulta (erro de timeout): prefira janelas de até 3 meses e divida períodos maiores em chamadas sucessivas. Obtenha siglas via `senado_listar_comissoes`, `codigoSenador` via `senado_listar_senadores`; para votações no plenário use `senado_votos_materia`. Atenção: o `codigo` de cada votação de comissão pertence a um espaço de numeração próprio e NÃO é válido em `senado_obter_votacao` (que é exclusivo de plenário) — podem coincidir numericamente, mas apontam para votações diferentes.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "por": {
+            "default": "comissao",
+            "description": "Eixo da consulta: comissao, senador ou materia",
+            "type": "string",
+            "enum": [
+              "comissao",
+              "senador",
+              "materia"
+            ]
+          },
+          "siglaComissao": {
+            "description": "Sigla da comissão (obrigatório quando por=comissao; ex: CCJ, CAE)",
+            "type": "string",
+            "minLength": 2
+          },
+          "codigoSenador": {
+            "description": "Código do senador (obrigatório quando por=senador)",
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "sigla": {
+            "description": "Sigla do tipo da proposição (obrigatório quando por=materia; ex: PL, PEC)",
+            "type": "string",
+            "minLength": 2
+          },
+          "numero": {
+            "description": "Número da proposição (obrigatório quando por=materia)",
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "ano": {
+            "description": "Ano da proposição (obrigatório quando por=materia)",
+            "type": "integer",
+            "minimum": 1900,
+            "maximum": 2100
+          },
+          "comissao": {
+            "description": "Sigla da comissão para filtrar (por=senador ou por=materia)",
+            "type": "string"
+          },
+          "dataInicio": {
+            "description": "Data início (YYYYMMDD)",
+            "type": "string",
+            "pattern": "^\\d{8}$"
+          },
+          "dataFim": {
+            "description": "Data fim (YYYYMMDD)",
+            "type": "string",
+            "pattern": "^\\d{8}$"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "senado_notas_taquigraficas",
+      "description": "Transcrição oficial (notas taquigráficas) de uma sessão plenária ou reunião de comissão, em blocos sequenciais. Retorna `{ id, tipo, sessao, data, totalBlocos, aviso?, blocos }`; `id` inexistente ou sem transcrição no acervo retorna `totalBlocos` 0 com `aviso` explicando. Cobertura: sessões plenárias do SF (deliberativas, não deliberativas, especiais) são transcritas em poucos dias; sessões CONJUNTAS do Congresso, canceladas/não realizadas e algumas solenes NÃO têm notas (a mídia pode existir em `senado_videos_taquigrafia`). `modo` governa o payload: `resumo` (padrão) traz por bloco `sequencia`, `dataInicio/Fim`, `trecho` (200 chars), `caracteres` e `linkAudio`, limitado a `limite` (padrão 20; pagine com `sequenciaInicio`, `aviso` sinaliza corte); `texto` traz o conteúdo integral de até 20 blocos por chamada (janela `sequenciaInicio`→`sequenciaFim`) e inclui `intervalo`. `sequenciaFim` só atua em `modo=texto`. Obtenha o `id` via `senado_agenda_plenario`/`senado_resultado_plenario` (sessão) ou `senado_reuniao_comissao` (reunião); `orador` filtra blocos pelo nome citado. Para a mídia (vídeo/áudio) use `senado_videos_taquigrafia`, não esta.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Código da sessão plenária ou da reunião de comissão"
+          },
+          "tipo": {
+            "default": "sessao",
+            "description": "sessao = plenário (padrão); reuniao = comissão",
+            "type": "string",
+            "enum": [
+              "sessao",
+              "reuniao"
+            ]
+          },
+          "modo": {
+            "default": "resumo",
+            "description": "resumo = blocos com trecho inicial; texto = transcrição integral dos blocos selecionados",
+            "type": "string",
+            "enum": [
+              "resumo",
+              "texto"
+            ]
+          },
+          "sequenciaInicio": {
+            "description": "Primeiro bloco a retornar (base 1); pagina o modo resumo e abre a janela do modo texto (padrão: 1)",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "sequenciaFim": {
+            "description": "Último bloco no modo texto (ignorado no modo resumo); a janela é capada em 20 blocos por chamada",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "limite": {
+            "default": 20,
+            "description": "modo=resumo: máximo de blocos por chamada (padrão 20); o excedente é sinalizado em aviso",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "orador": {
+            "description": "Retorna só blocos cujo texto menciona este nome (busca parcial no conteúdo)",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "senado_videos_taquigrafia",
+      "description": "Lista os vídeos e áudios (unidades descritivas) de uma sessão plenária ou reunião de comissão. Retorna `{ id, tipo, count, total, aviso?, videos }` (sessão sem mídia no acervo → `count`/`total` 0 com `aviso`; ao passar de `limite` inclui `aviso`). A cobertura de mídia é mais ampla que a das notas: sessões conjuntas do Congresso costumam ter vídeos mesmo sem transcrição, cada item com `codigo`, `data`, `descricao`, `orador`, `duracaoSegundos` e os links `urlVideo`, `urlAudio`, `urlThumbnail`. Obtenha o `id` via `senado_agenda_plenario`/`senado_resultado_plenario` (sessão) ou `senado_reuniao_comissao` (reunião). Para a transcrição textual correspondente use `senado_notas_taquigraficas`, não esta.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Código da sessão plenária ou da reunião de comissão, conforme `tipo`"
+          },
+          "tipo": {
+            "default": "sessao",
+            "description": "sessao = plenário (padrão); reuniao = comissão",
+            "type": "string",
+            "enum": [
+              "sessao",
+              "reuniao"
+            ]
+          },
+          "orador": {
+            "description": "Retorna só unidades cujo orador contém este nome (busca parcial)",
+            "type": "string"
+          },
+          "limite": {
+            "default": 50,
+            "description": "Máximo de unidades (padrão 50, máx 200); o excedente é sinalizado em aviso",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "senado_ceaps",
+      "description": "Despesas da Cota para Exercício da Atividade Parlamentar (CEAPS) dos senadores em um ano. A fonte também publica lançamentos NEGATIVOS, sem rótulo próprio (a maioria em passagens aéreas, com jeito de crédito ou estorno): eles entram nas somas e totais como desconto e, nas estatísticas, aparecem como mínimo e no `bottom` — não leia um valor negativo como erro nem como 'a menor despesa'. Para perguntas de **maior/menor/média/mediana/distribuição/ranking** ('quem gastou mais CEAPS', 'gasto mediano', 'distribuição das despesas') use `estatisticas=true`: computa min/máx/média/mediana/desvio/percentis sobre TODAS as despesas filtradas e devolve `top`/`bottom` (padrão 10) com identificadores — os modos agregados só somam por grupo e não revelam a distribuição nem o extremo individual. Sem `agruparPor` → `distribuicao` das despesas individuais + `top`/`bottom`; com `agruparPor` (`senador`/`tipo`/`mes`/`fornecedor`) → `grupos[]` ranqueados por soma decrescente (`grupos[0]` = maior gastador), cada um com sua mini-distribuição. Sem `estatisticas`: nos modos agregados (`por-senador`/`por-tipo`/`por-mes`/`por-fornecedor`, padrão `por-senador`) traz `agregado[]` ordenado por `total` desc com `chave`, `total` e `despesas` (contagem); em `modo='detalhe'` traz `despesas[]` (mês, data, senador, tipoDespesa, fornecedor, cnpjCpf, valor). Filtre por `mes`, `codSenador`, `nomeSenador`, `tipoDespesa` ou `fornecedor` (busca parcial); `limite` cap 100 com `aviso` ao truncar. Obtenha `codSenador` via `senado_listar_senadores`.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "ano": {
+            "type": "integer",
+            "minimum": 2008,
+            "maximum": 2100,
+            "description": "Ano das despesas"
+          },
+          "modo": {
+            "default": "por-senador",
+            "description": "Agregação ou detalhe (padrão: por-senador). Ignorado quando estatisticas=true",
+            "type": "string",
+            "enum": [
+              "por-senador",
+              "por-tipo",
+              "por-mes",
+              "por-fornecedor",
+              "detalhe"
+            ]
+          },
+          "estatisticas": {
+            "default": false,
+            "description": "Computa estatísticas (min/máx/média/mediana/percentis) + ranking top/bottom sobre todas as despesas filtradas. Use para 'quem gastou mais/menos', 'gasto médio/mediano', 'distribuição', 'ranking'",
+            "type": "boolean"
+          },
+          "agruparPor": {
+            "description": "Quando estatisticas=true, ranqueia os grupos por soma decrescente (grupos[0] = maior gastador), cada grupo com sua mini-distribuição",
+            "type": "string",
+            "enum": [
+              "senador",
+              "tipo",
+              "mes",
+              "fornecedor"
+            ]
+          },
+          "topN": {
+            "default": 10,
+            "description": "Tamanho das listas top/bottom quando estatisticas=true sem agruparPor (padrão: 10, máx: 100)",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "mes": {
+            "description": "Filtrar por mês",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 12
+          },
+          "codSenador": {
+            "description": "Filtrar por código do senador",
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "nomeSenador": {
+            "description": "Filtrar por nome do senador (busca parcial)",
+            "type": "string"
+          },
+          "tipoDespesa": {
+            "description": "Filtrar por tipo de despesa (busca parcial)",
+            "type": "string"
+          },
+          "fornecedor": {
+            "description": "Filtrar por fornecedor (busca parcial)",
+            "type": "string"
+          },
+          "limite": {
+            "default": 100,
+            "description": "Máximo de linhas no resultado (padrão: 100)",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000
+          }
+        },
+        "required": [
+          "ano"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "senado_senadores_admin",
+      "description": "Dados administrativos dos senadores conforme o parâmetro `tipo`: `auxilio-moradia` → `{ tipo, count, senadores }` (`nome`, `uf`, `partido`, `auxilioMoradia`, `imovelFuncional`; legislatura atual). `escritorios-apoio` → `{ tipo, count, escritorios }` (`senador`, `uf`, `partido`, `setor`, `endereco`, `telefone`). `aposentados` → `{ tipo, count, aposentados }` ex-senadores aposentados pelos planos de previdência do Congresso (IPC e PSSC), com `nome`, `tipo` do plano, `dataInicial`, `remuneracao`. Filtros opcionais `uf` e `nome` (busca parcial) aplicam-se a auxilio-moradia e escritorios-apoio; `nome` também filtra aposentados. Cada `tipo` retorna `count` 0 e lista vazia quando não há registros. Para gastos de cota parlamentar use `senado_ceaps`. Ex.: `{ tipo: 'auxilio-moradia', uf: 'SP' }` ou `{ tipo: 'aposentados' }`.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "auxilio-moradia",
+              "escritorios-apoio",
+              "aposentados"
+            ],
+            "description": "Qual dado administrativo consultar"
+          },
+          "uf": {
+            "description": "Filtrar por estado (auxilio-moradia/escritorios-apoio)",
+            "type": "string",
+            "maxLength": 2
+          },
+          "nome": {
+            "description": "Filtrar por nome do senador (busca parcial)",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tipo"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "senado_servidores",
+      "description": "Lista servidores do Senado por `situacao` (ativos, efetivos, comissionados ou inativos), com filtros opcionais por `nome`, `lotacao` e `cargo`. Retorna `{ situacao, count, total, servidores[] }`, cada item com `nome`, `vinculo`, `situacao`, `cargo`, `funcao`, `lotacao`, `anoAdmissao` etc. Aplica `limite` (padrão 50, máx 500) e inclui `aviso` quando há truncamento — refine os filtros. Também conta e lista TODOS os servidores de TODA a estrutura subordinada a uma diretoria/secretaria (não só a lotação direta), cruzando a lotação de cada servidor com o organograma até o nível de serviço: informe a unidade (sigla ou nome, ex.: 'DGER') em `subordinadasA` — use isso para 'quantas pessoas estão sob a Diretoria-Geral', pois filtrar `lotacao` pela sigla-mãe retorna 0 (os servidores ficam em serviços/núcleos subordinados). Nesse modo o retorno traz a unidade resolvida, o total (um piso), os servidores, as unidades não reconhecidas no organograma (`naoClassificados`, com nota explicativa) e os afastados/em trânsito (`afastadosOuEmTransito`); ao responder, verbalize esses conceitos em português corrente — não cite nomes de parâmetros ou campos. Para o organograma em si use `senado_estrutura_organizacional`; para remuneração use `senado_remuneracoes_servidores`.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "situacao": {
+            "default": "ativos",
+            "description": "Qual lista consultar (padrão: ativos)",
+            "type": "string",
+            "enum": [
+              "ativos",
+              "efetivos",
+              "comissionados",
+              "inativos"
+            ]
+          },
+          "nome": {
+            "description": "Nome do servidor (busca parcial)",
+            "type": "string"
+          },
+          "lotacao": {
+            "description": "Lotação/setor imediato (busca parcial, ex: SEGRAF). Para toda a estrutura subordinada a uma diretoria/secretaria, use `subordinadasA`.",
+            "type": "string"
+          },
+          "subordinadasA": {
+            "description": "Sigla ou nome de uma unidade (ex.: 'DGER', 'Diretoria-Geral'): conta/lista servidores de TODA a estrutura subordinada a ela (organograma até o nível de serviço), não só a lotação direta.",
+            "type": "string"
+          },
+          "cargo": {
+            "description": "Cargo (busca parcial)",
+            "type": "string"
+          },
+          "limite": {
+            "default": 50,
+            "description": "Máximo de resultados (padrão: 50)",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 500
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "senado_remuneracoes_servidores",
+      "description": "Remunerações dos servidores do Senado em `ano`/`mes` de referência (a partir de 2013). Para perguntas de **maior/menor/média/mediana/ranking** ('quem ganhou mais em junho/2026', 'remuneração média') use `estatisticas=true`: computa min/máx/média/mediana/desvio/percentis sobre a folha INTEIRA e devolve `top`/`bottom` (padrão 10) identificados por `nome` (com `idInternoFolha` só para desambiguar homônimos, não para citar) — o modo `resumo`/`detalhe` só vê uma fatia e não acha o extremo real. Cada percentil vem com um `rotulo` legível e a coluna analisada tem rótulo legível em `campoAnalisado`. `campo` escolhe a verba analisada (padrão: remuneração bruta); `consolidarPorServidor` (padrão true) soma as linhas Normal+Suplementar da mesma pessoa antes das estatísticas; `agruparPor='tipoFolha'` devolve estatísticas por grupo (implica não-consolidado). Sem `estatisticas`: `modo=resumo` (padrão) retorna `{ ano, mes, totalRegistros, resumo[] }` agregado por `tipoFolha`; `modo=detalhe` retorna `{ count, total, remuneracoes[] }` com a composição individual, limitada por `limite` (padrão 50, máx 500). Filtros `nome`/`tipoFolha` aplicam antes de tudo. Para o cadastro de servidores use `senado_servidores`.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "ano": {
+            "type": "integer",
+            "minimum": 2013,
+            "maximum": 2100,
+            "description": "Ano de referência"
+          },
+          "mes": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 12,
+            "description": "Mês de referência"
+          },
+          "modo": {
+            "default": "resumo",
+            "description": "resumo = totais por tipo de folha (padrão); detalhe = composição individual. Ignorado quando estatisticas=true",
+            "type": "string",
+            "enum": [
+              "resumo",
+              "detalhe"
+            ]
+          },
+          "estatisticas": {
+            "default": false,
+            "description": "Computa estatísticas (min/máx/média/mediana/percentis) + ranking top/bottom sobre a folha inteira. Use para 'quem ganhou mais/menos', 'média', 'ranking'",
+            "type": "boolean"
+          },
+          "campo": {
+            "default": "bruto",
+            "description": "Verba analisada quando estatisticas=true (padrão: remuneração bruta — calculada por este servidor como soma das 7 verbas: básica, vantagens pessoais, função comissionada, gratificação natalina, horas extras, outras eventuais e abono de permanência). O resultado traz o rótulo legível em campoAnalisado.",
+            "type": "string",
+            "enum": [
+              "bruto",
+              "liquida",
+              "remuneracaoBasica",
+              "vantagensPessoais",
+              "funcaoComissionada",
+              "gratificacaoNatalina",
+              "horasExtras",
+              "outrasEventuais",
+              "abonoPermanencia"
+            ]
+          },
+          "consolidarPorServidor": {
+            "default": true,
+            "description": "Soma as linhas (Normal+Suplementar) do mesmo servidor antes das estatísticas (padrão: true). Ignorado — forçado a false — quando agruparPor está definido",
+            "type": "boolean"
+          },
+          "agruparPor": {
+            "description": "Quando estatisticas=true, devolve estatísticas por grupo (só `tipoFolha`); implica dados por linha (não consolidados)",
+            "type": "string",
+            "enum": [
+              "tipoFolha"
+            ]
+          },
+          "topN": {
+            "default": 10,
+            "description": "Tamanho das listas top/bottom quando estatisticas=true (padrão: 10, máx: 100)",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "nome": {
+            "description": "Nome do servidor (busca parcial)",
+            "type": "string"
+          },
+          "tipoFolha": {
+            "description": "Filtrar por tipo de folha (busca parcial)",
+            "type": "string"
+          },
+          "limite": {
+            "default": 50,
+            "description": "Máximo de linhas no modo detalhe (padrão: 50)",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 500
+          }
+        },
+        "required": [
+          "ano",
+          "mes"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "senado_horas_extras",
+      "description": "Horas extras pagas a servidores do Senado em `ano`/`mes` de referência (a partir de 2013). Para perguntas de **maior/menor/média/mediana/distribuição/ranking** ('quem recebeu mais horas extras', 'valor mediano de hora extra', 'distribuição dos pagamentos') use `estatisticas=true`: computa min/máx/média/mediana/desvio/percentis sobre TODAS as linhas filtradas (`valorTotal`) e devolve `top`/`bottom` (padrão 10) com identificadores. Sem `agruparPor` → `distribuicao` das linhas individuais + `top`/`bottom`; com `agruparPor` (`nome`/`competencia`) → `grupos[]` ranqueados por soma decrescente (`grupos[0]` = quem mais recebeu; por `nome` soma as linhas do mesmo servidor no mês), cada um com sua mini-distribuição. Sem `estatisticas`: retorna `{ ano, mes, count, total, valorTotal, horasExtras[] }`, onde `valorTotal` soma o gasto do mês e cada item traz `nome`, `valorTotal`, `horasExtras`, `competencia` e `pagamento`. Filtro opcional por `nome` (busca parcial) e `limite` (padrão 100, máx 500; ignorado quando estatisticas=true). Para a remuneração completa do servidor use `senado_remuneracoes_servidores`.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "ano": {
+            "type": "integer",
+            "minimum": 2013,
+            "maximum": 2100,
+            "description": "Ano de referência"
+          },
+          "mes": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 12,
+            "description": "Mês de referência"
+          },
+          "estatisticas": {
+            "default": false,
+            "description": "Computa estatísticas (min/máx/média/mediana/percentis) + ranking top/bottom sobre todas as linhas filtradas. Use para 'quem recebeu mais/menos', 'média', 'mediana', 'ranking'",
+            "type": "boolean"
+          },
+          "agruparPor": {
+            "description": "Quando estatisticas=true, ranqueia os grupos por soma decrescente (grupos[0] = quem mais recebeu): `nome` soma as linhas do mesmo servidor no mês, `competencia` agrupa por mês de prestação. Cada grupo traz sua mini-distribuição",
+            "type": "string",
+            "enum": [
+              "nome",
+              "competencia"
+            ]
+          },
+          "topN": {
+            "default": 10,
+            "description": "Tamanho das listas top/bottom quando estatisticas=true sem agruparPor (padrão: 10, máx: 100)",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "nome": {
+            "description": "Nome do servidor (busca parcial)",
+            "type": "string"
+          },
+          "limite": {
+            "default": 100,
+            "description": "Máximo de resultados (padrão: 100; ignorado quando estatisticas=true)",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 500
+          }
+        },
+        "required": [
+          "ano",
+          "mes"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "senado_pessoal_tabelas",
+      "description": "Tabelas de pessoal do Senado conforme o parâmetro `tabela`. Quantitativos agregados: `pessoal` (força de trabalho por classe/escolaridade), `cargos-funcoes` (cargos em comissão e funções de confiança), `previsao-aposentadoria`, `senadores`. Listas nominais: `estagiarios` (ativos), `pensionistas`, `lotacoes` (setores), `cargos` (nomes de cargos). Retorna `{ tabela, count, total, aviso?, registros[] }` — registros agregados (nos quantitativos) ou nominais (nas listas), conforme a `tabela`, limitados por `limite` (padrão 100, máx 2000); `count` 0 e lista vazia quando a tabela não tem registros. O `filtro` textual opcional casa contra qualquer campo do registro. Para o cadastro nominal de servidores efetivos/comissionados use `senado_servidores`.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "tabela": {
+            "type": "string",
+            "enum": [
+              "pessoal",
+              "cargos-funcoes",
+              "previsao-aposentadoria",
+              "senadores",
+              "estagiarios",
+              "pensionistas",
+              "lotacoes",
+              "cargos"
+            ],
+            "description": "Qual tabela de pessoal consultar (quantitativo agregado ou lista nominal)"
+          },
+          "filtro": {
+            "description": "Filtro textual (nome, curso, setor...)",
+            "type": "string"
+          },
+          "limite": {
+            "default": 100,
+            "description": "Máximo de registros (padrão: 100)",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2000
+          }
+        },
+        "required": [
+          "tabela"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "senado_contratos",
+      "description": "Busca contratos administrativos do Senado por fornecedor, CNPJ, ano, número, objeto ou mão de obra (base completa baixada e filtrada no Worker; busca parcial sem acento em objeto/fornecedor/número). Retorna `{ count, total, contratos }`, onde cada item traz `id`, `numero`, `objeto`, `empresa {nome, cnpj}`, `subEspecie`, `dataAssinatura`, `vigencia` e `unidadeGestora`. Atenção: a fonte NÃO publica o valor do contrato (nenhum campo monetário aqui nem nas seções de detalhe; apenas a seção `aditivos` de `senado_contratacao_detalhe` traz `valor`, referente ao termo aditivo) — não gaste chamadas procurando valor. A lista mistura subespécies (CT = contratos, AC = acordos de cooperação, TD = termos de doação etc.); distinga pelo campo `subEspecie` retornado. Limitado a `limite` itens (padrão 50, máx 500), com `aviso` quando há truncamento. Use o `id` retornado em `senado_contratacao_detalhe` para itens, pagamentos, garantias ou aditivos.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "fornecedor": {
+            "description": "Nome do fornecedor (busca parcial)",
+            "type": "string"
+          },
+          "cnpj": {
+            "description": "CNPJ/CPF exato do fornecedor",
+            "type": "string"
+          },
+          "ano": {
+            "description": "Ano do contrato",
+            "type": "integer",
+            "minimum": 1990,
+            "maximum": 2100
+          },
+          "numero": {
+            "description": "Número do contrato (busca parcial)",
+            "type": "string"
+          },
+          "objeto": {
+            "description": "Texto no objeto do contrato",
+            "type": "string"
+          },
+          "maoDeObra": {
+            "description": "Apenas contratos com mão de obra residente",
+            "type": "boolean"
+          },
+          "limite": {
+            "default": 50,
+            "description": "Máximo de resultados (padrão: 50)",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 500
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "senado_contratacao_detalhe",
+      "description": "Detalha uma seção específica de uma contratação já identificada pelo `id`. `tipo` indica a natureza do registro: `contratos` (contrato firmado; padrão), `atas_registro_preco` (compromisso de preços para compras futuras) ou `notas_empenho` (reserva orçamentária do gasto). `secao` escolhe o aspecto: `itens`, `pagamentos`, `garantias` (qualquer `tipo`), `aditivos` (só `contratos`) ou `acionamentos` (só `atas_registro_preco`). Retorna `{ id, tipo, secao, count, total, itens }` com os registros brutos da seção (campos conforme a API administrativa), limitados a `limite` (padrão 100, máx 500) — `count < total` indica truncagem; seção sem registros retorna `count` 0 e `itens` vazio (o `id` é conferido na lista-pai antes, então `count` 0 significa mesmo seção vazia, não contratação inexistente); `id` que não existe e combinações `secao`×`tipo` inválidas (ex.: `aditivos` fora de contratos) retornam erro. Atenção: a fonte NÃO publica o valor do contrato em nenhuma seção; apenas `aditivos` traz `valor`, referente ao termo aditivo (às vezes nulo) — não procure valor monetário em itens/pagamentos/garantias. Obtenha o `id` via `senado_contratos` ou `senado_contratacoes_lista` — para localizar a contratação (não detalhá-la) use aquelas ferramentas.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "ID da contratação (campo 'id' das listas de contratos/atas/empenhos)"
+          },
+          "tipo": {
+            "default": "contratos",
+            "description": "contratos = contrato firmado (padrão); atas_registro_preco = compromisso de preços p/ compras futuras; notas_empenho = reserva orçamentária do gasto",
+            "type": "string",
+            "enum": [
+              "contratos",
+              "atas_registro_preco",
+              "notas_empenho"
+            ]
+          },
+          "secao": {
+            "type": "string",
+            "enum": [
+              "itens",
+              "pagamentos",
+              "garantias",
+              "aditivos",
+              "acionamentos"
+            ],
+            "description": "Aspecto a detalhar: itens/pagamentos/garantias (qualquer tipo); aditivos (só contratos); acionamentos (só atas_registro_preco)"
+          },
+          "limite": {
+            "default": 100,
+            "description": "Máximo de itens (padrão 100, máx 500); count < total sinaliza corte",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 500
+          }
+        },
+        "required": [
+          "id",
+          "secao"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "senado_licitacoes",
+      "description": "Busca licitações do Senado por número exato (ex: `19/2018`) ou texto do objeto. Retorna `{ count, total, licitacoes }` com os registros brutos da API administrativa, limitados a `limite` (padrão 50, máx 500). Exige ao menos `numero` ou `objeto` (sem filtro retorna erro). Para o contrato resultante de uma licitação, use `senado_contratos`.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "numero": {
+            "description": "Número exato da licitação (ex: 19/2018)",
+            "type": "string"
+          },
+          "objeto": {
+            "description": "Texto no objeto da licitação",
+            "type": "string"
+          },
+          "limite": {
+            "default": 50,
+            "description": "Máximo de resultados (padrão: 50)",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 500
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "senado_terceirizados",
+      "description": "Lista colaboradores terceirizados do Senado, filtráveis (busca parcial, sem acento) por nome, empresa contratada ou lotação. Retorna `{ count, total, terceirizados }`, cada item com `nome`, `cpf`, `situacao`, `empresa`, `lotacao` e `numeroContrato`. A lista completa é baixada e filtrada no Worker; resultados limitados a `limite` (padrão 50, máx 500), com `aviso` ao truncar. Para a empresa contratante e seus contratos, use `senado_empresas_contratadas`.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "nome": {
+            "description": "Nome do colaborador (busca parcial)",
+            "type": "string"
+          },
+          "empresa": {
+            "description": "Nome da empresa contratada (busca parcial)",
+            "type": "string"
+          },
+          "lotacao": {
+            "description": "Lotação/setor (busca parcial)",
+            "type": "string"
+          },
+          "limite": {
+            "default": 50,
+            "description": "Máximo de resultados (padrão: 50)",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 500
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "senado_empresas_contratadas",
+      "description": "Busca empresas que contratam com o Senado por nome (mín. 3 caracteres) ou CNPJ/CPF (busca parcial). Retorna `{ count, total, empresas }`, cada item com `id`, `nome`, `cnpj`, `contratos` (até 30 números) e `totalContratos`. Exige `nome` ou `cnpj` (a base completa é grande); limitado a `limite` (padrão 20, máx 100). Use o `id`/número de contrato em `senado_contratos` ou `senado_contratacao_detalhe` para o detalhamento.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "nome": {
+            "description": "Nome da empresa (busca parcial, mín. 3 caracteres)",
+            "type": "string",
+            "minLength": 3
+          },
+          "cnpj": {
+            "description": "CNPJ/CPF (busca parcial)",
+            "type": "string"
+          },
+          "limite": {
+            "default": 20,
+            "description": "Máximo de empresas (padrão: 20)",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "senado_contratacoes_lista",
+      "description": "Lista, conforme `tipo`, atas de registro de preço, notas de empenho ou menores aprendizes do Senado, com filtro textual opcional aplicado no Worker sobre todos os campos. Retorna `{ tipo, count, total, registros }`; para `atas_registro_preco`/`notas_empenho` cada registro segue o formato de contrato (`id`, `numero`, `objeto`, `empresa`, `subEspecie`, `vigencia`...), enquanto `menores_aprendizes` vêm como registros brutos da API (campos não normalizados). Ordenação por `ordem` sobre a sequência de id do upstream: `desc` (padrão) = mais recentes primeiro, `asc` = mais antigos primeiro; `offset` pula registros para paginar a cauda. Limitado a `limite` (padrão 50, máx 500), com `aviso` ao truncar; `tipo` sem registros retorna lista vazia. Para aprofundar uma ata/empenho, use o `id` em `senado_contratacao_detalhe`.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "atas_registro_preco",
+              "notas_empenho",
+              "menores_aprendizes"
+            ],
+            "description": "Qual lista consultar"
+          },
+          "filtro": {
+            "description": "Filtro textual (empresa, objeto, etc.)",
+            "type": "string"
+          },
+          "ordem": {
+            "default": "desc",
+            "description": "desc = mais recentes primeiro (padrão); asc = mais antigos primeiro (ordem de id do upstream)",
+            "type": "string",
+            "enum": [
+              "asc",
+              "desc"
+            ]
+          },
+          "offset": {
+            "default": 0,
+            "description": "Registros a pular após a ordenação (paginação; padrão: 0)",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "limite": {
+            "default": 50,
+            "description": "Máximo de resultados (padrão: 50)",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 500
+          }
+        },
+        "required": [
+          "tipo"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "senado_suprimento_fundos",
+      "description": "Suprimento de fundos do Senado (adiantamentos a supridos): relação anual de supridos, atos de concessão, empenhos, movimentações ou transações de cartão corporativo, conforme `tipo`. Retorna `{ ano, tipo, count, total, registros }` (snake_case da API administrativa), filtrável por `filtro` textual e limitado por `limite` (padrão 100, máx 500); ao truncar, inclui `aviso`. Para maior/menor/média/mediana/distribuição/ranking ('quem mais recebeu', 'fornecedor com maior gasto', 'valor mediano') use `estatisticas=true` (só nos tipos `transacoes`, `empenhos`, `atos-concessao` — os demais não têm coluna de valor): SEM `agruparPor` = distribuição das linhas (min/máx/média/mediana/percentis) + top/bottom; COM `agruparPor` = grupos ranqueados por soma decrescente (grupos[0]=maior). A coluna de valor analisada é escolhida automaticamente conforme o `tipo`; o resultado já traz o rótulo legível dela em `campoAnalisado`. Registros sem valor são excluídos das estatísticas. Em atos de concessão, cada beneficiário é identificado pelo NOME (cruzado com o cadastro de supridos) e pode-se usar `agruparPor='suprido'` para ranquear por beneficiário. Informe o `ano` (a fonte publica de 2013 em diante); use os mesmos códigos administrativos vistos em `senado_contratacoes_lista` ou `senado_execucao_orcamentaria` para cruzar gastos.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "ano": {
+            "type": "integer",
+            "minimum": 2013,
+            "maximum": 2100,
+            "description": "Ano de referência (a fonte publica de 2013 em diante)"
+          },
+          "tipo": {
+            "default": "supridos",
+            "description": "Qual relação consultar (padrão: supridos)",
+            "type": "string",
+            "enum": [
+              "supridos",
+              "atos-concessao",
+              "empenhos",
+              "movimentacoes",
+              "transacoes"
+            ]
+          },
+          "filtro": {
+            "description": "Filtro textual (nome, unidade...)",
+            "type": "string"
+          },
+          "estatisticas": {
+            "default": false,
+            "description": "Distribuição/ranking sobre as linhas: min/máx/média/mediana/percentis + top/bottom, ou grupos ranqueados por soma via agruparPor. Só para tipo transacoes/empenhos/atos-concessao",
+            "type": "boolean"
+          },
+          "campo": {
+            "description": "Opcional: força a coluna de valor analisada; por padrão ela é escolhida conforme o tipo. Se a opção não se aplicar ao tipo, o padrão é usado automaticamente.",
+            "type": "string",
+            "enum": [
+              "valor",
+              "valorExecutado",
+              "valorConcedido",
+              "valorTotalTransacoes",
+              "valorTotalEmpenhos",
+              "valorTotalElementosDespesa",
+              "valorTotalMovimentacoes"
+            ]
+          },
+          "agruparPor": {
+            "description": "Opcional: agrupa e ranqueia os resultados por esta dimensão (as opções válidas dependem do tipo; em atos de concessão, `suprido` agrupa por beneficiário, com o nome).",
+            "type": "string",
+            "enum": [
+              "fornecedor",
+              "tipo",
+              "tipoInscricao",
+              "rubricas",
+              "rubrica",
+              "descricao",
+              "elementoDespesa",
+              "regimeEspecial",
+              "suprido"
+            ]
+          },
+          "topN": {
+            "default": 10,
+            "description": "Tamanho do top/bottom nas estatísticas (padrão: 10)",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "limite": {
+            "default": 100,
+            "description": "Máximo de resultados (padrão: 100)",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 500
+          }
+        },
+        "required": [
+          "ano"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "senado_execucao_orcamentaria",
+      "description": "Execução orçamentária do Senado: despesas (dotação, empenhado, liquidado, pago; desde 2013) ou receitas próprias (previstas e arrecadadas; desde 2012). Para maior/menor/média/mediana/distribuição/ranking ('quanto o Senado pagou/arrecadou com X', 'maior grupo de despesa') use `estatisticas=true`: SEM `agruparPor` = distribuição das linhas (min/máx/média/mediana/percentis) + top/bottom; COM `agruparPor` = grupos ranqueados por soma decrescente (grupos[0]=maior). A coluna de valor analisada é escolhida automaticamente conforme o `tipo`; o resultado já traz o rótulo legível dela em `campoAnalisado`. Retorna `{ tipo, modo, ano, totalLinhas, ... }`: nos modos agregados, `agregado[]` com `{ chave, ...valores }` ordenado por valor; em `detalhe`, `despesas[]`/`receitas[]` limitado por `limite` (padrão 100, com `aviso` ao truncar). Use `tipo=despesas` com `modo` por-ano/por-acao/por-grupo/por-fonte e `tipo=receitas` com por-origem; filtre por `ano` para reduzir o volume antes de pedir `detalhe`. O que cada número é: nas despesas, dotação/empenhado/liquidado/pago são ACUMULADOS no exercício até a data de posição do arquivo (o `data_vintage` da proveniência diz qual) — o exercício corrente é parcial e cresce; nas receitas, `arrecadada` é o valor do mês e `prevista` vem lançada inteira no mês 1. São os valores que o Senado publica na data de posição; lançamentos podem ser corrigidos depois. Única ferramenta de orçamento interno do Senado; não confundir com `senado_orcamento_parlamentar` (emendas/ofícios parlamentares ao orçamento da União).",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "tipo": {
+            "default": "despesas",
+            "description": "despesas = dotação e execução; receitas = receitas próprias",
+            "type": "string",
+            "enum": [
+              "despesas",
+              "receitas"
+            ]
+          },
+          "ano": {
+            "description": "Filtrar por exercício financeiro",
+            "type": "integer",
+            "minimum": 2012,
+            "maximum": 2100
+          },
+          "modo": {
+            "default": "por-ano",
+            "description": "Agregação (por-acao/por-grupo/por-fonte: despesas; por-origem: receitas) ou detalhe. Ignorado quando estatisticas=true",
+            "type": "string",
+            "enum": [
+              "por-ano",
+              "por-acao",
+              "por-grupo",
+              "por-fonte",
+              "por-origem",
+              "detalhe"
+            ]
+          },
+          "estatisticas": {
+            "default": false,
+            "description": "Distribuição/ranking sobre as linhas: min/máx/média/mediana/percentis + top/bottom, ou grupos ranqueados por soma via agruparPor",
+            "type": "boolean"
+          },
+          "campo": {
+            "description": "Opcional: força a coluna de valor analisada; por padrão ela é escolhida conforme o tipo. Se a opção não se aplicar ao tipo, o padrão é usado automaticamente.",
+            "type": "string",
+            "enum": [
+              "pago",
+              "liquidado",
+              "empenhado",
+              "dotacaoInicial",
+              "dotacaoAtualizada",
+              "arrecadada",
+              "prevista"
+            ]
+          },
+          "agruparPor": {
+            "description": "Opcional: agrupa e ranqueia os resultados por esta dimensão (as opções válidas dependem do tipo).",
+            "type": "string",
+            "enum": [
+              "ano",
+              "acao",
+              "grupo",
+              "fonte",
+              "modalidade",
+              "resultadoLei",
+              "plano",
+              "origem",
+              "categoria",
+              "especie",
+              "natureza"
+            ]
+          },
+          "topN": {
+            "default": 10,
+            "description": "Tamanho do top/bottom nas estatísticas (padrão: 10)",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "limite": {
+            "default": 100,
+            "description": "Máximo de linhas (padrão: 100)",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "senado_estrutura_organizacional",
+      "description": "Estrutura organizacional (organograma) do Senado Federal até o nível de serviço. Dada uma `unidade` (sigla como 'DGER' ou nome como 'Diretoria-Geral'), retorna `{ unidade, caminho[], totalSubordinadas, subordinadas[] }`: `caminho` são os órgãos superiores (da cúpula até o superior imediato) e `subordinadas` são TODAS as unidades da subárvore (secretarias, coordenações, serviços e núcleos), cada uma com `sigla`, `nome` e `nivel` (profundidade relativa). Use para responder 'o que está sob a DGER', 'quais secretarias/serviços pertencem a X' ou para entender a hierarquia administrativa. Para CONTAR ou LISTAR servidores sob uma unidade, use `senado_servidores` com `subordinadasA`. Fonte: portal institucional (a API de dados abertos não publica a árvore completa).",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "unidade": {
+            "type": "string",
+            "description": "Sigla (ex.: 'DGER', 'SEGRAF') ou nome (ex.: 'Diretoria-Geral') da unidade"
+          },
+          "limite": {
+            "default": 200,
+            "description": "Máximo de subordinadas listadas (padrão: 200)",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000
+          }
+        },
+        "required": [
+          "unidade"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "search",
+      "description": "Searches the Brazilian Federal Senate open data (senators in office and active committees of the Senate and the National Congress) catalog and returns up to 10 matching documents as { id, title, url }, ordered by relevance (an empty list means nothing matched).\n\nThis tool exists for the OpenAI Deep Research contract: ChatGPT deep research, company knowledge and research workflows over the Responses API require exactly the tools `search` and `fetch`. Pass one of the returned ids to `fetch` to read the document.\nFor direct questions and for data (values, series, rankings) prefer the `senado_*` tools, which return the actual data with provenance — this is a catalog index, not a data query.\n\nQuery: natural language or keywords, Portuguese or English; accents and case are ignored.\n\nBehavior: read-only and idempotent — the catalog comes from the public source and is cached in memory.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Termos de busca em linguagem natural ou palavras-chave (acentos e caixa são ignorados)"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "fetch",
+      "description": "Returns the full document for an id obtained from `search`, as { id, title, text, url, metadata }: `text` is the readable content (Markdown) and `url` the canonical public page to cite.\n\nCompanion of `search` in the OpenAI Deep Research contract, over the Brazilian Federal Senate open data (senators in office and active committees of the Senate and the National Congress) catalog. Only ids returned by `search` are valid; an unknown id returns an error.\nThe `senado_*` tools remain the tools for data queries.\n\nBehavior: read-only and idempotent — a live GET against the public source when the document needs it.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Identificador de um documento devolvido por `search`"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "io.github.SidneyBissoli/senado-br-mcp-cloudflare",
+    "version": "3.27.0",
+    "remoteUrl": "https://senado.sidneybissoli.com/mcp",
+    "publishedAt": "2026-11-26T04:01:12.131895Z",
+    "fetchedAt": "2026-11-26T10:40:47.803Z",
+    "toolsSha256": "a1c6c356beb3d78e1545b2d5d0e9777fae2a6b1a6cb954d84ec20f171c972b16"
+  }
+}

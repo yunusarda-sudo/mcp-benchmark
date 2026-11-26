@@ -5034,7 +5034,7 @@
     },
     {
       "name": "list_tables",
-      "description": "List the business's tables — the places that each need their own QR code for table ordering (the code tells the order which table it's from). Returns each table's name, zone, code and the order URL its QR encodes.",
+      "description": "List the business's tables — the places that each need their own QR code for table ordering (the code tells the order which table it's from). Returns each table's name, zone, code, the short URL its QR encodes (qr_url; null until first exported) and the order page that opens.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -5098,6 +5098,98 @@
         },
         "required": [
           "business_id"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "list_qr_codes",
+      "description": "List the business's QR codes. Every printed QR is a short link (lknd.to/<code>) whose destination can change without reprinting. role: menu (the menu QR — is_default marks the one export_qr_codes prints; extra ones are separate placements such as a window), table (one per table, opens that table's order page) or link (any other URL). Returns each code's url (what the QR encodes), where a scan goes now (destination), its all-time scans and whether it is retired (retired codes open the menu, and so do table codes while the business doesn't take orders).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "business_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "include_retired": {
+            "type": "boolean",
+            "description": "Default false"
+          }
+        },
+        "required": [
+          "business_id"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "create_qr_code",
+      "description": "Create a QR code (a short link). With target_url it is a link code to that URL (Wi-Fi page, reviews, Instagram, a campaign). Without target_url it is another menu code — a separate placement (e.g. \"Window\") with its own scan count; the menu already has a default code, so only add one when the owner wants to tell placements apart. Table codes are made by create_tables. Print it with export_qr_codes(purpose: link, shortlink_ids: [code]).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "business_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "label": {
+            "type": "string",
+            "maxLength": 80,
+            "description": "What it is or where it goes, e.g. \"Window\""
+          },
+          "target_url": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048,
+            "format": "uri",
+            "pattern": "^https?:\\/\\/",
+            "description": "http(s) URL; omit for a menu code"
+          }
+        },
+        "required": [
+          "business_id",
+          "label"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "update_qr_code",
+      "description": "Change a QR code without reprinting it. target_url re-points it (not for table codes, which always open their table). label renames it. retired: true takes it out of use — its printed QR then opens the menu, and the code stays reserved; retired: false restores it. A printed code is never deleted. Find codes with list_qr_codes.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "business_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "code": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "target_url": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048,
+            "format": "uri",
+            "pattern": "^https?:\\/\\/"
+          },
+          "label": {
+            "type": "string",
+            "maxLength": 80
+          },
+          "retired": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "business_id",
+          "code"
         ],
         "additionalProperties": false,
         "$schema": "http://json-schema.org/draft-07/schema#"
@@ -5189,6 +5281,10 @@
             ],
             "description": "Optional text above the code, e.g. \"Scan to order\". null = none (only the name is printed)"
           },
+          "show_label": {
+            "type": "boolean",
+            "description": "Print the table's name under each per-table code (default true). Only turn off for stickers fixed to their table: on a stand that can move, an unnamed code sends orders to the wrong table"
+          },
           "reset": {
             "type": "boolean"
           }
@@ -5202,7 +5298,7 @@
     },
     {
       "name": "export_qr_codes",
-      "description": "Render the business's QR codes as a printable file and return a download URL. purpose: menu (one code to the menu site, repeated `copies` times), table_ordering (ONE CODE PER TABLE, each with its table name printed under it — needs tables, see create_tables) or link (its short links). format: home_pdf (A4/Letter sheets with cut guides, for a home printer; layout large=1, medium=4, small=12 per page), press_pdf (print shop: one code per page at size_mm wide, 3 mm bleed, trim box and crop marks, all vector) or svg_zip (one vector SVG per code, for a designer). Uses the saved design (get_qr_design) unless `design` overrides it for this file only.",
+      "description": "Render the business's QR codes as a printable file and return a download URL. Every code is a short link (lknd.to/<code>) the owner can re-point without reprinting. purpose: menu (one code to the menu site, repeated `copies` times), table_ordering (ONE CODE PER TABLE, each with its table name printed under it — needs tables, see create_tables) or link (its short links). format: home_pdf (sheets with cut guides on any paper: a4, a3, a5, letter, or custom with paper_width_mm and paper_height_mm; layout large=1, medium=4, small=12 per page, or size_mm for an exact code width with as many per page as fit), press_pdf (print shop: one code per page at size_mm wide, 3 mm bleed, trim box and crop marks, all vector) or svg_zip (one vector SVG per code, for a designer). Uses the saved design (get_qr_design) unless `design` overrides it for this file only.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -5258,21 +5354,40 @@
               "medium",
               "small"
             ],
-            "description": "home_pdf: default medium"
+            "description": "home_pdf: default medium; ignored when size_mm is set"
           },
           "paper": {
             "type": "string",
             "enum": [
               "a4",
-              "letter"
+              "a3",
+              "a5",
+              "letter",
+              "custom"
             ],
             "description": "home_pdf: default a4"
           },
+          "paper_width_mm": {
+            "type": "number",
+            "minimum": 50,
+            "maximum": 1000,
+            "description": "home_pdf, paper custom"
+          },
+          "paper_height_mm": {
+            "type": "number",
+            "minimum": 50,
+            "maximum": 1000,
+            "description": "home_pdf, paper custom"
+          },
           "size_mm": {
             "type": "number",
-            "minimum": 30,
+            "minimum": 20,
             "maximum": 300,
-            "description": "press_pdf/svg_zip: printed code width in mm; default 90"
+            "description": "Printed code width in mm. press_pdf/svg_zip: default 90. home_pdf: exact width instead of a layout"
+          },
+          "cut_lines": {
+            "type": "boolean",
+            "description": "home_pdf: dashed cut guides around each code; default true"
           },
           "bleed_mm": {
             "type": "number",
@@ -5340,6 +5455,10 @@
                   }
                 ],
                 "description": "Optional text above the code, e.g. \"Scan to order\". null = none (only the name is printed)"
+              },
+              "show_label": {
+                "type": "boolean",
+                "description": "Print the table's name under each per-table code (default true). Only turn off for stickers fixed to their table: on a stand that can move, an unnamed code sends orders to the wrong table"
               }
             },
             "additionalProperties": false
@@ -5508,10 +5627,10 @@
     "type": "registry",
     "registry": "registry.modelcontextprotocol.io",
     "name": "com.lokand/lokand",
-    "version": "1.0.5",
+    "version": "1.0.6",
     "remoteUrl": "https://api.lokand.com/mcp",
-    "publishedAt": "2026-11-19T19:20:06.116496Z",
-    "fetchedAt": "2026-11-25T11:03:46.215Z",
-    "toolsSha256": "f2e29420eea5aecc50f5e5be3994026743880c485c62d3d21efca000cdacdd66"
+    "publishedAt": "2026-11-25T21:07:57.003789Z",
+    "fetchedAt": "2026-11-26T10:40:47.803Z",
+    "toolsSha256": "cc1b3b9b4567accf95e048f49b4e60183338c12820cb0cfd0b7c484f7742ca2b"
   }
 }

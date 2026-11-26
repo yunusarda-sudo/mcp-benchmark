@@ -1,0 +1,319 @@
+{
+  "$schema": "../schema.json",
+  "name": "io.sota/mcp",
+  "category": "AI, LLMs & Agents",
+  "description": "EU-native PaaS for AI agents — deploy web apps with one sentence, managed Postgres, GDPR by default.",
+  "repository": "https://github.com/sota-deploy/mcp-server",
+  "tools": [
+    {
+      "name": "create_account",
+      "description": "Sign up for a brand-new sota.io account from inside Claude — no browser, no copy-paste. Two-step flow:\n\nSTEP 1: Call with just `email`. We send a 6-digit confirmation code to that email.\nSTEP 2: Call again with `email` + `code`. We verify, create the account on the Free tier (3 projects, EU-hosted, no credit card), generate a sota.io API key, and return it to you.\n\nAfter Step 2 you'll get back a key like `sota_…`. **Save it in a safe place** — you'll need it for any subsequent sota.io tool call in Claude (or you can use it with the sota CLI). It is shown ONCE and never recoverable.\n\nsota.io is an EU-native PaaS hosted in Germany — GDPR-compliant by default, no CLOUD Act exposure. Disposable / throwaway email addresses are not accepted; use a real address.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "description": "A real email address. We send the confirmation code here. Throwaway / disposable email services are blocked."
+          },
+          "code": {
+            "type": "string",
+            "description": "The 6-digit code from the confirmation email. Provide on the second call to complete signup. Omit on the first call."
+          }
+        },
+        "required": [
+          "email"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "get-account",
+      "description": "Call this FIRST, before writing or deploying code. Returns the signed-in sota.io account: plan limits (projects, databases, memory per app, upload size), whether it is a sota Enterprise account (company label, app URL scheme https://<app>.<label>.sota.io, own server, sign-in connection status, the dashboard page where the owner grants access) and the build contract the app must follow: one container, PORT, health gate, database through PgBouncer, upload rules, and for Enterprise the identity headers, fail-closed rule, health-without-identity rule and what the human must do before anyone can open the app. Read-only.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "list-projects",
+      "description": "List all projects on your sota.io account. sota.io is an EU-native DevOps PaaS hosted in Germany (GDPR-compliant). Each project gets one live URL with automatic HTTPS (https://{slug}.sota.io, or https://{app}.{label}.sota.io behind the company sign-in on a sota Enterprise account; always show the URL this tool returns), a managed PostgreSQL 17 database created on the first deploy (DATABASE_URL auto-injected), PgBouncer connection pooling, daily backups, zero-downtime blue-green deployments, gVisor container isolation, and custom domain support (up to 5 per project with automatic HTTPS).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "create-project",
+      "description": "Create a new project on sota.io. Call get-account first: on a sota Enterprise account the project gets the slug \"<label>-<name>\" and the one URL https://<name>.<label>.sota.io behind the company's Microsoft 365 sign-in, counts against the account's app limit and runs on the company's own server; otherwise the URL is https://{slug}.sota.io and the app is public. The slug is generated from the name (lowercase, hyphens, max 63 chars) and cannot be changed. The first deploy creates a managed PostgreSQL 17 database (DATABASE_URL auto-injected, through PgBouncer in transaction mode) with daily backups kept 7 days. Supported: Next.js, Node.js, Python, or any language with a Dockerfile. Custom domains (not on Enterprise yet): up to 5 per project via the domain tools.\n\nOptionally associate the project with a public git repository at create-time by passing `git_url` (and optional `git_branch`). The association is informational: it shows up in the dashboard and the `sota deploy --git` CLI flag can default to it, but it does NOT deploy on push.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Name for the new project. A URL slug will be auto-generated (e.g. \"My Cool App\" becomes my-cool-app.sota.io)"
+          },
+          "git_url": {
+            "type": "string",
+            "description": "Optional git repository URL to associate with this project (https://, git://, ssh://, or git@host:path). Informational only — does not trigger an automatic deploy."
+          },
+          "git_branch": {
+            "type": "string",
+            "description": "Optional branch name (defaults to the repository default branch when omitted). Only meaningful when `git_url` is also set."
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "delete-project",
+      "description": "Delete a project and all its deployments from sota.io. This action is PERMANENT and irreversible. It removes the project, all deployments, the managed PostgreSQL database, environment variables, and webhooks. The project slug will become available again after deletion.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "description": "Project ID (UUID) to delete. Use list-projects to find the ID"
+          }
+        },
+        "required": [
+          "project_id"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "deploy",
+      "description": "Deploy an application to sota.io. The platform auto-detects your framework and builds a Docker image automatically:\n\n- Next.js: Detected via next.config.js/ts. Add output: 'standalone' to next.config for optimal builds.\n- Node.js: Detected via package.json with a \"start\" script. Works with Express, Fastify, Koa, Hapi, etc.\n- Python: Detected via requirements.txt or pyproject.toml. Works with Flask, FastAPI, Django.\n- Custom Dockerfile: If a Dockerfile exists in the project root, it takes priority over auto-detection. Use this for Go, Rust, Java, or any other language. The EXPOSE directive in the Dockerfile is used to detect the app port automatically.\n\nSupply the source code as **files** (inline source from AI):\n   Pass a map of relative paths to UTF-8 text content. Best when you've just\n   generated a small app in this conversation and want to deploy it without\n   any filesystem step. Up to 200 files, 10 MB total. Include\n   the framework manifest (package.json, requirements.txt, or Dockerfile)\n   so auto-detection works.\n\nThis hosted server only accepts inline files. Pass the source inline as `files`, or deploy a directory or a git repository with the local server (npx @sota-io/mcp) or the CLI (`sota deploy`).\n\nBEFORE the first deploy, call get-account: it says whether this is a sota Enterprise account and returns the full contract. The rules that make a deploy fail:\n\n- Listen on 0.0.0.0 and the PORT environment variable: 8080 for auto-detected frameworks, the EXPOSE port of a Dockerfile.\n- Health gate: sota calls GET /health inside the container (GET / when /health answers 404) WITHOUT identity headers; it must answer 2xx or 3xx within 60 seconds, otherwise the deploy fails and the previous version keeps running.\n- One container, one web process, no persistent disk (files are lost on every deploy), no second service.\n- sota Enterprise: never build a login; read the X-Sota-Access-* headers and fail closed without them, EXCEPT GET /health (200) and GET / (2xx/3xx, no data), which the health gate and the edge check call without identity. An app answering 401 on / is marked down.\n\nThe first deploy creates a PostgreSQL 17 database and injects DATABASE_URL (through PgBouncer in transaction mode: no LISTEN/NOTIFY, no session state, no named prepared statements) plus PGHOST, PGPORT, PGUSER, PGPASSWORD and PGDATABASE. Run migrations at start.\n\nThe deploy runs in the background: this tool returns at once. Poll get-status every 10-15 seconds until the deployment is running or failed; on failed, get-status shows the reason and get-logs the build log. Blue-green: the old container keeps serving until the new one passes the health gate. .git/, node_modules/, .DS_Store and the local/secret env files .env, .env.local, .env.*.local and .envrc (any directory, any case) are excluded from the archive; set runtime secrets with set-env instead. .env.production is kept (set-env values are not available at build time): put public build-time values such as NEXT_PUBLIC_* there, never secrets.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "description": "Project ID (UUID) to deploy to. Use list-projects to find the ID."
+          },
+          "files": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Map of relative file paths to UTF-8 text content. Use when generating an app inline (e.g. from a Claude.ai web conversation). Include a framework manifest so auto-detection works."
+          }
+        },
+        "required": [
+          "project_id",
+          "files"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "get-logs",
+      "description": "Get the build and deploy log of a deployment (logs of the running app are not available yet). If no deployment_id is provided, returns the log of the latest deployment. Use this after calling deploy to follow the build and diagnose build failures: framework detection, dependency installation and build steps. The reason of a failed health check is shown by get-status. If a deployment fails, check the logs for error details — common issues include missing dependencies, build errors, or the app not listening on the correct PORT (check the PORT env var — 8080 for auto-detected frameworks, or the EXPOSE value from Dockerfile).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "description": "Project ID (UUID) to get logs for"
+          },
+          "deployment_id": {
+            "type": "string",
+            "description": "Specific deployment ID (optional, defaults to latest). Use get-status to see recent deployment IDs"
+          }
+        },
+        "required": [
+          "project_id"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "set-env",
+      "description": "Set an environment variable for a project. Variables are encrypted at rest (AES-256-GCM) and injected at container runtime. NOTE: DATABASE_URL, PGHOST, PGPORT, PGUSER, PGPASSWORD, and PGDATABASE are all auto-injected for the managed PostgreSQL database — you do NOT need to set any of them manually. The PORT variable is auto-managed: 8080 for auto-detected frameworks (Next.js, Node.js, Python), or auto-detected from the Dockerfile EXPOSE directive for custom Dockerfile builds. IMPORTANT: Changing env vars does NOT auto-redeploy: call deploy again to apply them. Values set here are only available at runtime, never at build time: build-time values such as Next.js NEXT_PUBLIC_* belong in a committed file such as .env.production. On a sota Enterprise account do not set login or session secrets for your own sign-in: sota Access does the sign-in.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "description": "Project ID (UUID)"
+          },
+          "key": {
+            "type": "string",
+            "description": "Environment variable name (e.g., REDIS_URL, API_SECRET). Do NOT set DATABASE_URL — it is auto-managed"
+          },
+          "value": {
+            "type": "string",
+            "description": "Environment variable value. Will be encrypted at rest"
+          }
+        },
+        "required": [
+          "project_id",
+          "key",
+          "value"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "get-env",
+      "description": "List environment variables for a project. Values are masked for security. Auto-injected variables (DATABASE_URL, PGHOST, PGPORT, PGUSER, PGPASSWORD, PGDATABASE, PORT) may not appear in this list but are always available in the container at runtime.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "description": "Project ID (UUID)"
+          }
+        },
+        "required": [
+          "project_id"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "rollback",
+      "description": "Rollback a project to its previous deployment. This instantly swaps the container image without rebuilding — the previous image is reused for near-instant rollback. Uses the same blue-green strategy for zero downtime. The database is NOT rolled back (data persists across deployments). Use this when a deployment introduces bugs or breaks the app.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "description": "Project ID (UUID) to rollback. Use list-projects to find the ID"
+          }
+        },
+        "required": [
+          "project_id"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "get-status",
+      "description": "Get the current deployment status for a project, including the live host (the project URL from list-projects: https://{slug}.sota.io, or https://{app}.{label}.sota.io on a sota Enterprise account), detected framework, the reason of a failed deployment, and recent deployment history. Deployment statuses: pending (queued), building (build in progress), built (image ready), deploying (starting container + health checks), running (live and healthy), failed (build or health check error), stopped (replaced by newer deployment). Use this to verify a deployment succeeded after calling deploy.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "description": "Project ID (UUID) to check status for. Use list-projects to find the ID"
+          }
+        },
+        "required": [
+          "project_id"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "add-domain",
+      "description": "Add a custom domain to a sota.io project. Each project supports up to 5 custom domains with automatic HTTPS via Let's Encrypt. Returns DNS setup instructions: for apex domains (example.com), add an A record pointing to 23.88.45.28; for subdomains (app.example.com), add a CNAME record pointing to {slug}.sota.io. Domain statuses: pending (waiting for DNS) → verified (SSL provisioning) → active (live with HTTPS). After DNS is configured, verification and SSL provisioning happen automatically.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "description": "Project ID (UUID) to add the domain to. Use list-projects to find the ID"
+          },
+          "domain": {
+            "type": "string",
+            "description": "Domain name to add (e.g. \"app.example.com\" or \"example.com\")"
+          }
+        },
+        "required": [
+          "project_id",
+          "domain"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "list-domains",
+      "description": "List all custom domains for a sota.io project. Shows domain name, status (pending/verified/active), and ID for each domain. Use get-domain with a domain ID to see DNS instructions and full details.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "description": "Project ID (UUID) to list domains for. Use list-projects to find the ID"
+          }
+        },
+        "required": [
+          "project_id"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "get-domain",
+      "description": "Get details of a custom domain including its current status and DNS setup instructions. Domain statuses: pending (DNS not yet configured), verified (DNS confirmed, SSL provisioning), active (live with HTTPS). If status is 'pending', configure the DNS record as shown in the instructions.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "description": "Project ID (UUID). Use list-projects to find the ID"
+          },
+          "domain_id": {
+            "type": "string",
+            "description": "Domain ID (UUID). Use list-domains to find the ID"
+          }
+        },
+        "required": [
+          "project_id",
+          "domain_id"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "remove-domain",
+      "description": "Remove a custom domain from a sota.io project. This removes the domain mapping and its SSL certificate. The DNS records at your registrar are NOT automatically removed — clean those up manually. This action is immediate and irreversible.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "description": "Project ID (UUID). Use list-projects to find the ID"
+          },
+          "domain_id": {
+            "type": "string",
+            "description": "Domain ID (UUID). Use list-domains to find the ID"
+          }
+        },
+        "required": [
+          "project_id",
+          "domain_id"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "io.sota/mcp",
+    "version": "1.7.1",
+    "remoteUrl": "https://mcp.sota.io/mcp",
+    "publishedAt": "2026-11-25T15:41:45.169996Z",
+    "fetchedAt": "2026-11-26T10:40:47.803Z",
+    "toolsSha256": "cb5e06203835ce072e37add1c7cc7d7b97d8b53e617b8e74d6967d9dcb769d2c"
+  }
+}

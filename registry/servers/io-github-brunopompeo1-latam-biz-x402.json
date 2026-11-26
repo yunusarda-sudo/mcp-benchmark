@@ -1,0 +1,280 @@
+{
+  "$schema": "../schema.json",
+  "name": "io.github.brunopompeo1/latam-biz-x402",
+  "title": "LATAM Business, Fiscal & FX (x402)",
+  "category": "Developer Tools & DevOps",
+  "description": "Validate/decode LATAM tax & bank IDs (MX, AR, CL, CO, PE, UY, BR) + FX, pay-per-call x402 USDC.",
+  "repository": "https://github.com/brunopompeo1/brazil-ai-fiscal-apis-x402",
+  "tools": [
+    {
+      "name": "latam_validate_tax_id",
+      "description": "Checks a single Latin American tax or personal identifier and decodes what it encodes: Mexican RFC and CURP, Argentine CUIT and CUIL, Chilean RUT, Colombian NIT, Peruvian RUC, Uruguayan RUT, and Brazilian CPF and CNPJ. It runs the official check-digit algorithm of each registry, confirms the structure, and returns the canonical format plus the data embedded in the number itself, such as whether an RFC belongs to a company or an individual, the birth date and state in a CURP, the DNI inside a CUIT, or whether a CNPJ is a head office or a branch. Use it at signup, in KYC and onboarding flows, to clean a supplier record, or before sending an identifier to a registry that charges per query. Do not use it for bank account keys, which latam_validate_bank_account handles, do not loop it over a list when latam_validate_batch checks up to 100 identifiers for the same single charge, and do not expect it to confirm that the holder exists or is active: this is an offline structural and checksum audit, not a registry lookup. Read-only, deterministic and fully offline at the edge, so the same input always returns the same verdict and a retry is safe. Costs 0.008 USDC per call via x402 v2 on Base (eip155:8453) or a B2B X-API-Key; an unpaid call returns HTTP 402 with a PAYMENT-REQUIRED header. One call is one charge no matter how many identifiers it carries, so batching is strictly cheaper than looping. It never throws on bad input: an unrecognised value comes back with type 'UNKNOWN', valid false and the reasons in errors, so branch on results[0].valid and never on the HTTP status alone.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "value": {
+            "type": "string",
+            "description": "The identifier to check, with or without punctuation: '12.345.678-5', 'XAXX010101000' and '20-12345678-9' are all accepted. Dots, dashes and slashes are stripped before the checksum is computed."
+          },
+          "country": {
+            "type": "string",
+            "enum": [
+              "MX",
+              "AR",
+              "CL",
+              "CO",
+              "PE",
+              "UY",
+              "BR"
+            ],
+            "description": "ISO 3166-1 alpha-2 country code. Supplying it narrows auto-detection to that country's standards and avoids an ambiguous match between same-length documents."
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "RFC",
+              "CURP",
+              "CUIT",
+              "CUIL",
+              "RUT",
+              "RUT_CL",
+              "RUT_UY",
+              "NIT",
+              "RUC",
+              "CPF",
+              "CNPJ"
+            ],
+            "description": "Document type, which skips auto-detection and makes the check strict. RFC is the Mexican SAT tax ID, CURP the Mexican RENAPO personal ID, CUIT and CUIL the Argentine AFIP tax and labour IDs, RUT_CL the Chilean SII ID, RUT_UY the Uruguayan DGI ID, NIT the Colombian DIAN ID, RUC the Peruvian SUNAT ID, and CPF and CNPJ the Brazilian Receita Federal personal and company IDs. Plain 'RUT' is resolved to the Chilean or Uruguayan variant by length. Supply it whenever you know it: without it an 11-digit number could be read as a CPF or a Uruguayan RUT."
+          }
+        },
+        "required": [
+          "value"
+        ]
+      }
+    },
+    {
+      "name": "latam_validate_bank_account",
+      "description": "Checks an interbank account key and names the institution behind it: the 18-digit Mexican CLABE with the Banxico Mod-10 check digit, and the 22-digit Argentine CBU with its two independent block checksums. It returns the bank name from the embedded institution code, the branch and account portions, and for a CLABE the plaza code. Use it before a first payout, when registering supplier or payroll bank details, or to reject a mistyped key at the point of entry instead of waiting for a returned transfer. Do not use it for tax IDs, which latam_validate_tax_id handles, do not loop it over a payout list when latam_validate_batch checks up to 100 keys for the same single charge, and do not read a pass as confirmation that the account exists, is open or belongs to the named holder: the checksum proves only that the key is well formed, so it catches typos, not fraud. Read-only, deterministic and fully offline at the edge, so a retry is safe. Costs 0.008 USDC per call via x402 v2 on Base (eip155:8453) or a B2B X-API-Key; an unpaid call returns HTTP 402 with a PAYMENT-REQUIRED header. One call is one charge no matter how many identifiers it carries, so batching is strictly cheaper than looping. It never throws on bad input: a malformed key comes back with valid false and the reasons in errors, so branch on results[0].valid.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "value": {
+            "type": "string",
+            "description": "The account key, with or without spaces or dashes: 18 digits for a Mexican CLABE, 22 for an Argentine CBU. Separators are stripped before the checksum is computed."
+          },
+          "country": {
+            "type": "string",
+            "enum": [
+              "MX",
+              "AR"
+            ],
+            "description": "ISO 3166-1 alpha-2 country code, MX for a CLABE or AR for a CBU. Optional, since the two standards differ in length."
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "CLABE",
+              "CBU"
+            ],
+            "description": "Bank account standard. CLABE is the 18-digit Mexican Banxico interbank key and CBU the 22-digit Argentine BCRA key. Omit it to auto-detect by length; supply it to force a strict check and get a clear error instead of a silent 'UNKNOWN'."
+          }
+        },
+        "required": [
+          "value"
+        ]
+      }
+    },
+    {
+      "name": "latam_validate_batch",
+      "description": "Checks a mixed list of up to 100 Latin American tax IDs and bank account keys across all seven supported countries in a single paid call, each line independently auto-detected or strictly typed, and returns the same decoded detail as the single-document tools plus aggregate counters: how many passed, how many failed, and which countries were found. Attach your own label to each line and it comes back on the matching result, so the response joins straight onto a spreadsheet row or a database id. Use it to clean a customer, supplier or payroll base, to screen an uploaded file, for periodic re-validation of a CRM, and in general whenever you have more than one identifier, since one call is one charge and looping the single-document tools over 100 rows costs 100 times as much for the same answer. Do not use it for a single identifier, where latam_validate_tax_id and latam_validate_bank_account give a clearer contract, and do not send more than 100 lines: the surplus is silently dropped and a note appears in warnings, so split a larger list into successive calls. Read-only, deterministic and fully offline at the edge unless you also request FX. Costs 0.008 USDC per call via x402 v2 on Base (eip155:8453) or a B2B X-API-Key; an unpaid call returns HTTP 402 with a PAYMENT-REQUIRED header. One call is one charge no matter how many identifiers it carries, so batching is strictly cheaper than looping. It never throws on bad input: invalid lines are reported individually with valid false and their own errors while the rest are still processed, so always read summary.invalid and then filter results on valid.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 100,
+            "description": "The identifiers to check, in any mix of countries and types. Anything beyond the 100th item is ignored and reported in warnings.",
+            "items": {
+              "type": "object",
+              "description": "One identifier to check. A plain string is also accepted and is treated as { value } with full auto-detection.",
+              "properties": {
+                "value": {
+                  "type": "string",
+                  "description": "The identifier itself, with or without punctuation. Dots, dashes and slashes are stripped before the checksum is computed."
+                },
+                "country": {
+                  "type": "string",
+                  "enum": [
+                    "MX",
+                    "AR",
+                    "CL",
+                    "CO",
+                    "PE",
+                    "UY",
+                    "BR"
+                  ],
+                  "description": "ISO 3166-1 alpha-2 country code, which narrows auto-detection to that country's standards."
+                },
+                "type": {
+                  "type": "string",
+                  "description": "Document type for this line, from the same set the single-document tools accept, including CLABE and CBU. Omit to auto-detect."
+                },
+                "label": {
+                  "type": "string",
+                  "description": "Your own correlation key, echoed back verbatim on the matching result so you can join the response to your records. Use a row id or a column name."
+                }
+              },
+              "required": [
+                "value"
+              ]
+            }
+          },
+          "fx": {
+            "type": "object",
+            "description": "Optional live FX conversion bundled into the same paid call, useful when the batch feeds a cross-border payout run. Leave it out if you only need validation.",
+            "properties": {
+              "amount": {
+                "type": "number",
+                "default": 1,
+                "description": "Amount to convert, in the source currency, as a plain number. Defaults to 1, which gives you the raw rates."
+              },
+              "from": {
+                "type": "string",
+                "enum": [
+                  "USD",
+                  "EUR",
+                  "MXN",
+                  "ARS",
+                  "CLP",
+                  "COP",
+                  "PEN",
+                  "UYU",
+                  "BRL"
+                ],
+                "default": "USD",
+                "description": "Source currency, ISO 4217. Defaults to USD. An unsupported code falls back to USD and adds a warning instead of failing."
+              },
+              "to": {
+                "oneOf": [
+                  {
+                    "type": "string",
+                    "enum": [
+                      "USD",
+                      "EUR",
+                      "MXN",
+                      "ARS",
+                      "CLP",
+                      "COP",
+                      "PEN",
+                      "UYU",
+                      "BRL"
+                    ]
+                  },
+                  {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "USD",
+                        "EUR",
+                        "MXN",
+                        "ARS",
+                        "CLP",
+                        "COP",
+                        "PEN",
+                        "UYU",
+                        "BRL"
+                      ]
+                    }
+                  }
+                ],
+                "description": "Target currency or array of target currencies, ISO 4217. Omit it to receive every supported currency except the source in a single call, which costs the same as one target."
+              }
+            }
+          }
+        },
+        "required": [
+          "items"
+        ]
+      }
+    },
+    {
+      "name": "latam_convert_fx",
+      "description": "Converts an amount between LATAM and reference currencies at live edge-cached rates: MXN, ARS, CLP, COP, PEN, UYU, BRL, USD and EUR. One call can fan out to several targets at once, or to every supported currency when you omit the target list, and each conversion returns the converted amount with the rate and its inverse. Use it to price a cross-border invoice, normalise a multi-country report to one currency, or estimate a payout. Do not use it to settle a payment or to book an FX trade: the rates are indicative and come from public sources, so always check the source field, which reports 'fallback-reference' when every live upstream timed out and static reference rates were used. Do not use it for validation either, which the three sibling tools handle, although latam_validate_batch can bundle an FX conversion into the same charge. Read-only and non-destructive, but NOT deterministic: it reads live market data, so two identical calls minutes apart can legitimately return different figures, and a retry is safe but will not necessarily reproduce the earlier numbers. Costs 0.008 USDC per call via x402 v2 on Base (eip155:8453) or a B2B X-API-Key; an unpaid call returns HTTP 402 with a PAYMENT-REQUIRED header. One call is one charge no matter how many identifiers it carries, so batching is strictly cheaper than looping. It never throws on bad input: an unsupported currency code is replaced by the default and noted in fx.warnings rather than rejected, so read fx.base and fx.warnings to confirm the pair you actually got.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "amount": {
+            "type": "number",
+            "default": 1,
+            "description": "Amount to convert, in the source currency, as a plain number. Defaults to 1, which gives you the raw rates."
+          },
+          "from": {
+            "type": "string",
+            "enum": [
+              "USD",
+              "EUR",
+              "MXN",
+              "ARS",
+              "CLP",
+              "COP",
+              "PEN",
+              "UYU",
+              "BRL"
+            ],
+            "default": "USD",
+            "description": "Source currency, ISO 4217. Defaults to USD. An unsupported code falls back to USD and adds a warning instead of failing."
+          },
+          "to": {
+            "oneOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "USD",
+                  "EUR",
+                  "MXN",
+                  "ARS",
+                  "CLP",
+                  "COP",
+                  "PEN",
+                  "UYU",
+                  "BRL"
+                ]
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "USD",
+                    "EUR",
+                    "MXN",
+                    "ARS",
+                    "CLP",
+                    "COP",
+                    "PEN",
+                    "UYU",
+                    "BRL"
+                  ]
+                }
+              }
+            ],
+            "description": "Target currency or array of target currencies, ISO 4217. Omit it to receive every supported currency except the source in a single call, which costs the same as one target."
+          }
+        },
+        "required": []
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "io.github.brunopompeo1/latam-biz-x402",
+    "version": "2.7.1",
+    "remoteUrl": "https://latam.brunopompeo.com.br/mcp",
+    "publishedAt": "2026-11-26T00:39:18.723771Z",
+    "fetchedAt": "2026-11-26T10:40:47.803Z",
+    "toolsSha256": "e7fdf95e189fc0a7d7d703cb61e9f16ef4bbc75286cd0d3b0f4c2e2d265ccc5c"
+  }
+}

@@ -1,0 +1,416 @@
+{
+  "$schema": "../schema.json",
+  "name": "io.github.kolivritech/memoria-mcp",
+  "title": "Memoria — Deterministic AI Memory & Code Intelligence MCP",
+  "category": "Developer Tools & DevOps",
+  "description": "Official Node.js MCP connector for Memoria Cloud (https://memoria.kolivri.com).",
+  "repository": "https://github.com/kolivritech/memoria-mcp",
+  "tools": [
+    {
+      "name": "encode_memory",
+      "description": "Store a single memory record in Memoreal Cloud (consumes 1 Write API call; non-idempotent: encoding identical text twice creates separate IDs until consolidate is run) and return { id, namespace, salience }. Defaults type to \"episodic\", salience to 0.5 (items >=0.7 or semantic/core surface in memory://rules), and namespace to \"default\" while rejecting reserved \"org:\" prefixes. Use when persisting one architectural decision, bug root cause, or user rule; use batch_encode instead for 2+ memories at once, or handoff_to_agent for cross-wing task handoffs.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "namespace": {
+            "type": "string",
+            "description": "Logical project or workspace namespace (defaults to \"default\"; never prefix with \"org:\")."
+          },
+          "content": {
+            "type": "string",
+            "description": "Non-empty memory text to persist."
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "episodic",
+              "semantic",
+              "buffer",
+              "core"
+            ],
+            "default": "episodic",
+            "description": "Memory tier classification (core and semantic receive 1.5x/1.25x recall boosts)."
+          },
+          "salience": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "default": 0.5,
+            "description": "Importance weight from 0.0 to 1.0 (use >=0.7 for durable team rules)."
+          },
+          "context": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "description": "Optional [key, value] string pairs (for example [[\"file\", \"src/auth.js\"]]) targetable by delete_by_context."
+          }
+        },
+        "required": [
+          "namespace",
+          "content"
+        ]
+      }
+    },
+    {
+      "name": "batch_encode",
+      "description": "Store multiple memories atomically in one request (consumes max(1, memories.length) Write API calls; non-idempotent) and return { ids, encoded }. Validates every item namespace before writing so any reserved \"org:\" prefix aborts the entire batch cleanly; items inherit top-level namespace and default to type=\"episodic\" and salience=0.5. Use when checkpointing or importing 2+ memories together; use encode_memory instead for a single memory write.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "namespace": {
+            "type": "string",
+            "description": "Fallback logical workspace namespace applied to batch items that omit namespace."
+          },
+          "memories": {
+            "type": "array",
+            "description": "Non-empty array of memory objects ({ content, type?, salience?, namespace?, context? }).",
+            "items": {
+              "type": "object",
+              "properties": {
+                "content": {
+                  "type": "string",
+                  "description": "Memory text to persist."
+                },
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "episodic",
+                    "semantic",
+                    "buffer",
+                    "core"
+                  ],
+                  "default": "episodic",
+                  "description": "Memory tier classification."
+                },
+                "salience": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1,
+                  "default": 0.5,
+                  "description": "Importance weight from 0.0 to 1.0."
+                },
+                "namespace": {
+                  "type": "string",
+                  "description": "Optional per-item logical namespace override (never prefix with \"org:\")."
+                },
+                "context": {
+                  "type": "array",
+                  "items": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "description": "Optional [key, value] metadata pairs."
+                }
+              },
+              "required": [
+                "content"
+              ]
+            }
+          }
+        },
+        "required": [
+          "memories"
+        ]
+      }
+    },
+    {
+      "name": "recall_memories",
+      "description": "Retrieve up to 20 deterministically ranked memory records for a query (read-only, idempotent; consumes 1 Read API call) and return { results, total_candidates } with per-item { memory, score }. Scores up to 500 candidates in namespace by lexical match (0.55), salience (0.30), and 30-day freshness (0.15) multiplied by tier boost (core=1.5x, semantic=1.25x), excluding items below min_salience. Use when you need individual memory IDs, metadata, or scores (for inspection, feedback, or forget_memory); use build_context instead for a ready-to-inject <memory_context> block, or search_code for code symbols.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "namespace": {
+            "type": "string",
+            "description": "Logical workspace namespace to search (defaults to \"default\"; never prefix with \"org:\")."
+          },
+          "query": {
+            "type": "string",
+            "description": "Keywords or natural-language topic to match against stored memory content."
+          },
+          "token_budget": {
+            "type": "number",
+            "default": 4096,
+            "description": "Advisory token budget hint for downstream context sizing (default 4096)."
+          },
+          "min_salience": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "default": 0,
+            "description": "Minimum salience filter (0.0-1.0); memories strictly below this value are excluded."
+          }
+        },
+        "required": [
+          "namespace",
+          "query"
+        ]
+      }
+    },
+    {
+      "name": "build_context",
+      "description": "Assemble a token-budgeted <memory_context> XML/Markdown block from a namespace (read-only, idempotent; consumes 1 Read API call) and return { context, memories_used }. Ranks up to 500 namespace memories deterministically and packs lines greedily up to max(256, token_budget * 4) characters under \"## Established Facts\" (core/semantic) and \"## Recent Context\" (episodic/buffer). Use at session start or before planning a task to ground the model in one call; use recall_memories instead when you need raw memory objects and IDs.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "namespace": {
+            "type": "string",
+            "description": "Logical workspace namespace to ground context around (never prefix with \"org:\")."
+          },
+          "query": {
+            "type": "string",
+            "description": "Active task, feature, or session topic used to rank relevant facts and history."
+          },
+          "token_budget": {
+            "type": "number",
+            "default": 4096,
+            "description": "Maximum token budget (~4 characters per token, default 4096) before truncating lower-ranked items."
+          }
+        },
+        "required": [
+          "namespace",
+          "query"
+        ]
+      }
+    },
+    {
+      "name": "forget_memory",
+      "description": "Permanently delete one memory and its incident graph edges by ID (destructive, idempotent; consumes 1 Write API call) and return { deleted }. Enforces organization ownership (returns JSON-RPC error -32003 on foreign IDs) and returns { deleted: false } when the ID is already absent. Use when removing a single known memory ID; use delete_by_context instead to bulk-delete memories by [key, value] metadata tag, or feedback (useful=false) to lower salience without deleting.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Exact memory UUID returned by encode_memory or recall_memories."
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    },
+    {
+      "name": "delete_by_context",
+      "description": "Permanently bulk-delete all memories whose context array contains an exact [key, value] pair (destructive, idempotent; consumes 1 Write API call) and return { deleted_count }. Scopes deletion to namespace when provided, or across all namespaces in your organization when namespace is omitted (rejecting reserved \"org:\" prefixes). Use to purge memories tied to a deleted file, PR, or feature tag; use forget_memory instead when deleting a single memory by UUID.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "namespace": {
+            "type": "string",
+            "description": "Optional logical namespace filter; omit to match across the entire organization."
+          },
+          "key": {
+            "type": "string",
+            "description": "Exact context tuple key to match (for example \"file\" or \"pr\")."
+          },
+          "value": {
+            "type": "string",
+            "description": "Exact context tuple value to match (for example \"src/legacy.js\")."
+          }
+        },
+        "required": [
+          "key",
+          "value"
+        ]
+      }
+    },
+    {
+      "name": "feedback",
+      "description": "Adjust a memory salience weight based on recall utility (consumes 1 Write API call; non-idempotent because repeated calls compound the salience delta) and return { updated }. Enforces organization ownership on id; useful=true boosts salience toward 1.0 while useful=false dampens noisy or outdated entries without deleting them. Use after recall_memories to tune future ranking quality; use forget_memory instead for permanent removal, or consolidate to merge duplicate records.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Target memory UUID from recall_memories."
+          },
+          "useful": {
+            "type": "boolean",
+            "description": "True to boost salience when helpful; false to dampen salience when stale or noisy."
+          }
+        },
+        "required": [
+          "id",
+          "useful"
+        ]
+      }
+    },
+    {
+      "name": "consolidate",
+      "description": "Run an idempotent maintenance pass on a workspace namespace to deduplicate redundant records, link superseded state, and promote recurring high-salience episodic memories to Semantic tier (consumes 1 Write API call; non-destructive to unique facts) and return { namespace, consolidated }. Requires Write permission and a valid logical namespace (never prefixed with \"org:\"). Use at session wrap-up after multiple encode_memory calls; use feedback instead to rate one memory, or delete_by_context to purge obsolete tags.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "namespace": {
+            "type": "string",
+            "description": "Logical workspace namespace to consolidate (for example \"my-project\")."
+          }
+        },
+        "required": [
+          "namespace"
+        ]
+      }
+    },
+    {
+      "name": "health",
+      "description": "Check Memoreal Cloud service status, total organization memory count across all namespaces, and rolling 30-day API quota usage (read-only, idempotent; consumes 1 Read API call on tools/call) and return { status, memory_count, used_calls_30d, api_call_limit }. Takes no parameters; api_call_limit is null on Unlimited plans. Use to verify connectivity and overall organization quota headroom; use stats instead when you need memory counts scoped to one specific project namespace.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "stats",
+      "description": "Retrieve the stored memory count for a single logical namespace alongside rolling 30-day organization quota metrics (read-only, idempotent; consumes 1 Read API call) and return { namespace, memory_count, used_calls_30d, api_call_limit }. Rejects reserved \"org:\" prefixes on namespace. Use when inspecting how many memories exist inside one specific project or wing namespace; use health instead for an organization-wide connectivity and total-memory check, or list_agent_wings for per-wing counts.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "namespace": {
+            "type": "string",
+            "description": "Logical workspace namespace to inspect (for example \"my-project\" or \"wing:qa\")."
+          }
+        },
+        "required": [
+          "namespace"
+        ]
+      }
+    },
+    {
+      "name": "search_code",
+      "description": "Search indexed code symbol definitions, file paths, and reference memories within a namespace (read-only, idempotent; consumes 1 Read API call) and return { results, total_candidates } capped at 20 ranked { memory, score } hits. Requires code memories in namespace (populated via /memoreal-sync-code or encode_memory) and rejects reserved \"org:\" prefixes. Use to discover where functions, classes, or routes live by keyword; use explain_code instead to inspect callers and invariants of a known symbol, or recall_memories for general prose rules.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "namespace": {
+            "type": "string",
+            "description": "Logical repository or workspace namespace to search (never prefix with \"org:\")."
+          },
+          "query": {
+            "type": "string",
+            "description": "Function, class, route, or file keyword to locate."
+          }
+        },
+        "required": [
+          "namespace",
+          "query"
+        ]
+      }
+    },
+    {
+      "name": "explain_code",
+      "description": "Synthesize definitions, caller/callee references, related tests, and architectural notes for a specific code symbol in a namespace (read-only, idempotent; consumes 1 Read API call) and return { results, total_candidates } (up to 20 ranked matches). Pass the identifier via symbol or its equivalent alias target (if both are supplied, symbol takes precedence). Use before editing a known function, class, or module to check its blast radius and invariants; use search_code instead when you only have keywords and need to find symbol names first.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "namespace": {
+            "type": "string",
+            "description": "Logical repository or workspace namespace containing indexed code memories."
+          },
+          "symbol": {
+            "type": "string",
+            "description": "Exact function, class, or module name to explain (preferred; equivalent to target)."
+          },
+          "target": {
+            "type": "string",
+            "description": "Alias for symbol accepted for client compatibility when symbol is omitted."
+          }
+        },
+        "required": [
+          "namespace"
+        ]
+      }
+    },
+    {
+      "name": "list_agent_wings",
+      "description": "List all five built-in specialist multi-agent wings (architect, reviewer, qa, security, ops), their isolated wing:<id> namespaces, and active memory counts (read-only, idempotent; consumes 1 Read API call) and return { wings }. Always returns all five wings even when memory_count is 0. Use to inspect wing responsibilities and queued handoff volume before delegating work; use handoff_to_agent to record a new cross-wing handoff, or stats to inspect a custom project namespace.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "namespace": {
+            "type": "string",
+            "description": "Optional logical workspace namespace context (never prefix with \"org:\")."
+          }
+        }
+      }
+    },
+    {
+      "name": "handoff_to_agent",
+      "description": "Persist a high-salience (0.9) Semantic handoff memory into a target specialist wing namespace (wing:<target>) (consumes 1 Write API call; non-idempotent: repeated calls create distinct handoff records) and return { id, wing, namespace }. Accepts target wing via wing or alias to_wing (defaults to \"architect\") and sender via from_agent or alias from_wing (defaults to \"agent\"), attaching files and memory_ids as searchable context tuples. Use when delegating findings and next steps between architect, reviewer, qa, security, or ops agents; use encode_memory instead for general project memories.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "wing": {
+            "type": "string",
+            "enum": [
+              "architect",
+              "reviewer",
+              "qa",
+              "security",
+              "ops"
+            ],
+            "description": "Destination specialist wing (preferred; defaults to \"architect\" if both wing and to_wing are omitted)."
+          },
+          "to_wing": {
+            "type": "string",
+            "enum": [
+              "architect",
+              "reviewer",
+              "qa",
+              "security",
+              "ops"
+            ],
+            "description": "Alias for destination wing used when wing is omitted."
+          },
+          "from_agent": {
+            "type": "string",
+            "description": "Identifier of the sending agent or role (preferred; defaults to \"agent\")."
+          },
+          "from_wing": {
+            "type": "string",
+            "description": "Alias for sending specialist wing used when from_agent is omitted."
+          },
+          "summary": {
+            "type": "string",
+            "description": "Required concise summary of architectural findings, constraints, and state."
+          },
+          "task": {
+            "type": "string",
+            "description": "Optional concrete follow-up action appended for the receiving wing."
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Optional file paths attached as [\"file\", path] context tags."
+          },
+          "memory_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Optional related memory UUIDs attached as [\"memory_id\", id] context tags."
+          }
+        },
+        "required": [
+          "summary"
+        ]
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "io.github.kolivritech/memoria-mcp",
+    "version": "1.0.2",
+    "remoteUrl": "https://memoria.kolivri.com/v1/mcp",
+    "publishedAt": "2026-11-19T10:30:12.082662Z",
+    "fetchedAt": "2026-11-26T10:40:47.803Z",
+    "toolsSha256": "e42e0d49062353930ea1769e6a9f9451e4711750908c5bbfa8b8db1f82a8298b"
+  }
+}

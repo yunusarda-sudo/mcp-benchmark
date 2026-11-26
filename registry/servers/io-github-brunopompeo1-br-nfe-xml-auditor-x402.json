@@ -1,0 +1,207 @@
+{
+  "$schema": "../schema.json",
+  "name": "io.github.brunopompeo1/br-nfe-xml-auditor-x402",
+  "title": "Brazil NF-e XML Auditor & Key Engine (x402)",
+  "category": "Developer Tools & DevOps",
+  "description": "SEFAZ 4.00 NF-e/NFC-e XML audit, ~90% token compression & Mod-11 key decoder via x402 Base USDC.",
+  "repository": "https://github.com/brunopompeo1/brazil-ai-fiscal-apis-x402",
+  "tools": [
+    {
+      "name": "audit_nfe_xml",
+      "description": "Parses one Brazilian NF-e (model 55) or NFC-e (model 65) XML in SEFAZ layout 4.00, including the 2025 tax-reform <IBSCBS> group, into compact JSON with about 90% fewer tokens, then audits it: checks that items, freight, discounts and taxes add up to the invoice total, that CFOPs fit an in-state or interstate operation, that the access key passes Mod-11 and that the embedded SEFAZ protocol says authorised; and, under LC 214/2025, compares the CBS and IBS highlighted per item with the official rates to compute the credit at risk in reais and draft a supplier alert. Use it when an agent receives a purchase invoice to book, pay or reconcile, or must answer questions about one without spending tokens on raw XML. Do not use it for a batch of invoices, which is audit_nfe_xml_batch, for an NFS-e service invoice, whose XML is different, or to confirm the current status at SEFAZ, since a later cancellation does not appear in the XML. Read 'auditReport', then 'rtcCreditAudit' and 'supplierAlert'. Costs 0.010 USDC per call, paid with x402 v2 on Base (eip155:8453), a B2B X-API-Key or a Wafermap marketplace signature; an unpaid call returns HTTP 402 with a PAYMENT-REQUIRED header instead of an exception, and every failure is a JSON body with 'error', so an agent loop never breaks on a thrown error. Pure parsing and arithmetic at the edge: the XML is not stored, SEFAZ is not queried (authorisation is read from the protocol embedded in the XML) and no e-mail is sent.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "xml": {
+            "type": "string",
+            "minLength": 50,
+            "description": "Full XML text of one invoice, either the authorised <nfeProc> (preferred, it carries the SEFAZ protocol) or a bare <NFe>. Send the XML itself as a string, not a file path, a URL or a DANFE PDF. Text that is not a NF-e or NFC-e returns HTTP 422."
+          },
+          "includeItems": {
+            "type": "boolean",
+            "default": true,
+            "description": "Include the per-item lines in 'items' (default true). Set false to cut the response size on invoices with hundreds of items."
+          },
+          "auditRtcCredit": {
+            "type": "boolean",
+            "default": true,
+            "description": "Run the CBS/IBS tax-credit audit under LC 214/2025 against the official RFB classification tables (default true). Set false for a pure parse-and-totals audit."
+          },
+          "referenceYear": {
+            "type": "integer",
+            "minimum": 2026,
+            "maximum": 2033,
+            "description": "Calendar year whose CBS/IBS transition rates are expected, 2026 to 2033. Defaults to the invoice's issue year, or 2026 when there is none. Drives the expected-credit figures and the 2027 projection."
+          },
+          "buyerRegime": {
+            "type": "string",
+            "enum": [
+              "regime_regular",
+              "simples_nacional"
+            ],
+            "default": "regime_regular",
+            "description": "Tax regime of the buying company. 'regime_regular' (default) can take CBS/IBS credits, so missing highlights are a loss; 'simples_nacional' changes what counts as credit at risk."
+          },
+          "supplierEmail": {
+            "type": "string",
+            "format": "email",
+            "description": "Optional supplier e-mail, only used to prefill supplierAlert.emailDraft so the alert can be sent with the agent-email API. Nothing is sent by this tool."
+          },
+          "aiSummary": {
+            "type": "boolean",
+            "default": true,
+            "description": "When true (the default) a single-XML audit carries 'aiExecutiveBrief', one Portuguese sentence of at most 38 words with the operation, total, SEFAZ status and credit risk. Set false to skip it and save latency."
+          }
+        },
+        "required": [
+          "xml"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "audit_nfe_xml_batch",
+      "description": "Audits a batch of up to 25 Brazilian NF-e or NFC-e XMLs in one paid call and returns one compact audit per invoice plus batch totals: total invoiced, number of invoices with credit risk, total CBS/IBS credit at risk and overcharged tax in reais, the 2027 projection, a severity breakdown and one supplier alert per invoice that needs action. Use it for a monthly purchase-ledger review, a supplier compliance sweep before the CBS/IBS transition, or any time several invoices would otherwise mean several calls. Do not use it when you need the full detail of one invoice, such as its items, which audit_nfe_xml returns, and do not send more than 25 XMLs: extras are ignored and 'truncatedAtMax25' turns true. An XML that fails to parse is reported in its own entry instead of failing the batch. Read 'batchSummary' and 'supplierAlerts'. Costs 0.010 USDC per call, paid with x402 v2 on Base (eip155:8453), a B2B X-API-Key or a Wafermap marketplace signature; an unpaid call returns HTTP 402 with a PAYMENT-REQUIRED header instead of an exception, and every failure is a JSON body with 'error', so an agent loop never breaks on a thrown error. Pure parsing and arithmetic at the edge: the XML is not stored, SEFAZ is not queried (authorisation is read from the protocol embedded in the XML) and no e-mail is sent.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "xmls": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 25,
+            "items": {
+              "type": "string",
+              "description": "Full XML text of one NF-e or NFC-e, <nfeProc> or <NFe>."
+            },
+            "description": "Between 1 and 25 invoice XMLs as strings. Items beyond the 25th are ignored."
+          },
+          "includeItems": {
+            "type": "boolean",
+            "default": true,
+            "description": "Include per-item lines inside each invoice entry (default true). Set false for large batches."
+          },
+          "auditRtcCredit": {
+            "type": "boolean",
+            "default": true,
+            "description": "Run the CBS/IBS tax-credit audit under LC 214/2025 against the official RFB classification tables (default true). Set false for a pure parse-and-totals audit."
+          },
+          "referenceYear": {
+            "type": "integer",
+            "minimum": 2026,
+            "maximum": 2033,
+            "description": "Calendar year whose CBS/IBS transition rates are expected, 2026 to 2033. Defaults to the invoice's issue year, or 2026 when there is none. Drives the expected-credit figures and the 2027 projection."
+          },
+          "buyerRegime": {
+            "type": "string",
+            "enum": [
+              "regime_regular",
+              "simples_nacional"
+            ],
+            "default": "regime_regular",
+            "description": "Tax regime of the buying company. 'regime_regular' (default) can take CBS/IBS credits, so missing highlights are a loss; 'simples_nacional' changes what counts as credit at risk."
+          }
+        },
+        "required": [
+          "xmls"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "audit_cbs_ibs_credit_items",
+      "description": "Audits the CBS and IBS tax credit of up to 100 purchase or fleet items given as plain JSON, for when there is no XML at hand, such as an ERP export or a spreadsheet: for each item it finds the expected rate in the official RFB classification tables by NCM or cClassTrib for the reference year, compares it with the CBS and IBS the supplier highlighted, and returns the credit at risk and overcharged tax in reais, projections to 2027 and 2033 and a supplier alert with a ready e-mail draft. Use it for procurement and fleet cost reviews and to quantify the cash impact of the tax reform on a supplier. Do not use it when you have the invoice XML, which audit_nfe_xml audits more completely, or to compute ICMS, IPI or PIS/COFINS, which are not covered. Read 'rtcCreditAudit' and 'supplierAlert'. Costs 0.010 USDC per call, paid with x402 v2 on Base (eip155:8453), a B2B X-API-Key or a Wafermap marketplace signature; an unpaid call returns HTTP 402 with a PAYMENT-REQUIRED header instead of an exception, and every failure is a JSON body with 'error', so an agent loop never breaks on a thrown error. Pure parsing and arithmetic at the edge: the XML is not stored, SEFAZ is not queried (authorisation is read from the protocol embedded in the XML) and no e-mail is sent.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 100,
+            "description": "Between 1 and 100 purchase items. Items beyond the 100th are ignored.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "descricao": {
+                  "type": "string",
+                  "description": "Item description, used in the findings and the e-mail draft."
+                },
+                "ncm": {
+                  "type": "string",
+                  "description": "Eight-digit NCM code, which selects the expected CBS/IBS treatment, for example '27101259' for diesel."
+                },
+                "cClassTrib": {
+                  "type": "string",
+                  "description": "Tax-reform classification code (cClassTrib) when known, passed to the RFB table lookup together with the NCM."
+                },
+                "valor": {
+                  "type": "number",
+                  "minimum": 0,
+                  "description": "Item base value in BRL."
+                },
+                "vCbsDestacado": {
+                  "type": "number",
+                  "minimum": 0,
+                  "description": "CBS amount the supplier highlighted, in BRL. Omit when nothing was highlighted, which is itself a finding."
+                },
+                "vIbsDestacado": {
+                  "type": "number",
+                  "minimum": 0,
+                  "description": "IBS amount the supplier highlighted, in BRL. Omit when nothing was highlighted."
+                }
+              },
+              "required": [
+                "valor"
+              ]
+            }
+          },
+          "referenceYear": {
+            "type": "integer",
+            "minimum": 2026,
+            "maximum": 2033,
+            "description": "Calendar year whose CBS/IBS transition rates are expected, 2026 to 2033. Defaults to the invoice's issue year, or 2026 when there is none. Drives the expected-credit figures and the 2027 projection."
+          },
+          "buyerRegime": {
+            "type": "string",
+            "enum": [
+              "regime_regular",
+              "simples_nacional"
+            ],
+            "default": "regime_regular",
+            "description": "Tax regime of the buying company. 'regime_regular' (default) can take CBS/IBS credits, so missing highlights are a loss; 'simples_nacional' changes what counts as credit at risk."
+          },
+          "supplierName": {
+            "type": "string",
+            "description": "Supplier name for the alert and e-mail draft."
+          },
+          "supplierCnpj": {
+            "type": "string",
+            "description": "Supplier CNPJ, 14 digits, for the alert."
+          },
+          "supplierEmail": {
+            "type": "string",
+            "format": "email",
+            "description": "Optional supplier e-mail, only used to prefill supplierAlert.emailDraft so the alert can be sent with the agent-email API. Nothing is sent by this tool."
+          },
+          "accessKey": {
+            "type": "string",
+            "description": "Optional 44-digit access key of the related invoice; when given it is Mod-11 checked and returned in 'accessKeyAudit'."
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "additionalProperties": false
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "io.github.brunopompeo1/br-nfe-xml-auditor-x402",
+    "version": "2.7.1",
+    "remoteUrl": "https://br-nfe-xml-auditor-x402.architect-x402.workers.dev/mcp",
+    "publishedAt": "2026-11-26T00:39:29.915439Z",
+    "fetchedAt": "2026-11-26T10:40:47.803Z",
+    "toolsSha256": "9640faaae91802aae6e27a513c34a8543d5e8d8e2ea8279a02e51a265a3b615f"
+  }
+}

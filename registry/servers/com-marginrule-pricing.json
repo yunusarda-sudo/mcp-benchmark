@@ -1,0 +1,425 @@
+{
+  "$schema": "../schema.json",
+  "name": "com.marginrule/pricing",
+  "title": "Marginrule pricing agent",
+  "category": "AI, LLMs & Agents",
+  "description": "Pricing math for Etsy, Shopify, Payhip, Gumroad, Ko-fi, Notion Marketplace and Square. US sellers.",
+  "repository": "https://github.com/marginrule/marginrule-mcp",
+  "tools": [
+    {
+      "name": "price_for_margin",
+      "description": "Finds the lowest whole-cent price that keeps a target profit margin after a platform's fees, for a given cost per item. Use it when a US seller asks what to charge on Etsy, Shopify Basic, Payhip, Gumroad, Ko-fi, Notion Marketplace or Square to hit a margin. status is \"ok\", \"not_possible\" or \"not_practical\". With \"ok\" it returns price_usd, the fee breakdown at that price, profit_usd and the achieved margin. Do not use it for sellers outside the US, for Amazon FBA, for competitor repricing, for VAT, for shipping, or for monthly plan fees (use compare_plans for plan costs). Inputs are platform, cost, and target_margin as a FRACTION of the price (0.30 means 30%). Optional buyer_tax_rate, processor, and on Etsy offsite_ads (none, under_10k or 10k_plus). Default offsite_ads is none, which leaves ads out. Optional cross_border is none, international, currency_conversion or both. Default is none, which leaves those fees out. Rates are dated and sourced, so read assumptions and verify before quoting. US sellers only. Read-only.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "platform": {
+            "type": "string",
+            "enum": [
+              "etsy",
+              "shopify-basic",
+              "payhip-free",
+              "payhip-plus",
+              "payhip-pro",
+              "gumroad-direct",
+              "gumroad-discover",
+              "ko-fi-shop",
+              "notion-marketplace",
+              "square-online",
+              "square-in-person"
+            ],
+            "description": "Platform and plan id from list_platforms, e.g. \"etsy\", \"payhip-free\", \"gumroad-direct\", \"ko-fi-shop\"."
+          },
+          "cost": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1000000000,
+            "description": "Your cost per item sold in USD (materials, labour, packaging you pay). 0 for a digital download with no per-sale cost."
+          },
+          "target_margin": {
+            "type": "number",
+            "minimum": 0,
+            "exclusiveMaximum": 1,
+            "description": "Target profit margin as a FRACTION of the price: profit / price. 0.30 means 30%. Must be at least 0 and under 1. A value like 30 is rejected as a percent. Margins below 0.0001 are treated as 0. Within 0.01 of the platform's maximum (1 minus its percentage fees) the answer is status \"not_practical\"."
+          },
+          "processor": {
+            "description": "Card processor for platforms where the seller adds their own (Payhip plans, Ko-fi Shop). \"stripe\" = 2.9% + $0.30 (default). \"paypal\" = PayPal Checkout or Guest Checkout, 3.49% + $0.49. Ignored, with a note, for platforms that charge their own processing (Etsy, Shopify, Gumroad, Notion, Square).",
+            "type": "string",
+            "enum": [
+              "stripe",
+              "paypal"
+            ]
+          },
+          "region": {
+            "description": "Buyer location relative to a US seller. \"us\" (default) = domestic. \"international\" is only modelled with processor \"paypal\" (adds PayPal's 1.50% international fee, so 4.99% + $0.49); other combinations return an error rather than a guess.",
+            "type": "string",
+            "enum": [
+              "us",
+              "international"
+            ]
+          },
+          "buyer_tax_rate": {
+            "description": "Buyer's sales tax as a FRACTION, e.g. 0.07 for 7%. Default 0. Tax is never profit; it only raises card processing on platforms that charge processing on the tax-inclusive total (see each platform's tax_base).",
+            "type": "number",
+            "minimum": 0,
+            "exclusiveMaximum": 1
+          },
+          "processor_rate": {
+            "description": "Advanced override: your own card processor percentage as a FRACTION (0.029 = 2.9%). Only for platforms where the seller adds their own processor. Replaces the preset's rate.",
+            "type": "number",
+            "minimum": 0,
+            "maximum": 0.2
+          },
+          "processor_fixed_usd": {
+            "description": "Advanced override: your card processor's fixed fee per sale in USD, e.g. 0.30. Replaces the preset's fixed fee.",
+            "type": "number",
+            "minimum": 0,
+            "maximum": 5
+          },
+          "offsite_ads": {
+            "description": "Etsy only. Optional Offsite Ads flag. \"none\" (the default) leaves the fee out, so answers match earlier callers. \"under_10k\" adds 15% of the item price for a shop that has always made less than $10,000 USD in any consecutive 365-day period. \"10k_plus\" adds 12% for a shop that has made $10,000 USD or more in any consecutive 365-day period. Etsy charges this fee on the order total, which also includes any shipping and gift wrap the seller charges, so add the same rate on those amounts. The cap is $100 per order, and this tool treats the item as a one-item order. The fee applies only to orders Etsy attributes to an Offsite Ad. Other platforms reject any value except \"none\".",
+            "type": "string",
+            "enum": [
+              "none",
+              "under_10k",
+              "10k_plus"
+            ]
+          },
+          "cross_border": {
+            "description": "Optional cross-border and currency-conversion fees, from official pages opened 2026-11-20. \"none\" (the default) leaves them out, so answers match earlier callers. \"international\" adds the sourced extra fee on an international card or cross-border receipt (Shopify Payments 1% on a US store, Stripe 1.5%, PayPal 1.50%, Square 1.5%). \"currency_conversion\" adds the sourced conversion fee (Etsy 2.5% when listing currency differs from the Payment account, Shopify Payments 1.5% for a US store, Stripe 1%, PayPal 3% under a labelled assumption). \"both\" adds each as its own line. The fee is applied to the item price. Official pages often also count shipping or gift wrap in the base, so add the same rate on those amounts. Currency conversion applies only when the sale currency differs from the payout currency, not merely because the buyer is abroad. Where a platform page states no rate, that line is marked not_modelled and adds nothing. That is not a statement that the fee is $0. compare_plans does not take this field.",
+            "type": "string",
+            "enum": [
+              "none",
+              "international",
+              "currency_conversion",
+              "both"
+            ]
+          },
+          "price_floor_usd": {
+            "description": "Lowest price to suggest, in USD. Default 1.00 (Marginrule's assumption, not a platform rule). 0 turns the floor off.",
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1000
+          }
+        },
+        "required": [
+          "platform",
+          "cost",
+          "target_margin"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "fees_breakdown",
+      "description": "Reports the fees a platform takes from one sale at a given price, split into platform, listing and card processor parts, plus net after fees, and with an optional cost, profit and margin as a fraction. Use it when a US seller asks what they keep from a sale on Etsy, Shopify Basic, Payhip, Gumroad (including Discover), Ko-fi, Notion Marketplace or Square. Do not use it for sellers outside the US, for Amazon FBA, for competitor repricing, for VAT, for shipping, or for monthly plan costs (use compare_plans to compare plans at a monthly volume). Inputs are platform and price. Optional cost, buyer_tax_rate as a FRACTION (0.07 means 7%), processor, and on Etsy offsite_ads (none, under_10k or 10k_plus). Default offsite_ads is none, which leaves ads out. Optional cross_border is none, international, currency_conversion or both. Default is none, which leaves those fees out. Rates are dated and sourced, so read assumptions and verify before quoting. US sellers only. Read-only.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "platform": {
+            "type": "string",
+            "enum": [
+              "etsy",
+              "shopify-basic",
+              "payhip-free",
+              "payhip-plus",
+              "payhip-pro",
+              "gumroad-direct",
+              "gumroad-discover",
+              "ko-fi-shop",
+              "notion-marketplace",
+              "square-online",
+              "square-in-person"
+            ],
+            "description": "Platform and plan id from list_platforms, e.g. \"etsy\", \"payhip-free\", \"gumroad-direct\", \"ko-fi-shop\"."
+          },
+          "price": {
+            "type": "number",
+            "minimum": 0.01,
+            "maximum": 1000000000,
+            "description": "Sale price in USD before buyer sales tax, in whole cents, at least 0.01, e.g. 17."
+          },
+          "cost": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1000000000,
+            "description": "Optional cost per item in USD, so the answer includes profit and margin. Default 0."
+          },
+          "processor": {
+            "description": "Card processor for platforms where the seller adds their own (Payhip plans, Ko-fi Shop). \"stripe\" = 2.9% + $0.30 (default). \"paypal\" = PayPal Checkout or Guest Checkout, 3.49% + $0.49. Ignored, with a note, for platforms that charge their own processing (Etsy, Shopify, Gumroad, Notion, Square).",
+            "type": "string",
+            "enum": [
+              "stripe",
+              "paypal"
+            ]
+          },
+          "region": {
+            "description": "Buyer location relative to a US seller. \"us\" (default) = domestic. \"international\" is only modelled with processor \"paypal\" (adds PayPal's 1.50% international fee, so 4.99% + $0.49); other combinations return an error rather than a guess.",
+            "type": "string",
+            "enum": [
+              "us",
+              "international"
+            ]
+          },
+          "buyer_tax_rate": {
+            "description": "Buyer's sales tax as a FRACTION, e.g. 0.07 for 7%. Default 0. Tax is never profit; it only raises card processing on platforms that charge processing on the tax-inclusive total (see each platform's tax_base).",
+            "type": "number",
+            "minimum": 0,
+            "exclusiveMaximum": 1
+          },
+          "processor_rate": {
+            "description": "Advanced override: your own card processor percentage as a FRACTION (0.029 = 2.9%). Only for platforms where the seller adds their own processor. Replaces the preset's rate.",
+            "type": "number",
+            "minimum": 0,
+            "maximum": 0.2
+          },
+          "processor_fixed_usd": {
+            "description": "Advanced override: your card processor's fixed fee per sale in USD, e.g. 0.30. Replaces the preset's fixed fee.",
+            "type": "number",
+            "minimum": 0,
+            "maximum": 5
+          },
+          "offsite_ads": {
+            "description": "Etsy only. Optional Offsite Ads flag. \"none\" (the default) leaves the fee out, so answers match earlier callers. \"under_10k\" adds 15% of the item price for a shop that has always made less than $10,000 USD in any consecutive 365-day period. \"10k_plus\" adds 12% for a shop that has made $10,000 USD or more in any consecutive 365-day period. Etsy charges this fee on the order total, which also includes any shipping and gift wrap the seller charges, so add the same rate on those amounts. The cap is $100 per order, and this tool treats the item as a one-item order. The fee applies only to orders Etsy attributes to an Offsite Ad. Other platforms reject any value except \"none\".",
+            "type": "string",
+            "enum": [
+              "none",
+              "under_10k",
+              "10k_plus"
+            ]
+          },
+          "cross_border": {
+            "description": "Optional cross-border and currency-conversion fees, from official pages opened 2026-11-20. \"none\" (the default) leaves them out, so answers match earlier callers. \"international\" adds the sourced extra fee on an international card or cross-border receipt (Shopify Payments 1% on a US store, Stripe 1.5%, PayPal 1.50%, Square 1.5%). \"currency_conversion\" adds the sourced conversion fee (Etsy 2.5% when listing currency differs from the Payment account, Shopify Payments 1.5% for a US store, Stripe 1%, PayPal 3% under a labelled assumption). \"both\" adds each as its own line. The fee is applied to the item price. Official pages often also count shipping or gift wrap in the base, so add the same rate on those amounts. Currency conversion applies only when the sale currency differs from the payout currency, not merely because the buyer is abroad. Where a platform page states no rate, that line is marked not_modelled and adds nothing. That is not a statement that the fee is $0. compare_plans does not take this field.",
+            "type": "string",
+            "enum": [
+              "none",
+              "international",
+              "currency_conversion",
+              "both"
+            ]
+          }
+        },
+        "required": [
+          "platform",
+          "price"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "discount_impact",
+      "description": "Shows what a percentage or fixed-dollar discount on one item does to fees and profit at list and at the discounted price. It also reports the profit lost per sale and how many discounted sales it takes to match 100 sales at list. Use it when a US seller asks about a sale or promo code on Etsy, Shopify Basic, Payhip, Gumroad, Ko-fi, Notion Marketplace or Square. With optional target_margin it also returns the deepest discount that still keeps that margin after fees. Do not use it for sellers outside the US, for order-level discounts, free shipping offers, platform-funded promotions, VAT, Amazon FBA or competitor repricing. Inputs are platform, list_price, and either discount_rate or discount_usd. Rates and margins are FRACTIONS (0.25 means 25% off). Optional cost, target_margin, processor, and on Etsy offsite_ads (none, under_10k or 10k_plus). Default offsite_ads is none, which leaves ads out. Optional cross_border is none, international, currency_conversion or both. Default is none, which leaves those fees out. Rates are dated and sourced, so read assumptions and verify before quoting. US sellers only. Read-only.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "platform": {
+            "type": "string",
+            "enum": [
+              "etsy",
+              "shopify-basic",
+              "payhip-free",
+              "payhip-plus",
+              "payhip-pro",
+              "gumroad-direct",
+              "gumroad-discover",
+              "ko-fi-shop",
+              "notion-marketplace",
+              "square-online",
+              "square-in-person"
+            ],
+            "description": "Platform and plan id from list_platforms, e.g. \"etsy\", \"payhip-free\", \"gumroad-direct\", \"ko-fi-shop\"."
+          },
+          "list_price": {
+            "type": "number",
+            "minimum": 0.01,
+            "maximum": 1000000000,
+            "description": "Regular price in USD before the discount and before buyer sales tax, in whole cents, e.g. 20."
+          },
+          "cost": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1000000000,
+            "description": "Optional cost per item in USD, so profit and margin are included. Default 0."
+          },
+          "discount_rate": {
+            "description": "Percentage off as a FRACTION: 0.25 means 25% off, used to 6 decimals. Send this OR discount_usd, not both. The dollar amount off is rounded to the cent, half away from zero.",
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "exclusiveMaximum": 1
+          },
+          "discount_usd": {
+            "description": "Fixed dollars off per item, in whole cents, e.g. 5. Send this OR discount_rate, not both.",
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "maximum": 1000000000
+          },
+          "target_margin": {
+            "description": "Optional target profit margin as a FRACTION (0.30 = 30%). If sent, the answer also gives the deepest discount off list_price that still keeps it, and whether this discount keeps it.",
+            "type": "number",
+            "minimum": 0,
+            "exclusiveMaximum": 1
+          },
+          "processor": {
+            "description": "Card processor for platforms where the seller adds their own (Payhip plans, Ko-fi Shop). \"stripe\" = 2.9% + $0.30 (default). \"paypal\" = PayPal Checkout or Guest Checkout, 3.49% + $0.49. Ignored, with a note, for platforms that charge their own processing (Etsy, Shopify, Gumroad, Notion, Square).",
+            "type": "string",
+            "enum": [
+              "stripe",
+              "paypal"
+            ]
+          },
+          "region": {
+            "description": "Buyer location relative to a US seller. \"us\" (default) = domestic. \"international\" is only modelled with processor \"paypal\" (adds PayPal's 1.50% international fee, so 4.99% + $0.49); other combinations return an error rather than a guess.",
+            "type": "string",
+            "enum": [
+              "us",
+              "international"
+            ]
+          },
+          "buyer_tax_rate": {
+            "description": "Buyer's sales tax as a FRACTION, e.g. 0.07 for 7%. Default 0. Tax is never profit; it only raises card processing on platforms that charge processing on the tax-inclusive total (see each platform's tax_base).",
+            "type": "number",
+            "minimum": 0,
+            "exclusiveMaximum": 1
+          },
+          "processor_rate": {
+            "description": "Advanced override: your own card processor percentage as a FRACTION (0.029 = 2.9%). Only for platforms where the seller adds their own processor. Replaces the preset's rate.",
+            "type": "number",
+            "minimum": 0,
+            "maximum": 0.2
+          },
+          "processor_fixed_usd": {
+            "description": "Advanced override: your card processor's fixed fee per sale in USD, e.g. 0.30. Replaces the preset's fixed fee.",
+            "type": "number",
+            "minimum": 0,
+            "maximum": 5
+          },
+          "offsite_ads": {
+            "description": "Etsy only. Optional Offsite Ads flag. \"none\" (the default) leaves the fee out, so answers match earlier callers. \"under_10k\" adds 15% of the item price for a shop that has always made less than $10,000 USD in any consecutive 365-day period. \"10k_plus\" adds 12% for a shop that has made $10,000 USD or more in any consecutive 365-day period. Etsy charges this fee on the order total, which also includes any shipping and gift wrap the seller charges, so add the same rate on those amounts. The cap is $100 per order, and this tool treats the item as a one-item order. The fee applies only to orders Etsy attributes to an Offsite Ad. Other platforms reject any value except \"none\".",
+            "type": "string",
+            "enum": [
+              "none",
+              "under_10k",
+              "10k_plus"
+            ]
+          },
+          "cross_border": {
+            "description": "Optional cross-border and currency-conversion fees, from official pages opened 2026-11-20. \"none\" (the default) leaves them out, so answers match earlier callers. \"international\" adds the sourced extra fee on an international card or cross-border receipt (Shopify Payments 1% on a US store, Stripe 1.5%, PayPal 1.50%, Square 1.5%). \"currency_conversion\" adds the sourced conversion fee (Etsy 2.5% when listing currency differs from the Payment account, Shopify Payments 1.5% for a US store, Stripe 1%, PayPal 3% under a labelled assumption). \"both\" adds each as its own line. The fee is applied to the item price. Official pages often also count shipping or gift wrap in the base, so add the same rate on those amounts. Currency conversion applies only when the sale currency differs from the payout currency, not merely because the buyer is abroad. Where a platform page states no rate, that line is marked not_modelled and adds nothing. That is not a statement that the fee is $0. compare_plans does not take this field.",
+            "type": "string",
+            "enum": [
+              "none",
+              "international",
+              "currency_conversion",
+              "both"
+            ]
+          }
+        },
+        "required": [
+          "platform",
+          "list_price"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "compare_plans",
+      "description": "Compares selling plans at a price and monthly sales volume for Payhip Free, Plus and Pro, Gumroad direct and Discover, Ko-fi Shop and Ko-fi Gold, and Shopify Basic, Grow and Advanced, each billed monthly or yearly. Use it when a US seller asks which of those plans keeps the most after per-sale fees and monthly plan cost, or where the break-even between tiers falls. Do not use it for Etsy, Notion Marketplace or Square (they have no plan choice in the fee data, so use fees_breakdown), for sellers outside the US, for international cards, for Amazon FBA, for competitor repricing, for VAT, refunds, disputes, payout fees or ads. Inputs are price and sales_per_month. Optional processor, cost, and a platforms filter. A plan without sourced numbers is left out and named. US sellers, domestic cards. Read-only.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "price": {
+            "type": "number",
+            "minimum": 0.01,
+            "maximum": 1000000000,
+            "description": "Your sale price per item in USD before buyer sales tax, in whole cents, e.g. 17."
+          },
+          "sales_per_month": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000000,
+            "description": "How many sales you make (or expect) in a month, a whole number, e.g. 50."
+          },
+          "processor": {
+            "description": "Card processor for the plans where you add your own (Payhip plans, Ko-fi Shop and Ko-fi Gold). \"stripe\" = 2.9% + $0.30 (default). \"paypal\" = PayPal Checkout or Guest Checkout, 3.49% + $0.49. Domestic cards only. Gumroad and Shopify charge their own processing.",
+            "type": "string",
+            "enum": [
+              "stripe",
+              "paypal"
+            ]
+          },
+          "cost": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1000000000,
+            "description": "Optional cost per item sold in USD, so the answer adds profit_per_month_usd and counts it in sales_to_cover_plan_cost. Default 0."
+          },
+          "platforms": {
+            "description": "Optional filter: families (payhip, gumroad, ko-fi, shopify) and/or plan ids (payhip-free, payhip-plus, payhip-pro, gumroad-direct, gumroad-discover, ko-fi-shop, ko-fi-gold, shopify-basic-monthly, shopify-basic-yearly, shopify-grow-monthly, shopify-grow-yearly, shopify-advanced-monthly, shopify-advanced-yearly). Leave it out to compare every plan.",
+            "minItems": 1,
+            "maxItems": 17,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "payhip",
+                "gumroad",
+                "ko-fi",
+                "shopify",
+                "payhip-free",
+                "payhip-plus",
+                "payhip-pro",
+                "gumroad-direct",
+                "gumroad-discover",
+                "ko-fi-shop",
+                "ko-fi-gold",
+                "shopify-basic-monthly",
+                "shopify-basic-yearly",
+                "shopify-grow-monthly",
+                "shopify-grow-yearly",
+                "shopify-advanced-monthly",
+                "shopify-advanced-yearly"
+              ]
+            }
+          }
+        },
+        "required": [
+          "price",
+          "sales_per_month"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "list_platforms",
+      "description": "Every platform this server prices per sale is Etsy, Shopify Basic, Payhip Free, Plus and Pro, Gumroad direct and Discover, Ko-fi Shop, Notion Marketplace, and Square online or in person. It returns rates as fractions, fixed and listing fees in USD, monthly plan fee, whether it sells digital downloads, whether the seller adds their own processor, the tax-base flag, fees-as-of date, source URLs, and the card processor presets. Use it when you need valid platform ids or to read the sourced rates. Ko-fi Gold is a plan option, so it appears only in compare_plans. Shopify Grow and Advanced are plan options too, so they also appear only in compare_plans. Do not use it for price or fee math (use the other tools), for sellers outside the US, for Amazon FBA, for competitor repricing, or for VAT. It takes no inputs. US sellers only. Read-only.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "data_version",
+      "description": "Returns the fee dataset version, check dates, a staleness warning, hashes, and the source URLs for every platform and card processor. The full result includes the fees-as-of date per platform and processor, the oldest check date, the latest fee changelog entry, and SHA-256 of the embedded fee data and engine. Use it to cite or cache answers, or to check whether fee rows may be stale. Do not use it for price or fee math (use the other tools), for sellers outside the US, for Amazon FBA, for competitor repricing, or for VAT. It takes no inputs. US sellers only. Read-only.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "com.marginrule/pricing",
+    "version": "0.3.4",
+    "remoteUrl": "https://mcp.marginrule.com/mcp",
+    "publishedAt": "2026-11-25T23:02:22.067175Z",
+    "fetchedAt": "2026-11-26T10:40:47.803Z",
+    "toolsSha256": "97da7cd5358e6e1a5f19a138aa28cfbafa2968cdf9fe6151117d1be387fcf5eb"
+  }
+}

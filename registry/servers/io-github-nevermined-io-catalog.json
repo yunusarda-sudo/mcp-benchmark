@@ -1,0 +1,430 @@
+{
+  "$schema": "../schema.json",
+  "name": "io.github.nevermined-io/catalog",
+  "title": "Nevermined Catalog",
+  "category": "Developer Tools & DevOps",
+  "description": "Discover and pay for services from the Nevermined Catalog using a spend-capped budget.",
+  "repository": "https://github.com/nevermined-io/nvm-monorepo",
+  "tools": [
+    {
+      "name": "get_subscription_checkout",
+      "description": "Read your personal subscription balance and get the link the human opens to subscribe or manage their allowance when credits are short. Charges nothing and never starts a paid checkout. `topUpAvailable` says whether the human can buy a pack of never-expiring credits from the dashboard (`dashboardUrl`) now, which also switches on automatic top-ups or resumes paused ones; the message mentions top-ups only when it is true. An existing subscriber gets the dashboard and reset date. After the human finishes checkout, use get_budget to verify the credits, then retry pay_service. OAuth commerce connections must explicitly grant Nevermined credits.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "list_categories",
+      "description": "List the categories of paid services in the Nevermined Agent Services Catalog, with a count per category. Discovery only; no payment.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "search_services",
+      "description": "Search the Nevermined Agent Services Catalog for paid services, ranked by ARD HYBRID relevance — semantic (meaning) matches merged with lexical (keyword) matches, most relevant first — falling back to pure lexical when the embedding provider is unavailable. Each result includes a closed matchReason, a per-item rankingSource, and one scale-specific score. A query is required; the other filters are optional. Each listing is concise: `slug` (what get_service, quote_service and pay_service take), `displayName`, a one-line `description`, `tags`, `protocol`, `network`, prices (`priceLabel`, the listing's advertised price; `headlinePriceLabel`, derived from endpoint prices, where \"from\" means prices vary; and `displayPriceLabel`, which covers the whole listing: what calls to it, on any endpoint, settled at when `displayPriceSource` is `settled`, the merchant's latest quote when `quoted`), `freeAfterPurchasePaths` (path prefixes free to poll after your own paid call, within the follow-up window; a 402 under one is still paid; see get_service), health and payability (`healthStatus`, `uptime30d`, `successRate`, `verificationStatus`, `routerPayable`), and `endpoints`, each with its `method`, `path`, `invokePath` (on an untemplated path, the subpath to send, where `\"\"` means the service base already is the endpoint; a templated path, one with a `:name`, `{name}`, `<name>` or `*` segment, URL-encoded or not, has none: call get_service and send its `payServiceArgs.path` with each `pathParams` segment, whether a placeholder or the example's value, replaced by your own), `priceLabel` and `description` (plus `access` or `auth` when set). A field is omitted when it is unknown or withheld, never defaulted: a missing `healthStatus` does not mean healthy. A `rankingSource: \"federated\"` hit comes from another registry: it has no slug and cannot be quoted or paid here. Budget against the selected endpoint price and quote before paying. Request shapes and examples are not in a search result: call get_service on the slug before paying. `detail: true` returns every listing in full as the catalog publishes it: about 6 KB per listing on average, far more for a listing with many endpoints. A concise listing is roughly 1–2 KB, so a large page is still large. Only the first page is returned and the `pageToken` in the result cannot be passed back to this tool: to see other matches, narrow the query or filters first, and raise `pageSize` (up to 100) only when that is not enough. Discovery only; no payment. To have the platform PICK (and optionally pay) the single best service for a need instead of choosing yourself, use route_by_intent.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "funding": {
+            "description": "Only services with at least one endpoint payable with Nevermined credits. Local catalog only. Check get_service: the specific endpoint carries subscription when credits can pay it; this does not check your balance.",
+            "type": "string",
+            "enum": [
+              "subscription"
+            ]
+          },
+          "query": {
+            "type": "string",
+            "minLength": 1,
+            "description": "What you need, in plain language. REQUIRED. Ranked semantically AND lexically (hybrid), most relevant first — a query describing the need (\"translate documents to German\") matches on meaning, not only exact words, and also keyword-matches title, descriptions and tags. Falls back to keyword-only ranking when the embedding provider is unavailable."
+          },
+          "category": {
+            "description": "Restrict to services carrying this catalog tag — it filters on tags exactly like `tag`. The category names `list_categories` returns are not stored as tags, so passing one here matches nothing; put a category name in `query` instead. Given together, `category` and `tag` match a service carrying either one.",
+            "type": "string"
+          },
+          "protocol": {
+            "description": "Restrict to a payment protocol. Only x402 and mpp are payable via the Router.",
+            "type": "string",
+            "enum": [
+              "x402",
+              "mpp",
+              "rest",
+              "a2a",
+              "other"
+            ]
+          },
+          "tag": {
+            "description": "Restrict to services carrying this catalog tag (e.g. a protocol or domain keyword from a listing's `tags`). Combined with `category` it widens the match to either value rather than narrowing it.",
+            "type": "string"
+          },
+          "prefer": {
+            "description": "Move this opaque catalog slug to the front when it matched the returned page; if it did not match, keep the normal ranked fallback.",
+            "type": "string",
+            "minLength": 1
+          },
+          "exclude": {
+            "description": "Never return this opaque catalog slug in the result page.",
+            "type": "string",
+            "minLength": 1
+          },
+          "pageSize": {
+            "description": "Page size, 1–100 (a size of 0 is meaningless and is rejected).",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "detail": {
+            "description": "Return every listing in full, with each endpoint’s request and response shapes, examples and quote. Large; to read one listing, prefer get_service.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "query"
+        ]
+      }
+    },
+    {
+      "name": "get_service",
+      "description": "Fetch one catalog service by slug with metadata and a `requestShape` block. Read the endpoint's `payServiceArgs` before `pay_service`, replacing every `pathParams` placeholder. A checked invoke contract may include `invokePath`, `requestExample`, merchant-authored `responseSchema`/`responseExample`, and `exampleEvidence`: `paid-run` records a paid response, `challenge` proves only the request shape, and `docs` is unverified provider documentation. Only `paid-run` and `challenge` examples are pre-filled into `payServiceArgs`; adopt a `docs` example deliberately. Each endpoint also carries `requestExampleQuality`, grading how well it publishes the way to call it (not a callability verdict) — `proven` (a usable example earned against the real endpoint, including a concrete `invokePath` that fills a templated path), `docs` (a usable example from documentation, unverified), `no-input` (takes no request input, callable as-is), or `none` (no stored example — form the request from `requestSchema` if one is published). Merchant response shapes are sanitised, and harvested examples are published only when they validate against their schema. An `endpointCheck` records a dated unpaid failure. An endpoint with `auth: \"siwx\"` is not paid: it is a follow-up (a job or result poll) that only the wallet which paid an earlier call to the same service can read, so call it with `pay_service` after that call, filling its `pathParams` with the id the paid response returned; the Router signs the wallet challenge and charges nothing. A `requestSchema` is the merchant-declared JSON Schema of its request and is sanitised, not verified. A quote excludes the Router fee, which the budget must also cover. An unknown slug returns an error. Discovery only; no payment. Call `quote_service` for the live fee-inclusive total before paying.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "slug": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The service slug (from search_services)."
+          }
+        },
+        "required": [
+          "slug"
+        ]
+      }
+    },
+    {
+      "name": "quote_service",
+      "description": "Price ONE call to a catalog service WITHOUT paying it: it charges nothing, signs nothing and reserves no budget. Pass exactly what you would pass to `pay_service` (the same `slug`, `path`, `method`, `search`, `headers`, `body` and `delegationId`): the Router sends that request to the service unpaid, reads the price it asks for, and returns an opaque `quoteId`, its short `expiresAt`, the rail (`protocol`), the network and merchant amount (`settlement`) and the fee-inclusive total (`fee.capChargedCents`, whole cents rounded up; `fee.capChargedMicros` exact, in 1/10,000 of a cent). Unlike the `quote` on a get_service endpoint (the last merchant price the catalog observed, routing fee excluded), this is priced live for your exact request and includes the fee. Because the request really reaches the service, a service that does not charge for it performs it, so take care quoting a method with side effects; and a quote spends the same per-service rate limit as a payment, so quote once per decision rather than polling. It prices the delegation pay_service would charge (`optionSet: \"delegation\"`, naming its `delegationId`), or, with no delegation set up, what a personal crypto delegation would select (`optionSet: \"deployment\"`); in that case `nextTool` is `setup_delegation`: set one up and quote again before paying, since the delegation you create can select a different rail and price. The quote reports `wouldSucceed` and `blockers` (with `blockerLines`, one per limit, each with its fix) for your limits and, on MPP-tempo (a `charge`, or the deposit of a `session`), the wallet balance (never read on x402 or a card); it is advisory, the call re-checks, and a check it could not read is listed in `unchecked` (see `uncheckedLines`) rather than blocking. Next step (`nextTool: \"pay_service\"`): if `fee.capChargedCents` fits what you planned to spend, call `pay_service` before expiry with the same arguments, the quoted `delegationId`, `quoteId`, and `maxTotalCents` set to that figure as a number. The quote id fixes the exact challenge and fee-inclusive total while `maxTotalCents` remains an independent ceiling. `paymentRequired: false` means the service did not ask for payment for this request; `upstreamStatus` is its answer, and a non-2xx usually means the path, method or body is wrong. The service response itself is never returned. Outcomes, all charging nothing: `{\"payable\":false}`, `service_not_found`, `catalog_unavailable` and `delegation_lookup_failed` as in pay_service; `quote_unavailable` (no quote can be made here and retrying will not change that, so bound the price with pay_service `maxTotalCents` instead); `service_not_allowed` / `org_service_not_allowed` (with `orgId`), as in pay_service: the service or endpoint is outside the allowed-services list, refused before the service is contacted; `quote_failed` (the Router refused to price the call, or did not answer; see `code`, `message` and `retryable`); `credential_refused` (re-authorize). FUNDING (`funding`): chosen as pay_service would choose it. When you hold Nevermined credits that can pay it (a Nevermined Subscription allowance, welcome or top-up credits) and the endpoint accepts credits the answer is `{\"funding\":\"subscription\",\"credits\":…,\"paymentRequired\":…,\"upstreamStatus\":…,\"wouldSucceed\":…,\"blockers\":[…],\"unchecked\":[…],\"topUp\":…,\"priceSource\":…,\"observedAt\":…,\"usageBased\":…}` (`upstreamStatus` is absent when `priceSource` is `\"observed\"`: the service was not asked and `credits` is its last observed price, which may have moved; `topUp` (`credits`, `amountUsd`) appears only when your credits fall short, the credit pack pay_service would buy covers the shortfall and nothing else blocks the call, in which case `wouldSucceed` is true): with `priceSource` `\"live\"` (or absent), the exact credits this request costs (the service is sent it unpaid); with `\"observed\"`, the price of its last observed answer; there is no `quoteId` or cent total. Credits follow each service’s live price, with a 1-credit minimum, so pass everything pay_service will send. Then call pay_service with the same arguments and, when this answer gives one, the `maxCredits`: a call that has become dearer is refused and charges nothing. `usageBased: true` (absent otherwise) means the service charges by usage: `credits` is then a maximum, not the cost, a call spends the maximum the service names when it is made, and the credits the service does not take come back once its payment settles (all of them if it never does); say \"up to\" when you tell the human the cost. `paymentRequired: false` means the service named no price for this request, and `credits` is then 0. `wouldSucceed` and `blockers` (see `blockerLines`) report whether your credits, your spending limits and the treasury (BCK.SUBSCRIPTION_TREASURY.0001 or 0002: no treasury for this chain or asset, so pay with `funding: \"delegation\"`; 0003: the float is short, retry later) would allow the call; they are advisory, pay_service re-checks, and when `wouldSucceed` is false there is no `maxCredits` and no `nextTool`. A check this quote could not read is listed in `unchecked` (see `uncheckedLines`): it does not block, and pay_service still makes it. An answer with no `wouldSucceed` checked nothing: pay_service will check limits and balance. Your wallet balance is checked only on MPP-tempo (a `charge`, or the deposit of a `session`); never on x402 or a card, nor here for credits. Pass `funding: \"delegation\"` to price the delegation instead. Subscription refusals are named as in pay_service. When `settlement.scheme` is `session`, the merchant is paid out of a deposit in a payment channel, and `sessionDeposit` says what this call would do to it: `action` is `open` (the first call locks a deposit), `top_up` (it locks more), `none` (no new money leaves the wallet), `closing` (the call would be refused, nothing moves; quote again once it has closed) or null (what the call would do could not be stated, and pay_service may refuse it); `approxCents` is how much would move into the deposit, in cents, the network fee not included, and `basis` says whether that is `sized` for this budget and wallet or an `upper_bound`. That money can far exceed the price. It is locked, not spent, it is not charged to the budget, and what the merchant does not take comes back when the channel closes, `idleCloseSeconds` after its last use. Tell the human before paying. Requires your Nevermined API key on the Authorization header.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "slug": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The service slug to quote."
+          },
+          "path": {
+            "description": "The same `path` you would pass to pay_service: read `get_service`'s `requestShape.endpoints[].payServiceArgs.path` and replace every `pathParams` placeholder. Put query parameters in `search`.",
+            "type": "string"
+          },
+          "search": {
+            "description": "Query string without ?, for a slug-routed GET (e.g. flight_iata=AA217). It reaches the service re-encoded: values of a repeated name together, a space as `+`, a bare name as `name=`, every character other than letters, digits and `*-._` URL-encoded (`,` as `%2C`, `:` as `%3A`), and integer names (`2`, not `01` or `1.5`) first, ascending.",
+            "type": "string"
+          },
+          "method": {
+            "description": "HTTP method. Omit to use the method the catalog records for the endpoint matching `path` (POST when it records none), exactly as pay_service does.",
+            "type": "string"
+          },
+          "body": {
+            "description": "The request payload you would send; some services price by it."
+          },
+          "headers": {
+            "description": "The extra headers you would send to the vendor.",
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "delegationId": {
+            "description": "The delegation you would pay with, when you authenticate with an API key; defaults to the one pay_service would use. A card or organization-wallet delegation can select a different rail, and so a different price. An OAuth-connected caller is always quoted for the grant it approved: omit this, since another delegation is refused (`invalid_arguments`); the result names the one priced.",
+            "type": "string"
+          },
+          "requireProtocol": {
+            "description": "Price (and pin the returned quote to) one payment rail. Pass the same value you will pass to pay_service: the quote prices that rail, and the quoteId it returns is only payable on it. If the service does not offer the pinned rail the quote is refused (`quote_failed` with code BCK.ROUTER.0045, nothing charged) rather than priced on the other one. Omit to let the Router auto-select (it prefers mpp).",
+            "type": "string",
+            "enum": [
+              "x402",
+              "mpp"
+            ]
+          },
+          "funding": {
+            "description": "What to price: `subscription` (your Nevermined credits) or `delegation` (the fee-inclusive money total). Omit it to price the funding pay_service would use.",
+            "type": "string",
+            "enum": [
+              "subscription",
+              "delegation"
+            ]
+          }
+        },
+        "required": [
+          "slug"
+        ]
+      }
+    },
+    {
+      "name": "route_by_intent",
+      "description": "Given a plain-language description of what you need, find, and optionally pay in the same call, the single best payable catalog service, so you do not have to pick among listings yourself. Use it instead of search_services when you want the right service for a task rather than a list to browse: it ranks candidates on Nevermined's own relevance and quality signals (deterministic; no model reads the merchant listings), applies a fail-closed payability gate (listed, healthy, moderated, x402/mpp, not flagged unpayable) and a relevance floor, and returns the winner as `chosen` (with its opaque invoke handle, never a raw host) plus a ranked `shortlist`; every shortlist item carries a closed `matchReason`, `gateReason`, per-item `rankingSource`, and one scale-specific score. With `autoPay:false` (the default) it returns the pick only and charges nothing; the next step is normally `get_service` on `chosen.slug`, then `pay_service` with the endpoint you need. With `autoPay:true` it also pays the winner through the same path as pay_service and returns the upstream call in `result`: `result.status` and `result.body` are the vendor's answer, and `result.paid: true` means a payment was attempted, not that it settled, so read `result.payment.status` (`Settled`, `Issued` or `Failed`). autoPay calls the winner at its base URL plus any `path` you pass, and you only learn the winner from this call, so it suits single-endpoint services; a multi-endpoint winner typically answers 404 at its base URL. autoPay requires `requestId`; an API-key caller must also pass `delegationId`, while an OAuth-connected caller spends from the grant it approved and needs none. Outcomes: matches, but none could be chosen (or nothing matched while semantic ranking is down) → `{\"status\":\"no_fundable_match\"}` (broaden the intent or filters; nothing charged); payable matches that are all too weak to choose → the same status with `reason: \"below_relevance_floor\"`, and no match at all → `reason: \"no_match\"` (for either, rephrase the intent to name the capability concretely or relax `filters`, or browse with search_services; nothing charged); the close match is unhealthy or held by moderation right now → the same status with `reason: \"relevant_candidate_unavailable\"` (retry later, or browse with search_services; nothing charged); close matches that all fail to return the media named in `wantedMedia` → the same status with `reason: \"media_mismatch\"` and `wantedMedia` as applied (browse with search_services, or pin a slug in `filters.require`; nothing charged); on autoPay while semantic ranking is unavailable → `{\"status\":\"autopay_unavailable\"}` (the Router will not pay a keyword-only pick: retry later with the same `requestId`, or call without autoPay and pay the pick with pay_service; nothing charged). Relevance compares what you wrote with how each listing describes itself; when you list the media you need back in `wantedMedia` (an image, audio or a video), it also chooses only a service it records as returning each of them (from some endpoint; `audio` beside `video` is not checked separately, and the Router does not verify that a returned video has sound), unless you pin one with `filters.require`. The Router never infers the media from the intent, so set `wantedMedia` whenever you need media back. It checks what the winner returns, not what it accepts, so a need that combines several steps can still get a pick that does only one: for such a need, select without autoPay and check the winner with get_service before you pay. Other outcomes: `missing_autopay_fields` (nothing charged); on autoPay, `payment_indeterminate` (check `list_payments`, and retry only with the same `requestId`) and `already_paid` (this `requestId` already carries a payment, see `paymentId`; nothing new billed, and it does not by itself say whether the original succeeded). Every pick and each of these outcomes carries an `instructions` string with the next step; a payment the Router declines on autoPay comes back as a tool error carrying the API's message. Requires your Nevermined API key on the Authorization header.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "intent": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Plain-language description of the service you need (e.g. \"translate English to German\")."
+          },
+          "filters": {
+            "description": "Optional structured narrowing; all fields optional.",
+            "type": "object",
+            "properties": {
+              "require": {
+                "description": "Require this exact opaque catalog slug. It is returned only if payable and healthy; otherwise the Router fails closed with BCK.ROUTER.0031 and never substitutes another service. The relevance floor does not apply to it.",
+                "type": "string",
+                "minLength": 1
+              },
+              "prefer": {
+                "description": "Prefer this exact opaque catalog slug when it is a payable match that reaches the relevance floor on its semantic score (a service not yet indexed for that score qualifies on a keyword match); otherwise keep the normal ranked fallback. Use `require` to select a slug the floor would refuse.",
+                "type": "string",
+                "minLength": 1
+              },
+              "exclude": {
+                "description": "Never choose this exact opaque catalog slug.",
+                "type": "string",
+                "minLength": 1
+              },
+              "category": {
+                "description": "Narrow to services carrying this catalog tag. It matches tags, not the category names `list_categories` returns (those are not stored as tags and match nothing) — put a category name in `intent` instead.",
+                "type": "string"
+              },
+              "protocol": {
+                "description": "Narrow to a payment protocol (only x402 and mpp are payable).",
+                "type": "string",
+                "enum": [
+                  "x402",
+                  "mpp"
+                ]
+              },
+              "network": {
+                "description": "Narrow to a settlement network.",
+                "type": "string"
+              },
+              "maxPriceLabel": {
+                "description": "Upper price bound as a label (e.g. \"$0.05\"); best-effort.",
+                "type": "string"
+              }
+            }
+          },
+          "wantedMedia": {
+            "description": "The media you need the chosen service to return. Set it whenever you need an image, audio or a video back, for example `[\"video\"]` to dub a video or `[\"audio\"]` for text to speech; leave it unset for text or data. When set, only a service recorded as returning each of them (from some endpoint) is chosen (a `filters.require` pin is exempt); `audio` beside `video` is not checked separately (the Router does not verify that a returned video has sound), and when no close match does, the result is `no_fundable_match` with `reason: \"media_mismatch\"` (the API's BCK.ROUTER.0053). The Router never infers it from `intent`.",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "image",
+                "audio",
+                "video"
+              ]
+            }
+          },
+          "limit": {
+            "description": "Shortlist size to return (1–20, default 5).",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 20
+          },
+          "autoPay": {
+            "description": "When true, also pay and relay the winner in the same call (same path as pay_service); requires requestId, plus delegationId when you authenticate with an API key. Default false → return the pick only, no charge. A paid body too large or binary to inline comes back as `result.bodyOmitted`, as pay_service describes for `responseOmitted`.",
+            "type": "boolean"
+          },
+          "delegationId": {
+            "description": "Delegation to charge on autoPay. Required when you authenticate with an API key; an OAuth-connected caller spends from the grant it approved, so it can omit this (a value there does not choose the delegation).",
+            "type": "string"
+          },
+          "requestId": {
+            "description": "Idempotency key — REQUIRED when autoPay is true.",
+            "type": "string"
+          },
+          "method": {
+            "description": "HTTP method for the paid call (autoPay only).",
+            "type": "string"
+          },
+          "path": {
+            "description": "Subpath appended to the winner when paying (autoPay only).",
+            "type": "string"
+          },
+          "search": {
+            "description": "Query string (no leading ?) for the paid call (autoPay only).",
+            "type": "string"
+          },
+          "body": {
+            "description": "Request body for the paid call (autoPay only)."
+          },
+          "headers": {
+            "description": "Extra headers for the paid call (autoPay only).",
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "credentialHeader": {
+            "description": "Header the Router should carry the minted payment credential in on the paid hop (autoPay only). Send it only when the winning service needs its own auth AND a payment credential (e.g. \"Payment\"). Ignored when autoPay is false.",
+            "type": "string"
+          },
+          "maxTotalCents": {
+            "description": "Refuse a paid quote above this (fee-inclusive), before purchase (autoPay only).",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "intent"
+        ]
+      }
+    },
+    {
+      "name": "setup_delegation",
+      "description": "Start the spending-delegation ceremony and return ONE URL for a human to open. Use this when `pay_service` returns `{\"error\":\"no_delegation\"}` — it is the way out of that state. It sets up a stablecoin (crypto) delegation that spends from the human's personal wallet, so that wallet also needs funds on the network a service settles on (see `wallet_balance`); it does not enroll a card or create a card delegation. The human sets the currency, spending cap, duration and transaction limit themselves in the browser; you CANNOT set them and must not ask the human to pass them to you. Returns `{\"status\":\"human_action_required\",\"url\":…}` — relay the url, wait for the human to confirm, then simply call `pay_service` again. `{\"status\":\"already_active\"}` means a usable spending budget is in place — for an OAuth commerce caller it is the grant approved on the consent screen — and nobody needs to do anything: tell the human `message` as it stands (it states the cap, spent, remaining and expiry the API reports, in a voice written to be relayed), then follow `instructions` and call pay_service. The url embeds a short-lived session token, so treat it as sensitive and give it only to the account owner. Other outcomes: `delegation_setup_unavailable` (this deployment cannot run the ceremony) and `delegation_setup_failed` (the session could not be started) produce no URL; `return_url_not_allowed` means drop or fix `returnUrl`; a `human_action_required` answer with `delegationCheck: \"failed\"` means an existing budget could not be ruled out, so follow its `instructions` and try pay_service first. Requires your Nevermined API key on the Authorization header.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "returnUrl": {
+            "description": "Where the human's browser should land after they authorise. Only a localhost callback (http://127.0.0.1:<port>/…) or an origin this Nevermined deployment has allow-listed is accepted; a rejected value is reported back rather than silently dropped. OMIT THIS unless you actually have somewhere to receive the redirect — without it the page just shows a confirmation and the human closes the tab, which is the normal case in a chat host. Validated by the Nevermined API rather than here, deliberately: a second validator in this schema could refuse a URL the API would have accepted.",
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "top_up_credits",
+      "description": "Buy one credit pack on the card your human enrolled, within the monthly top-up limit they set — no new human approval. This CHARGES the human’s card. Pass `forCallCredits`: the credits the call you are about to make will spend. A pack is charged only when your spendable credits are below that — the recorded consent charges a pack “each time your credits are not enough for a call you make”, so state what that call needs (from a quote or your plan’s per-call cost); when your credits already cover it, nothing is charged (`not_needed`). Pass a `requestId` you choose as an idempotency handle: a NEW value for each top-up you intend, the SAME value only to re-send a call that may not have completed (a retry returns the pack already charged, never a second one). Read `status`: `bought` added credits (`creditsAdded`) — unless `replayed` is true, which means this requestId had already bought one and nothing new was charged (use a new id next time); `pending` means YOUR pack was charged and is awaiting confirmation (read the balance shortly); `busy` means another top-up is already being charged — nothing was charged for THIS request, so check your balance shortly and re-send the SAME requestId only if you still need one; `limit_reached` means this UTC month’s top-up limit is used up (no charge — do not retry until next month); `not_needed` means your credits already cover the call (no charge); `needs_attention` means the card was declined or needs 3-D Secure, a card payment to Nevermined is disputed, a human must finish setting top-ups up, a prior top-up is stuck, or a prior top-up’s outcome is unconfirmed (it may have been charged) — hand the human `operatorUrl`, never try to confirm it yourself, and do not start a new top-up until they act; `disabled` means a human must turn top-ups on first (give them `operatorUrl`); `unavailable` means nothing was charged — retry with a NEW requestId (reusing this one keeps returning the same settled result). `monthlyLimitUsd`/`boughtThisMonthUsd`/`packPriceUsd` are the human-set limit and this month’s spend. Requires your Nevermined API key on the Authorization header; a commerce OAuth grant must have enabled credit top-ups at consent.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "requestId": {
+            "type": "string",
+            "minLength": 8,
+            "maxLength": 200,
+            "pattern": "^[A-Za-z0-9._:-]+$",
+            "description": "An idempotency handle you choose (8–200 chars, letters/digits/._:-). Use a NEW value for each top-up you intend; reuse the SAME value only to re-send a call that may not have completed."
+          },
+          "forCallCredits": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000000,
+            "description": "The credits the call you are about to make will spend. A pack is charged only when your spendable credits are below this; when they already cover it, nothing is charged (`not_needed`)."
+          }
+        },
+        "required": [
+          "requestId",
+          "forCallCredits"
+        ]
+      }
+    },
+    {
+      "name": "get_payment_result",
+      "description": "Read the result of a paid call, by its `paymentId`. Use it when `pay_service` answered `{\"status\":\"pending\"}` (the service was still working when the Router stopped waiting — a payment was attempted, the call keeps running and its outcome is not known yet), or to recover a result whose response you lost. Reading costs nothing and charges nothing. Every answer with a `state` carries `payment.status`. `state: \"Pending\"` — still running, call again in a few seconds. `state: \"Ready\"` — `status` is the service's HTTP status and `body` its response (`bodyEncoding` says whether it is parsed JSON, text, or base64). `state: \"Failed\"` — the call ended without a response; `failureReason` says why. That does not prove nothing was charged, so check `deliveryStatus` in `list_payments` before paying again. `{\"status\":\"not_available\"}` — nothing to return: results are kept for 24 hours for the account that paid, and only then. `{\"status\":\"not_retained\"}` — the service is a partner API whose licence forbids keeping a copy of its answers, so no result of it is ever stored: its answer went only to the original pay_service call, and reading again will not change that. Do NOT call pay_service again to get a pending result: that does not return a new one. A paid body that is binary (audio, images, PDFs) or whose JSON form is larger than this server's inline limit is not inlined once the Router is confirmed to have kept the result: `bodyOmitted` comes instead, and it does NOT mean the body is empty. It gives the `contentType`, the `sizeBytes` and how to get the bytes: `contentUrl` to download with your API key (see its `instructions`), or the MCP resource `resourceUri`, also sent as a `resource_link` content block, read with the credential you send to this server. Fetching it charges nothing; do not pay again to get it. Pass `inline: true` to get such a body in the result anyway, at its full size. Requires your Nevermined API key on the Authorization header.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "paymentId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "description": "The `paymentId` a pay_service result returned."
+          },
+          "inline": {
+            "description": "Return the body in the result even when it is binary or larger than the inline limit, as base64 for binary. It can be very large (a paid audio file is hundreds of thousands of characters) and fill your context: set it only when you cannot fetch the body by `contentUrl` or `resourceUri`.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "paymentId"
+        ]
+      }
+    },
+    {
+      "name": "list_payments",
+      "description": "List your Router payments: the unified ledger across every service and delegation, newest first, at most 1000 records. Each record carries its `id` (the `paymentId` get_payment_result takes), `createdAt`, `status`, `protocol`, `network`, `requestId`, `delegationId` and `amount` in the asset's smallest unit (see `assetDecimals`), not in cents. Each row also carries `deliveryStatus`: `delivered` (request settled), `charged_not_delivered` (request failed and the merchant charge was observed), `charged_unconfirmed` (charge observed; delivery unconfirmed), `not_charged` (reconciliation recorded no merchant charge, including unreadable write-offs; not conclusive proof that no money moved), `not_delivered` (the merchant answered with an error, so nothing was delivered, and no charge has been seen: the amount stays reserved until reconciliation decides, after confirmed cancellation or payment authorization expiry, whether the merchant charged; it is not a confirmed charge), or `pending` (charge outcome unknown). Issued + `pending` means the charge outcome is unknown: neither payment nor no charge is established. On SPT and card rails, pending is not proof of no charge; those rows are never decided on chain. `merchantSettlementObservedAt` records an observed merchant charge; null is not, on its own, proof of no charge. Flag both charged states to the user. A usage-based (x402 `upto`) row also carries `maxAmount`, the most it could cost (its `amount`), and `settledAmount`, what the merchant settled, read from the chain later (`null` until then): report it as up to `maxAmount`, charged `settledAmount`. Each record also carries `fundingSource`, the funding it used: `delegation`, or `subscription` for your Nevermined credits, with or without a subscription. On a `subscription` row, `deliveryStatus` and `merchantSettlementObservedAt` describe what Nevermined paid the merchant, not a charge to you: what the call cost you is `creditsCharged`, and `creditsStatus` says whether that stands (`Committed` spent, `Reserved` held or marked for refund, `Refunded` returned). Do not report a charged state on such a row as a charge to the user. Pass `requestId` to look up the one payment with that id: the answer is then `{\"presence\":…,\"payments\":[…]}`, it ignores the other filters and the 1000-record limit, and `presence: \"absent\"` means no payment carries that id. Use this tool to reconcile an uncertain payment or find a paymentId; it does not return service responses (use get_payment_result) or the remaining budget (use get_budget, whose figures include fees and rounding). Reading costs nothing. Requires your Nevermined API key on the Authorization header.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "delegationId": {
+            "description": "Only payments charged to this delegation.",
+            "type": "string"
+          },
+          "requestId": {
+            "description": "The `requestId` a pay_service or route_by_intent result gave you, matched exactly. Finds that one payment wherever it sits in the ledger; the other filters are ignored.",
+            "type": "string",
+            "minLength": 1
+          },
+          "from": {
+            "description": "ISO-8601 lower bound on `createdAt`, inclusive. An unparseable value is an error.",
+            "type": "string"
+          },
+          "to": {
+            "description": "ISO-8601 upper bound on `createdAt`, inclusive. An unparseable value is an error.",
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "payment_summary",
+      "description": "Count your Router payment requests: `total` is how many there were in the period (uncapped, unlike list_payments) and `series` is that count per day (`date`, `value`), oldest first. `chargedNotDelivered` is the count of failed payments in the period whose merchant charge reconciliation observed on-chain (a failed payment not yet reconciled is not counted); this is the confirmed failed-and-charged count only. `countsByDeliveryStatus` exposes all six ledger delivery states, including `charged_unconfirmed`, `not_delivered` and `pending`, with zero counts included. The latter two have unknown charge outcomes: do not count them as confirmed charges. Flag both charged buckets and explain unresolved outcomes to the user. These buckets include calls paid with your Nevermined credits, so check `fundingSource` and `creditsStatus` in `list_payments` before telling the user they were charged. This reports numbers of payments, not money: for what has been spent or what is left, and how much of it was charged without delivery, use get_budget, and for amounts per payment use list_payments. Reading costs nothing. Requires your Nevermined API key on the Authorization header.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "from": {
+            "description": "ISO-8601 lower bound on `createdAt`, inclusive. An unparseable value is an error.",
+            "type": "string"
+          },
+          "to": {
+            "description": "ISO-8601 upper bound on `createdAt`, inclusive. An unparseable value is an error.",
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "wallet_balance",
+      "description": "Read the balances of YOUR OWN PERSONAL wallet — the funding source the crypto rails PULL from when pay_service charges a PERSONAL delegation. It answers `how much do I have, and on which chain`. Reading costs nothing and charges nothing. WHAT IT DOES NOT COVER, so you do not mis-diagnose: a delegation backed by an ORGANIZATION wallet is paid from that wallet, not this one; and a CARD delegation has no wallet at all — there `BCK.ROUTER.0009` is the card ISSUER declining, with nothing to top up, so this tool does not apply and the answer is a different card. BY RAIL: on MPP the wallet is checked BEFORE anything is signed, and the `BCK.ROUTER.0009` you get back already names the wallet and the chain — what it never says is HOW MUCH is there, which is what this tool supplies. On x402 there is NO balance pre-check and `BCK.ROUTER.0009` is never raised: the credential is minted, budget is reserved, and a short wallet only surfaces when the merchant's on-chain transfer fails — by which point your budget is already committed, and the reserve comes back only once the reconciler has seen the authorization expire unconsumed. So on that rail read the balance BEFORE you pay, not after. By default this reports EVERY network this deployment settles on, and you must read the one the merchant quoted: a healthy balance on one chain says NOTHING about the other, and most services settle on only one of them. Pass `network` (a chain id) to read a single chain. A token whose `atomic`/`formatted` is `null` was NOT READ (the on-chain read failed) — that is not a zero balance, and reporting it as empty is wrong; a chain that could not be read at all comes back as an entry with `error` instead of `balances`. This tool diagnoses and fixes nothing, and you cannot top your own wallet up, so a genuine shortfall is a stop condition — report the network and the amount to your human, and do not retry the payment. Your human can fund the wallet from the Nevermined app (Profile → Wallet): a transfer on any network this tool lists, or by card for USDC on live Base (8453) and live Tempo (4217) only, never on a testnet. Each entry with `balances` also carries `lockedInChannels` when the API reports it, per token (`atomic` in the token's smallest unit, `formatted`, `symbol`): money your payer wallet (the one the Router signs MPP payments with, which is this wallet once your account is migrated) has deposited into payment channels with merchants that charge per call over an MPP session, held in the channel's escrow. It is NOT part of `balances` and it is NOT spent: it is still the human's. It can pay further calls only to the merchant holding that channel, never anyone else, and what is unused comes back to that wallet when the channel closes, after 15 minutes without use. Report it beside the balance, never as spending, and never count it toward paying any other merchant. Here a null `symbol`/`decimals`/`formatted` means a token Nevermined does not recognise, NOT an unread amount: report `atomic` as raw units of `token`. An empty list means nothing is locked; `lockedInChannels: null` means it could not be read, which is not the same as nothing locked. When you have a Nevermined Subscription the result also carries `subscription` (the credits left, reset date and plan, as in get_budget), and whenever you hold credits, subscribed or not, `credits` (total, spendable and by kind and expiry, as in get_budget): credits are not held in this wallet and are not money; calls paid with credits are paid by Nevermined, not from this wallet. Requires your Nevermined API key on the Authorization header.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "network": {
+            "description": "Chain id to read. OMIT IT to see every network this deployment serves, which is what you want unless the merchant already told you which chain it settles on. A chain id this deployment does not serve is not refused: the result then lists the deployment's primary network (its own chain id, not the one you asked for) with a `warning` saying the requested chain is not served, so those balances say nothing about the chain you asked about.",
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          }
+        }
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "io.github.nevermined-io/catalog",
+    "version": "1.106.0",
+    "remoteUrl": "https://mcp.live.nevermined.app/mcp",
+    "publishedAt": "2026-11-26T09:11:28.680059Z",
+    "fetchedAt": "2026-11-26T10:40:47.803Z",
+    "toolsSha256": "c0b6c7f8cf2348792c17770d1fcadda2184d568c19031c507922e710fb77265e"
+  }
+}

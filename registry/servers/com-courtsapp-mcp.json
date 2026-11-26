@@ -1,0 +1,660 @@
+{
+  "$schema": "../schema.json",
+  "name": "com.courtsapp/mcp",
+  "title": "CourtsApp",
+  "category": "Travel, Maps & Navigation",
+  "description": "Find pickleball, tennis and padel courts, open play, coaches and tournaments, and book on CourtsApp.",
+  "repository": "https://github.com/courtsapp/courtsapp-mcp",
+  "tools": [
+    {
+      "name": "search_courts",
+      "description": "Use this when the user wants to find places to play racquet sports (pickleball, tennis, padel, badminton, racquetball, squash, table tennis) near a location, or wants to see open court times. Typical asks: \"pickleball courts near me\", \"where can I play tennis tonight?\", \"book a padel court Saturday at 9am\", \"any indoor pickleball courts open now in Austin?\", \"court rental prices near 85016\".\nSport is what unlocks live open times. With a sport and a place to search around (city+state, zip code, lat+lng, or a facilityName) it returns live open times at nearby bookable clubs, followed by nearby connected and listed clubs without times (up to 10 of each). The card shows the first 8 clubs and its Map button shows all of them, so name the rest in text if the user wants more. The date is optional and defaults to today (the date where the clubs are, and if nothing more is open today the results move on to the next day), so \"near me\" or \"now\" needs no date. Time is optional: without it the tool returns the earliest open times (from now if the date is today, otherwise from 6am). Duration is optional and defaults to 60 minutes. Returns sportId (use for get_booking_link), facilities with available slots, and hint. Facilities may include perPlayerFeeDollars, perPlayerFeePolicy, and checkInPolicy when set — mention these to the user when present.\nWithout a sport it lists nearby places to play instead, not live times, and the hint says to ask the user which sport. A state alone also lists places only (a state is too wide to search around), and the hint says to ask for a city or zip. Search by city+state, zip code, or lat+lng (nearest clubs within 50 miles), by state alone (listed by name), or look up one club with facilityName. Returns up to 50 bookable (including coming soon), 25 connected, and 25 listed facilities (10 of each for a state alone), bookable first, each with a photo, address, lat and lng (when known), sports, court count, and the CourtsApp page url (plus distance for radius searches).\nThe result has mode: \"times\" (live open times) or \"directory\" (places to play, no times). To turn a place list into open times, ask the user for what the hint says (the sport, or a city or zip) and call this tool again.\nFor connected facilities, send the user to bookingUrl. For listed facilities, send the user to website. Do not create a CourtsApp checkout for either. Facilities with comingSoon: true are joining CourtsApp but are not yet bookable.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "sport": {
+            "type": "string",
+            "enum": [
+              "tennis",
+              "pickleball",
+              "padel",
+              "table-tennis",
+              "badminton",
+              "racquetball",
+              "squash"
+            ],
+            "description": "Sport to look for. Pass it whenever the user names one: with a sport and a location the tool returns live open times; without one it only lists places to play (and the hint says to ask which sport). Case-insensitive. Common aliases accepted (e.g. \"ping pong\" → table-tennis, \"paddle\" → padel)."
+          },
+          "date": {
+            "type": "string",
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+            "description": "Optional date to check live open times, as YYYY-MM-DD (e.g. \"2026-01-22\"). Defaults to today where the clubs are, so leave it out when the user named no day. Used with a sport.\nPass the user's spoken date directly — no timezone conversion."
+          },
+          "time": {
+            "description": "Optional start time as HH:MM in 24-hour format (e.g. \"15:00\" or \"9:00\"), used with a sport. Omit it when the user gave no time; results then start at the earliest open time that day (from now if today, otherwise from 6am).\nPass the user's spoken time directly — no timezone conversion.",
+            "type": "string",
+            "pattern": "^\\d{2}:\\d{2}$"
+          },
+          "duration": {
+            "default": 60,
+            "description": "Optional play duration in minutes, used with a sport: 30, 60, 90 or 120. Defaults to 60.",
+            "type": "integer",
+            "enum": [
+              30,
+              60,
+              90,
+              120
+            ]
+          },
+          "location": {
+            "description": "Where to search. Accepts city+state, city-only, state-only, zip, or lat+lng. City+state or zip are preferred for accuracy. City-only may return broader results. Never use 0,0 or guess coordinates. A state alone lists that state's clubs by name (places only, no live times): live times need a city, zip, or lat+lng.",
+            "type": "object",
+            "properties": {
+              "lat": {
+                "type": "number"
+              },
+              "lng": {
+                "type": "number"
+              },
+              "city": {
+                "type": "string"
+              },
+              "state": {
+                "type": "string"
+              },
+              "zip": {
+                "type": "string"
+              }
+            }
+          },
+          "facilityName": {
+            "description": "Name of a club to find. With a sport it shows that club's live open times (a location is optional, the club says where to look) by narrowing the nearby bookable clubs by name and, if the location search finds none, searching by name instead. Without a sport it returns the clubs whose name has every word, in any area (a city, zip or coordinates only put the nearest first).",
+            "type": "string",
+            "maxLength": 100
+          },
+          "sortBy": {
+            "description": "Only used for live open times (with a sport). How to sort results. \"distance\" (default) returns closest facilities first. \"price\" returns cheapest facilities first.",
+            "type": "string",
+            "enum": [
+              "distance",
+              "price"
+            ]
+          },
+          "maxResults": {
+            "description": "Only used for live open times (with a sport). Number of facilities with open times to return (1–10, default 3). Use more when the user wants to compare options.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10
+          }
+        }
+      }
+    },
+    {
+      "name": "get_booking_link",
+      "description": "Use this when the user has picked an open court time from search_courts and wants to reserve it (\"book the 6pm court\", \"reserve that one for 90 minutes\", \"lock in Saturday at 9\"). Get a booking link for a court.\nRequires facilityId, date, time, sportId, and duration.\nOptional players (1–8, default 2) pre-fills the booking page and is used for per-player fee totals.\nReturns a URL to the booking page with pre-filled details and pricing info (court + player fees).",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "facilityId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "description": "Facility UUID from search_courts results"
+          },
+          "date": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "description": "YYYY-MM-DD (from the slot the user picked)"
+          },
+          "time": {
+            "type": "string",
+            "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$",
+            "description": "HH:MM 24-hour (from the slot the user picked)"
+          },
+          "sportId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "description": "Sport UUID from search_courts results"
+          },
+          "duration": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Duration in minutes, e.g. 60 (from the slot the user picked)"
+          },
+          "surface": {
+            "description": "Optional surface filter (e.g. \"Hard\", \"Clay\")",
+            "type": "string"
+          },
+          "players": {
+            "default": 2,
+            "description": "Optional number of players (1–8). Defaults to 2. Required for accurate totals when the facility charges a per-player fee — ask the user before calling when perPlayerFeeDollars is set.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 8
+          }
+        },
+        "required": [
+          "facilityId",
+          "sportId",
+          "duration"
+        ]
+      }
+    },
+    {
+      "name": "get_facility_details",
+      "description": "Use this when the user asks about a specific facility: hours, address, phone number, amenities, policies, what sports it offers, or its courts. Looks the facility up in the CourtsApp database. Typical asks: \"what time does the club open?\", \"does it have indoor courts?\", \"how much is the per-player fee?\", \"what's the cancellation policy?\", \"is there a pro shop or parking?\".\nAccepts partial name matches, city, state, or zip. facilityId is optional — use it only when you already have a real facility id from another CourtsApp tool; otherwise use name and location fields. At least one search field is required.\nReturns up to 5 matching facilities, bookable first, then connected, then listed, by name. Each includes: name, listingTier (bookable, connected, or listed), comingSoon status, description/about, seoDescription, timezone, full address, phone number, website, bookingUrl, hours of operation, amenities, booking/cancellation policies, per-player fees, check-in policy, available sports, indoorCourtCount, outdoorCourtCount, courtSurfaces, courtGroups (listed and connected: courts per sport, setting, and surface), bookable court details (name, environment, surface, sports), lat and lng (when known), photos (photoUrl is the first), and a link to the facility page. website and bookingUrl are https links, or null when the stored value is missing or not a normal web URL.\nFacilities with comingSoon: true are joining CourtsApp but not yet bookable. For connected facilities, send the user to bookingUrl. For listed facilities, send the user to website. Do not search availability or create a CourtsApp checkout for either.\nbookingPolicies.advanceBookingDays is the maximum advance booking window across all sports. When different sports have different windows, advanceBookingDaysBySport lists each sport and its window (e.g. Pickleball 7 days, Tennis 14 days). If a user asks about a date that one sport allows but another doesn't, explain which sport(s) can be booked that far out and which cannot.\nWhen bookingPolicies includes perPlayerFeeDollars or perPlayerFeePolicy, tell the user about the per-player fee — it affects total cost beyond the court rental price. When checkInPolicy is present, share it so the user knows what to expect on arrival.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "name": {
+            "description": "Facility name or partial name (case-insensitive). E.g. \"Lifetime\", \"Central Park Tennis\", \"YMCA\".",
+            "type": "string",
+            "maxLength": 100
+          },
+          "facilityId": {
+            "description": "Optional. Must be a valid UUID string (RFC 4122) when provided — used for exact lookup by id. Omit when searching by name, city, state, or zip instead.",
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "city": {
+            "description": "City name (case-insensitive partial match). E.g. \"Austin\", \"New York\".",
+            "type": "string"
+          },
+          "state": {
+            "description": "State name or abbreviation (case-insensitive). E.g. \"Texas\", \"TX\", \"New York\", \"NY\".",
+            "type": "string"
+          },
+          "zip": {
+            "description": "Zip/postal code (exact match)",
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "search_open_play",
+      "description": "Use this when the user wants open play, drop-in, or to join a game with other players instead of reserving a whole court. Typical asks: \"pickleball open play near me tonight\", \"drop-in tennis this weekend\", \"beginner open play in Scottsdale\", \"I'm solo, where can I find a game?\". Finds open play sessions with spots left at CourtsApp facilities near a location, or at one facility.\nRequires location (city+state or zip preferred), facilityName, or facilityId. When the user names a facility, pass it as facilityName right away — do not ask for the city first. date, time, sport, and level are optional filters; with no date it looks 7 days ahead.\nReturns facilities, each with up to 5 sessions: level, when (facility-local), price per player, spotsLeft, maxPlayers, and url. The url is the booking page for that session — share it once the user picks a session.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "location": {
+            "description": "Where to search (50-mile radius). With facilityName or facilityId there is no radius and location only sorts by distance. Accepts city+state, city-only, state-only, zip, or lat+lng. City+state or zip are preferred. Never use 0,0 or guess coordinates.",
+            "type": "object",
+            "properties": {
+              "lat": {
+                "type": "number"
+              },
+              "lng": {
+                "type": "number"
+              },
+              "city": {
+                "type": "string"
+              },
+              "state": {
+                "type": "string"
+              },
+              "zip": {
+                "type": "string"
+              }
+            }
+          },
+          "facilityId": {
+            "description": "Optional facility UUID from another CourtsApp tool, to list one facility's sessions. Never invent one.",
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "facilityName": {
+            "description": "Facility name the user said (e.g. \"Sportime Englewood\"). Every word must appear in the name, in any order, so partial names work. Searched nationwide; add location to sort same-named clubs by distance.",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "sport": {
+            "description": "Optional sport filter (e.g. \"pickleball\"). Omit to include every sport.",
+            "type": "string",
+            "enum": [
+              "tennis",
+              "pickleball",
+              "padel",
+              "table-tennis",
+              "badminton",
+              "racquetball",
+              "squash"
+            ]
+          },
+          "date": {
+            "description": "Optional facility-local date as YYYY-MM-DD. Omit to search the next 7 days.",
+            "type": "string",
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+          },
+          "time": {
+            "description": "Optional earliest start time of day as HH:MM 24-hour (e.g. \"17:00\" for evening sessions). Pass the user's spoken time directly — no timezone conversion.",
+            "type": "string",
+            "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+          },
+          "level": {
+            "description": "Optional skill level: Beginner, Advanced beginner, Intermediate, Advanced intermediate, Advanced, Expert, or Professional. Omit when the user has not said, or says any level.",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 60
+          },
+          "maxResults": {
+            "description": "Number of facilities to return (1–10, default 3).",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10
+          }
+        }
+      }
+    },
+    {
+      "name": "search_lessons",
+      "description": "Use this when the user wants a coach or private lessons for pickleball or tennis near a location. Not for court availability (search_courts) or open play (search_open_play). Typical asks: \"pickleball lessons near me\", \"find a tennis coach in Phoenix\", \"tennis lessons for my kid\", \"a private pickleball lesson this weekend\", \"who can help me fix my serve?\".\nRead-only: it finds TeachMe.To coaches within 25 miles who have an open lesson time in the next two weeks (times start 18 hours out, since coaches need that much notice), and does not book anything. Next, get_lesson_times shows a coach's open times, and each time has a checkoutUrl: TeachMe.To's checkout with the coach, place and time already filled in, where the user pays on TeachMe.To.\nRequires sport and a location (city+state, zip, or lat+lng). A state alone is too broad, so ask for a city or zip code. maxResults is 1-6 (default 3).\nReturns coaches, each with listingId and locationId (pass both to get_lesson_times), name, rating, reviewCount, a short headline, distanceMiles, city, singleLessonPrice (one lesson, all fees included; null when not listed, never guess it), startingPrice (the per-lesson rate when buying a 10-lesson pack, so say \"from $X per lesson\") and nextOpen (the soonest open time in the coach's local time, with its slotKey and checkoutUrl: share that link exactly as returned to book it; the player needs to give no contact details). Each coach also has locations (where they teach near the search, nearest first, with distanceMiles) and teachmeUrl, their own TeachMe.To page, where the player chooses a location, date and time themselves.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "sport": {
+            "description": "Sport to find a coach for: pickleball or tennis.",
+            "type": "string",
+            "enum": [
+              "pickleball",
+              "tennis"
+            ]
+          },
+          "location": {
+            "description": "Where to look (25-mile radius). City+state or zip are preferred. A state alone is too broad. Use lat+lng only if the user provided real coordinates. Never use 0,0 or guess coordinates.",
+            "type": "object",
+            "properties": {
+              "lat": {
+                "type": "number"
+              },
+              "lng": {
+                "type": "number"
+              },
+              "city": {
+                "type": "string"
+              },
+              "state": {
+                "type": "string"
+              },
+              "zip": {
+                "type": "string"
+              }
+            }
+          },
+          "maxResults": {
+            "description": "Number of coaches to return (1-6, default 3).",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 6
+          }
+        },
+        "required": [
+          "sport"
+        ]
+      }
+    },
+    {
+      "name": "get_lesson_times",
+      "description": "Use this when the user has picked a coach from search_lessons and wants to see when that coach is free for a private lesson. Not for court times (search_courts). Typical asks: \"when is that coach free Saturday morning?\", \"any evening times next week?\".\nRead-only: it shows the coach's open lesson times at one location and does not book anything. Pass the coach's listingId and the locationId from search_lessons (a coach who teaches at several places needs one). Optional: lessonLength in minutes (30, 60, 90 or 120; default the coach's usual length), startDate and endDate (YYYY-MM-DD, local days at the location; default the next 7 days, at most 14; times start 18 hours out, since coaches need that much notice), and earliestTime and latestTime (HH:MM, local) to narrow each day, for example evenings.\nReturns the coach (with teachmeUrl, their own TeachMe.To page, where the player chooses a location, date and time themselves), the location and the coach's other locations, the lesson length, prices (TeachMe.To quotes for one student, fees included: one lesson, and the 10-lesson pack where the coach sells one; the exact total comes back with the checkout link) and open times grouped by local day, each with a slotKey and a checkoutUrl (TeachMe.To's checkout for that time with the coach, place and time already filled in: to book, share it exactly as returned; no contact details are needed). Times are in the location's own time zone. Each day shows a spread of its times and openTimes says how many there are in all; at most 4 days are shown.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "listingId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "description": "The coach's listingId from search_lessons."
+          },
+          "locationId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "description": "The locationId from search_lessons (the coach's place nearest the user). Needed when the coach teaches at more than one place."
+          },
+          "lessonLength": {
+            "type": "integer",
+            "enum": [
+              30,
+              60,
+              90,
+              120
+            ],
+            "description": "Lesson length in minutes. Leave out for the coach's usual length."
+          },
+          "startDate": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "description": "First day to show, YYYY-MM-DD, a local day at the location. Defaults to today."
+          },
+          "endDate": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "description": "Last day to show, YYYY-MM-DD. Defaults to a week from the first day; at most 14 days in all."
+          },
+          "earliestTime": {
+            "type": "string",
+            "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$",
+            "description": "Only times starting at or after this local time, HH:MM 24-hour (for example 17:00 for evenings)."
+          },
+          "latestTime": {
+            "type": "string",
+            "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$",
+            "description": "Only times starting at or before this local time, HH:MM 24-hour."
+          }
+        },
+        "required": [
+          "listingId"
+        ]
+      }
+    },
+    {
+      "name": "get_lesson_booking_link",
+      "description": "Optional: use this only when the user asks to have their own details filled in on the checkout for them. The default way to book needs no contact details: share the picked time's checkoutUrl from get_lesson_times exactly as returned. This tool prepares a TeachMe.To checkout for that lesson and returns a link where the user pays, with the coach, location, time and the student's details already filled in.\nIt sends the student's full name, email address and phone number to TeachMe.To to prepare that checkout (they are what lets TeachMe.To fill them in), and creates their TeachMe.To account if the email is new. Ask the user for all three first, and use only what the user gave you. Nothing is charged by this tool, and CourtsApp takes no payment for lessons: the user pays on TeachMe.To, and the coach then accepts the time or suggests another, so it is a request, never a confirmed booking.\nRequires listingId, locationId and slotKey (from get_lesson_times, exactly as returned), lessonLength (minutes, the one used for the times), studentName, studentEmail and studentPhone. lessons is how many lessons to buy as a prepaid pack, 1-20 (default 1).\nReturns paymentUrl (share it exactly as returned), the coach, location and local time, and the quote: lessons, pricePerLesson, fees, total and currency.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "listingId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "description": "The coach's listingId from search_lessons or get_lesson_times."
+          },
+          "locationId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "description": "The locationId the time is at, from get_lesson_times."
+          },
+          "slotKey": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000,
+            "description": "The slotKey of the time the user picked, copied exactly as returned. It cannot be edited."
+          },
+          "lessonLength": {
+            "type": "integer",
+            "enum": [
+              30,
+              60,
+              90,
+              120
+            ],
+            "description": "Lesson length in minutes: the lessonLength of the times the user picked from."
+          },
+          "lessons": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 20,
+            "default": 1,
+            "description": "How many lessons to buy as a prepaid pack (1-20). Defaults to 1. The first lesson is at the time picked."
+          },
+          "studentName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "The student's full name, as the user gave it."
+          },
+          "studentEmail": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 254,
+            "description": "The student's email address, as the user gave it."
+          },
+          "studentPhone": {
+            "type": "string",
+            "minLength": 7,
+            "maxLength": 40,
+            "description": "The student's phone number with area code, as the user gave it."
+          }
+        },
+        "required": [
+          "listingId",
+          "locationId",
+          "slotKey",
+          "lessonLength",
+          "studentName",
+          "studentEmail",
+          "studentPhone"
+        ]
+      }
+    },
+    {
+      "name": "search_tournaments",
+      "description": "Use this when the user wants tournaments or leagues to play in, near a location or by name. Not for court availability (search_courts), open play (search_open_play) or coaching (search_lessons). Typical asks: \"pickleball tournaments near me\", \"tennis leagues in Dallas\", \"any tournaments this weekend?\", \"when does registration close for Moneyball?\".\nRead-only: it searches CourtsApp's catalog of events and cannot register anyone. Each event has a registration url on the organizer's site: share it exactly as returned and let the user sign up there. Never say anyone is registered.\nLocation is optional (city+state, zip, or lat+lng; a state alone lists that state's events). With a city or zip it returns events within 150 miles, soonest first, each with distanceMiles; if none are that close it says so and returns the 2 nearest, which are not near, so never call them nearby. Without a location it returns the soonest events anywhere. Use q or name for an event name (e.g. \"Moneyball\"), type to limit to tournaments or leagues, and from/to (YYYY-MM-DD) for dates; it starts from today by default. maxResults is 1-10 (default 6).\nReturns tournaments, each with name, eventType, venueName, city, state, startDate and endDate (calendar days), registrationCloseDate, closingSoon (registration closes within 5 days), priceMinCents and priceMaxCents with currency (cents; 0 means free), url, and distanceMiles; plus total and hint.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "sport": {
+            "type": "string",
+            "enum": [
+              "tennis",
+              "pickleball",
+              "padel",
+              "table-tennis",
+              "badminton",
+              "racquetball",
+              "squash"
+            ],
+            "description": "Optional sport to find events for. Pass it whenever the user names one. Case-insensitive. Common aliases accepted (e.g. \"pickle ball\" → pickleball)."
+          },
+          "location": {
+            "description": "Where to look (150-mile radius). City+state or zip are preferred; a state alone lists that state's events with no distances. Use lat+lng only if the user provided real coordinates. Never use 0,0 or guess coordinates. Optional: leave it out to search everywhere.",
+            "type": "object",
+            "properties": {
+              "lat": {
+                "type": "number"
+              },
+              "lng": {
+                "type": "number"
+              },
+              "city": {
+                "type": "string"
+              },
+              "state": {
+                "type": "string"
+              },
+              "zip": {
+                "type": "string"
+              }
+            }
+          },
+          "q": {
+            "description": "Optional event name or venue to look for, e.g. \"Moneyball\".",
+            "type": "string",
+            "maxLength": 100
+          },
+          "type": {
+            "description": "Optional: only tournaments, or only leagues. Leave it out for both.",
+            "type": "string",
+            "enum": [
+              "tournament",
+              "league"
+            ]
+          },
+          "from": {
+            "description": "Optional first day to include, as YYYY-MM-DD: events still on or after it are returned. Defaults to today.",
+            "type": "string",
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+          },
+          "to": {
+            "description": "Optional last day to include, as YYYY-MM-DD: events starting on or before it are returned. Omit for no end date.",
+            "type": "string",
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+          },
+          "maxResults": {
+            "description": "Number of events to return (1-10, default 6).",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10
+          }
+        }
+      }
+    },
+    {
+      "name": "get_facility_times",
+      "description": "Lists every open court time at one bookable CourtsApp facility on one day, grouped by indoor or outdoor and surface, with per-hour prices and a booking link for each. The CourtsApp facility card calls this to show a club's times on its profile; it is not needed to find courts for a user, which search_courts does (it returns the first few times per club). Needs the facility's id (from search_courts or get_facility_details). The date is optional and defaults to today where the facility is (tomorrow when nothing is left today); sport defaults to the facility's first sport.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "facilityId": {
+            "description": "The facility's id (a UUID), as returned by search_courts or get_facility_details.",
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "sport": {
+            "description": "Sport slug or name, e.g. \"pickleball\" or \"Table Tennis\". Defaults to the facility's first sport.",
+            "type": "string"
+          },
+          "date": {
+            "description": "Day to list, YYYY-MM-DD. Defaults to today where the facility is.",
+            "type": "string",
+            "format": "date"
+          }
+        },
+        "required": [
+          "facilityId"
+        ]
+      }
+    },
+    {
+      "name": "record_click",
+      "description": "Records that someone followed a link on a CourtsApp card, for CourtsApp's own click statistics. The CourtsApp cards call this when a link is opened; it is not needed to answer a user and does not need to be called. It keeps the kind of link, the club's id, the destination's host and path and its utm_* tags, and which assistant showed the card, and nothing about the person.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "url": {
+            "description": "The link that was opened (http or https).",
+            "type": "string",
+            "minLength": 8,
+            "maxLength": 2048
+          },
+          "facilityId": {
+            "description": "The facility's id (a UUID), when the card knows it.",
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "kind": {
+            "description": "What kind of link it was.",
+            "type": "string",
+            "enum": [
+              "facility_page",
+              "slot",
+              "book",
+              "booking_link",
+              "club_site",
+              "open_play",
+              "tournament",
+              "lesson_checkout",
+              "lesson_page",
+              "directions",
+              "other"
+            ]
+          }
+        },
+        "required": [
+          "url",
+          "kind"
+        ]
+      }
+    },
+    {
+      "name": "record_card_error",
+      "description": "Records that a CourtsApp card hit an error in its own code, so CourtsApp can fix the card. The CourtsApp cards call this on their own; it is not needed to answer a user and does not need to be called. It keeps which card, the kind of error, the error's message and where in the card it happened, and which assistant showed the card, and nothing about the person.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "card": {
+            "description": "Which card hit the error.",
+            "type": "string",
+            "enum": [
+              "availability",
+              "checkout",
+              "coach-cards",
+              "facility-profile",
+              "lesson-checkout",
+              "lesson-times",
+              "open-play-cards",
+              "tournament-cards"
+            ]
+          },
+          "kind": {
+            "description": "An error a script threw, or a promise nobody caught.",
+            "type": "string",
+            "enum": [
+              "error",
+              "unhandled_rejection"
+            ]
+          },
+          "message": {
+            "description": "The error's message.",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300
+          },
+          "at": {
+            "description": "Where in the card's script it happened (line and column), when known.",
+            "type": "string",
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "card",
+          "kind",
+          "message"
+        ]
+      }
+    },
+    {
+      "name": "get_coach_profile",
+      "description": "The coach card calls this when someone opens a coach's profile. It is not needed to find a coach, which search_lessons does. Read-only: it returns the bio, the places, the lesson lengths and the cancellation policy. It does not return a price.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "listingId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "description": "The coach's listingId from search_lessons."
+          }
+        },
+        "required": [
+          "listingId"
+        ],
+        "additionalProperties": false
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "com.courtsapp/mcp",
+    "version": "1.0.1",
+    "remoteUrl": "https://api.courtsapp.com/mcp",
+    "publishedAt": "2026-11-25T22:58:05.865461Z",
+    "fetchedAt": "2026-11-26T10:40:47.803Z",
+    "toolsSha256": "09b4c285c32f21b1c944e48478e3193222d33c8a1759948d089834bb24648c22"
+  }
+}

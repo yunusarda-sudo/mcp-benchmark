@@ -1,0 +1,528 @@
+{
+  "$schema": "../schema.json",
+  "name": "org.virtualflybrain/vfb3-mcp",
+  "title": "VirtualFlyBrain",
+  "category": "Other",
+  "description": "MCP server for Drosophila neuroscience data from VirtualFlyBrain",
+  "repository": "https://github.com/VirtualFlyBrain/VFB3-MCP",
+  "tools": [
+    {
+      "name": "get_term_info",
+      "description": "Get term info for a VFB or anatomy ontology entity (VFB_*, FBbt_*, etc.). THIS IS THE QUERY DISCOVERY TOOL: the response's \"Queries\" array lists the valid query_type values that run_query accepts for this entity. ALWAYS call get_term_info before run_query unless you already obtained the query_type from a previous get_term_info call in this conversation. Returns: SuperTypes (classification), Tags (data flags like has_image, has_neuron_connectivity), Queries (valid query_types for run_query), RelatedTools (other MCP tools applicable to this entity, with default_args ready to copy — e.g. get_hierarchy with subclass_of for cell types or part_of for nervous-system regions), Images (keyed by template brain ID), Publications, Synonyms. Supports batch — pass an array of IDs to fetch in parallel; batch results are returned as a JSON object keyed by ID. To build VFB browser URLs from the Images field: https://v3.virtualflybrain.org/org.geppetto.frontend/geppetto?id=<VFB_ID>&i=<TEMPLATE_ID>,<IMAGE_ID1>,<IMAGE_ID2> — id= sets the focus term and i= lists images for the 3D viewer (template ID must be first in i= to set the coordinate space).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "oneOf": [
+              {
+                "type": "string",
+                "description": "A single VFB ID (e.g., VFB_jrcv0i43)"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "An array of VFB IDs to fetch in batch (e.g., [\"VFB_jrcv0i43\", \"VFB_00101567\"])"
+              }
+            ],
+            "description": "One or more VFB IDs to look up"
+          },
+          "force_refresh": {
+            "type": "boolean",
+            "description": "Bypass the response cache and recompute this result. Expensive — leave it unset on a first call. Set it ONLY to re-try a call that, earlier in this same conversation, returned a result that was clearly wrong, stale, or reported as failed. Never set it on more than one retry of the same call."
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    },
+    {
+      "name": "run_query",
+      "description": "Run a pre-computed query on a VFB entity. REQUIRED WORKFLOW: (1) call get_term_info on the ID first; (2) read the response's \"Queries\" array; (3) pass one of those values as query_type. Calling run_query with a guessed query_type will return an error. If a query returns empty rows or an error, the entity does not support that query_type or has no data for it — try a different query_type from the Queries array, or try a related entity (e.g. its parent class via get_hierarchy). Empty results do NOT mean the answer is unknown — only that this call did not return it. NEVER fabricate results from training data when a query is empty; tell the user clearly what was tried. NEVER pass tool names like \"get_term_info\" or \"search_terms\" as query_type — those are separate tools. Common query_types by entity kind: PaintedDomains, AllAlignedImages, AlignedDatasets, AllDatasets (templates); SimilarMorphologyTo, NeuronInputsTo, NeuronNeuronConnectivityQuery, NeuronRegionConnectivityQuery (individual neurons); ListAllAvailableImages, SubclassesOf, PartsOf, NeuronsPartHere, NeuronsSynaptic, ExpressionOverlapsHere, DownstreamClassConnectivity, UpstreamClassConnectivity (classes). Supports batch — pass an array of IDs (same query_type) or a \"queries\" array of {id, query_type} pairs; batch results are keyed by \"ID::query_type\". Results are PAGED: the first 25 rows by default (change with limit/offset) plus the true total as \"count\". ALWAYS read \"count_status\" before quoting \"count\": \"exact\" means count is the true total; \"unavailable\" means the query FAILED upstream and count is -1, which is NOT zero and must never be reported as \"no results\" — read \"_note\" and tell the user the query could not be run. Image/thumbnail columns are excluded by default to save space - pass include_images=true to include them. FlyBase integration is via query_types too: FindStocks (fly stocks for a FlyBase feature ID - FBgn/FBal/FBti/FBtp/FBco/FBst; for an FBco split combination only the best tier is returned, labelled in a \"match\" column: Exact combination, else per hemidriver Hemidriver alone, else Hemidriver in other combination) and FindComboPublications (publications for an FBco split-GAL4 combination). Get those IDs from resolve_entity / resolve_combination first, then run_query with the ID and the query_type. Include FlyBase links in output: https://flybase.org/reports/{ID}.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "oneOf": [
+              {
+                "type": "string",
+                "description": "A single VFB ID (e.g., VFB_00101567)"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "An array of VFB IDs — all will use the same query_type"
+              }
+            ],
+            "description": "One or more VFB IDs to query"
+          },
+          "query_type": {
+            "type": "string",
+            "description": "A valid query type from the Queries array returned by get_term_info. Used for single id or array of ids."
+          },
+          "queries": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "description": "VFB ID"
+                },
+                "query_type": {
+                  "type": "string",
+                  "description": "Query type for this ID"
+                }
+              },
+              "required": [
+                "id",
+                "query_type"
+              ]
+            },
+            "description": "Array of {id, query_type} pairs for mixed batch queries. When provided, id and query_type params are ignored."
+          },
+          "limit": {
+            "type": "number",
+            "description": "Max rows returned per call (default 25). The true total is always returned as \"count\"; broad queries (e.g. ListAllAvailableImages, or NeuronsSynaptic on a whole region) can have thousands to hundreds of thousands of rows. Use 0 for all rows (still capped server-side ~25000 - avoid for broad queries)."
+          },
+          "offset": {
+            "type": "number",
+            "description": "Row offset for paging (default 0). To get the next page, re-run with offset increased by limit; \"count\" gives the total."
+          },
+          "include_images": {
+            "type": "boolean",
+            "description": "Include the image/thumbnail column in result rows. Default false: the thumbnail is a long markdown image string that is rarely useful to reason over and greatly inflates every row, so it is stripped and the response says so in _note. Set true to include it (e.g. to build image URLs)."
+          },
+          "force_refresh": {
+            "type": "boolean",
+            "description": "Bypass the response cache and recompute this result. Expensive — leave it unset on a first call. Set it ONLY to re-try a call that, earlier in this same conversation, returned a result that was clearly wrong, stale, or reported as failed. Never set it on more than one retry of the same call. A failed query (count -1) is already retried once automatically, so you do not need this for that case."
+          }
+        }
+      }
+    },
+    {
+      "name": "search_terms",
+      "description": "Search VFB terms. This is the search virtualflybrain.org itself runs — the same Solr query, the same ranking — so what comes back first here is what a user would see first on the site.\n\nUSE filter_types BY DEFAULT. Unfiltered searches mix scRNAseq artifacts and developmental stages in with the entity the user wants.\n\nCommon filter_types recipes:\n- Neuron classes: [\"neuron\", \"class\"]\n- Individual neurons with images: [\"neuron\", \"has_image\"]\n- Neurons with connectome data: [\"neuron\", \"has_neuron_connectivity\"]\n- Brain regions / neuropils: [\"anatomy\"]\n- Genes: [\"gene\"]\n- Driver lines / expression patterns: [\"expression_pattern\"]\n- Datasets: [\"dataset\"]\n\nThere are over 200 type names and they change as data is added, so do NOT guess them: call list_search_facets to see the current vocabulary (optionally filtered, e.g. contains=\"lineage\"). Names are matched case- and separator-insensitively, and a name that does not exist is an error with suggestions rather than a silently empty result.\n\nDeprecated terms are excluded by the search itself — you do not need exclude_types: [\"deprecated\"], and adding it is harmless but pointless.\n\nStage filtering: VFB covers adult, larval, and embryonic data, and many anatomical FBbt classes are stage-agnostic. Do NOT add \"adult\" or \"larva\" to filter_types by default — only add them when the user is explicit about a stage (e.g. \"adult Kenyon cells\", \"larval mushroom body\"). Default searches should leave stage out so stage-agnostic classes and all life stages are visible.\n\nUseful flags:\n- unique=true (the default) → one row per term. Turn it OFF only when you need to see WHICH synonym matched; with unique=false a term appears once per matching synonym, so \"Kenyon cell\" can return the same ID several times.\n- minimize_results=true → top 10, essential fields only, for exploratory searches.\n- auto_fetch_term_info=true → if an exact label match is found, returns get_term_info in the same response.\n- boost_types=[\"has_image\", \"has_neuron_connectivity\"] → float data-rich entities to the top of the list without excluding anything else.\n- demote_types=[\"expression_pattern_fragment\"] → sink noisy types to the bottom of the list instead of removing them.\n\nIf the search returns no good matches, do NOT fall back to training-data answers — try alternative spellings, synonyms, broader terms, or different filter_types.\n\nMultiple filter_types are ANDed (results must match ALL). Multiple exclude_types are ORed (any match excludes). boost_types and demote_types re-order without excluding; boost wins if a term matches both.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Search query (e.g., medulla)"
+          },
+          "filter_types": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Filter results to only include items matching ALL of these facets_annotation types (AND logic). Use list_search_facets for valid names."
+          },
+          "exclude_types": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Exclude results matching ANY of these facets_annotation types (OR logic). Deprecated terms are already excluded."
+          },
+          "boost_types": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Float results matching these facets_annotation types to the top of the ranked list without excluding others"
+          },
+          "demote_types": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Sink results matching these facets_annotation types to the bottom of the ranked list without excluding them. Ignored for a type that also appears in boost_types."
+          },
+          "unique": {
+            "type": "boolean",
+            "description": "One row per term (default true). Set false to get a row per matching synonym, which shows WHICH name matched at the cost of repeating IDs.",
+            "default": true
+          },
+          "start": {
+            "type": "number",
+            "description": "Pagination start index (default 0) - use to get results beyond the first page",
+            "default": 0
+          },
+          "rows": {
+            "type": "number",
+            "description": "Number of results to return (default 150, max 1000) - use smaller numbers for focused searches",
+            "default": 150,
+            "maximum": 1000
+          },
+          "minimize_results": {
+            "type": "boolean",
+            "description": "When true, return at most 10 results with only the essential fields. For exact matches, return only the matching result.",
+            "default": false
+          },
+          "auto_fetch_term_info": {
+            "type": "boolean",
+            "description": "When true and an exact label match is found, automatically fetch and include term info in the response.",
+            "default": false
+          }
+        },
+        "required": [
+          "query"
+        ]
+      }
+    },
+    {
+      "name": "list_search_facets",
+      "description": "List the type names search_terms can filter, exclude, boost or demote by, with the number of terms carrying each one. Call this instead of guessing: there are over 200 names, they are the index's own annotations rather than a curated list, and they change as data is added. Use contains to narrow (e.g. contains=\"lineage\" for the ~120 lineage clones, contains=\"connectivity\" to find the connectome facets). The counts tell you whether a name is broad or niche — \"entity\" covers everything, a single lineage covers a handful.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "contains": {
+            "type": "string",
+            "description": "Only return type names containing this text. Matched case- and separator-insensitively, so \"nervous system\" finds \"Nervous_system\"."
+          }
+        }
+      }
+    },
+    {
+      "name": "resolve_entity",
+      "description": "Resolve an unresolved FlyBase-related query string into VFB/FlyBase IDs and metadata. Pass the raw text exactly as the user wrote it (for example \"P{VT054895-GAL4.DBD}\", \"Hb9-GAL4\", \"SS04495\", \"MB002B\", \"PAM cluster\", or \"dpp\"). Do NOT pass resolved IDs such as FBgn/FBal/FBti/FBco/FBst or VFB IDs; if you already have an ID, use the downstream tool directly. Uses tiered resolution: exact name → synonym → broad pattern match. Returns match_type (EXACT/SYNONYM/BROAD), feature ID, name, type, and synonyms. IMPORTANT: When match_type is SYNONYM or BROAD, always confirm the resolved entity with the user before proceeding to further queries. If multiple matches are returned, show a disambiguation list and ask the user to choose. This tool queries FlyBase Chado — for VFB ontology lookups (anatomical terms, neuron class IDs) use search_terms instead.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Unresolved FlyBase-related query string from the user. Pass the raw name/synonym exactly as written (e.g., \"P{VT054895-GAL4.DBD}\", \"Hb9-GAL4\", \"SS04495\", \"MB002B\", \"PAM cluster\", \"dpp\"). Do NOT pass an already resolved FlyBase or VFB ID."
+          }
+        },
+        "required": [
+          "name"
+        ]
+      }
+    },
+    {
+      "name": "resolve_combination",
+      "description": "Resolve an unresolved split-GAL4 combination name or synonym into its FBco ID and component hemidrivers. Pass the raw combination text exactly as the user wrote it (for example \"MB002B\" or \"SS04495\"). Do NOT pass an FBco ID; if you already have one, use the downstream tool directly. Uses tiered resolution: exact name → synonym → broad pattern match. Returns FBco ID, combination name, matched synonym (if applicable), and component allele IDs/names. IMPORTANT: When match is via synonym, confirm the resolved combination with the user before proceeding (e.g., \"Your search for 'MB002B' matched [formal name] (FBco...) via synonym. Shall I proceed?\"). If multiple matches, show disambiguation list and ask user to choose.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Unresolved split-GAL4 combination name or synonym exactly as written by the user (e.g., \"MB002B\", \"SS04495\"). Do NOT pass an FBco ID here."
+          }
+        },
+        "required": [
+          "name"
+        ]
+      }
+    },
+    {
+      "name": "list_connectome_datasets",
+      "description": "List available connectome datasets with their labels and symbols. Use the returned symbols when constructing exclude_dbs arguments for query_connectivity. Common datasets include Hemibrain (hb), FAFB (fafb), MANC, and others. Call this tool if unsure which dataset symbols are valid.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "query_connectivity",
+      "description": "Query synaptic connectivity between Drosophila neuron classes across ALL connectome datasets simultaneously for comparative connectomics. This is NOT pre-cached — it runs live queries, so expect slow responses (up to several minutes). Set both upstream_type AND downstream_type to filter connections between two specific neuron classes (e.g., \"What Tm1→T3 connections exist across all datasets?\"). At least one of upstream_type or downstream_type is required. CONSTRAINTS: Only accepts neuron class terms (OWL IDs like FBbt_00003789 or labels like \"transmedullary neuron Tm1\") — anatomical regions or neuropils (e.g., \"lobula\", \"medulla\") are NOT accepted. NOT suitable for individual neuron-to-neuron connections — for pre-computed connections of a single individual neuron, use run_query with NeuronNeuronConnectivityQuery instead. NOT for muscle/sense organ connections. RECOMMENDED DEFAULTS: weight=5, exclude_dbs=[\"hb\",\"fafb\"] unless user specifies otherwise. For both-ends queries, start with weight≥50 to avoid timeouts. RESULT SIZE: a broad query is enormous (a single class at weight=5 can be over 50,000 connections), so results are ranked strongest-first and paged — you get limit rows (default 50) plus a summary computed over ALL of them: totals, per-dataset counts, distinct neuron counts, and the top class pairs. Answer from the summary and quote a handful of rows; only page with offset if the user asks for specific further rows. WORKFLOW: Confirm parameters with user before querying. Use search_terms with filter_types [\"neuron\",\"class\"] to validate/canonicalize neuron type labels. If zero results, try relaxation: lower weight to 1, then remove exclude_dbs filter, then try group_by_class=true — report what worked and let user decide. group_by_class=true is usually the better first call on a broad query: it rolls the connections up over the subclass hierarchy — a row per (upstream level, downstream level) with data, up to the queried term(s) — instead of returning every neuron pair. Because a connection counts toward every ancestor pair in scope, per-row pairwise_connections and total_weight do NOT sum to the raw connection counts, and a row appears for the queried class itself as well as each subclass with data.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "upstream_type": {
+            "type": "string",
+            "description": "Upstream (presynaptic) neuron class — OWL ID (e.g., \"FBbt_00003789\") or full label (e.g., \"transmedullary neuron Tm1\"). Must be a neuron type/class, NOT an anatomical region. Use search_terms with filter_types [\"neuron\",\"class\"] to validate/canonicalize labels before querying."
+          },
+          "downstream_type": {
+            "type": "string",
+            "description": "Downstream (postsynaptic) neuron class — OWL ID or full label. Must be a neuron type/class, NOT an anatomical region. If user asks about connectivity to a brain region, first find neuron classes in that region using search_terms, then query for those classes."
+          },
+          "weight": {
+            "type": "number",
+            "description": "Minimum synapse count threshold (recommended default: 5). Lower to 1 if initial query returns zero results as first relaxation step."
+          },
+          "group_by_class": {
+            "type": "boolean",
+            "description": "If true, aggregate by class rolled up over the subclass hierarchy: a row appears for the queried class AND each subclass with data (a connection counts toward every ancestor pair up to the queried term(s), so per-row pairwise_connections / total_weight do not sum to the raw counts). Returns total_weight, average_weight, percent_connected and pairwise_connections per class pair, ranked by pairwise_connections. If false (default), returns individual neuron-to-neuron rows."
+          },
+          "exclude_dbs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Dataset symbols to exclude (recommended default: [\"hb\", \"fafb\"] to focus on newer datasets). Pass empty array [] to include all datasets. Must be the exact `symbol` field from list_connectome_datasets — currently BANC, fw, ol, mv, hb, mc, fafb, l1em. An unrecognised symbol is silently ignored by the server rather than reported, so a dataset name (\"hemibrain\", \"male-cns\", \"flywire\") excludes nothing and gives no warning. Call list_connectome_datasets rather than guessing."
+          },
+          "limit": {
+            "type": "number",
+            "description": "How many connection rows to return, strongest first (default 50). The summary always covers every connection found, not just the returned rows. Pass 0 for all rows — only do this on a query you already know is small, as broad queries return tens of thousands.",
+            "default": 50
+          },
+          "offset": {
+            "type": "number",
+            "description": "Row to start from within the strongest-first ranking (default 0). Re-running with the same limit and the next offset walks down the list.",
+            "default": 0
+          }
+        }
+      }
+    },
+    {
+      "name": "find_circuit_paths",
+      "description": "Find the strongest multi-hop synaptic pathways from one Drosophila neuron class (or neuron) to another, e.g. \"how does LC12 reach the giant fiber?\" or \"what routes lead from DA1 ORNs to MBON01?\". Answers from precomputed graphs, so class and neuron paths take a second or two. Use this for indirect routes; for direct connections between two classes use query_connectivity, and for one-sided partner lists use run_query with UpstreamClassConnectivity / DownstreamClassConnectivity. INPUT: ids only — FBbt class ids, or VFB ids for individual neurons; labels are refused, so resolve names with search_terms (filter_types [\"neuron\",\"class\"]) first. Several ids per end are allowed. SCORING: each step is weighted by its input proportion (inprop_in: the fraction of the downstream class's total synaptic input that comes from the upstream class); a path's score is the product of its steps, so a 3-step path at 0.1 per step scores 0.001. Paths are ranked best first; scores are comparable within a dataset, not as absolute strengths. normalise=\"output\" uses the fraction of the upstream class's output instead. HOW CLASSES ARE COUNTED: each neuron is assigned to its single most specific (leaf) cell type in that connectome, so broad classes do not act as shortcuts. A broad term such as \"Kenyon cell\" expands to the leaf classes beneath it (listed under sources/targets). Neurons with no leaf type, or more than one, are left out (neurons_left_out counts them). They can still appear in neuron-level paths, as nodes with class null plus status (no_leaf: only general types; multi_leaf: several leaf types; only_axis: only transmitter/lineage-type classes; untyped) and types (the most specific types they do have). Because of this the figures differ from query_connectivity with group_by_class=true, which rolls connections up to every ancestor class and pools datasets: do not compare the two numbers directly. LEVELS: if both ends are classes the search runs on the class graph; if either end is a VFB neuron id, it runs on the neuron graph (class ends expand to their neurons). DATASETS: each connectome is searched separately and reported in its own block; shared_class_paths lists class paths found in more than one dataset, which are the most robust. instance_graph=true adds the best individual-neuron chains along each class path, but takes tens of seconds on the large connectomes: use it only when the user asks about individual neurons, and then with k at most 5 and instance_k at most 3. RECOMMENDED DEFAULTS: k=5, min_synapses=5, exclude_dbs omitted (= [\"hb\",\"fafb\"]). If no paths are found, try min_synapses=1, then exclude_dbs=[]. Every response names the data release (run) it came from.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            ],
+            "description": "Start of the path: FBbt class id(s) (e.g. \"FBbt_00100484\") or VFB neuron id(s) (e.g. \"VFB_fw011554\"). A broad class expands to its leaf classes. Not labels — use search_terms first."
+          },
+          "target": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            ],
+            "description": "End of the path, in the same form as source."
+          },
+          "k": {
+            "type": "number",
+            "description": "Paths to return per dataset, best first (default 5, max 20; max 5 with instance_graph).",
+            "default": 5
+          },
+          "min_synapses": {
+            "type": "number",
+            "description": "Ignore class-to-class (or neuron-to-neuron) connections with fewer synapses than this (default 5). Lower to 1 if nothing is found.",
+            "default": 5
+          },
+          "min_inprop": {
+            "type": "number",
+            "description": "Ignore steps whose input proportion is below this (0..1, default 0). Raise it (e.g. 0.01) to keep only substantial steps.",
+            "default": 0
+          },
+          "normalise": {
+            "type": "string",
+            "enum": [
+              "input",
+              "output"
+            ],
+            "description": "\"input\" (default): weight each step by the fraction of the downstream partner's input. \"output\": by the fraction of the upstream partner's output.",
+            "default": "input"
+          },
+          "exclude_dbs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Dataset symbols to leave out. Omit for the default ([\"hb\",\"fafb\"], as on query_connectivity); pass [] to search every dataset. Must be symbols from list_connectome_datasets — an unknown name is rejected."
+          },
+          "instance_graph": {
+            "type": "boolean",
+            "description": "If true, add the best individual-neuron chains along each class path (instances). Slow: tens of seconds on the large connectomes, so only when the user asks about individual neurons. With it, k is at most 5 and instance_k at most 3. Default false.",
+            "default": false
+          },
+          "instance_k": {
+            "type": "number",
+            "description": "Neuron chains per class path when instance_graph is true (default 3, max 3).",
+            "default": 3
+          }
+        },
+        "required": [
+          "source",
+          "target"
+        ]
+      }
+    },
+    {
+      "name": "get_predicted_neurotransmitters",
+      "description": "Get the PREDICTED neurotransmitter(s) for a Drosophila neuron class — itself or any subclass — from per-instance connectome predictions (each reconstructed neuron carries a predicted transmitter with a confidence). Use this for \"what neurotransmitter does <cell type> use?\" when you want the data-driven prediction and its confidence. By default results are aggregated to flat per-class rows (one per cell type × neurotransmitter) with instance counts, percent_of_class and mean_confidence; set aggregate=false for one row per individual neuron. Set split_by_dataset=true to get one row per (cell type, neurotransmitter, dataset) so you can see agreement across connectomes. The neurotransmitter is reported as a GO secretion term (nt_id/nt_label), the same id space as get_known_neurotransmitters. This is distinct from get_known_neurotransmitters, which returns the ontology-curated classification without confidence. CONSTRAINTS: neuron class terms only (FBbt id or label); use search_terms with filter_types [\"neuron\",\"class\"] to canonicalize. RECOMMENDED: exclude_dbs defaults to [\"hb\",\"fafb\"]; pass [] for all datasets.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "neuron_type": {
+            "type": "string",
+            "description": "Neuron class — OWL ID (e.g. \"FBbt_00003797\") or label (e.g. \"Tm9\"). Means the class and all of its subclasses."
+          },
+          "aggregate": {
+            "type": "boolean",
+            "description": "If true (default), aggregate to flat per-class rows {cell_type_id, cell_type, nt_id, nt_label, instances, percent_of_class, mean_confidence}. If false, return one row per individual neuron {..., neuron_id, neuron_name, confidence, references, dataset}.",
+            "default": true
+          },
+          "split_by_dataset": {
+            "type": "boolean",
+            "description": "If true (aggregate only), emit one row per (cell type, neurotransmitter, dataset) with a dataset column, so cross-connectome agreement is visible. Default false aggregates over all included datasets.",
+            "default": false
+          },
+          "exclude_dbs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Dataset symbols to exclude (default [\"hb\",\"fafb\"]). Pass [] to include all datasets. Same symbols as query_connectivity / list_connectome_datasets."
+          },
+          "min_confidence": {
+            "type": "number",
+            "description": "Drop predictions below this confidence (0..1). Default 0 (keep all).",
+            "default": 0
+          }
+        },
+        "required": [
+          "neuron_type"
+        ]
+      }
+    },
+    {
+      "name": "get_known_neurotransmitters",
+      "description": "Get the KNOWN (curated) neurotransmitter(s) for a Drosophila neuron class and its subclasses, from the ontology's classification rather than per-instance predictions — so there is no confidence. Use this for \"what neurotransmitter is <cell type> known to use?\" when you want the curated/established answer. Returns one row per (cell type, neurotransmitter): {cell_type_id, cell_type, nt_id, nt_label}, where the neurotransmitter is a GO secretion term (same id space as get_predicted_neurotransmitters). Empty when the ontology asserts none — in that case try get_predicted_neurotransmitters for the data-driven prediction. CONSTRAINTS: neuron class terms only (FBbt id or label); use search_terms with filter_types [\"neuron\",\"class\"] to canonicalize.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "neuron_type": {
+            "type": "string",
+            "description": "Neuron class — OWL ID (e.g. \"FBbt_00003797\") or label (e.g. \"Tm9\"). Means the class and all of its subclasses."
+          }
+        },
+        "required": [
+          "neuron_type"
+        ]
+      }
+    },
+    {
+      "name": "get_hierarchy",
+      "description": "Build a hierarchy tree for a VFB term, showing ancestors (parents) and/or descendants (children). Use relationship \"part_of\" for brain region structure (e.g. \"what are the parts of the mushroom body?\") and \"subclass_of\" for cell type hierarchies (e.g. \"what types of Kenyon cell are there?\"). Descendants are returned as a nested tree for both relationship types. Ancestors are returned as a nested chain, filtered to nervous system terms for part_of. Start with max_depth=1 for direct parents/children, and offer to go deeper if the user wants more detail.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "VFB term ID (e.g. FBbt_00005801 for mushroom body, FBbt_00003686 for Kenyon cell)"
+          },
+          "relationship": {
+            "type": "string",
+            "enum": [
+              "part_of",
+              "subclass_of"
+            ],
+            "description": "Type of hierarchy: \"part_of\" for brain region structure, \"subclass_of\" for cell type taxonomies"
+          },
+          "direction": {
+            "type": "string",
+            "enum": [
+              "descendants",
+              "ancestors",
+              "both"
+            ],
+            "description": "Which direction to explore (default: \"both\")",
+            "default": "both"
+          },
+          "max_depth": {
+            "type": "number",
+            "description": "Number of levels to expand. 1 = direct children/parents only. Higher values go deeper. -1 = full tree (use with caution on broad terms). Default: 1.",
+            "default": 1
+          }
+        },
+        "required": [
+          "id",
+          "relationship"
+        ]
+      }
+    },
+    {
+      "name": "lookup_xref",
+      "description": "Map a VFB ID to its external database accessions, or an external accession back to the VFB term that carries it. USE THIS INSTEAD OF search_terms FOR ANY EXTERNAL ACCESSION — a hemibrain/FAFB/MANC bodyId, a CATMAID skeleton id, a neuprint id. Free-text search on a bare number ranks a plausible near-miss first and gives you no way to tell a real match from a good guess; this tool confirms the accession against each candidate term's own cross-reference list and returns a row only if that term really carries it. Each row gives the VFB id, label, site (db, db_label, site_id), the accession and a resolved deep link into the external site. Pass exactly one of id or accession. THE TWO DIRECTIONS DIFFER WHEN EMPTY: an empty id->accession result is authoritative (the term has no cross-references); an empty accession->id result means the search index did not reach a term carrying that accession, NOT that no such term exists — report it as \"could not confirm\", never as \"does not exist\", and do not substitute a search_terms guess.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "A VFB ID to list external accessions for (e.g. VFB_jrchjtdb). Mutually exclusive with accession."
+          },
+          "accession": {
+            "type": "string",
+            "description": "An external accession to resolve back to a VFB term (e.g. 1734350908 for a hemibrain bodyId). Mutually exclusive with id."
+          },
+          "db": {
+            "type": "string",
+            "description": "Optional site filter. Matches a site symbol (\"hb\"), short_form (\"neuprint_JRC_Hemibrain_1point2point1\") or label, ignoring case, punctuation and spacing, and also accepts whole words from those names — \"flywire\", \"hemibrain\", \"neuprint\", \"catmaid\", \"male-cns\" all work. When set, the response carries db_matched and available_dbs; a filtered empty result means \"none from this site\", not \"none at all\"."
+          }
+        }
+      }
+    },
+    {
+      "name": "combine_queries",
+      "description": "Boolean set algebra over the results of two or more VFB queries, compared on term ID. USE THIS INSTEAD OF RUNNING THE QUERIES SEPARATELY AND INTERSECTING THEM YOURSELF — the operands are often hundreds or thousands of rows each, so doing it by hand is both slow and a common source of wrong answers. Answers questions of the form \"which neurons are in both X and Y\", \"in X but not Y\", \"in either but not both\". Operators: AND OR NOT XOR NAND NOR XNOR, unary NOT, brackets, symbol aliases (& | - ^) and plain-English aliases (\"but not\", \"in both\", \"either but not both\"). Precedence loosest-first: OR/NOR, then XOR/XNOR, then AND/NAND/NOT, all left-associative. The response explains itself — as_read gives the grouping actually parsed, plain_english reads the whole expression back, steps traces the size of every intermediate set, and warnings flag the three ways a combination is silently wrong (a truncated operand, two sides in different ID namespaces, a complement against an implicit universe). ALWAYS CHECK as_read AGAINST WHAT THE USER ASKED before reporting the answer; use explain_only=true to see the parse for free before spending a query. Query-type operands must name a real query_type — get it from get_term_info's Queries array for the term in question, exactly as for run_query.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "expr": {
+            "type": "string",
+            "description": "The boolean expression over your operand names, e.g. \"calyx AND lh\", \"calyx but not lh\", \"(a OR b) AND NOT c\". Max 2000 characters."
+          },
+          "operands": {
+            "type": "object",
+            "description": "Named sets referenced by expr. Each value takes one of three forms: \"<QueryType>:<id>\" to run a query (e.g. \"NeuronsPartHere:FBbt_00007401\" — any run_query query_type), \"search:<text>\" for a free-text search, or \"ids:<id>,<id>\" for a literal set (useful for a list from a paper or the ids of a previous combine). Max 12 operands.",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "universe": {
+            "type": "string",
+            "description": "Optional operand spec, same three forms, defining what \"everything\" means for a complement (NOT, NAND, NOR, XNOR). Defaults to the union of the operands in the expression, because VFB holds around 750,000 terms and returning most of them is never the intended answer."
+          },
+          "limit": {
+            "type": "number",
+            "description": "Rows to return (default 25). count is always the true size of the result set. There is no offset — raise limit, or pass 0 for every row, only on a result you already know is small.",
+            "default": 25
+          },
+          "include_images": {
+            "type": "boolean",
+            "description": "Include the thumbnail column (default false — it is stripped to save space; on a 220-row result it is the difference between 428 KB and 9.5 KB).",
+            "default": false
+          },
+          "explain_only": {
+            "type": "boolean",
+            "description": "Parse and explain the expression without running any query (default false). Returns as_read, plain_english and the universe note in well under a kilobyte. Use it to confirm the grouping of anything more complicated than a single operator before spending real work.",
+            "default": false
+          },
+          "require_complete": {
+            "type": "boolean",
+            "description": "Fail rather than answer if any operand was truncated (default false). A set operation over a truncated operand is silently wrong, so set this when the answer matters more than getting one.",
+            "default": false
+          }
+        },
+        "required": [
+          "expr",
+          "operands"
+        ]
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "org.virtualflybrain/vfb3-mcp",
+    "version": "1.13.0",
+    "remoteUrl": "https://mcp.virtualflybrain.org/",
+    "publishedAt": "2026-11-25T13:48:43.280845Z",
+    "fetchedAt": "2026-11-26T10:40:47.803Z",
+    "toolsSha256": "f5f22b72d015332a9719456b8d64881de3a27eed1d025cad89b0138d00743bc6"
+  }
+}

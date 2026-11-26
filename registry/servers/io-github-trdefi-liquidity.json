@@ -1,0 +1,310 @@
+{
+  "$schema": "../schema.json",
+  "name": "io.github.TRDEFI/liquidity",
+  "title": "TRDEFI Liquidity",
+  "category": "Developer Tools & DevOps",
+  "description": "Live non-custodial stablecoin liquidity: open positions, volume, and an on-chain swap quote.",
+  "repository": "https://github.com/TRDEFI/mcp-server",
+  "tools": [
+    {
+      "name": "trdefi_stats",
+      "description": "Aggregate statistics for the live TRDEFI non-custodial stablecoin liquidity catalogue: how many open maker positions exist, how many distinct makers, how many pairs, across how many networks, plus settled volume over 1, 7 and 30 days, and the deepest pairs by volume and by position count. Free, no key.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "trdefi_chains",
+      "description": "The networks where liquidity is live right now, with each network's settlement engine address and the tokens a position can be built from. Use this instead of hardcoding chain or token identifiers.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "trdefi_positions",
+      "description": "Live non-custodial liquidity, as positions an agent can actually trade against. Each row carries the strategy hash, network, pair, tokens, settled volume and a `quote_eligible` flag, meaning the position is router-attached and its network has a quote route. It does NOT mean the position will quote: a maker can still gate it. Use this before a swap to find a real on-chain counterparty, or to survey where liquidity sits. Filter by network and by pair. Free, no key, no custody.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "chain": {
+            "type": "string",
+            "description": "Network key, e.g. \"base\" or \"ethereum\". Defaults to every network."
+          },
+          "pair": {
+            "type": "string",
+            "description": "Pair filter. Either an exact pair such as \"USDC/USDT\", or a substring such as \"USDC\" or \"WETH\" which matches any pair containing it, or a network name, or part of a strategy hash."
+          },
+          "quote_ready": {
+            "type": "boolean",
+            "description": "True returns positions on a network that has a quote route, which is the quote_eligible set. False returns the positions that do not, which are usually on networks with no quote RPC. Neither guarantees a price: a maker can still gate a position, and around 6 in 10 sampled positions answer \"Strategy is gated\"."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 500,
+            "default": 50,
+            "description": "Rows to return."
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "trdefi_position_detail",
+      "description": "One position in full, by its 32-byte strategy hash.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "hash": {
+            "type": "string",
+            "pattern": "^0x[a-fA-F0-9]{64}$",
+            "description": "Strategy hash, 64 hex characters."
+          }
+        },
+        "required": [
+          "hash"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "trdefi_position_inventory",
+      "description": "Whether one position can actually be filled right now: the balance sitting in the strategy, the maker wallet balance behind it, and the remaining allowance, read from the chain. An Aqua virtual balance is a bookkeeping ceiling, not a reserve, so a position can answer a quote while the wallet behind it is empty - and the swap then reverts at the pull. Check this before signing a swap against a position that matters: fillable=false means the quote is real but the fill is not. Read-only, free, no key, and no dependency on 1inch rate limits.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "hash": {
+            "type": "string",
+            "pattern": "^0x[a-fA-F0-9]{64}$",
+            "description": "Strategy hash, 64 hex characters."
+          },
+          "overview": {
+            "type": "boolean",
+            "description": "Also fetch 1inch's overview (status, openedAt, price range). Costs the upstream rate limit, so it is off by default."
+          }
+        },
+        "required": [
+          "hash"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "trdefi_quote",
+      "description": "Price a swap against one position, on-chain, at the current block — no custody, nothing signed, nothing moved. Works on any pair the position trades, not only stablecoins. Use this to check liquidity and get the output amount before preparing a swap. If a position answers \"Strategy is gated\", the maker embedded an access-licence check in the order: the CALLER must hold the 1inch Aqua access token. That check reads tx.origin, so the revert depends on whether a caller was supplied: without one it is 0x89c62b64 (\"the caller holds none\"), with one it is 0x39c4052c (the tx-origin balance check). Pass `from` with the address that will actually sign the swap. A caller that holds the maker's credential gets a real price; anyone else gets an accurate \"you do not hold it\" instead of the least specific answer available. This is a property of the strategy, not a bug — and it is strongly per-network. Measured 2026-10-19: on Ethereum 58 of 60 sampled positions are gated, and across 17 networks the network-balanced split is about 62 percent gated and 17 percent priced. The credential contract itself is only deployed on the 13 Aqua chains, so Arc, Monad, Cronos and HyperEVM have no such gate. The response also decodes the fee from the signed order: `fee_decoding` is decoded/none/unsupported, `maker_fee_percent` is the maker commission (for example 0.00025), `maker_fee_receiver` is its receiver, and `fees` lists every fee instruction. Quotes are simulated on 17 networks: ethereum, base, arbitrum, optimism, polygon, arc, bnb-chain, gnosis, avalanche, sonic, linea, zksync-era, monad, unichain, hyperevm, cronos and robinhood-chain. This list is the set the quote path actually serves; if a network is not on it, do not promise a quote for it.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "hash": {
+            "type": "string",
+            "pattern": "^0x[a-fA-F0-9]{64}$",
+            "description": "Strategy hash to quote against."
+          },
+          "amount": {
+            "type": "string",
+            "description": "Input amount in token base units, as an integer string. e.g. \"1000000\" for 1 USDC."
+          },
+          "chain": {
+            "type": "string",
+            "description": "Network key. Defaults to \"ethereum\"."
+          },
+          "direction": {
+            "type": "string",
+            "enum": [
+              "aToB",
+              "bToA"
+            ],
+            "default": "aToB"
+          },
+          "from": {
+            "type": "string",
+            "pattern": "^0x[a-fA-F0-9]{40}$",
+            "description": "The address that will sign the swap, simulated as msg.sender. Supply it whenever the caller might hold the maker's access credential: the gate is checked on tx.origin, so with an address the answer is the real one, and without one it is the least specific one."
+          },
+          "wallet": {
+            "type": "string",
+            "pattern": "^0x[a-fA-F0-9]{40}$",
+            "description": "The wallet that would trade. When a position is gated, this asks for a Fusion price instead: a 1inch resolver fills the order, so the wallet needs no credential, and the answer is executable rather than indicative. Omit it and a gated position answers an indicative price that no unlicensed wallet can fill."
+          }
+        },
+        "required": [
+          "hash",
+          "amount"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "trdefi_fusion_quote",
+      "description": "A 1inch Fusion quote for a token pair. Use this when a position answers \"Strategy is gated\": the user/agent does not need an Aqua NFT, because a 1inch resolver with the credential fills the order. Returns the expected output, the Fusion resolver fee and a quote id. Free, read-only, nothing signed or moved. Chain, token addresses and base-unit amounts come from trdefi_positions / trdefi_chains. Note: a Fusion fill is best-effort, not guaranteed: the resolver chooses the venue, and a gated Aqua position is used only if that resolver holds the Aqua NFT.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "chain": {
+            "type": "string",
+            "description": "Network key, e.g. \"ethereum\", \"base\", \"arc\"."
+          },
+          "fromToken": {
+            "type": "string",
+            "pattern": "^0x[a-fA-F0-9]{40}$",
+            "description": "Input token address."
+          },
+          "toToken": {
+            "type": "string",
+            "pattern": "^0x[a-fA-F0-9]{40}$",
+            "description": "Output token address."
+          },
+          "amount": {
+            "type": "string",
+            "description": "Input amount in token base units, as an integer string."
+          },
+          "wallet": {
+            "type": "string",
+            "pattern": "^0x[a-fA-F0-9]{40}$",
+            "description": "The address that will sign the Fusion order."
+          },
+          "preset": {
+            "type": "string",
+            "enum": [
+              "fast",
+              "medium",
+              "slow",
+              "custom"
+            ],
+            "description": "Auction preset. Defaults to the quote recommendation."
+          }
+        },
+        "required": [
+          "chain",
+          "fromToken",
+          "toToken",
+          "amount",
+          "wallet"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "trdefi_fusion_prepare",
+      "description": "Quote and build an EIP-712 Fusion order. Returns `typedData` (sign with eth_signTypedData_v4), the `order` object, `extension`, `quoteId` and `orderHash`. Nothing is signed or submitted. After signing, call trdefi_fusion_submit with the same order, the signature, extension and quote id. This is the gated-liquidity path: the user/agent does not need an Aqua NFT; a 1inch resolver fills the order (best-effort, not guaranteed).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "chain": {
+            "type": "string",
+            "description": "Network key, e.g. \"ethereum\", \"base\", \"arc\"."
+          },
+          "fromToken": {
+            "type": "string",
+            "pattern": "^0x[a-fA-F0-9]{40}$",
+            "description": "Input token address."
+          },
+          "toToken": {
+            "type": "string",
+            "pattern": "^0x[a-fA-F0-9]{40}$",
+            "description": "Output token address."
+          },
+          "amount": {
+            "type": "string",
+            "description": "Input amount in token base units, as an integer string."
+          },
+          "wallet": {
+            "type": "string",
+            "pattern": "^0x[a-fA-F0-9]{40}$",
+            "description": "The address that will sign the Fusion order."
+          },
+          "preset": {
+            "type": "string",
+            "enum": [
+              "fast",
+              "medium",
+              "slow",
+              "custom"
+            ],
+            "description": "Auction preset. Defaults to the quote recommendation."
+          }
+        },
+        "required": [
+          "chain",
+          "fromToken",
+          "toToken",
+          "amount",
+          "wallet"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "trdefi_fusion_submit",
+      "description": "Forward an already-signed Fusion order to 1inch's relayer. The signature is the user's authorization; this server never signs and never holds a key. Pass the `order`, `signature`, `extension` and `quoteId` returned by trdefi_fusion_prepare. A resolver fills the order later; submission does not guarantee a fill.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "chain": {
+            "type": "string",
+            "description": "Network key, e.g. \"ethereum\", \"base\", \"arc\"."
+          },
+          "order": {
+            "type": "object",
+            "description": "The signed Fusion order object returned by trdefi_fusion_prepare (`order`)."
+          },
+          "signature": {
+            "type": "string",
+            "description": "EIP-712 signature from the wallet (0x-prefixed hex)."
+          },
+          "extension": {
+            "type": "string",
+            "description": "The `extension` returned by trdefi_fusion_prepare. Defaults to 0x."
+          },
+          "quoteId": {
+            "type": "string",
+            "description": "The `quoteId` returned by trdefi_fusion_prepare."
+          }
+        },
+        "required": [
+          "chain",
+          "order",
+          "signature"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "trdefi_badge",
+      "description": "A shields.io endpoint payload for the catalogue metrics, so a README can show live figures. Metrics: volume30, volume7, volume1, strategies, makers, pairs, chains.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "metric": {
+            "type": "string",
+            "enum": [
+              "volume30",
+              "volume7",
+              "volume1",
+              "strategies",
+              "makers",
+              "pairs",
+              "chains"
+            ],
+            "default": "volume30"
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "io.github.TRDEFI/liquidity",
+    "version": "1.0.1",
+    "remoteUrl": "https://yield.trdefi.com/mcp",
+    "publishedAt": "2026-11-19T09:28:08.815295Z",
+    "fetchedAt": "2026-11-26T10:40:47.803Z",
+    "toolsSha256": "774679e5b61606f1920de8f816d5c460eefca2cd710d768ca5d54b033201b4b5"
+  }
+}

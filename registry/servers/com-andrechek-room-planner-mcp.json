@@ -1,0 +1,660 @@
+{
+  "$schema": "../schema.json",
+  "name": "com.andrechek.room-planner/mcp",
+  "title": "Room Planner",
+  "category": "Other",
+  "description": "Lay out a room to scale, check furniture, doors and clearances, and get a link to edit the plan.",
+  "repository": "https://github.com/EricAndrechek/Room-Planner",
+  "tools": [
+    {
+      "name": "create_plan",
+      "description": "Make a Room Planner plan and the link that opens it in the editor (https://room-planner.andrechek.com), where the user can see it to scale, drag and rotate the furniture, export and share. In clients with MCP Apps the drawing is shown in the chat, with the problems marked.\nReturns {plan, issues, summary, url, editable}: the plan normalised (defaults and ids filled) in your unit, every layout issue (as check_layout), one paragraph describing it, and the url. Give the user the url exactly as returned, whole and unchanged; it holds the entire plan.\nPrefer this to writing a Room Planner link by hand. Every plan the format allows gets a link: several rooms joined by doors, any outline, L-shaped and round pieces, pieces set aside.\n\nPlan format (version 4):\n- Lengths: every length is in plan.unit: \"in\", \"cm\", \"m\" or \"ft\". Use the unit the user speaks. Answers come back in the same unit.\n- Coordinates: one floor coordinate system for every room and piece. x grows to the right, y grows DOWN (as on a screen). Start the floor's top-left corner at {x:0,y:0}.\n- Room: {id, name, outline, openings}. outline = interior corners, clockwise as drawn, 3 to 64 of them. A W x D rectangle at (X,Y) is [{x:X,y:Y},{x:X+W,y:Y},{x:X+W,y:Y+D},{x:X,y:Y+D}]; its walls are then 0 = top, 1 = right, 2 = bottom, 3 = left. Wall i always runs from outline[i] to outline[i+1] (the last back to outline[0]); an L-shaped room is 6 corners. Give each room a name (\"Bedroom\").\n- Several rooms: rooms share a wall by touching, with no gap and no wall thickness: a hall right of a 12 x 10 bedroom at the origin starts at x = 12. Rooms must not overlap. A door on a shared wall connects the two rooms: list it once, in either room's openings. Windows go on outside walls.\n- Door or window: in room.openings, {id, kind:\"door\"|\"window\", wall, offset, width}. offset runs along the wall from its start corner to the opening's near edge, clockwise: left to right on a top wall, top to bottom on a right wall, RIGHT TO LEFT on a bottom wall, BOTTOM TO TOP on a left wall. Doors: type \"swing-in\" (default: into the room that lists it), \"swing-out\", \"double-in\", \"double-out\", \"sliding\", \"pocket\", \"bifold\" or \"opening\"; hinge \"start\" (default) or \"end\", where \"start\" is on the left seen from inside that room facing the wall.\n- Furniture: plan.items, {id, label, width, depth, placement:{x, y, rotation}}. width is along x and depth along y before rotation; placement is the CENTRE of the piece in floor coordinates and rotation is clockwise degrees (90 swaps the footprint). A piece belongs to the room it stands in. Against a room's top wall, y = top + depth/2; against its left wall, x = left + width/2. Optional: color \"#rrggbb\", locked, hidden, notes.\n- Shapes: shape \"rect\" (default), \"ellipse\" (round or oval: width x depth; a round table is equal width and depth) or \"l\" with cut:{corner:\"tl\"|\"tr\"|\"br\"|\"bl\", width, depth}, the rectangle removed from that corner of the width x depth box before rotation (an L sofa 108 x 84 in with cut {corner:\"tr\", width:72, depth:48}).\n- Set aside: leave out placement to keep a piece in the plan but off the floor (bought but not placed, or an alternative). The user places it later; set-aside pieces are never checked.\n- ids: unique strings in the whole plan, e.g. \"bedroom\", \"door-1\", \"bed\".\nTypical sizes, inches (width x depth): queen bed 60x80, king 76x80, twin 38x75, nightstand 20x16, dresser 60x18, wardrobe 40x24, 3-seat sofa 84x36, armchair 32x34, coffee table 48x24, TV stand 60x18, dining table for 4 48x30 or round 42-48, for 6 72x36, dining chair 18x20, desk 48x24, desk chair 24x24, bookcase 36x12. Rooms, feet: bedroom 10x12 to 14x16, living room 12x18, hallway 3.5-4 wide. Interior doors 30-36 wide; windows 24-48.\nClearances, inches: 30-36 for walkways, 24 beside a bed, 16-18 between a sofa and a coffee table, 36 behind dining chairs; keep door swings and doorways clear.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "plan": {
+            "type": "object",
+            "properties": {
+              "version": {
+                "type": "number",
+                "const": 4
+              },
+              "name": {
+                "default": "Untitled",
+                "type": "string",
+                "maxLength": 100
+              },
+              "unit": {
+                "type": "string",
+                "enum": [
+                  "ft",
+                  "in",
+                  "m",
+                  "cm"
+                ],
+                "description": "Unit of every length in this document."
+              },
+              "rooms": {
+                "minItems": 1,
+                "maxItems": 50,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_-]{1,40}$",
+                      "description": "Unique within the plan. Letters, digits, \"-\" and \"_\"."
+                    },
+                    "name": {
+                      "type": "string",
+                      "maxLength": 80
+                    },
+                    "outline": {
+                      "minItems": 3,
+                      "maxItems": 64,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "x": {
+                            "type": "number",
+                            "minimum": -100000,
+                            "maximum": 100000
+                          },
+                          "y": {
+                            "type": "number",
+                            "minimum": -100000,
+                            "maximum": 100000
+                          }
+                        },
+                        "required": [
+                          "x",
+                          "y"
+                        ]
+                      },
+                      "description": "Interior corners in floor coordinates, clockwise as drawn (y grows downward). A rectangle is 4 points starting at its top-left corner; its walls are then 0 = top, 1 = right, 2 = bottom, 3 = left."
+                    },
+                    "openings": {
+                      "default": [],
+                      "maxItems": 64,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "pattern": "^[A-Za-z0-9_-]{1,40}$",
+                            "description": "Unique within the plan. Letters, digits, \"-\" and \"_\"."
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "door",
+                              "window"
+                            ]
+                          },
+                          "wall": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991,
+                            "description": "Wall index. Wall i runs from outline[i] to outline[i+1]."
+                          },
+                          "offset": {
+                            "type": "number",
+                            "minimum": 0,
+                            "description": "Distance along the wall from its start corner to the near edge of the opening."
+                          },
+                          "width": {
+                            "type": "number",
+                            "exclusiveMinimum": 0,
+                            "maximum": 10000,
+                            "description": "Width along the wall."
+                          },
+                          "type": {
+                            "default": "swing-in",
+                            "description": "Doors only.",
+                            "type": "string",
+                            "enum": [
+                              "swing-in",
+                              "swing-out",
+                              "double-in",
+                              "double-out",
+                              "sliding",
+                              "pocket",
+                              "bifold",
+                              "opening"
+                            ]
+                          },
+                          "hinge": {
+                            "default": "start",
+                            "description": "Doors only. Seen from inside the room facing the wall, \"start\" is on the left.",
+                            "type": "string",
+                            "enum": [
+                              "start",
+                              "end"
+                            ]
+                          },
+                          "swingAngle": {
+                            "anyOf": [
+                              {
+                                "type": "number",
+                                "const": 90
+                              },
+                              {
+                                "type": "number",
+                                "const": 180
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "kind",
+                          "wall",
+                          "offset",
+                          "width"
+                        ],
+                        "additionalProperties": {}
+                      }
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "outline"
+                  ],
+                  "additionalProperties": {}
+                }
+              },
+              "items": {
+                "default": [],
+                "maxItems": 500,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_-]{1,40}$",
+                      "description": "Unique within the plan. Letters, digits, \"-\" and \"_\"."
+                    },
+                    "label": {
+                      "type": "string",
+                      "maxLength": 80
+                    },
+                    "color": {
+                      "default": "#93c5fd",
+                      "type": "string",
+                      "pattern": "^#[0-9a-fA-F]{6}$"
+                    },
+                    "shape": {
+                      "default": "rect",
+                      "type": "string",
+                      "enum": [
+                        "rect",
+                        "l",
+                        "ellipse"
+                      ]
+                    },
+                    "width": {
+                      "type": "number",
+                      "exclusiveMinimum": 0,
+                      "maximum": 10000,
+                      "description": "Bounding-box size along x before rotation."
+                    },
+                    "depth": {
+                      "type": "number",
+                      "exclusiveMinimum": 0,
+                      "maximum": 10000,
+                      "description": "Bounding-box size along y before rotation."
+                    },
+                    "cut": {
+                      "description": "Shape \"l\" only: the rectangle removed from one corner of the bounding box.",
+                      "type": "object",
+                      "properties": {
+                        "corner": {
+                          "type": "string",
+                          "enum": [
+                            "tl",
+                            "tr",
+                            "br",
+                            "bl"
+                          ]
+                        },
+                        "width": {
+                          "type": "number",
+                          "exclusiveMinimum": 0,
+                          "maximum": 10000
+                        },
+                        "depth": {
+                          "type": "number",
+                          "exclusiveMinimum": 0,
+                          "maximum": 10000
+                        }
+                      },
+                      "required": [
+                        "corner",
+                        "width",
+                        "depth"
+                      ]
+                    },
+                    "placement": {
+                      "description": "Centre of the piece in floor coordinates and its clockwise rotation in degrees. Omit it to set the piece aside: kept in the plan, not on the floor.",
+                      "type": "object",
+                      "properties": {
+                        "x": {
+                          "type": "number",
+                          "minimum": -100000,
+                          "maximum": 100000
+                        },
+                        "y": {
+                          "type": "number",
+                          "minimum": -100000,
+                          "maximum": 100000
+                        },
+                        "rotation": {
+                          "default": 0,
+                          "type": "number",
+                          "minimum": 0,
+                          "exclusiveMaximum": 360
+                        }
+                      },
+                      "required": [
+                        "x",
+                        "y"
+                      ]
+                    },
+                    "locked": {
+                      "type": "boolean"
+                    },
+                    "hidden": {
+                      "type": "boolean"
+                    },
+                    "notes": {
+                      "type": "string",
+                      "maxLength": 500
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "label",
+                    "width",
+                    "depth"
+                  ],
+                  "additionalProperties": {}
+                }
+              },
+              "settings": {
+                "type": "object",
+                "properties": {
+                  "unitSystem": {
+                    "type": "string",
+                    "enum": [
+                      "ft-in",
+                      "ft",
+                      "in",
+                      "m",
+                      "cm"
+                    ]
+                  }
+                },
+                "additionalProperties": {}
+              }
+            },
+            "required": [
+              "version",
+              "unit",
+              "rooms"
+            ],
+            "additionalProperties": {}
+          }
+        },
+        "required": [
+          "plan"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "check_layout",
+      "description": "Check a Room Planner plan for layout problems, without making a link. Cheap: call it as often as you like while arranging, then call create_plan once.\nReports, each as {code, severity, message, ids}: item_overlap and item_outside_room (errors: outside every room); door_blocked (a piece in a door's swing or track, in either room), doorway_blocked (in the passage on either side of a door), opening_overlap, opening_off_wall, room_overlap, window_between_rooms (a window on a wall two rooms share) and unknown_field (warnings, unknown_field for a key the format does not have, usually a typo); tight_clearance (info: a gap above zero but below minClearance, default 24 in / 61 cm). Messages name rooms. ids name the piece first, then what it collides with. Returns {ok, issues, summary}; ok is true when nothing is an error or a warning.\nminClearance is in the plan's unit.\n\nPlan format (version 4):\n- Lengths: every length is in plan.unit: \"in\", \"cm\", \"m\" or \"ft\". Use the unit the user speaks. Answers come back in the same unit.\n- Coordinates: one floor coordinate system for every room and piece. x grows to the right, y grows DOWN (as on a screen). Start the floor's top-left corner at {x:0,y:0}.\n- Room: {id, name, outline, openings}. outline = interior corners, clockwise as drawn, 3 to 64 of them. A W x D rectangle at (X,Y) is [{x:X,y:Y},{x:X+W,y:Y},{x:X+W,y:Y+D},{x:X,y:Y+D}]; its walls are then 0 = top, 1 = right, 2 = bottom, 3 = left. Wall i always runs from outline[i] to outline[i+1] (the last back to outline[0]); an L-shaped room is 6 corners. Give each room a name (\"Bedroom\").\n- Several rooms: rooms share a wall by touching, with no gap and no wall thickness: a hall right of a 12 x 10 bedroom at the origin starts at x = 12. Rooms must not overlap. A door on a shared wall connects the two rooms: list it once, in either room's openings. Windows go on outside walls.\n- Door or window: in room.openings, {id, kind:\"door\"|\"window\", wall, offset, width}. offset runs along the wall from its start corner to the opening's near edge, clockwise: left to right on a top wall, top to bottom on a right wall, RIGHT TO LEFT on a bottom wall, BOTTOM TO TOP on a left wall. Doors: type \"swing-in\" (default: into the room that lists it), \"swing-out\", \"double-in\", \"double-out\", \"sliding\", \"pocket\", \"bifold\" or \"opening\"; hinge \"start\" (default) or \"end\", where \"start\" is on the left seen from inside that room facing the wall.\n- Furniture: plan.items, {id, label, width, depth, placement:{x, y, rotation}}. width is along x and depth along y before rotation; placement is the CENTRE of the piece in floor coordinates and rotation is clockwise degrees (90 swaps the footprint). A piece belongs to the room it stands in. Against a room's top wall, y = top + depth/2; against its left wall, x = left + width/2. Optional: color \"#rrggbb\", locked, hidden, notes.\n- Shapes: shape \"rect\" (default), \"ellipse\" (round or oval: width x depth; a round table is equal width and depth) or \"l\" with cut:{corner:\"tl\"|\"tr\"|\"br\"|\"bl\", width, depth}, the rectangle removed from that corner of the width x depth box before rotation (an L sofa 108 x 84 in with cut {corner:\"tr\", width:72, depth:48}).\n- Set aside: leave out placement to keep a piece in the plan but off the floor (bought but not placed, or an alternative). The user places it later; set-aside pieces are never checked.\n- ids: unique strings in the whole plan, e.g. \"bedroom\", \"door-1\", \"bed\".\nTypical sizes, inches (width x depth): queen bed 60x80, king 76x80, twin 38x75, nightstand 20x16, dresser 60x18, wardrobe 40x24, 3-seat sofa 84x36, armchair 32x34, coffee table 48x24, TV stand 60x18, dining table for 4 48x30 or round 42-48, for 6 72x36, dining chair 18x20, desk 48x24, desk chair 24x24, bookcase 36x12. Rooms, feet: bedroom 10x12 to 14x16, living room 12x18, hallway 3.5-4 wide. Interior doors 30-36 wide; windows 24-48.\nClearances, inches: 30-36 for walkways, 24 beside a bed, 16-18 between a sofa and a coffee table, 36 behind dining chairs; keep door swings and doorways clear.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "plan": {
+            "type": "object",
+            "properties": {
+              "version": {
+                "type": "number",
+                "const": 4
+              },
+              "name": {
+                "default": "Untitled",
+                "type": "string",
+                "maxLength": 100
+              },
+              "unit": {
+                "type": "string",
+                "enum": [
+                  "ft",
+                  "in",
+                  "m",
+                  "cm"
+                ],
+                "description": "Unit of every length in this document."
+              },
+              "rooms": {
+                "minItems": 1,
+                "maxItems": 50,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_-]{1,40}$",
+                      "description": "Unique within the plan. Letters, digits, \"-\" and \"_\"."
+                    },
+                    "name": {
+                      "type": "string",
+                      "maxLength": 80
+                    },
+                    "outline": {
+                      "minItems": 3,
+                      "maxItems": 64,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "x": {
+                            "type": "number",
+                            "minimum": -100000,
+                            "maximum": 100000
+                          },
+                          "y": {
+                            "type": "number",
+                            "minimum": -100000,
+                            "maximum": 100000
+                          }
+                        },
+                        "required": [
+                          "x",
+                          "y"
+                        ]
+                      },
+                      "description": "Interior corners in floor coordinates, clockwise as drawn (y grows downward). A rectangle is 4 points starting at its top-left corner; its walls are then 0 = top, 1 = right, 2 = bottom, 3 = left."
+                    },
+                    "openings": {
+                      "default": [],
+                      "maxItems": 64,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "pattern": "^[A-Za-z0-9_-]{1,40}$",
+                            "description": "Unique within the plan. Letters, digits, \"-\" and \"_\"."
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "door",
+                              "window"
+                            ]
+                          },
+                          "wall": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991,
+                            "description": "Wall index. Wall i runs from outline[i] to outline[i+1]."
+                          },
+                          "offset": {
+                            "type": "number",
+                            "minimum": 0,
+                            "description": "Distance along the wall from its start corner to the near edge of the opening."
+                          },
+                          "width": {
+                            "type": "number",
+                            "exclusiveMinimum": 0,
+                            "maximum": 10000,
+                            "description": "Width along the wall."
+                          },
+                          "type": {
+                            "default": "swing-in",
+                            "description": "Doors only.",
+                            "type": "string",
+                            "enum": [
+                              "swing-in",
+                              "swing-out",
+                              "double-in",
+                              "double-out",
+                              "sliding",
+                              "pocket",
+                              "bifold",
+                              "opening"
+                            ]
+                          },
+                          "hinge": {
+                            "default": "start",
+                            "description": "Doors only. Seen from inside the room facing the wall, \"start\" is on the left.",
+                            "type": "string",
+                            "enum": [
+                              "start",
+                              "end"
+                            ]
+                          },
+                          "swingAngle": {
+                            "anyOf": [
+                              {
+                                "type": "number",
+                                "const": 90
+                              },
+                              {
+                                "type": "number",
+                                "const": 180
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "kind",
+                          "wall",
+                          "offset",
+                          "width"
+                        ],
+                        "additionalProperties": {}
+                      }
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "outline"
+                  ],
+                  "additionalProperties": {}
+                }
+              },
+              "items": {
+                "default": [],
+                "maxItems": 500,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_-]{1,40}$",
+                      "description": "Unique within the plan. Letters, digits, \"-\" and \"_\"."
+                    },
+                    "label": {
+                      "type": "string",
+                      "maxLength": 80
+                    },
+                    "color": {
+                      "default": "#93c5fd",
+                      "type": "string",
+                      "pattern": "^#[0-9a-fA-F]{6}$"
+                    },
+                    "shape": {
+                      "default": "rect",
+                      "type": "string",
+                      "enum": [
+                        "rect",
+                        "l",
+                        "ellipse"
+                      ]
+                    },
+                    "width": {
+                      "type": "number",
+                      "exclusiveMinimum": 0,
+                      "maximum": 10000,
+                      "description": "Bounding-box size along x before rotation."
+                    },
+                    "depth": {
+                      "type": "number",
+                      "exclusiveMinimum": 0,
+                      "maximum": 10000,
+                      "description": "Bounding-box size along y before rotation."
+                    },
+                    "cut": {
+                      "description": "Shape \"l\" only: the rectangle removed from one corner of the bounding box.",
+                      "type": "object",
+                      "properties": {
+                        "corner": {
+                          "type": "string",
+                          "enum": [
+                            "tl",
+                            "tr",
+                            "br",
+                            "bl"
+                          ]
+                        },
+                        "width": {
+                          "type": "number",
+                          "exclusiveMinimum": 0,
+                          "maximum": 10000
+                        },
+                        "depth": {
+                          "type": "number",
+                          "exclusiveMinimum": 0,
+                          "maximum": 10000
+                        }
+                      },
+                      "required": [
+                        "corner",
+                        "width",
+                        "depth"
+                      ]
+                    },
+                    "placement": {
+                      "description": "Centre of the piece in floor coordinates and its clockwise rotation in degrees. Omit it to set the piece aside: kept in the plan, not on the floor.",
+                      "type": "object",
+                      "properties": {
+                        "x": {
+                          "type": "number",
+                          "minimum": -100000,
+                          "maximum": 100000
+                        },
+                        "y": {
+                          "type": "number",
+                          "minimum": -100000,
+                          "maximum": 100000
+                        },
+                        "rotation": {
+                          "default": 0,
+                          "type": "number",
+                          "minimum": 0,
+                          "exclusiveMaximum": 360
+                        }
+                      },
+                      "required": [
+                        "x",
+                        "y"
+                      ]
+                    },
+                    "locked": {
+                      "type": "boolean"
+                    },
+                    "hidden": {
+                      "type": "boolean"
+                    },
+                    "notes": {
+                      "type": "string",
+                      "maxLength": 500
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "label",
+                    "width",
+                    "depth"
+                  ],
+                  "additionalProperties": {}
+                }
+              },
+              "settings": {
+                "type": "object",
+                "properties": {
+                  "unitSystem": {
+                    "type": "string",
+                    "enum": [
+                      "ft-in",
+                      "ft",
+                      "in",
+                      "m",
+                      "cm"
+                    ]
+                  }
+                },
+                "additionalProperties": {}
+              }
+            },
+            "required": [
+              "version",
+              "unit",
+              "rooms"
+            ],
+            "additionalProperties": {}
+          },
+          "minClearance": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Report gaps below this as tight_clearance, in the plan's unit. Default 24 in."
+          }
+        },
+        "required": [
+          "plan"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "read_plan",
+      "description": "Read the plan in a Room Planner link that the user gives you: any link from room-planner.andrechek.com (#s=, #j= or the older ?config= form). Returns {plan, summary, issues, url, editable}, the plan in the unit it is displayed in, ready to edit and send to create_plan for a new link. In clients with MCP Apps the drawing is shown in the chat.\nA link that was cut off when it was copied returns an error; ask the user for the whole link.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "The whole Room Planner link, as the user gave it."
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "additionalProperties": false
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "com.andrechek.room-planner/mcp",
+    "version": "1.0.0",
+    "remoteUrl": "https://room-planner.andrechek.com/mcp",
+    "publishedAt": "2026-11-25T21:48:51.094746Z",
+    "fetchedAt": "2026-11-26T10:40:47.803Z",
+    "toolsSha256": "f46965bd5938c2035ea2b9d47a936ddf29c80fbb98896bfe5c100bfe4dfffd41"
+  }
+}

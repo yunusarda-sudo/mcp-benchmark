@@ -1,0 +1,418 @@
+{
+  "$schema": "../schema.json",
+  "name": "io.uptimeify/mcp-server",
+  "title": "Uptimeify",
+  "category": "Communication & Alerting",
+  "description": "Free anonymous website, DNS, email and TLS checks, plus monitor read and opt-in write access.",
+  "tools": [
+    {
+      "name": "check_ssl",
+      "description": "Fetches and evaluates a host's TLS certificate over a live handshake: subject, issuer, validity window, days until expiry, hostname match, chain trust, self-signed and expired flags, SANs, serial and SHA-256 fingerprint. Takes a hostname (not an IP address) and an optional port (default 443). A single sample taken now; HTTP behaviour is covered by website_status and the HSTS policy by hsts_check. Anonymous, rate-limited per IP; private and reserved addresses are refused.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "host": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Domain name (not an IP), e.g. deinkunde.com"
+          },
+          "port": {
+            "description": "TLS port, default 443",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 65535
+          }
+        },
+        "required": [
+          "host"
+        ]
+      }
+    },
+    {
+      "name": "check_dns",
+      "description": "Resolves a domain's DNS records in one call (A, AAAA, CNAME, MX, TXT, NS, SOA and more) and returns each record type with its values, or a per-type error where a lookup failed. Answers come from a single resolver; dns_propagation compares several. Reads records only and never connects to the host. Anonymous, rate-limited per IP.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "domain": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Domain name, e.g. deinkunde.com"
+          }
+        },
+        "required": [
+          "domain"
+        ]
+      }
+    },
+    {
+      "name": "dns_propagation",
+      "description": "Queries one domain against several public resolvers and compares the answers, which tells a recent record change apart from a stale cache. Returns each resolver with its values and a `consistent` flag that stays false while the answers differ. check_dns is the cheaper call for a single reading of all record types. Anonymous, rate-limited per IP.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "domain": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Domain name, e.g. deinkunde.com"
+          }
+        },
+        "required": [
+          "domain"
+        ]
+      }
+    },
+    {
+      "name": "mx_lookup",
+      "description": "Looks up a domain's MX records and resolves each mail exchanger to its IPv4 and IPv6 addresses, ordered by priority, flagging hosts that resolve into private address space. Shows where mail is delivered; it does not connect to the servers or test SMTP, and sender authorisation is covered by spf_check, dkim_check and dmarc_check. Anonymous, rate-limited per IP.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "domain": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Domain name, e.g. deinkunde.com"
+          }
+        },
+        "required": [
+          "domain"
+        ]
+      }
+    },
+    {
+      "name": "spf_check",
+      "description": "Fetches a domain's SPF record and evaluates it: raw record, parsed terms with qualifiers, DNS lookups counted against the RFC 7208 limit of ten, the final `all` qualifier, and warnings for common silent failures. A domain without a record returns found=false. Alignment and reporting belong to dmarc_check, signing keys to dkim_check. Anonymous, rate-limited per IP.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "domain": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Domain name, e.g. deinkunde.com"
+          }
+        },
+        "required": [
+          "domain"
+        ]
+      }
+    },
+    {
+      "name": "dkim_check",
+      "description": "Fetches and validates the DKIM public key at <selector>._domainkey.<domain>: parsed tags, key type, key size and warnings such as a revoked or malformed key. The selector is required and cannot be derived from the domain; it appears in a message's DKIM-Signature header (common provider values: google, selector1, default, k1). An unused selector returns found=false. Anonymous, rate-limited per IP.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "domain": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Domain name, e.g. deinkunde.com"
+          },
+          "selector": {
+            "type": "string",
+            "minLength": 1,
+            "description": "DKIM selector, e.g. google or default"
+          }
+        },
+        "required": [
+          "domain",
+          "selector"
+        ]
+      }
+    },
+    {
+      "name": "dmarc_check",
+      "description": "Fetches a domain's DMARC record from _dmarc.<domain> and evaluates it: raw record, parsed tags, policy and subdomain policy, percentage, and warnings for records that parse but offer no protection (p=none, missing rua). Reports the published policy, not whether real mail passes it; spf_check and dkim_check cover the mechanisms it aligns against. Anonymous, rate-limited per IP.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "domain": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Domain name, e.g. deinkunde.com"
+          }
+        },
+        "required": [
+          "domain"
+        ]
+      }
+    },
+    {
+      "name": "dnsbl_check",
+      "description": "Checks a public IP address against common DNS blocklists and returns, per list, whether it is listed, the list's reason code and delisting URL, plus totals and a `clean` flag. Takes an IP address, not a domain (mx_lookup or check_dns resolve one). Slow lists are skipped rather than awaited, so partial=true marks a provisional verdict; lists that could not answer are counted in `zonesFailed` and keep `clean` false. One call reflects only the current moment. Anonymous, with the strictest per-IP rate limit of the anonymous tools.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "ip": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Public IPv4 or IPv6 address"
+          }
+        },
+        "required": [
+          "ip"
+        ]
+      }
+    },
+    {
+      "name": "whois",
+      "description": "Retrieves WHOIS registration data for a domain: registrar, creation, update and expiry dates, EPP status codes, nameservers and the contact roles the registry still publishes (personal data is usually redacted). tldSupported=false means the TLD has no queryable WHOIS server, which differs from an unregistered domain (found=false). domain_expiry returns the expiry with the remaining days computed. Anonymous, rate-limited per IP.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "domain": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Domain name, e.g. deinkunde.com"
+          }
+        },
+        "required": [
+          "domain"
+        ]
+      }
+    },
+    {
+      "name": "domain_expiry",
+      "description": "Reports a domain's registration expiry from WHOIS with the remaining days, plus registrar, creation and update dates and the EPP status codes that reveal redemption or pending delete. Covers the registration, not the TLS certificate (check_ssl). tldSupported=false means the TLD has no queryable WHOIS server, not that the domain is unregistered. Anonymous, rate-limited per IP.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "domain": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Domain name, e.g. deinkunde.com"
+          }
+        },
+        "required": [
+          "domain"
+        ]
+      }
+    },
+    {
+      "name": "http_headers",
+      "description": "Fetches a URL and returns its HTTP response headers verbatim as a name/value map, with the status line and every redirect hop. The response body is never returned. website_status gives a plain up/down verdict and redirect_check the redirect chain alone. Anonymous, rate-limited per IP; private and reserved addresses are refused.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Full URL, e.g. https://deinkunde.com"
+          }
+        },
+        "required": [
+          "url"
+        ]
+      }
+    },
+    {
+      "name": "hsts_check",
+      "description": "Checks a domain's HTTP Strict Transport Security setup: header presence and raw value, max-age, includeSubDomains and preload flags, whether plain HTTP redirects to HTTPS, preload-list eligibility, and warnings for ineffective values. Reports the advertised policy only; the certificate is check_ssl and the redirect chain redirect_check. Anonymous, rate-limited per IP; private and reserved addresses are refused.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "domain": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Domain name, e.g. deinkunde.com"
+          }
+        },
+        "required": [
+          "domain"
+        ]
+      }
+    },
+    {
+      "name": "redirect_check",
+      "description": "Follows a URL's redirect chain hop by hop and returns each step's status, source and target, the final URL and status, the hop count, and warnings for loops, HTTPS-to-HTTP downgrades and overly long chains. Body and headers of the destination are not returned (http_headers covers headers). Anonymous, rate-limited per IP; private and reserved addresses are refused.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Full URL, e.g. https://deinkunde.com"
+          }
+        },
+        "required": [
+          "url"
+        ]
+      }
+    },
+    {
+      "name": "port_check",
+      "description": "Opens TCP connections to one port or a list of up to 10 ports on a host and reports each as open, closed or filtered, with the time taken. partial=true means the time budget ran out, and `portsNotChecked` lists the ports that were never probed; filtered means no answer arrived, not that the port is certainly closed. TCP only, no UDP. Anonymous, rate-limited per IP; hosts resolving to private or reserved addresses are refused.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "host": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Domain name or host"
+          },
+          "port": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 65535
+              },
+              {
+                "minItems": 1,
+                "maxItems": 10,
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 65535
+                }
+              }
+            ],
+            "description": "TCP port, or a list of up to 10 ports, e.g. 443 or [80, 443, 25]"
+          }
+        },
+        "required": [
+          "host",
+          "port"
+        ]
+      }
+    },
+    {
+      "name": "ping_test",
+      "description": "Measures reachability and round-trip time with repeated TCP connections to a host port (default 443), returning every attempt, sent and received counts, packet loss and min/avg/max milliseconds. A TCP handshake, not an ICMP echo, so hosts that drop ICMP still answer. website_status gives a one-shot verdict for a website. Anonymous, rate-limited per IP; private and reserved addresses are refused.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "host": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Domain name or host"
+          },
+          "port": {
+            "description": "Port, default 443",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 65535
+          }
+        },
+        "required": [
+          "host"
+        ]
+      }
+    },
+    {
+      "name": "website_status",
+      "description": "Checks whether a website is up right now: up/down verdict, HTTP status and text, response time, server header and number of redirects followed. The usual first call for any is-the-site-down question. A single sample from one location, not uptime; response_time, http_headers and redirect_check go deeper. Anonymous, rate-limited per IP; private and reserved addresses are refused.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Full URL, e.g. https://deinkunde.com"
+          }
+        },
+        "required": [
+          "url"
+        ]
+      }
+    },
+    {
+      "name": "response_time",
+      "description": "Measures how fast a URL answers over several samples, returning each sample plus min, average and max milliseconds, the HTTP status and an `up` flag. partial=true means fewer samples returned than requested. Measures the HTTP response only: no browser runs, so JavaScript, assets and Core Web Vitals are not reflected. A snapshot, not a trend. Anonymous, rate-limited per IP; private and reserved addresses are refused.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Full URL, e.g. https://deinkunde.com"
+          }
+        },
+        "required": [
+          "url"
+        ]
+      }
+    },
+    {
+      "name": "ip_geolocation",
+      "description": "Locates a public IP address, or a domain resolved to one, at network level: country code, registry, announced prefix, PTR hostname and autonomous systems. Registry-based, so it names the network operator's country, which for hosted or CDN addresses differs from where a visitor or business is located; it is not a street address. Private and reserved addresses have no answer. Anonymous, rate-limited per IP.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Public IP address or domain name"
+          }
+        },
+        "required": [
+          "query"
+        ]
+      }
+    },
+    {
+      "name": "asn_lookup",
+      "description": "Resolves a public IP address, or a domain, to the autonomous system that announces it: AS number and name, announced prefix, country code, registry and allocation date. Distinguishes hosting providers, CDNs and corporate networks; it does not identify the site owner. Private and reserved addresses have no announcing AS. ip_geolocation returns the same AS data plus country and PTR. Anonymous, rate-limited per IP.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Public IP address or domain name"
+          }
+        },
+        "required": [
+          "query"
+        ]
+      }
+    },
+    {
+      "name": "reverse_dns",
+      "description": "Resolves a public IP address to the PTR hostnames published for it, or returns the resolver's error where there is none. A PTR is set by whoever controls the address block, so it names the host rather than necessarily the site; a missing PTR is common and not a fault. Forward and reverse records need not agree, and this call does not check that they do. Anonymous, rate-limited per IP.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "ip": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Public IPv4 or IPv6 address"
+          }
+        },
+        "required": [
+          "ip"
+        ]
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "io.uptimeify/mcp-server",
+    "version": "1.16.0",
+    "remoteUrl": "https://uptimeify.io/mcp",
+    "publishedAt": "2026-11-25T16:04:03.114441Z",
+    "fetchedAt": "2026-11-26T10:40:47.803Z",
+    "toolsSha256": "c06e7d69842086194f5e63fcce36e3ec0e5591059e82ea8f68322a1bec4fc95e"
+  }
+}

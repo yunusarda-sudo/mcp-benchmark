@@ -1,0 +1,3488 @@
+{
+  "$schema": "../schema.json",
+  "name": "io.github.MsingathiM/swapeazi",
+  "title": "SwapEazi",
+  "category": "AI, LLMs & Agents",
+  "description": "Payment intelligence for agents sending money abroad or paying suppliers.",
+  "repository": "https://github.com/msingathim/swapeazi",
+  "tools": [
+    {
+      "name": "discover_payment",
+      "description": "Use when a user wants to send money abroad or pay a supplier, for example 'pay GBP 1,000 to Botswana' or 'send EUR 1,000 to Botswana'. Ask for the recipient currency if it is not specified; do not assume it from the country. Provide amount, source_currency and target_currency, and beneficiary.country when known. Returns available payment evidence, costs, timing, requirements and unknowns for the currency pair; coverage varies and some facts may be unavailable. A reference rate or indicative figure is not a firm quote. The compact response points to a signed Options Map; detail: \"full\" returns the full report. An optional needed_by adds timing and FX scenarios, not a forecast or recommendation. The customer decides and their provider executes the payment.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "amount": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "The amount, greater than zero."
+          },
+          "source_currency": {
+            "type": "string",
+            "description": "ISO 4217 code the payment leaves in, e.g. 'EUR'."
+          },
+          "target_currency": {
+            "type": "string",
+            "description": "ISO 4217 code the payment must land in, e.g. 'ZAR'."
+          },
+          "direction": {
+            "type": "string",
+            "enum": [
+              "pay",
+              "receive"
+            ],
+            "description": "pay (default): amount is what leaves. receive: amount is what must land."
+          },
+          "amount_in": {
+            "type": "string",
+            "enum": [
+              "source",
+              "destination"
+            ],
+            "description": "Which currency amount is stated in. Overrides direction's default, e.g. paying a fixed destination amount while funding from the source currency."
+          },
+          "needed_by": {
+            "type": "string",
+            "description": "Optional ISO date the money must land by. Adds timing_scenarios, fx_exposure and hedge_scenarios to the report, and each option's settlement.release_by: the latest release that lands by this date at the rail's later and earlier typical settle_days (on bank rails, the provider's cut-off on a banking day; the cut-off is not on record)."
+          },
+          "release_at": {
+            "type": "string",
+            "description": "Optional ISO date-time the payment will be released; default now. Each option's settlement.release_window states whether its rail moves at that moment (bank rails on banking days only, stablecoin rails around the clock), when it starts moving, the landing dates that follow, any sourced time-based markup, and what is not on record (cut-offs, bank holidays)."
+          },
+          "payer": {
+            "type": "object",
+            "properties": {
+              "entity_type": {
+                "type": "string",
+                "enum": [
+                  "corporate",
+                  "sme",
+                  "fintech",
+                  "crypto_native",
+                  "individual"
+                ],
+                "description": "corporate, sme, fintech, crypto_native or individual."
+              },
+              "jurisdiction": {
+                "type": "string",
+                "description": "Optional ISO 3166-1 alpha-2 country of the payer."
+              }
+            },
+            "description": "Optional. Who is paying: { entity_type, jurisdiction }."
+          },
+          "beneficiary": {
+            "type": "object",
+            "properties": {
+              "country": {
+                "type": "string",
+                "description": "ISO 3166-1 alpha-2 country where the supplier is paid, e.g. 'CN'."
+              }
+            },
+            "description": "Optional. Where the supplier is paid: { country }. Its country rules on record (and the payer's, from payer.jurisdiction) are returned as country_rules."
+          },
+          "rails_allowed": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "bank",
+                "psp",
+                "stablecoin",
+                "dex"
+              ]
+            },
+            "description": "Default: all. Only bank and stablecoin filter directly today; psp/dex leave every non-excluded rail in."
+          },
+          "current_quote": {
+            "type": "object",
+            "description": "Optional: a quote already held, measured as given against the reference.",
+            "properties": {
+              "provider": {
+                "type": "string",
+                "description": "Who gave the quote, e.g. a bank or provider name."
+              },
+              "rate": {
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "description": "Destination units per source unit."
+              },
+              "fees": {
+                "type": "number",
+                "description": "Optional, in the source currency."
+              },
+              "quoted_at": {
+                "type": "string",
+                "description": "ISO 8601 timestamp the quote was given, e.g. '2026-11-04T09:30:00Z'."
+              }
+            },
+            "required": [
+              "rate"
+            ]
+          },
+          "constraints": {
+            "type": "object",
+            "properties": {
+              "max_settlement_hours": {
+                "type": "number",
+                "description": "Maximum hours from release to landing; slower options are marked outside."
+              },
+              "exclude_providers": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Provider ids or names to leave out."
+              },
+              "require_licensed_in": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Not yet filterable; listed in what_we_dont_know when given."
+              }
+            },
+            "description": "Optional. The payer's own limits: { max_settlement_hours, exclude_providers, require_licensed_in }."
+          },
+          "client": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "agent",
+                  "human"
+                ],
+                "description": "agent or human."
+              },
+              "agent_id": {
+                "type": "string",
+                "description": "Optional, self-declared; logged."
+              }
+            },
+            "description": "Optional. Who is asking: { type: agent | human, agent_id }."
+          },
+          "detail": {
+            "type": "string",
+            "enum": [
+              "compact",
+              "full"
+            ],
+            "description": "compact (default): a short summary that points at the signed full document, sized for a tool result. full: the whole document, which can exceed 100 KB."
+          }
+        },
+        "required": [
+          "amount",
+          "source_currency",
+          "target_currency"
+        ]
+      }
+    },
+    {
+      "name": "run_payments",
+      "description": "Prepares a batch of cross-border payments for approval: validates each payee, prices each route and drafts each instruction for the business's own bank, provider or wallet. Send the payables (payables: a JSON list; file: a payout CSV or pain.001; or xero: a Xero bills reply) with source_currency. Each payment is verified (changed bank details against previous, duplicates, missing fields), assessed (route assessment_id with Rate Receipts: who published each figure, when it was read, its evidence type) and given an instruction for the business's own bank, provider or wallet (a CSV row, or an unsigned stablecoin transaction). Each is prepared, needs_attention (with the reason) or no_evidence. Returns run_id. An agent prepares; a named person approves. Never sends or moves money. A router key runs real payables; without one, sample: true returns the synthetic sample run. Same as POST /api/v1/payment-runs.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sample": {
+            "type": "boolean",
+            "description": "true: the built-in sample run (synthetic, labelled), no key needed."
+          },
+          "source_currency": {
+            "type": "string",
+            "description": "The currency the business pays from, e.g. ZAR."
+          },
+          "payables": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            },
+            "description": "[{ reference, payee: { name, iban?, bic?, account_number?, routing_number?, branch_code?, country? }, amount, currency, due_date?, rail?: bank | provider | stablecoin, via?, wallet? }]"
+          },
+          "file": {
+            "type": "string",
+            "description": "Instead of payables: a payout CSV or pain.001 text."
+          },
+          "previous": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            },
+            "description": "The previous run's payables, for changed bank details and amount jumps. Not kept."
+          },
+          "policy": {
+            "type": "object",
+            "description": "{ approver_role, material_threshold: { amount, currency }, agent_may_record_approval }"
+          },
+          "sort": {
+            "type": "string",
+            "enum": [
+              "landed_cost",
+              "arrival_time",
+              "answer_rate"
+            ],
+            "description": "Your chosen order for the routes: landed cost against the official rate, stated days to land, or the measured 7-day answer rate. It is your order, stated as yours. Without it, routes come in the order the sources answered; get_corridor_capacity ranks routes by evidence of what landed."
+          },
+          "include_types": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "banks",
+                "otc_desks",
+                "exchange_books",
+                "stablecoin_pools",
+                "p2p",
+                "ramps",
+                "payment_providers"
+              ]
+            },
+            "description": "Keep only routes of these rail types. Each route left out is listed with the reason."
+          },
+          "exclude_types": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "banks",
+                "otc_desks",
+                "exchange_books",
+                "stablecoin_pools",
+                "p2p",
+                "ramps",
+                "payment_providers"
+              ]
+            },
+            "description": "Leave out routes of these rail types. Each route left out is listed with the reason."
+          },
+          "min_answer_rate": {
+            "type": "number",
+            "description": "Percent, 0 to 100: leave out routes whose measured 7-day answer rate is lower, or not measured (not enough reads). Each is listed with the reason."
+          },
+          "access_key": {
+            "type": "string",
+            "description": "A router key (rk_...), if not sent as a Bearer header."
+          }
+        }
+      }
+    },
+    {
+      "name": "approve_payment_run",
+      "description": "Gets prepared payments approved by a named person and returns each one's release instruction. Records the approval of that person (approver: { name, role }) for the run's prepared payments (payments: \"all_prepared\") or listed payment_ids (held ones need acknowledge: true), and creates one release record per approved payment. Each approved payment returns release_in_own_bank: beneficiary, amount, currency, reference, which of the business's own accounts to pay from and the cut-off, for the business to release itself in its own bank or rail portal; then record what landed with reconcile_payment. An agent cannot approve on its own: this tool records an approval only when the run's policy sets agent_may_record_approval and names the person who approved; otherwise it returns how the person approves (POST /api/v1/payment-runs/{id}/approve). Never sends or moves money.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "description": "pr_... or pr_sample."
+          },
+          "approver": {
+            "type": "object",
+            "description": "{ name, role, id? }: the person who approved. Required."
+          },
+          "payments": {
+            "description": "\"all_prepared\" or a list of payment_ids."
+          },
+          "acknowledge": {
+            "type": "boolean",
+            "description": "true to approve listed payments that need attention or have no evidence, once the person has assessed them."
+          },
+          "access_key": {
+            "type": "string",
+            "description": "A router key (rk_...), if not sent as a Bearer header."
+          }
+        },
+        "required": [
+          "run_id",
+          "approver"
+        ]
+      }
+    },
+    {
+      "name": "payment_run_status",
+      "description": "Tracks each payment in a run from prepared through approval and release to what landed. Reads the run by run_id: each payment's status (prepared, needs_attention with reasons, no_evidence), its assessment and Rate Receipts, approval, release record and what landed. export: true returns the audit export, where any payment without an assessment, approval or release record shows \"no evidence\". pr_sample needs no key; a real run needs the router key that made it.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "description": "pr_... from run_payments, or pr_sample."
+          },
+          "export": {
+            "type": "boolean",
+            "description": "true: the audit export (JSON) instead of the run."
+          },
+          "access_key": {
+            "type": "string",
+            "description": "A router key (rk_...), if not sent as a Bearer header."
+          }
+        },
+        "required": [
+          "run_id"
+        ]
+      }
+    },
+    {
+      "name": "recommend_payment_route",
+      "description": "Prepares one payment: the routes that can carry it, with cost, speed, licence and freshness. Hard facts first (complete cost, not stale, settles by the due date, licence active, not excluded by route health). SwapEazi does not pick a route. A person chooses. Not a firm quote: confirm with the provider before approval. One analysis (POST /api/v1/payment-analyses), the same service for every payment-intelligence tool. Every figure labelled LIVE, INDICATIVE, HISTORICAL or ESTIMATED. Free: shares the route-assessment allowance.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "invoice_text": {
+            "type": "string",
+            "description": "Paste the invoice or a sentence (e.g. 'Invoice INV-2207, Lusaka Copper Supplies Ltd, Zambia. Amount due: EUR 80,000. Due 2026-11-20'). Or the fields below."
+          },
+          "amount": {
+            "type": "number",
+            "description": "Amount, in currency (default the source currency)."
+          },
+          "currency": {
+            "type": "string",
+            "description": "The currency of amount: the source currency, or the destination one (then it is what the supplier receives)."
+          },
+          "source_currency": {
+            "type": "string",
+            "description": "ISO code you pay from, e.g. EUR or ZAR."
+          },
+          "destination_currency": {
+            "type": "string",
+            "description": "ISO code the supplier is paid in, e.g. ZMW. Or destination_country."
+          },
+          "destination_country": {
+            "type": "string",
+            "description": "ISO 3166 alpha-2 or name, e.g. ZM or Mozambique."
+          },
+          "beneficiary_amount": {
+            "type": "number",
+            "description": "What the supplier must receive, in the destination currency (instead of amount)."
+          },
+          "due_date": {
+            "type": "string",
+            "description": "YYYY-MM-DD: a route that cannot settle by then is not eligible."
+          },
+          "priority": {
+            "type": "string",
+            "enum": [
+              "cost",
+              "speed",
+              "balanced"
+            ],
+            "description": "Sets the default scoring weights. Default balanced."
+          },
+          "weights": {
+            "type": "object",
+            "description": "Your own scoring weights: { total_cost, speed, reliability, liquidity, compliance }, non-negative, normalised to 1."
+          },
+          "existing_provider": {
+            "type": "object",
+            "description": "Your current provider: { provider, kind: quote | entered_rate | past_payment, rate (destination per source unit) or landed_amount, fees: { transaction, intermediary, payout } in the source currency, fees_deducted_destination, quoted_at, valid_until }."
+          },
+          "supplier": {
+            "type": "string",
+            "description": "Optional. The supplier's name as on the invoice, e.g. 'Lusaka Copper Supplies Ltd'; echoed in the analysis."
+          },
+          "reference": {
+            "type": "string",
+            "description": "Optional. Your invoice or payment reference, e.g. 'INV-2207'; echoed in the analysis."
+          },
+          "analysis_id": {
+            "type": "string",
+            "description": "Read a kept analysis (pa_...) instead of making a new one."
+          },
+          "access_key": {
+            "type": "string",
+            "description": "A router key (rk_...), if not sent as a Bearer header: names the routes and is not counted."
+          }
+        }
+      }
+    },
+    {
+      "name": "assess_route",
+      "description": "Prices a cross-border payment before the business commits to it: every known route for the pair, assessed on SwapEazi's independent data. Returns deterministic JSON: the routes known for the pair, each cost and FX figure with its source, read time, freshness (fresh, aging, stale, unknown) and evidence type (observed, executable, indicative, published; the official rate as reference), settlement facts, the requirements on record with sources, what changed since the last assessment of the corridor, data-quality flags (stale, contradictory, missing, indicative only), unknowns, and the evidence behind each finding, under an assessment_id whose record is kept and retrievable (GET /api/v1/route-assessments/{id}; a content hash, not a signature). Never recommends a route, never executes, never claims a figure is executable unless a provider's firm quote is on record. Free; same as GET /api/v1/route-assessments.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "description": "Source currency, ISO code, e.g. EUR."
+          },
+          "to": {
+            "type": "string",
+            "description": "Destination currency, ISO code, e.g. ZMW."
+          },
+          "corridor": {
+            "type": "string",
+            "description": "Instead of from and to: e.g. EUR-ZMW."
+          },
+          "amount": {
+            "type": "number",
+            "description": "Amount leaving, in the source currency. Optional: without it the corridor is assessed at about USD 10,000, labelled."
+          },
+          "as_of": {
+            "type": "string",
+            "description": "Assessment time, ISO 8601, within 15 minutes of now (default now). A past assessment is retrieved by assessment_id, never recomputed."
+          },
+          "assessment_id": {
+            "type": "string",
+            "description": "Retrieve a kept assessment record instead of making a new one."
+          },
+          "sort": {
+            "type": "string",
+            "enum": [
+              "landed_cost",
+              "arrival_time",
+              "answer_rate"
+            ],
+            "description": "Your chosen order for the routes: landed cost against the official rate, stated days to land, or the measured 7-day answer rate. It is your order, stated as yours. Without it, routes come in the order the sources answered; get_corridor_capacity ranks routes by evidence of what landed."
+          },
+          "include_types": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "banks",
+                "otc_desks",
+                "exchange_books",
+                "stablecoin_pools",
+                "p2p",
+                "ramps",
+                "payment_providers"
+              ]
+            },
+            "description": "Keep only routes of these rail types. Each route left out is listed with the reason."
+          },
+          "exclude_types": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "banks",
+                "otc_desks",
+                "exchange_books",
+                "stablecoin_pools",
+                "p2p",
+                "ramps",
+                "payment_providers"
+              ]
+            },
+            "description": "Leave out routes of these rail types. Each route left out is listed with the reason."
+          },
+          "min_answer_rate": {
+            "type": "number",
+            "description": "Percent, 0 to 100: leave out routes whose measured 7-day answer rate is lower, or not measured (not enough reads). Each is listed with the reason."
+          },
+          "payer_country": {
+            "type": "string",
+            "description": "Two-letter country the money leaves from. Needed when from and to are the same currency (e.g. USD from LR to a USD account in CN): the payment is then assessed as a cross-border transfer, banks' charges and rules, no conversion."
+          },
+          "beneficiary_country": {
+            "type": "string",
+            "description": "Two-letter country of the beneficiary's account; with payer_country for a same-currency payment."
+          },
+          "charge_option": {
+            "type": "string",
+            "enum": [
+              "OUR",
+              "SHA",
+              "BEN"
+            ],
+            "description": "Who pays the banks' charges on a wire: OUR (payer pays all), SHA (shared), BEN (beneficiary)."
+          }
+        }
+      }
+    },
+    {
+      "name": "liquidity_map",
+      "description": "Shows where a payment of this size can be filled, and at what cost. For a currency pair (e.g. ZAR-USD, NGN-USD, KES-USD, USD-MWK) and a ticket size: each venue type (exchange order books, stablecoin pools, P2P adverts, ramps and off-ramps, OTC desks, banks) with whether the evidence read shows depth at that size, the measured slippage and landing cost at that size with a Rate Receipt, the largest size the evidence supports, or Being measured with the reason. With prefunding (amount held, days held), idle fiat prefunding and stablecoin reserves on the same evidence: cost to enter and exit at that size, the peg and exit depth from the stablecoin profiles, and the past official-rate move over the same days. Figures, not advice. Unknowns listed. SwapEazi never holds, creates or moves liquidity. Free callers see Route A, Route B; a router key shows venue names. Same as GET/POST /api/v1/liquidity.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "pair": {
+            "type": "string",
+            "description": "e.g. ZAR-USD or USD-MWK. Or from and to."
+          },
+          "from": {
+            "type": "string",
+            "description": "ISO 4217 code of the source currency (what leaves), e.g. 'ZAR'."
+          },
+          "to": {
+            "type": "string",
+            "description": "ISO 4217 code of the destination currency (what lands), e.g. 'USD'."
+          },
+          "amount": {
+            "type": "number",
+            "description": "Ticket size, in the from currency unless amount_currency says otherwise."
+          },
+          "amount_currency": {
+            "type": "string",
+            "description": "The from or the to currency. Default from."
+          },
+          "prefunding": {
+            "type": "object",
+            "description": "{ amount, currency?, corridor?, days_held }: an amount held to prefund the corridor, and for how many days (1 to 365)."
+          },
+          "access_key": {
+            "type": "string",
+            "description": "A router key (rk_...), if not sent as a Bearer header."
+          }
+        },
+        "required": [
+          "amount"
+        ]
+      }
+    },
+    {
+      "name": "onchain_liquidity",
+      "description": "Finds where a stablecoin payment of this size can be filled on-chain, and at what cost: for USDC and USDT (and ZARP, cNGN as to_asset), executable depth and cost at the amount on Ethereum, Tron, Solana, Base, BNB Chain, Arbitrum and Polygon, from keyless DEX aggregator quotes (KyberSwap, ParaSwap, Jupiter): price impact against a USD 100 quote, cost against par with gas and stated fees, and each network's published time to finality. Bridge cost and time between chains from Across, Circle CCTP and LI.FI. Each chain's network fee model (EIP-1559 base fee plus tip, BNB gas price, Solana's fixed fee plus priority fee, Tron energy; HyperEVM labelled unconfirmed) with the fee for one transfer in USD and in bps of the ticket, and its 24-hour range from stored reads. The hourly reads at USD 10k, 100k, 1m and 5m for the pair, each with its age. With destination (two-letter country), the documented facts on whether suppliers there take stablecoins directly (not established where we hold no source) and the off-ramp venues SwapEazi reads in its currency. Every figure has its source, time and a Rate Receipt; each failure keeps its reason. Figures, not advice. The SwapEazi check never touches the money and never asks for a wallet signature. Same as GET/POST /api/v1/onchain-liquidity. Free within the daily allowance.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "amount": {
+            "type": "number",
+            "description": "The ticket in US dollars (dollar stablecoins at par)."
+          },
+          "from_asset": {
+            "type": "string",
+            "description": "USDC or USDT. Default USDC."
+          },
+          "to_asset": {
+            "type": "string",
+            "description": "USDC, USDT, ZARP or cNGN (ZAR and NGN map to ZARP and cNGN). Default: the other dollar coin."
+          },
+          "chains": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Any of ethereum, tron, solana, base, bsc, arbitrum, polygon. Default all."
+          },
+          "destination": {
+            "type": "string",
+            "description": "Optional supplier country, two letters (e.g. HK, CN, AE, NG, ZA, KE)."
+          },
+          "access_key": {
+            "type": "string",
+            "description": "A router key (rk_...), if not sent as a Bearer header: shows exchange and P2P venue names in the destination block."
+          }
+        },
+        "required": [
+          "amount"
+        ]
+      }
+    },
+    {
+      "name": "record_landed",
+      "description": "Closes a payment once the money arrived, on its remembered intent: what left (source currency) and what arrived (destination currency), and/or attach a stablecoin leg by chain and transaction hash, verified from the chain. SwapEazi measures it against the independent reference and against what was routed, and every later route on the pair carries it as a measured payment. On a recurring intent it closes the current cycle only and the series moves to its next due date. Amounts only, never names or account numbers.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "intent_id": {
+            "type": "string",
+            "description": "The remembered intent to close (remembered.intent_id from route_intent)."
+          },
+          "sent": {
+            "type": "number",
+            "description": "Amount that left, in the source currency."
+          },
+          "landed": {
+            "type": "number",
+            "description": "Amount that arrived, in the destination currency, after every deduction."
+          },
+          "settled_at": {
+            "type": "string",
+            "description": "YYYY-MM-DD"
+          },
+          "provider": {
+            "type": "string",
+            "description": "Defaults to the route selected on the last day."
+          },
+          "chain": {
+            "type": "string",
+            "description": "For a stablecoin leg: base, ethereum, arbitrum, optimism, polygon or celo."
+          },
+          "tx": {
+            "type": "string",
+            "description": "For a stablecoin leg: the transaction hash; read and priced from the chain and added to the payment record."
+          }
+        },
+        "required": [
+          "intent_id"
+        ]
+      }
+    },
+    {
+      "name": "reconcile_payment",
+      "description": "Matches each released payment in a run with what landed: amount sent, amount landed, settlement time, proof reference, the official rate with a Rate Receipt, realised all-in cost in percent and in the sent currency, and position inside, above or below the assessment range. The same proof reference is rejected the second time. dry_run: true validates and writes nothing. A payment with no assessment is flagged no_evidence. A router key is required except for pr_sample. Never sends money.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "description": "pr_... or pr_sample."
+          },
+          "dry_run": {
+            "type": "boolean",
+            "description": "true: validate only, write nothing."
+          },
+          "payments": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            },
+            "description": "[{ payment_id, sent_amount, landed_amount, settled_at?, proof_ref, source? }]. proof_ref is an MT103 reference, a transaction hash or a provider reference."
+          },
+          "access_key": {
+            "type": "string",
+            "description": "A router key (rk_...), if not sent as a Bearer header."
+          }
+        },
+        "required": [
+          "run_id",
+          "payments"
+        ]
+      }
+    },
+    {
+      "name": "record_release",
+      "description": "Records the release of a material payment against the organisation's release policy, at the moment it is released: the map_id and measure_id on file, who released it, and any exception with its reason and approver. When an agent releases under a policy with agent_autonomy tiers, the record states the tier its amount falls in and the agent_approval on record for it. Returns a Release Evidence Record, appended to the organisation's hash chain and signed. It records; it never blocks, executes or moves money. A release with no map is still recorded, flagged as a policy miss. Needs the organisation's key.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "policy_id": {
+            "type": "string",
+            "description": "The organisation's release policy the payment is released under, e.g. 'pol_...'."
+          },
+          "payment_ref": {
+            "type": "string",
+            "description": "Your internal payment reference, never an account number."
+          },
+          "uetr": {
+            "type": "string",
+            "description": "The payment's SWIFT UETR (UUID v4), optional: ties the record to the payment itself."
+          },
+          "amount": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "number",
+                "description": "Amount released, in amount.currency, greater than zero."
+              },
+              "currency": {
+                "type": "string",
+                "description": "ISO 4217 code of the released amount, e.g. 'EUR'."
+              }
+            },
+            "description": "The released amount: { value, currency }."
+          },
+          "map_id": {
+            "type": "string",
+            "description": "The Options Map (map_id) on file for this payment, if one was made."
+          },
+          "measure_id": {
+            "type": "string",
+            "description": "The Measure (msr_...) on file for this payment, if one was made."
+          },
+          "intent_hash": {
+            "type": "string",
+            "description": "The intent_hash from compile_intent, so the record proves the map matches this payment."
+          },
+          "released_at": {
+            "type": "string",
+            "description": "ISO timestamp; defaults to now."
+          },
+          "released_by": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "human",
+                  "system",
+                  "agent"
+                ],
+                "description": "human, system or agent."
+              },
+              "id": {
+                "type": "string",
+                "description": "Your own id for the releaser, e.g. an employee id or agent id; never a password or key."
+              }
+            },
+            "description": "Who released the payment: { type: human | system | agent, id }."
+          },
+          "exception": {
+            "type": "object",
+            "properties": {
+              "reason": {
+                "type": "string",
+                "description": "Why the payment was released outside the policy, in plain words."
+              },
+              "approved_by": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "description": "Your own id for the approver."
+                  },
+                  "role": {
+                    "type": "string",
+                    "description": "The approver's role, e.g. 'CFO'."
+                  }
+                },
+                "description": "The person who approved the exception: { id, role }."
+              }
+            },
+            "description": "Only when the release falls outside the policy: { reason, approved_by: { id, role } }."
+          },
+          "agent_approval": {
+            "type": "object",
+            "description": "Agent releases only: { id, role } of the person who signed off a release above the policy's agent_autonomy.release_up_to. The role is the policy's agent_autonomy.approver_role.",
+            "properties": {
+              "id": {
+                "type": "string",
+                "description": "Your own id for the person who signed off."
+              },
+              "role": {
+                "type": "string",
+                "description": "That person's role, e.g. 'Treasurer'."
+              }
+            }
+          }
+        },
+        "required": [
+          "policy_id",
+          "payment_ref",
+          "released_by"
+        ]
+      }
+    },
+    {
+      "name": "release_status",
+      "description": "Tracks a released payment's evidence: reads its Release Evidence Record by rer_id: the policy result at release and the match status as of now (pending, done, overdue or not required). With no rer_id, verifies the organisation's chain of records and returns ok or the first record where it breaks. Read-only. Needs the organisation's key.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "rer_id": {
+            "type": "string",
+            "description": "Optional. The Release Evidence Record (rer_...) to read. Omit to verify the organisation's whole chain."
+          }
+        }
+      }
+    },
+    {
+      "name": "check_fx_charges",
+      "description": "Every foreign-currency cost on a bank or card statement found, proven and booked. Give files (statement CSV, or PDF/screenshot; supplier invoices) or transactions[] and invoices[]. Each charge is matched to its invoice, rated at the ECB mid of the transaction date (last business day on weekends and holidays, date and source named), split into hidden markup in the rate, disclosed fee and VAT, booked as balanced journals in the functional currency (settings: functional_currency, chart_of_accounts, accounting_policy), with exceptions flagged (verification charges, failed attempts, refunds netted, no conversion, vendor reference rates never trusted, cashback, duplicates blocked). Returns a signed, re-runnable pack: same input, same pack_id, hashes and signature. Read-only: SwapEazi never touches the money. Free up to 20 transactions a month; unlimited with a key.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "files": {
+            "type": "array",
+            "description": "[{ name, data (CSV text or base64 PDF/image), kind?: statement|invoice, currency? (account currency when the CSV has none), account? }]"
+          },
+          "transactions": {
+            "type": "array",
+            "description": "[{ date, description, amount (negative = money out), currency, foreign_amount?, foreign_currency?, bank_rate?, fee?, vat?, cashback?, processing_date?, status?, chain?, tx_hash? }]"
+          },
+          "invoices": {
+            "type": "array",
+            "description": "[{ vendor, number?, date, amount, currency, vat?, reference_currency?, reference_amount?, reference_rate? }]"
+          },
+          "settings": {
+            "type": "object",
+            "description": "{ functional_currency?, chart_of_accounts?, accounting_policy?: { fx_cost: separate_account|in_expense, expense_rate_date: invoice|charge }, period_end?, match_window_days? }"
+          },
+          "consent": {
+            "type": "boolean",
+            "description": "Add the result anonymously to the public markup index"
+          },
+          "provider": {
+            "type": "string",
+            "description": "Your bank or card, from the public index list (fnb, absa, ing, revolut, ...); anything else is stored as other. Used only with consent."
+          },
+          "card_type": {
+            "type": "string",
+            "enum": [
+              "credit",
+              "debit",
+              "prepaid",
+              "app"
+            ],
+            "description": "Card type, for the anonymous index. Used only with consent."
+          }
+        }
+      }
+    },
+    {
+      "name": "books_record",
+      "description": "A books-ready, standards-referenced record of one managed payment for the payer's own books: the invoice in the functional currency at approval and at settlement at dated official rates (ECB for EUR, SARB for ZAR, named with date), fees split out, the realised FX difference between approval and settlement, the conversion cost against the official rate, the landed amount, stablecoin legs each valued at its own time with the measured premium (classification left to the company's accountant), and the Rate Receipt and release record ids. Give run_id (+ payment_id) for a Payment Run (pr_sample works without a key), or the figures (business, payment, legs). format: json (record + suggested journal lines, accounts left to the company), csv or journal. closing: { date, currencies } adds the period-end closing rate for open balances. SwapEazi posts nothing to any ledger and decides no accounting policy.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "description": "A payment run (pr_...), or pr_sample."
+          },
+          "payment_id": {
+            "type": "string",
+            "description": "One payment of the run; all payments when left out."
+          },
+          "business": {
+            "type": "object",
+            "description": "{ name?, country (ISO 2), functional_currency? (defaults from country), framework?: IFRS | US_GAAP | LOCAL_GAAP }"
+          },
+          "payment": {
+            "type": "object",
+            "description": "{ invoice?: {amount, currency}, sent: {amount, currency}, landed?: {amount, currency}, approved_at, settled_at?, fees?: [{label, amount, currency, paid_by?: payer|beneficiary}], reference?, payee? }"
+          },
+          "legs": {
+            "type": "array",
+            "description": "Stablecoin legs: [{ at, kind: conversion|transfer|payout, from: {amount, currency}, to: {amount, currency}, venue?, ref? }]"
+          },
+          "evidence": {
+            "type": "object",
+            "description": "{ rate_receipt_ids?, release_record_id?, assessment_id?, approval?: {approver, approved_at} }"
+          },
+          "format": {
+            "type": "string",
+            "enum": [
+              "json",
+              "csv",
+              "journal"
+            ],
+            "description": "json (default): the record with suggested journal lines; csv; or journal lines only."
+          },
+          "closing": {
+            "type": "object",
+            "description": "{ date: YYYY-MM-DD, currencies: [\"USD\", \"USDC\"], functional? }: period-end closing rates with source."
+          },
+          "access_key": {
+            "type": "string",
+            "description": "The router key that made the run (not needed for pr_sample or given figures)."
+          }
+        }
+      }
+    },
+    {
+      "name": "swapeazi_coverage",
+      "description": "Every currency a payment can be measured in today, and the number of directional corridors between them. Call before swapeazi_landed_cost to know whether a pair is covered. Free, no key.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "swapeazi_corridor_registry",
+      "description": "Documented status of cross-border corridors per provider: which pairs a provider says it serves, published fees, and when each record was last verified. Public tier only. Free, no key.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "description": "Optional ISO 4217 source currency, e.g. 'ZAR'."
+          },
+          "to": {
+            "type": "string",
+            "description": "Optional ISO 4217 destination currency, e.g. 'ZMW'."
+          },
+          "provider": {
+            "type": "string",
+            "description": "Optional provider id."
+          }
+        }
+      }
+    },
+    {
+      "name": "swapeazi_guardrail_check",
+      "description": "Before money moves: every eligible route for a payment scored against your own limits (maximum LDI, maximum settlement time, regulated provider required), your quote measured if you pass one, beside what banks advertise, the official business-payment average and the G20 lines. Evidence against your policy, never a recommendation. Returns a signed record: keep it with the payment and pass it to swapeazi_guardrail_reconcile once it settles. Paid: configure this server with an Authorization Bearer key (https://swapeazi.io/pricing).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "client_id": {
+            "type": "string",
+            "description": "Optional. Your own reference, echoed back."
+          },
+          "origin_currency": {
+            "type": "string",
+            "description": "ISO 4217 code, e.g. 'GBP'."
+          },
+          "destination_currency": {
+            "type": "string",
+            "description": "ISO 4217 code, e.g. 'MZN'."
+          },
+          "source_amount": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Amount to send, in the origin currency."
+          },
+          "origin_jurisdiction": {
+            "type": "string",
+            "description": "Optional ISO 3166-1 alpha-2 country of the sender."
+          },
+          "destination_jurisdiction": {
+            "type": "string",
+            "description": "Optional ISO 3166-1 alpha-2 country of the beneficiary."
+          },
+          "max_acceptable_ldi_bps": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Optional. Your cost cap in basis points."
+          },
+          "max_settlement_hours": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Optional. Your delivery-time cap."
+          },
+          "require_regulated_lp": {
+            "type": "boolean",
+            "description": "Default true."
+          },
+          "quote": {
+            "type": "object",
+            "description": "Optional. A quote you already hold, to be measured as given.",
+            "properties": {
+              "provider": {
+                "type": "string",
+                "description": "Who gave the quote, e.g. a bank or provider name; for the record, not used to price."
+              },
+              "landed_amount": {
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "description": "Amount the quote says will land, in the destination currency."
+              }
+            },
+            "required": [
+              "landed_amount"
+            ]
+          },
+          "allowed_providers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Optional. Restrict routes to your own already-connected panel, by provider label or id. For embedding this assessment as a mandatory step inside your own already-licensed release pipeline. asking which of YOUR connected providers should carry this, not who exists in the market, the way an execution-management system asks which of its own connected brokers should fill an order. A provider outside the panel is ruled out before scoring, never silently dropped: it appears in ruled_out with reason not_in_callers_connected_panel. Omit for no restriction."
+          }
+        },
+        "required": [
+          "origin_currency",
+          "destination_currency",
+          "source_amount"
+        ]
+      }
+    },
+    {
+      "name": "swapeazi_guardrail_reconcile",
+      "description": "After money moves: the signed record from swapeazi_guardrail_check plus what landed (figures, or the bank's MT103 or pacs.008 text) returns a signed matching record. Was the quote honoured, did the payment stay inside policy, how far the market moved between approval and value date, and which part of the cost the banks in the chain took. Only amounts, dates, rates and charges are read from a message, never the parties. Paid, included in the assessment it closes.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "attestation": {
+            "type": "string",
+            "description": "decision.attestation from swapeazi_guardrail_check."
+          },
+          "settlement": {
+            "type": "object",
+            "description": "What landed, when no bank message is supplied.",
+            "properties": {
+              "landed_amount": {
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "description": "Amount that arrived, in the destination currency."
+              },
+              "source_amount": {
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "description": "Optional. Amount that left, including any fee billed on top."
+              },
+              "settled_on": {
+                "type": "string",
+                "description": "Optional. Value date, YYYY-MM-DD."
+              }
+            },
+            "required": [
+              "landed_amount"
+            ]
+          },
+          "message": {
+            "type": "string",
+            "description": "Optional. The bank's MT103 text or pacs.008 XML for this payment."
+          }
+        },
+        "required": [
+          "attestation"
+        ]
+      }
+    },
+    {
+      "name": "swapeazi_verify_record",
+      "description": "Verify that a decision or matching record was issued by SwapEazi and has not been altered, and read what it says. Free and keyless, so an auditor, board or counterparty can verify a payer's records without an account.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "attestation": {
+            "type": "string",
+            "description": "The attestation string from a decision or matching record."
+          }
+        },
+        "required": [
+          "attestation"
+        ]
+      }
+    },
+    {
+      "name": "verify_release_record",
+      "description": "Verify a SwapEazi Release Record v1, the evidence of a managed payment (or a chain of them), with no key: schema (https://swapeazi.io/schemas/release-record-v1.json), hash, chain link and Ed25519 signature against the published key. Returns valid or invalid with each test named and the first record that breaks. Nothing sent is stored. The same verification runs offline from the spec at https://swapeazi.io/standard.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "record": {
+            "type": "object",
+            "description": "One release record, as returned by record_release, release_status or GET /api/v1/releases/{id}."
+          },
+          "chain": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            },
+            "description": "Optional. The records around it, in any order; links are verified in seq order."
+          }
+        }
+      }
+    },
+    {
+      "name": "swapeazi_beneficiary_check",
+      "description": "Structural check on a payment destination: an IBAN's own checksum (ISO 7064 MOD 97-10), a US ABA routing number's own checksum, a BIC's format (ISO 9362), an EVM address's EIP-55 checksum, a South African universal branch code recognised against known major banks, or a SADC mobile-money number (South Africa, Zimbabwe, Malawi, Zambia) assessed for the right country code and length. Catches a mistyped or mis-keyed identifier, the single most common cause of a misdirected payment. A payment platform is several rails at once (SEPA, Fedwire/ACH, stablecoin); this assessments whichever identifiers you supply. UK sort codes and most domestic account numbers carry no public checksum and are not covered. This is NOT confirmation of payee or verification of payee: it does not confirm the name on the account, only that the identifier is internally consistent (or, for a branch code or phone number, plausible). Paid: configure this server with an Authorization Bearer key (https://swapeazi.io/pricing).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "iban": {
+            "type": "string",
+            "description": "An IBAN, spaces allowed."
+          },
+          "bic": {
+            "type": "string",
+            "description": "A BIC/SWIFT code, 8 or 11 characters."
+          },
+          "usRoutingNumber": {
+            "type": "string",
+            "description": "A US ABA routing number, 9 digits."
+          },
+          "saBranchCode": {
+            "type": "string",
+            "description": "A South African universal branch code, 6 digits."
+          },
+          "mxClabe": {
+            "type": "string",
+            "description": "A Mexican CLABE (SPEI account), 18 digits; its verification digit is verified."
+          },
+          "mobileMoney": {
+            "type": "object",
+            "description": "A SADC mobile-money number.",
+            "properties": {
+              "phone": {
+                "type": "string",
+                "description": "E.164 format, e.g. +27821234567."
+              },
+              "country": {
+                "type": "string",
+                "enum": [
+                  "ZA",
+                  "ZW",
+                  "MW",
+                  "ZM"
+                ],
+                "description": "ISO 3166-1 alpha-2 country of the mobile-money number: ZA, ZW, MW or ZM."
+              }
+            },
+            "required": [
+              "phone",
+              "country"
+            ]
+          },
+          "address": {
+            "type": "string",
+            "description": "An EVM address, '0x' followed by 40 hex characters."
+          }
+        }
+      }
+    },
+    {
+      "name": "payout_preflight",
+      "description": "Pre-release check on a whole payout file before it goes to the company's own bank or PSP. Send the file's text: an ISO 20022 pain.001 credit-transfer file (versions .03 to .12) or a CSV with a header row (comma or semicolon, Dutch or English column names). Every row comes back ok, needs_person or blocked, with the reasons: missing name or account, failed IBAN checksum, a BIC from a different country than the IBAN, SA branch code, SADC mobile money, too many decimals, a euro payment outside SEPA, an execution date in the past or on a weekend, possible duplicates, and rows above the company's own review limit. With a signing key set, it also returns a signed record of the check (file hash and each row's state, no names or accounts). SwapEazi never sends, holds or routes the money: the company releases the file itself. Paid: configure this server with an Authorization Bearer key (https://swapeazi.io/pricing).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "file": {
+            "type": "string",
+            "description": "The payout file's text: pain.001 XML or a CSV with a header row."
+          },
+          "today": {
+            "type": "string",
+            "description": "Release date, YYYY-MM-DD. Defaults to today (UTC)."
+          },
+          "review_above": {
+            "type": "number",
+            "description": "Rows above this amount need a person, whatever else they pass. The company's own limit."
+          }
+        },
+        "required": [
+          "file"
+        ]
+      }
+    },
+    {
+      "name": "swapeazi_dex_cost",
+      "description": "What a stablecoin swap on a DEX really cost, from its transaction hash: the sender's token out and token in, each priced as the currency it tracks (USDC, EURC, cUSD, KESm/cKES, cNGN, NGNm, ZARm, GHSm, XOFm, ZARP and others), measured against the independent reference for the day with a margin of error, and signed. Chains: ethereum, base, arbitrum, optimism, polygon, celo, robinhood. Free.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "chain": {
+            "type": "string",
+            "description": "ethereum, base, arbitrum, optimism, polygon, celo or robinhood."
+          },
+          "tx": {
+            "type": "string",
+            "description": "The swap's transaction hash, 0x followed by 64 hex characters."
+          }
+        },
+        "required": [
+          "chain",
+          "tx"
+        ]
+      }
+    },
+    {
+      "name": "swapeazi_forward",
+      "description": "The estimated fair forward rate for a currency pair and tenor, by covered interest parity from an independent mid and central bank policy rates, with its margin of error, and what hedging costs or earns per year. Free. With a paid key and quotedRate, the forward a bank quoted is held to it: how much is margin.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "description": "ISO 4217 code of the currency sold forward, e.g. 'USD'."
+          },
+          "to": {
+            "type": "string",
+            "description": "ISO 4217 code of the currency received, e.g. 'ZAR'."
+          },
+          "tenorDays": {
+            "type": "number",
+            "description": "Days to settlement, 1 to 1095."
+          },
+          "amount": {
+            "type": "number",
+            "description": "Optional notional in the from currency, to state the margin in money."
+          },
+          "quotedRate": {
+            "type": "number",
+            "description": "Optional. The forward rate a bank quoted (units of to per from)."
+          }
+        },
+        "required": [
+          "from",
+          "to",
+          "tenorDays"
+        ]
+      }
+    },
+    {
+      "name": "swapeazi_rwa_compare",
+      "description": "Every tokenised Treasury and money fund SwapEazi covers (BUIDL, BENJI, OUSG, USTB, USYC, WTGXX, USDY, Spiko, CETES), landed in the investor's own currency and hedged back: after the fee, converting in and out at their size and the hedge carry, ranked, beside a local money fund, with a one-line verdict. Landed yields free; the working with a paid key.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "investorCurrency": {
+            "type": "string",
+            "description": "ISO 4217 code the investor holds and reports in, e.g. 'ZAR'."
+          },
+          "amount": {
+            "type": "number",
+            "description": "Amount to place, in the investor's currency."
+          },
+          "horizonMonths": {
+            "type": "number",
+            "description": "Holding period in months, default 12."
+          }
+        },
+        "required": [
+          "investorCurrency",
+          "amount"
+        ]
+      }
+    },
+    {
+      "name": "compile_intent",
+      "description": "Turn a corporate FX or payment requirement into a PaymentIntent: the currencies, the amount and whether it is what leaves or what must land, the value date, and the principal's own constraints. Accepts a sentence ('pay a Japanese supplier JPY 800m by 15 October') with the source currency, a flat form, or a full intent. The source currency is never assumed. Returns the intent, its hash and every assumption made. Free.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "description": "The requirement in plain words."
+          },
+          "from": {
+            "type": "string",
+            "description": "ISO 4217 code the money leaves in."
+          },
+          "to": {
+            "type": "string",
+            "description": "ISO 4217 code it must land in."
+          },
+          "amount": {
+            "type": "number",
+            "description": "The amount."
+          },
+          "amount_basis": {
+            "type": "string",
+            "enum": [
+              "source",
+              "destination"
+            ],
+            "description": "Whether the amount leaves (source) or must land (destination). Default destination."
+          },
+          "value_date": {
+            "type": "string",
+            "description": "ISO date the money must land by."
+          },
+          "max_all_in_bps": {
+            "type": "number",
+            "description": "The principal's own limit on all-in cost against the reference, in basis points."
+          },
+          "max_settlement_days": {
+            "type": "number",
+            "description": "The principal's own limit on settlement time."
+          },
+          "allowed_rail_classes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "bank",
+                "specialist_fx",
+                "payout_network",
+                "payment_network",
+                "local_rail",
+                "stablecoin"
+              ]
+            },
+            "description": "Optional. Only these rail classes may carry the payment: bank, specialist_fx, payout_network, payment_network, local_rail, stablecoin. Default: all."
+          },
+          "payer": {
+            "type": "object",
+            "description": "Who is paying, so onboarding_status can be resolved per candidate instead of defaulting to onboardable-with-steps. All optional.",
+            "properties": {
+              "registration_country": {
+                "type": "string",
+                "description": "ISO 3166 country the paying entity is registered in."
+              },
+              "has_local_bank_account": {
+                "type": "boolean",
+                "description": "Whether the payer holds a bank account in the destination country."
+              },
+              "onboarded_providers": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Provider ids the payer is already onboarded with (marks that candidate ready)."
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "map_options",
+      "description": "The signed Options Map for a PaymentIntent: every rail and provider the graph holds for the pair and size, each with its access facts, documented capacity, settlement window, economics basis (observed, band or unpublished) and evidence class, and whether it sits inside, outside or unknown against the principal's constraints. Each candidate also carries route_family (bank_correspondent or stablecoin_casp), regulatory_risk (stable, watch, restricted or blocked, tied to a tracked rule) and onboarding_status (ready, onboardable, ineligible or unknown, with onboarding_gap naming what's missing) so an agent can filter out ineligible or blocked routes before quoting. route_families lists every family even one with zero candidates, reason no_eligible_provider, rather than hiding it. Sorted by coverage tier, rail class and name, never by a rank. payout_rules lists the rules that reach the payout per route (applies or depends, each with its document; document_not_read when found by search). A guide, not advice. Pass an intent (any form compile_intent takes, including payer) or an intent_id. Free within the daily allowance; a key lifts it. Returns a compact view by default (one short object per candidate, every unknown in full) that points at the signed full map; pass detail: \"full\" for the whole signed document, or map_id to read back a map made earlier.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "intent": {
+            "type": "object",
+            "description": "A PaymentIntent, a flat form or { text, from }."
+          },
+          "intent_id": {
+            "type": "string",
+            "description": "An intent compiled earlier."
+          },
+          "release_at": {
+            "type": "string",
+            "description": "Optional ISO date-time the payment will be released; default now. Sets each candidate's settlement.release_window."
+          },
+          "map_id": {
+            "type": "string",
+            "description": "A map_id from an earlier map_options call: returns that stored, signed map (with expired) instead of making a new one."
+          },
+          "country": {
+            "type": "string",
+            "description": "Optional ISO 3166-1 alpha-2 country of the payer (or payee) for a multi-country currency, e.g. CI for XOF: attaches that country's profile (banks, fees, payment-side rules, each with source and confidence) and the receipts measured there."
+          },
+          "detail": {
+            "type": "string",
+            "enum": [
+              "compact",
+              "full"
+            ],
+            "description": "compact (default): a short summary that points at the signed full document, sized for a tool result. full: the whole document, which can exceed 100 KB."
+          }
+        }
+      }
+    },
+    {
+      "name": "check_constraints",
+      "description": "Re-evaluate every candidate in a stored Options Map against constraints supplied now: the principal's own policy, an AP2 open (intent) mandate, a Verifiable Intent credential, or x402 payment requirements (accepts[] with the listed price, verified against the reference). Each row comes back inside, outside or unknown, and carries the map's own route_family, regulatory_risk and onboarding_status/onboarding_gap for that candidate, so an agent can drop ineligible or blocked rows without a second call. Nothing is executed or issued. Free.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "map_id": {
+            "type": "string",
+            "description": "The map_id from map_options."
+          },
+          "constraints": {
+            "type": "object",
+            "description": "max_all_in_bps_vs_ref, max_settlement_days, allowed_rail_classes, disallowed_providers, must_include_provider_id, allowed_providers (restrict every row to your own already-connected panel, by provider id or name. a candidate outside it evaluates outside, never hidden; for embedding this assessment as a mandatory step inside your own already-licensed payment run, the way an EMS asks which of its own connected brokers should carry an order), corporate_only. Stablecoin risk appetite, the client's own thresholds held to each token's dated profile (/stablecoins): stablecoin_attestation_max_age_days, stablecoin_peg_min_share_within_50bps (0 to 1, last 30 days), stablecoin_peg_max_worst_bps (last 30 days), stablecoin_exit_depth_covers_amount (true), stablecoin_supervised_in (ISO codes or EU), stablecoin_no_single_key_mint_freeze (true). A fact not on record makes the row unknown, never inside."
+          },
+          "ap2_mandate": {
+            "type": "object",
+            "description": "An AP2 intent mandate; recognised fields are read, the rest listed as unevaluable."
+          },
+          "x402": {
+            "type": "object",
+            "description": "{ accepts: PaymentRequirements[], price: { currency, amount } }."
+          },
+          "verifiable_intent": {
+            "type": [
+              "string",
+              "object"
+            ],
+            "description": "A Verifiable Intent credential: the serialised SD-JWT, or decoded mandate objects. Amount limits and expiry are held to the intent; where the payment crosses currencies, the result says the mandate does not bound the conversion cost."
+          },
+          "instrument_classes_allowed": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "spot",
+                "forward",
+                "stablecoin_rail"
+              ]
+            },
+            "description": "Optional. Only these instruments are inside: spot, forward or stablecoin_rail. Default: all."
+          },
+          "policy_id": {
+            "type": "string",
+            "description": "A release policy of this organisation (needs its key): supplies the limit and the map-age rule."
+          }
+        },
+        "required": [
+          "map_id"
+        ]
+      }
+    },
+    {
+      "name": "reconcile_outcome",
+      "description": "After the money moved: post what was sent and what landed (or the all-in cost) against the map it was chosen from. Returns the expected band beside the realised cost, signed. The outcome is kept by pair and size band only and later maps at that size carry it, so bands tighten and unknowns close. Economics only. Free.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "map_id": {
+            "type": "string",
+            "description": "The map_id of the Options Map the payment was chosen from."
+          },
+          "candidate_id_used": {
+            "type": "string",
+            "description": "The candidate_id from the map the payment went through."
+          },
+          "realised": {
+            "type": "object",
+            "properties": {
+              "sent_amount": {
+                "type": "number",
+                "description": "Amount that left, in the map's source currency."
+              },
+              "landed_amount": {
+                "type": "number",
+                "description": "Amount that landed, in the map's destination currency, after every deduction."
+              },
+              "all_in_bps_vs_ref": {
+                "type": "number",
+                "description": "All-in cost against the reference, in basis points (e.g. 85 = 0.85%), when the amounts are not given."
+              },
+              "settled_at": {
+                "type": "string",
+                "description": "ISO 8601 date or timestamp the money landed, e.g. '2026-11-04'."
+              },
+              "failure": {
+                "type": "boolean",
+                "description": "true if the payment failed or was returned; default false."
+              }
+            },
+            "description": "What actually happened: sent_amount and landed_amount, or all_in_bps_vs_ref; with settled_at, and failure if it did not land."
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "bank_mt",
+              "swift",
+              "onchain_tx",
+              "manual_upload"
+            ],
+            "description": "Where the realised figures come from: bank_mt (bank statement, MT940/950), swift (SWIFT confirmation), onchain_tx (a chain transaction) or manual_upload."
+          },
+          "proof_ref": {
+            "type": "string",
+            "description": "Your own reference for the proof; never an account number."
+          }
+        },
+        "required": [
+          "map_id",
+          "candidate_id_used",
+          "realised"
+        ]
+      }
+    },
+    {
+      "name": "coverage",
+      "description": "How much of the map for a currency pair and size rests on evidence: the coverage tier (evidenced, partial or inferred), how many matched outcomes sit behind it, how many candidates carry economics, the reference's publishers, error band and type (hard_peg, derived_peg, fixing_median or home_central_bank), and whether a failure rate is published yet. With country (e.g. CI for XOF), also that country's profile and measured receipts. Free.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "description": "ISO 4217 code of the source currency (what leaves), e.g. 'ZAR'."
+          },
+          "to": {
+            "type": "string",
+            "description": "ISO 4217 code of the destination currency (what lands), e.g. 'USD'."
+          },
+          "amount": {
+            "type": "number",
+            "description": "Optional. Payment size for the size band, in the currency named by amount_basis."
+          },
+          "amount_basis": {
+            "type": "string",
+            "enum": [
+              "source",
+              "destination"
+            ],
+            "description": "Whether amount is what leaves (source) or what must land (destination). Default source."
+          },
+          "country": {
+            "type": "string",
+            "description": "Optional ISO 3166-1 alpha-2 country, e.g. CI for XOF."
+          }
+        },
+        "required": [
+          "from",
+          "to"
+        ]
+      }
+    },
+    {
+      "name": "payout_rules",
+      "description": "Which payout rules reach a payout, and when: for a corridor (two-letter countries, or currencies) and a route (bank or stablecoin), each rule SwapEazi holds answers applies, depends (and on what) or does not apply, with its dated steps, its official document and the day it was read. Drafts are never answered as law. Information from each rule's own document, not legal advice. route_intent carries the rules that reach its payout in its rules field. Read-only, free, no key.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "description": "Paying from: a two-letter country (ZA) or a currency (ZAR)."
+          },
+          "to": {
+            "type": "string",
+            "description": "Paying to: a two-letter country (ZW) or a currency (USD)."
+          },
+          "route": {
+            "type": "string",
+            "enum": [
+              "bank",
+              "stablecoin"
+            ],
+            "description": "How the payout goes; both when left out."
+          },
+          "currency": {
+            "type": "string",
+            "description": "Currency sent, when from and to are countries."
+          }
+        },
+        "required": [
+          "from",
+          "to"
+        ]
+      }
+    },
+    {
+      "name": "route_intent",
+      "description": "Route one cross-border payment, given as fields or as one sentence (\"USD 25,000 to a supplier in Lagos by 30 November\"). From a sentence the guide reads what matters without being told: urgency or the due date sets the deadline and puts speed first, words such as cheapest put cost first, regulated or licensed keeps only providers with a licence on record, and paying drivers, staff or a supplier is noted; intent.understood says what was read, and explicit policy fields override it. Returns every route that can carry it, ordered by the payer's own policy, the route the policy selects on the strongest evidence (payments measured when they landed, then published prices; estimates only if the policy allows), the saving against the payer's own quote, and where to pay. With a due date it also routes across time: pay now, lock a forward while holding tokenised T-bills, convert and park, or hold unhedged, as what each needs today. With remember: true SwapEazi keeps the intent, reprices it daily until due and returns its intent_id. A sentence about idle money (\"park $5m USDC, back within 24 hours, non-US, qualified, we have Ondo\") returns treasury parking instead: tokenised T-bill funds that fit the amount, eligibility, chain and redemption need, by net yield, with what the accounts already held can do and what a new account is worth. The free verification returns the verdict with names masked; a router key (Bearer rk_...) unlocks them. SwapEazi executes nothing and takes no fee from any provider. Returns a compact view by default (each route with its release window cut to the summary and landing dates); pass detail: \"full\" for everything.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "description": "The payment in one sentence; used instead of from/to/amount."
+          },
+          "from": {
+            "type": "string",
+            "description": "ISO 4217 code of the source currency (what leaves), e.g. 'ZAR'."
+          },
+          "to": {
+            "type": "string",
+            "description": "ISO 4217 code of the destination currency (what lands), e.g. 'USD'."
+          },
+          "amount": {
+            "type": "number",
+            "description": "Amount leaving, in the source currency."
+          },
+          "your_quote_landed": {
+            "type": "number",
+            "description": "What the payer's current quote would land, in the destination currency."
+          },
+          "due_date": {
+            "type": "string",
+            "description": "YYYY-MM-DD the money must land; adds routing across time: pay now, forward, convert and park, hold unhedged."
+          },
+          "deliver": {
+            "type": "number",
+            "description": "Amount to deliver on the due date, destination currency."
+          },
+          "remember": {
+            "type": "boolean",
+            "description": "Keep the intent and reprice it daily until it lands; returns remembered.intent_id."
+          },
+          "have": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Providers or issuers the payer already has accounts with; the result shows what they can do and what a new account adds."
+          },
+          "lock_at": {
+            "type": "number",
+            "description": "With remember: mark the day locking the rate needs this much or less, source currency."
+          },
+          "repeat": {
+            "type": "string",
+            "enum": [
+              "weekly",
+              "monthly"
+            ],
+            "description": "With remember and due_date: the payment repeats; due_date is the first cycle. Monthly cycles keep the day of month (31st: last day of shorter months). One reminder per cycle, before the last day to release through the selected route."
+          },
+          "repeat_until": {
+            "type": "string",
+            "description": "With repeat: YYYY-MM-DD, last date a cycle may fall on."
+          },
+          "repeat_count": {
+            "type": "number",
+            "description": "With repeat: number of cycles, the first included."
+          },
+          "nudge_lead_days": {
+            "type": "number",
+            "description": "With repeat: banking days before the release-by date to send the reminder (default 2)."
+          },
+          "detail": {
+            "type": "string",
+            "enum": [
+              "compact",
+              "full"
+            ],
+            "description": "compact (default): a short summary that points at the signed full document, sized for a tool result. full: the whole document, which can exceed 100 KB."
+          },
+          "policy": {
+            "type": "object",
+            "properties": {
+              "objective": {
+                "type": "string",
+                "enum": [
+                  "lowest_cost",
+                  "fastest"
+                ],
+                "description": "What decides the selected route: lowest_cost (total cost) or fastest (time to land)."
+              },
+              "deadline_days": {
+                "type": "number",
+                "description": "Days from today by which the money must land; routes that cannot are left out."
+              },
+              "max_all_in_bps": {
+                "type": "number",
+                "description": "Maximum all-in cost against the official rate, in basis points (e.g. 150 = 1.5%)."
+              },
+              "exclude": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Provider ids or names to leave out, e.g. ['provider-a']."
+              },
+              "include_estimates": {
+                "type": "boolean",
+                "description": "true also selects among routes priced by estimate. Default false: measured payments or published prices only."
+              },
+              "risk": {
+                "type": "string",
+                "enum": [
+                  "certain",
+                  "allow_unhedged"
+                ],
+                "description": "certain (default): fixed outcomes only. allow_unhedged: also considers holding the currency unhedged until the due date."
+              },
+              "require_licence": {
+                "type": "boolean",
+                "description": "true: only routes with a licence on record. Default false."
+              }
+            },
+            "description": "Optional. The payer's own routing policy; overrides what is read from text."
+          }
+        }
+      }
+    },
+    {
+      "name": "intent_status",
+      "description": "A payment intent SwapEazi is watching (from route_intent with remember: true): today's route and what paying now, locking the rate and holding unhedged need, every day since it was kept, and what changed (the selected route, the cost of paying today, the payer's lock-at level, the due date). Signed. Facts only; SwapEazi moves no money.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "intent_id": {
+            "type": "string",
+            "description": "The remembered intent (remembered.intent_id from route_intent with remember: true)."
+          }
+        },
+        "required": [
+          "intent_id"
+        ]
+      }
+    },
+    {
+      "name": "prepare_payment",
+      "description": "Prepare an unsigned USDC or USDT transaction for the paying wallet you control, on Base, Arbitrum, Optimism, Polygon or BNB Chain, or USDT (TRC-20) on Tron (chain_id 728126428, T... addresses; TronLink signs it). SwapEazi screens the recipient's address and verifies the organisation's spend profile first: the cap per payment, the daily and monthly budget, approved recipients and chains, and the approval line. A person approves every payment an agent prepares: within the rules it returns an approval_id, the approver decides at /approvals, and once approved payment_controls with that approval_id returns the transaction (a plain transfer, or a swap or bridge with no SwapEazi fee) for your wallet to sign; outside the rules it explains why. Pass the map_id and candidate_id of the stablecoin option you took from discover_payment or map_options, so the approver sees what the guide showed for it and the records name the map; the guide never picks it. SwapEazi never signs, holds keys or moves funds. With private: true, the payment runs through NEAR Intents' confidential mode under the same rules; that is also the way between Tron and an EVM chain. With profile_id, needs the organisation's key.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string",
+            "enum": [
+              "USDC",
+              "USDT"
+            ],
+            "description": "The stablecoin paid from the wallet: USDC or USDT."
+          },
+          "chain_id": {
+            "type": "number",
+            "description": "8453 Base, 42161 Arbitrum, 10 Optimism, 137 Polygon, 56 BNB Chain, 728126428 Tron (USDT only)."
+          },
+          "from": {
+            "type": "string",
+            "description": "The paying wallet's address: 0x on EVM chains, T... (base58check) on Tron."
+          },
+          "to": {
+            "type": "string",
+            "description": "The recipient's address on the chain it receives on (0x, or T... on Tron), or your own deposit address at an off-ramp."
+          },
+          "amount": {
+            "type": "number",
+            "description": "Amount to pay, in token units (1 = one USDC or USDT), greater than zero."
+          },
+          "to_token": {
+            "type": "string",
+            "enum": [
+              "USDC",
+              "USDT"
+            ],
+            "description": "Optional. The stablecoin the recipient receives, when it differs from token: USDC or USDT."
+          },
+          "to_chain_id": {
+            "type": "number",
+            "description": "The chain the recipient receives on, when it differs from chain_id. To or from Tron (728126428) needs private: true."
+          },
+          "destination_currency": {
+            "type": "string",
+            "description": "The local currency the money is for, so local stablecoin rules are assessed, e.g. ZAR."
+          },
+          "profile_id": {
+            "type": "string",
+            "description": "prof_… from payment_controls; applies the organisation's budgets and approval line."
+          },
+          "rules": {
+            "type": "object",
+            "description": "Inline rules when no profile is used: max_per_payment_usd, approval_above_usd, daily_limit_usd, monthly_limit_usd, allowed_recipients, allowed_chains."
+          },
+          "map_id": {
+            "type": "string",
+            "description": "The map_id from discover_payment or map_options. The map must not have expired."
+          },
+          "candidate_id": {
+            "type": "string",
+            "description": "The stablecoin candidate in that map this payment takes. Bank candidates are sent by your bank or provider, not prepared here."
+          },
+          "private": {
+            "type": "boolean",
+            "description": "Pay privately through NEAR Intents' confidential mode: one transfer to a deposit address for your wallet to sign; settles in full or refunds to your wallet. The quote's signature and correlation id go into the signed record. Read progress with private_payment_status."
+          }
+        },
+        "required": [
+          "token",
+          "chain_id",
+          "from",
+          "to",
+          "amount"
+        ]
+      }
+    },
+    {
+      "name": "confirm_payment",
+      "description": "After your wallet has sent a payment prepared by prepare_payment, give its prepare_id and transaction hash. SwapEazi reads the receipt on chain, verifies it came from the prepared wallet and matches the prepared transaction, and returns a signed payment record for the audit trail. Read-only on chain; moves nothing.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "prepare_id": {
+            "type": "string",
+            "description": "The prepare_id returned by prepare_payment."
+          },
+          "tx_hash": {
+            "type": "string",
+            "description": "The transaction hash your wallet broadcast: 0x plus 64 hex characters on EVM chains, 64 hex characters on Tron."
+          },
+          "contribute": {
+            "type": "boolean",
+            "description": "True adds one anonymised row (token, network, month, size band) to SwapEazi's cost research."
+          }
+        },
+        "required": [
+          "prepare_id",
+          "tx_hash"
+        ]
+      }
+    },
+    {
+      "name": "private_payment_status",
+      "description": "For a payment prepared with private: true, give the deposit_address from its quote_proof. Returns the NEAR Intents status: PENDING_DEPOSIT, KNOWN_DEPOSIT_TX, PROCESSING, SUCCESS, REFUNDED, INCOMPLETE_DEPOSIT or FAILED, with the reason when it cannot be read. Read-only, free, no key.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "deposit_address": {
+            "type": "string",
+            "description": "The deposit_address from the payment's quote_proof (prepare_payment with private: true)."
+          }
+        },
+        "required": [
+          "deposit_address"
+        ]
+      }
+    },
+    {
+      "name": "payment_controls",
+      "description": "Read the controls that govern the payments an agent prepares for an organisation: its spend profiles with today's and this month's spend against each budget, the payments waiting for a person to approve (with any transaction already prepared after approval), and the audit trail of prepared and confirmed payments. With approval_id, reads that one approval. Read-only. Needs the organisation's key.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "approval_id": {
+            "type": "string",
+            "description": "rapr_… returned by prepare_payment when a person must approve."
+          }
+        }
+      }
+    },
+    {
+      "name": "evidence_passport",
+      "description": "Read a payment case by intent_id (pi_…): its lifecycle status and who reported it, the Evidence Passport (intent, evidence with provenance and freshness, provider access and dependencies, decision, outcome), unknowns, exceptions with owner and next action, and the timeline. Use it before acting on a payment, to see what is current, what has expired and what must happen next. Read-only: it changes nothing and moves no money. Cases opened with an organisation's key need that key.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "intent_id": {
+            "type": "string",
+            "description": "pi_… from POST /api/v1/cases."
+          }
+        },
+        "required": [
+          "intent_id"
+        ]
+      }
+    },
+    {
+      "name": "approval_status",
+      "description": "Read a payout the agent held for approval by approval_id: awaiting_approval while it is pending; approved with the agent_approval { id, role } to pass to record_release; rejected with the approver's reason; or expired once its release-by date passed undecided. Each decision is signed and chained to the agent's signed record. Do not release a payout while it is awaiting approval, rejected or expired. Read-only. Needs the organisation's key; demo items (aprd_) do not.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "approval_id": {
+            "type": "string",
+            "description": "apr_… (or aprd_… for a demo item), from POST /api/v1/agent/run with policy_id."
+          }
+        },
+        "required": [
+          "approval_id"
+        ]
+      }
+    },
+    {
+      "name": "request_introduction",
+      "description": "Retired on 19 Oct 2026: SwapEazi collects no contact details for introductions. Calls answer RETIRED. The next step after route_intent is the chosen route's handoff_url, the provider's own sign-in or account page.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "corridor_events",
+      "description": "Dated corridor news for a currency pair or one currency: provider route launches and exits, licences granted or revoked, central-bank FX and payment rule changes, devaluations, limit changes and outages, collected from payments press and regulator feeds across Africa, Latin America, Asia, the Middle East and Turkey. Each event carries its source link and an evidence label: 'official source' (a regulator or central bank published it), 'announced, unverified' (a company or the press reported it), or 'headline only, not read'. Listed newest first; route launches for the exact pair come back separately as announced_routes, never as payment options. Free.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "pair": {
+            "type": "string",
+            "description": "Six letters, e.g. NGNCNY. Matches either currency or the exact corridor."
+          },
+          "currency": {
+            "type": "string",
+            "description": "One ISO code, e.g. NGN, when no pair is given."
+          },
+          "days": {
+            "type": "number",
+            "description": "Look-back window, 1 to 365. Default 90."
+          },
+          "kind": {
+            "type": "string",
+            "description": "Optional comma-separated kinds: route_launch, route_exit, licence_granted, licence_revoked, rule_change, devaluation, limit_change, outage, partnership, other."
+          },
+          "limit": {
+            "type": "number",
+            "description": "Events returned, 1 to 100. Default 25."
+          }
+        }
+      }
+    },
+    {
+      "name": "price_routes",
+      "description": "Read public prices for a corridor at a payment size: on-chain pools, public order books and public adverts, with no partner key. Each figure is a route option with a Rate Receipt (schema swapeazi.rate_receipt.v1): publisher, source_type, read_at, size_priced, rate, official_rate, cost_pct, confidence, evidence_ref and status (proven, priced_only or no_live_route). max_age_seconds says when to read again. A missing figure is null with a reason. Free callers see Route A, Route B; a router key sees source names. Never executes.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "description": "Source currency, e.g. USDT."
+          },
+          "to": {
+            "type": "string",
+            "description": "Destination currency, e.g. ZAR."
+          },
+          "corridor": {
+            "type": "string",
+            "description": "Instead of from and to: USDT-ZAR."
+          },
+          "amount": {
+            "type": "number",
+            "description": "Amount in the source currency. Default 10000."
+          },
+          "access_key": {
+            "type": "string",
+            "description": "A router key (rk_...), if not sent as a Bearer header."
+          }
+        }
+      }
+    },
+    {
+      "name": "get_rate_receipt",
+      "description": "Return a stored Rate Receipt by id (rr_...). Schema swapeazi.rate_receipt.v1. Includes max_age_seconds. Free callers see a masked publisher; a router key sees the source name.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "rr_... from price_routes."
+          },
+          "access_key": {
+            "type": "string",
+            "description": "A router key (rk_...), if not sent as a Bearer header."
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    },
+    {
+      "name": "get_coverage",
+      "description": "List corridors and each route's standing: proven (a real price and at least one closed landing), priced_only, or no_live_route with a reason. Includes last_priced_at, last_landed_at, landed_count and max_age_seconds. A route is never proven without a closed landing. Free callers see masked route names. Same records as GET /api/v1/coverage?view=routes.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "access_key": {
+            "type": "string",
+            "description": "A router key (rk_...), if not sent as a Bearer header."
+          }
+        }
+      }
+    },
+    {
+      "name": "create_mandate",
+      "description": "Create a spend mandate for an agent: per-payment cap, period cap, currencies, corridors, rails (bank, provider, stablecoin_wallet), optional cap on cost above the official rate, the person who approves, and an expiry. A router key is required. A person still approves every payment. The mandate does not send money.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "agent_id": {
+            "type": "string",
+            "description": "Your own id for the agent this mandate covers, e.g. 'ap-agent-1'."
+          },
+          "max_per_payment": {
+            "type": "object",
+            "description": "{ amount, currency }"
+          },
+          "max_per_period": {
+            "type": "object",
+            "description": "{ amount, currency }"
+          },
+          "period": {
+            "type": "string",
+            "enum": [
+              "day",
+              "week",
+              "month"
+            ],
+            "description": "The window max_per_period applies to: day, week or month."
+          },
+          "currencies_allowed": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "ISO 4217 codes the agent may pay in, e.g. ['ZAR', 'USD']."
+          },
+          "corridors_allowed": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "e.g. USDT-ZAR"
+          },
+          "rails_allowed": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "bank",
+                "provider",
+                "stablecoin_wallet"
+              ]
+            },
+            "description": "Rails the agent may use: bank, provider, stablecoin_wallet."
+          },
+          "max_cost_above_official_pct": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Optional. Most a payment may cost above the official rate, in percent (e.g. 1.5); null for no cap."
+          },
+          "approver_person_id": {
+            "type": "string",
+            "description": "The person who approves. An agent cannot approve alone."
+          },
+          "expires_at": {
+            "type": "string",
+            "description": "ISO 8601, in the future."
+          },
+          "access_key": {
+            "type": "string",
+            "description": "A router key (rk_...), if not sent as a Bearer header."
+          }
+        },
+        "required": [
+          "agent_id",
+          "max_per_payment",
+          "max_per_period",
+          "period",
+          "currencies_allowed",
+          "corridors_allowed",
+          "rails_allowed",
+          "approver_person_id",
+          "expires_at"
+        ]
+      }
+    },
+    {
+      "name": "get_mandate",
+      "description": "Read a mandate by id (man_...) for the organisation of the router key. A router key is required.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "man_..."
+          },
+          "mandate_id": {
+            "type": "string",
+            "description": "Same as id."
+          },
+          "access_key": {
+            "type": "string",
+            "description": "A router key (rk_...), if not sent as a Bearer header."
+          }
+        }
+      }
+    },
+    {
+      "name": "check_payment_against_mandate",
+      "description": "Verify one payment against a mandate before it is prepared. A breach returns mandate_violation and the rule that failed. A pass still needs the named person to approve. Nothing is sent. A router key is required. The verification is recorded when the payment is prepared inside a payment run.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "mandate_id": {
+            "type": "string",
+            "description": "The mandate's id, from create_mandate."
+          },
+          "agent_id": {
+            "type": "string",
+            "description": "Optional. The agent making the payment; must match the mandate's agent."
+          },
+          "amount": {
+            "type": "number",
+            "description": "The payment amount, in currency, greater than zero."
+          },
+          "currency": {
+            "type": "string",
+            "description": "ISO 4217 code of amount, e.g. 'USD'."
+          },
+          "from": {
+            "type": "string",
+            "description": "ISO 4217 code of the source currency, e.g. 'USDT'; with to, forms the corridor (e.g. USDT-ZAR)."
+          },
+          "to": {
+            "type": "string",
+            "description": "ISO 4217 code of the destination currency, e.g. 'ZAR'."
+          },
+          "rail": {
+            "type": "string",
+            "enum": [
+              "bank",
+              "provider",
+              "stablecoin"
+            ],
+            "description": "Optional. The rail the payment would use: bank, provider or stablecoin."
+          },
+          "cost_above_official_pct": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Null when the gap to the official rate is not on record. Never treated as zero."
+          },
+          "access_key": {
+            "type": "string",
+            "description": "A router key (rk_...), if not sent as a Bearer header."
+          }
+        },
+        "required": [
+          "mandate_id",
+          "amount",
+          "currency",
+          "from",
+          "to"
+        ]
+      }
+    },
+    {
+      "name": "payment_intent",
+      "description": "Keyed. A business states the payee, the corridor, the amount the payee must receive, and the deadline. Returns a proposal: bank, OTC, ramp, AMM and secure P2P wallet routes, including the business's own negotiated rate when one is on record. The selected route is the lower total the payer sends to land the full amount by the deadline. Each figure is measured, a public quote read at a date and not locked, or Being measured. SwapEazi does not hold or move money. A person still approves.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "payee_name": {
+            "type": "string",
+            "description": "The payee's name, e.g. 'Lagos Steel Ltd'."
+          },
+          "from": {
+            "type": "string",
+            "description": "ISO 4217 code the business pays from, e.g. 'USD'."
+          },
+          "to": {
+            "type": "string",
+            "description": "ISO 4217 code the payee receives, e.g. 'NGN'."
+          },
+          "amount_receive": {
+            "type": "number",
+            "description": "What the payee must receive, in the to currency, greater than zero."
+          },
+          "deadline": {
+            "type": "string",
+            "description": "YYYY-MM-DD"
+          },
+          "customer_id": {
+            "type": "string",
+            "description": "Optional. Your own id for the customer, so its negotiated rate on record is included."
+          },
+          "access_key": {
+            "type": "string",
+            "description": "A router key (rk_...), if not sent as a Bearer header."
+          }
+        },
+        "required": [
+          "payee_name",
+          "from",
+          "to",
+          "amount_receive",
+          "deadline"
+        ]
+      }
+    },
+    {
+      "name": "decide_intent",
+      "description": "Keyed. A named person approves or rejects a payment intent. The decision is kept with the time, the person and the proposal. An agent cannot approve alone. Nothing is sent.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "intent_id": {
+            "type": "string",
+            "description": "The payment intent's id, from payment_intent."
+          },
+          "decision": {
+            "type": "string",
+            "enum": [
+              "approved",
+              "rejected"
+            ],
+            "description": "approved or rejected."
+          },
+          "person_name": {
+            "type": "string",
+            "description": "Full name of the person deciding, e.g. 'Thandi Nkosi'. An agent cannot decide alone."
+          },
+          "person_role": {
+            "type": "string",
+            "description": "That person's role, e.g. 'Finance Director'."
+          },
+          "access_key": {
+            "type": "string",
+            "description": "A router key (rk_...), if not sent as a Bearer header."
+          }
+        },
+        "required": [
+          "intent_id",
+          "decision",
+          "person_name",
+          "person_role"
+        ]
+      }
+    },
+    {
+      "name": "rail_handoff",
+      "description": "Keyed. With intent_id: after a person has approved, the approved instruction for your rail, with a Rate Receipt of the rate against the official rate and the negotiated deal; where no live connection is configured the adapter is marked stub. The default is that the business releases the payment itself in its own bank or rail portal (release_in_own_bank on the approved payment); SwapEazi never sends it. Sandbox only: with run_id, payment_id and connection_id, sends ONE Payment Run payment a named person approved through the business's OWN connected rail account (Yellow Card sandbox; production stays off unless the deployment sets YELLOWCARD_ENV=production), with the rail's own idempotency key, and returns the submission with a Rate Receipt and the release record. Refused, with the reason, without a recorded approval, when the payment changed since approval, above the connection's cap, or for an account other than the one approved. With run_id and payment_id only: reads that payment's status from the rail. SwapEazi holds no funds and has no account in the flow.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "intent_id": {
+            "type": "string",
+            "description": "An approved payment intent (from payment_intent and decide_intent): returns its instruction for your rail."
+          },
+          "run_id": {
+            "type": "string",
+            "description": "Instead of intent_id: the payment run (pr_...) holding an approved payment to send."
+          },
+          "payment_id": {
+            "type": "string",
+            "description": "With run_id: the approved payment in the run, e.g. 'p_001'."
+          },
+          "connection_id": {
+            "type": "string",
+            "description": "With run_id: your connected rail account (from connect_rail_account) to send through."
+          },
+          "account_number": {
+            "type": "string",
+            "description": "The payee's full account number as approved; SwapEazi keeps only its last four characters and matches this against the approved instruction."
+          },
+          "channel_id": {
+            "type": "string",
+            "description": "With run_id: the rail's payout channel id for this payment (Yellow Card channelId)."
+          },
+          "network_id": {
+            "type": "string",
+            "description": "With run_id: the rail's id for the payee's bank or mobile-money network (Yellow Card networkId)."
+          },
+          "account_type": {
+            "type": "string",
+            "enum": [
+              "bank",
+              "momo"
+            ],
+            "description": "With run_id: bank (default) or momo (mobile money)."
+          },
+          "reason": {
+            "type": "string",
+            "description": "With run_id: the payment's purpose as the rail records it, e.g. 'other' (default)."
+          },
+          "access_key": {
+            "type": "string",
+            "description": "A router key (rk_...), if not sent as a Bearer header."
+          }
+        }
+      }
+    },
+    {
+      "name": "connect_rail_account",
+      "description": "Keyed. Connects the business's OWN account at a rail (yellowcard) for reads and sandbox sending; production sending is off unless the deployment enables it, and the default flow is that the business releases payments itself in its own portal with its API key and secret and a required cap per payment. The credentials are proven with a read (no payment is sent), encrypted at rest and never returned: answers show the key's last four characters and the created date. Prefer POST /api/v1/rail-connections from your own software: credentials passed here travel through the agent's context. SwapEazi holds no funds and has no account in the flow.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "rail": {
+            "type": "string",
+            "enum": [
+              "yellowcard"
+            ],
+            "description": "The rail: yellowcard."
+          },
+          "env": {
+            "type": "string",
+            "enum": [
+              "sandbox",
+              "production"
+            ],
+            "description": "sandbox (default) or production; production sending stays off unless the deployment enables it."
+          },
+          "api_key": {
+            "type": "string",
+            "description": "Your API key at the rail. Encrypted at rest; only its last four characters are ever shown."
+          },
+          "secret": {
+            "type": "string",
+            "description": "Your API secret at the rail. Encrypted at rest; never shown."
+          },
+          "cap_per_payment": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "number",
+                "description": "The cap, in cap_per_payment.currency, greater than 0 and at most 10,000,000."
+              },
+              "currency": {
+                "type": "string",
+                "description": "ISO 4217 code of the cap, e.g. 'USD'."
+              }
+            },
+            "required": [
+              "value",
+              "currency"
+            ],
+            "description": "Required. The most any one payment through this connection may be: { value, currency }; a payment in another currency is refused."
+          },
+          "label": {
+            "type": "string",
+            "description": "Optional. Your name for this connection, up to 80 characters."
+          },
+          "sender": {
+            "type": "object",
+            "description": "Optional. The sending business as the rail needs it: { name, country, phone, address, email, idType, idNumber, businessId, businessName }."
+          },
+          "access_key": {
+            "type": "string",
+            "description": "A router key (rk_...), if not sent as a Bearer header."
+          }
+        },
+        "required": [
+          "rail",
+          "api_key",
+          "secret",
+          "cap_per_payment"
+        ]
+      }
+    },
+    {
+      "name": "list_rail_accounts",
+      "description": "Keyed. The rail accounts connected with this router key: rail, env, label, the API key's last four characters, created date and cap per payment. Never a key or a secret.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "access_key": {
+            "type": "string",
+            "description": "The router key (rk_...) the accounts were connected with, if not sent as a Bearer header."
+          }
+        }
+      }
+    },
+    {
+      "name": "remove_rail_account",
+      "description": "Keyed. Deletes a connected rail account and its stored credentials. Payments already sent stay readable in the business's own rail account.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "connection_id": {
+            "type": "string",
+            "description": "The connected rail account to delete (from list_rail_accounts)."
+          },
+          "access_key": {
+            "type": "string",
+            "description": "A router key (rk_...), if not sent as a Bearer header."
+          }
+        },
+        "required": [
+          "connection_id"
+        ]
+      }
+    },
+    {
+      "name": "join_network",
+      "description": "Keyed. A business, a rail or an agent joins. A rail may attach a quote feed as an API key or an OAuth-style connection and one published rate. No placement is sold. SwapEazi does not hold or move money.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "party": {
+            "type": "string",
+            "enum": [
+              "business",
+              "rail",
+              "agent"
+            ],
+            "description": "Who is joining: business, rail or agent."
+          },
+          "name": {
+            "type": "string",
+            "description": "The joining organisation's or agent's name."
+          },
+          "contact": {
+            "type": "string",
+            "description": "A work email address to reach the joining party."
+          },
+          "rail_kind": {
+            "type": "string",
+            "description": "Rails only: bank, otc, ramp, psp or amm."
+          },
+          "quote_feed": {
+            "type": "string",
+            "enum": [
+              "api_key",
+              "oauth"
+            ],
+            "description": "Rails only, optional: how the quote feed connects: api_key or oauth."
+          },
+          "from": {
+            "type": "string",
+            "description": "Rails only, with rate: ISO 4217 source currency of the published rate, e.g. 'USD'."
+          },
+          "to": {
+            "type": "string",
+            "description": "Rails only, with rate: ISO 4217 destination currency, e.g. 'ZAR'."
+          },
+          "rate": {
+            "type": "number",
+            "description": "Rails only: one published rate, destination units per source unit, e.g. 18.25."
+          },
+          "access_key": {
+            "type": "string",
+            "description": "A router key (rk_...), if not sent as a Bearer header."
+          }
+        },
+        "required": [
+          "party",
+          "name",
+          "contact"
+        ]
+      }
+    },
+    {
+      "name": "rail_position",
+      "description": "Keyed. For one corridor, the rail's own published rate beside the official rate and a public market read when one exists. Position is lower_landed_cost, higher_landed_cost or unknown. A missing figure is Being measured.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "description": "ISO 4217 code of the source currency (what leaves), e.g. 'ZAR'."
+          },
+          "to": {
+            "type": "string",
+            "description": "ISO 4217 code of the destination currency (what lands), e.g. 'USD'."
+          },
+          "access_key": {
+            "type": "string",
+            "description": "A router key (rk_...), if not sent as a Bearer header."
+          }
+        },
+        "required": [
+          "from",
+          "to"
+        ]
+      }
+    },
+    {
+      "name": "rate_deal_history",
+      "description": "Keyed. Returns the dated history of measurements for one customer and corridor: the rate on each prepared or matched payment against that day's official rate, the negotiated deal (margin in bps or a fixed spread, with the customer's own bank label), and a public market price when one was read. Drift is in bps and in the sent currency. above_negotiated is set when the gap over the deal exceeds the stored tolerance. A missing figure is null. The payment stays with the customer's own bank. A router key is required.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "customer_id": {
+            "type": "string",
+            "description": "Your own id for the customer whose negotiated deal is compared, e.g. 'acme'."
+          },
+          "from": {
+            "type": "string",
+            "description": "ISO 4217 code of the source currency (what leaves), e.g. 'ZAR'."
+          },
+          "to": {
+            "type": "string",
+            "description": "ISO 4217 code of the destination currency (what lands), e.g. 'USD'."
+          },
+          "access_key": {
+            "type": "string",
+            "description": "A router key (rk_...), if not sent as a Bearer header."
+          }
+        },
+        "required": [
+          "customer_id",
+          "from",
+          "to"
+        ]
+      }
+    },
+    {
+      "name": "parallel_signal",
+      "description": "A dated series per currency of the gap between a public-advert median and the official rate. Labelled market-observed, never an official rate. Currencies: ZAR, MZN, MWK, ZMW, NGN, KES, BRL, ARS, PHP. Too few adverts, or no read on record, is null with a reason. A missing gap is never zero. Free.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "date": {
+            "type": "string",
+            "description": "YYYY-MM-DD. Default today (UTC)."
+          }
+        }
+      }
+    },
+    {
+      "name": "get_corridor_rates",
+      "description": "Spec v1.0 name for assess_route: the official rate for the pair and each route's all-in cost and FX figure with source, read time, freshness and evidence type, settlement and requirements, under an assessment_id. Same arguments as assess_route.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "description": "ISO 4217 code of the source currency (what leaves), e.g. 'ZAR'."
+          },
+          "to": {
+            "type": "string",
+            "description": "ISO 4217 code of the destination currency (what lands), e.g. 'USD'."
+          },
+          "corridor": {
+            "type": "string",
+            "description": "e.g. EUR-ZMW instead of from and to."
+          },
+          "amount": {
+            "type": "number",
+            "description": "Amount leaving, in the source currency."
+          },
+          "access_key": {
+            "type": "string",
+            "description": "A router key (rk_...), if not sent as a Bearer header."
+          }
+        }
+      }
+    },
+    {
+      "name": "calculate_payment_cost",
+      "description": "What this payment costs through your current provider against the official rate: effective rate, FX spread, transaction, intermediary and payout fees, total cost in money and bps, and what the beneficiary receives; with each alternative route's cost at the same size. One analysis (POST /api/v1/payment-analyses), the same service for every payment-intelligence tool. Every figure labelled LIVE, INDICATIVE, HISTORICAL or ESTIMATED; estimated savings are never realised. Free: shares the route-assessment allowance.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "invoice_text": {
+            "type": "string",
+            "description": "Paste the invoice or a sentence (e.g. 'Invoice INV-2207, Lusaka Copper Supplies Ltd, Zambia. Amount due: EUR 80,000. Due 2026-11-20'). Or the fields below."
+          },
+          "amount": {
+            "type": "number",
+            "description": "Amount, in currency (default the source currency)."
+          },
+          "currency": {
+            "type": "string",
+            "description": "The currency of amount: the source currency, or the destination one (then it is what the supplier receives)."
+          },
+          "source_currency": {
+            "type": "string",
+            "description": "ISO code you pay from, e.g. EUR or ZAR."
+          },
+          "destination_currency": {
+            "type": "string",
+            "description": "ISO code the supplier is paid in, e.g. ZMW. Or destination_country."
+          },
+          "destination_country": {
+            "type": "string",
+            "description": "ISO 3166 alpha-2 or name, e.g. ZM or Mozambique."
+          },
+          "beneficiary_amount": {
+            "type": "number",
+            "description": "What the supplier must receive, in the destination currency (instead of amount)."
+          },
+          "due_date": {
+            "type": "string",
+            "description": "YYYY-MM-DD: a route that cannot settle by then is not eligible."
+          },
+          "priority": {
+            "type": "string",
+            "enum": [
+              "cost",
+              "speed",
+              "balanced"
+            ],
+            "description": "Sets the default scoring weights. Default balanced."
+          },
+          "weights": {
+            "type": "object",
+            "description": "Your own scoring weights: { total_cost, speed, reliability, liquidity, compliance }, non-negative, normalised to 1."
+          },
+          "existing_provider": {
+            "type": "object",
+            "description": "Your current provider: { provider, kind: quote | entered_rate | past_payment, rate (destination per source unit) or landed_amount, fees: { transaction, intermediary, payout } in the source currency, fees_deducted_destination, quoted_at, valid_until }."
+          },
+          "supplier": {
+            "type": "string",
+            "description": "Optional. The supplier's name as on the invoice, e.g. 'Lusaka Copper Supplies Ltd'; echoed in the analysis."
+          },
+          "reference": {
+            "type": "string",
+            "description": "Optional. Your invoice or payment reference, e.g. 'INV-2207'; echoed in the analysis."
+          },
+          "analysis_id": {
+            "type": "string",
+            "description": "Read a kept analysis (pa_...) instead of making a new one."
+          },
+          "access_key": {
+            "type": "string",
+            "description": "A router key (rk_...), if not sent as a Bearer header: names the routes and is not counted."
+          }
+        }
+      }
+    },
+    {
+      "name": "compare_payment_providers",
+      "description": "Your current provider measured against every route on record for the corridor at the same amount and against the same official rate: all-in bps, total cost, beneficiary amount, eligibility and score, plus routes known without figures. One analysis (POST /api/v1/payment-analyses), the same service for every payment-intelligence tool. Every figure labelled LIVE, INDICATIVE, HISTORICAL or ESTIMATED; estimated savings are never realised. Free: shares the route-assessment allowance.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "invoice_text": {
+            "type": "string",
+            "description": "Paste the invoice or a sentence (e.g. 'Invoice INV-2207, Lusaka Copper Supplies Ltd, Zambia. Amount due: EUR 80,000. Due 2026-11-20'). Or the fields below."
+          },
+          "amount": {
+            "type": "number",
+            "description": "Amount, in currency (default the source currency)."
+          },
+          "currency": {
+            "type": "string",
+            "description": "The currency of amount: the source currency, or the destination one (then it is what the supplier receives)."
+          },
+          "source_currency": {
+            "type": "string",
+            "description": "ISO code you pay from, e.g. EUR or ZAR."
+          },
+          "destination_currency": {
+            "type": "string",
+            "description": "ISO code the supplier is paid in, e.g. ZMW. Or destination_country."
+          },
+          "destination_country": {
+            "type": "string",
+            "description": "ISO 3166 alpha-2 or name, e.g. ZM or Mozambique."
+          },
+          "beneficiary_amount": {
+            "type": "number",
+            "description": "What the supplier must receive, in the destination currency (instead of amount)."
+          },
+          "due_date": {
+            "type": "string",
+            "description": "YYYY-MM-DD: a route that cannot settle by then is not eligible."
+          },
+          "priority": {
+            "type": "string",
+            "enum": [
+              "cost",
+              "speed",
+              "balanced"
+            ],
+            "description": "Sets the default scoring weights. Default balanced."
+          },
+          "weights": {
+            "type": "object",
+            "description": "Your own scoring weights: { total_cost, speed, reliability, liquidity, compliance }, non-negative, normalised to 1."
+          },
+          "existing_provider": {
+            "type": "object",
+            "description": "Your current provider: { provider, kind: quote | entered_rate | past_payment, rate (destination per source unit) or landed_amount, fees: { transaction, intermediary, payout } in the source currency, fees_deducted_destination, quoted_at, valid_until }."
+          },
+          "supplier": {
+            "type": "string",
+            "description": "Optional. The supplier's name as on the invoice, e.g. 'Lusaka Copper Supplies Ltd'; echoed in the analysis."
+          },
+          "reference": {
+            "type": "string",
+            "description": "Optional. Your invoice or payment reference, e.g. 'INV-2207'; echoed in the analysis."
+          },
+          "analysis_id": {
+            "type": "string",
+            "description": "Read a kept analysis (pa_...) instead of making a new one."
+          },
+          "access_key": {
+            "type": "string",
+            "description": "A router key (rk_...), if not sent as a Bearer header: names the routes and is not counted."
+          }
+        }
+      }
+    },
+    {
+      "name": "get_corridor_capacity",
+      "description": "Which banks, fintechs, stablecoin platforms and crypto P2P routes can carry one payment, e.g. 'Pay EUR 100k to Botswana', each measured the same way: corridor served (or one leg only), can carry it (yes / no / not established, against a published per-payment limit or measured P2P depth, with the source), licence in the sending and receiving country with the register, cost against the official rate (Rate Receipt where priced; otherwise 'listed, not priced', never estimated), stated speed, on/off-ramp and stablecoin path, and the forms of money each takes (bank deposit, tokenised deposit, USDC, USDT, EURC, PYUSD...) with the chains where published and whether it cashes out in the destination currency. Public sources only, every fact with its source URL and date; routes ranked by evidence of what landed (landing receipts, then verified business submissions, then public reports, each labelled), not enough evidence yet where it is thin, with landing time and delay risk next to cost; a listing never changes rank. Paid per call: x402 (USDC on Base, price in the 402 body, USD 0.25) via params._meta[\"x402/payment\"], or a paid router key as Bearer. The free top line is GET https://swapeazi.io/api/v1/capacity. Who does what: the agent may compile the intent, gather the facts, propose the route that fits the user's own weights (recommend_payment_route) and prepare the instruction with a link to the provider's own sign-in. A person approves, releases, shares account details and authorises any spend above the mandate; the user signs in to the provider with their own credentials. SwapEazi never touches the money: it never connects a wallet and never asks for a signature.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "description": "The payment in one sentence, e.g. 'Pay EUR 100k to Botswana' or 'R500,000 from rand to Mozambique'. Or the fields below."
+          },
+          "from": {
+            "type": "string",
+            "description": "ISO code of the currency that leaves, e.g. EUR, USD or ZAR."
+          },
+          "to": {
+            "type": "string",
+            "description": "ISO code of the currency that lands, e.g. BWP, ZMW, NAD, MZN, MWK, ZAR, NGN or GHS."
+          },
+          "amount": {
+            "type": "number",
+            "description": "Amount that leaves, in the source currency, e.g. 100000."
+          },
+          "access_key": {
+            "type": "string",
+            "description": "A paid router key (rk_...), if not sent as a Bearer header."
+          },
+          "holding": {
+            "type": "string",
+            "enum": [
+              "bank_deposit",
+              "tokenised_deposit",
+              "USDC",
+              "USDT",
+              "EURC",
+              "PYUSD",
+              "USDG",
+              "USDP"
+            ],
+            "description": "What the money is held as now (optional, default bank_deposit in the source currency): a bank deposit, a tokenised deposit or a named stablecoin. Each route then shows whether it takes that form directly and whether the money can be spent in the destination currency."
+          }
+        }
+      }
+    },
+    {
+      "name": "get_payment_guide",
+      "description": "A payment guide for a business paying or getting paid in Namibia, from one sentence, e.g. 'We are a Dutch logistics company starting truck operations out of Walvis Bay, paying drivers and suppliers in Namibia' or 'We pay traders in Namibia from South Africa every month'. Leads with paying and getting paid: the banks, fintechs, stablecoin platforms and crypto routes on record that can carry the payment, with speed and the forms of money each takes and pays out; what a payment really costs against the rate a currency site shows, worked from SwapEazi's own measurements; and the payment rules that decide whether money can move (exchange control, the Common Monetary Area, the documents a bank asks for before releasing a cross-border payment, limits). Then funding until contracts pay (institutions that publicly offer working-capital, asset or trade finance; information only, SwapEazi never lends, brokers or introduces for a fee); outside payments, who to see (each authority with its link; registration, tax and permits are not explained: use a tax or legal practitioner); documented payment pitfalls; what is not known and the next three actions with who approves what. Every fact with its source URL, date and evidence class (published, register, reported, not published). Information with sources, not legal, tax or financial advice. Paid per call: x402 (USDC on Base, price in the 402 body, USD 0.25) via params._meta[\"x402/payment\"], or a paid router key as Bearer. The free summary is POST https://swapeazi.io/api/v1/pay-guide. The agent prepares; a person decides. SwapEazi never touches the money.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "description": "The business and its payments in one sentence: where it is based, what it does and whom it pays, e.g. 'We pay traders in Namibia from South Africa every month'."
+          },
+          "country": {
+            "type": "string",
+            "enum": [
+              "namibia"
+            ],
+            "description": "The country paid into or out of. Namibia today; Botswana and South Africa follow."
+          },
+          "access_key": {
+            "type": "string",
+            "description": "A paid router key (rk_...), if not sent as a Bearer header."
+          }
+        },
+        "required": [
+          "text"
+        ]
+      }
+    },
+    {
+      "name": "check_before_payout",
+      "description": "The check your agent runs right before it moves money, e.g. 'about to pay out 4,000,000 MXN to a bank via Solana, where will it land and what will arrive?'. Reads the payout in the currency the recipient gets, funded from USDC or USDT on Solana or Base, or from a stated currency. Returns JSON: the payout's value at the official rate (publisher and date), the routes on record ordered by evidence of what landed (\"not enough evidence yet\" and no rank where thin) with all-in cost against the official rate where a public price exists, landing time and delay risk, the documents the banks are published to ask for, a tracking handle, a compliance manifest, a safety block (confidence, data freshness, sources) and a signature. Free view; every route's full evidence: USD 0.25 per call by x402 in USDC on Base or Solana, or a paid key. Same check: POST https://swapeazi.io/api/v1/pre-payout. Information, not advice: SwapEazi never sends, holds or settles money; the payer's own provider or wallet pays out after a person approves.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "q": {
+            "type": "string",
+            "description": "The payout in plain words: amount and currency the recipient gets, how it lands (bank, mobile money, cash), and the funding chain (Solana or Base)."
+          },
+          "amount": {
+            "type": "number",
+            "description": "The payout amount in the currency the recipient gets, instead of q."
+          },
+          "currency": {
+            "type": "string",
+            "description": "ISO code the recipient gets, e.g. MXN."
+          },
+          "chain": {
+            "type": "string",
+            "enum": [
+              "solana",
+              "base"
+            ],
+            "description": "The chain the USDC or USDT is on, if funding from stablecoins."
+          },
+          "from": {
+            "type": "string",
+            "description": "ISO code the payout is funded from, if not stablecoins."
+          },
+          "payout_method": {
+            "type": "string",
+            "description": "bank, mobile_money or cash."
+          },
+          "access_key": {
+            "type": "string",
+            "description": "A paid key (rk_...), if not sent as a Bearer header."
+          }
+        }
+      }
+    },
+    {
+      "name": "plan_payment",
+      "description": "One call instead of five: give an amount and a corridor (e.g. amount 500, corridor EUR-XAF, payer_type business) or the payment in plain words (q). Returns the routes on record ordered by evidence of what landed (\"not enough evidence yet\" and no rank where it is thin), the official and street rates as separate dated fields with the all-in cost where a public price exists, the documents the sending and receiving banks are published to ask for (each with its source), and a tracking handle (plan_id): send the settlement event with it and the signed landing receipt joins the plan. Every plan carries a compliance manifest (which AML, sanctions, PSD2 and travel-rule questions it covers and which it does not) and a safety block (confidence, data freshness, sources) so another agent can decide whether to act. Signed. Free view; every route's full evidence: USD 0.25 per call by x402 in USDC on Base, or a paid key. Same plan: POST https://swapeazi.io/api/v1/plan. Information, not advice: SwapEazi is not a licensed payment provider and never sends or holds money; a person approves and the payer's own bank or provider pays.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "q": {
+            "type": "string",
+            "description": "The payment in plain words, instead of the fields, e.g. 'USD 25,000 to a supplier in Lagos'."
+          },
+          "amount": {
+            "type": "number",
+            "description": "The amount that leaves, in the source currency, e.g. 500."
+          },
+          "corridor": {
+            "type": "string",
+            "description": "FROM-TO ISO codes, e.g. EUR-XAF."
+          },
+          "from": {
+            "type": "string",
+            "description": "Source currency ISO code, if not given as corridor."
+          },
+          "to": {
+            "type": "string",
+            "description": "Destination currency ISO code, if not given as corridor."
+          },
+          "payer_type": {
+            "type": "string",
+            "enum": [
+              "business",
+              "payout_company",
+              "individual"
+            ],
+            "description": "Who pays: a business, a payout company or an individual. Default business."
+          },
+          "payee": {
+            "type": "string",
+            "enum": [
+              "supplier",
+              "people"
+            ],
+            "description": "Who receives: a supplier, or people (payroll, payouts). Default from payer_type."
+          },
+          "payout_method": {
+            "type": "string",
+            "description": "How it should land, if it matters: bank, mobile money (e.g. MTN), cash or stablecoin."
+          },
+          "country": {
+            "type": "string",
+            "description": "The destination country or city, if the currency is shared (e.g. Cameroon for XAF)."
+          },
+          "access_key": {
+            "type": "string",
+            "description": "A paid key (rk_...), if not sent as a Bearer header."
+          }
+        }
+      }
+    },
+    {
+      "name": "search_routes",
+      "description": "Ask in plain words how to land a payment, e.g. 'land 500 EUR in Douala on MTN today' or 'USD 25,000 to a supplier in Lagos'. Returns clean JSON: the payment as understood (amount, currencies, country, payout method, operator), the official rate (legal peg or central bank) and the street rate as separate dated fields, and the routes on record ordered by evidence of what landed. A route without enough landed evidence says \"not enough evidence yet\" and has no rank. Each route carries cost against the mid-market rate where a public price exists, landing time, delay risk, licence, limit and sources with dates; the answer is signed (verify at POST https://swapeazi.io/api/v1/attestations/verify). Free view without a key; every route's full evidence: USD 0.25 per call by x402 in USDC on Base, or a paid key. The same search is GET https://swapeazi.io/api/v1/search?q=... Information, not advice: SwapEazi never sends or holds money; the payer's own bank or provider does.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "q": {
+            "type": "string",
+            "description": "The payment in plain words: amount, currency, where it lands, and how (bank, mobile money, cash, stablecoin) if it matters."
+          },
+          "access_key": {
+            "type": "string",
+            "description": "A paid key (rk_...), if not sent as a Bearer header."
+          }
+        },
+        "required": [
+          "q"
+        ]
+      }
+    },
+    {
+      "name": "check_tokenised_route",
+      "description": "Ask in plain words whether a payment can move on tokenised deposits, e.g. 'can a USD payment reach DBS Singapore 24/7 on tokenised deposits from a US bank?'. Returns JSON: whether a live tokenised route is shown by public sources (or \"not enough evidence yet\"), which networks (Kinexys by J.P. Morgan, DBS Token Services, Partior, the Swift shared ledger) and the links between them, operating hours and published downtime (e.g. Kinexys pauses moves between deposit and blockchain accounts on Saturdays 15:00 to 18:00 US Eastern), the banks on those networks, the Swift correspondent route as the alternative, sources with check dates, and a signed record (verify at POST https://swapeazi.io/api/v1/attestations/verify). Network membership is not eligibility: the payer's bank confirms access. Free answer; USD 0.25 per call by x402 in USDC on Base for agents that pay per call. Same check: GET https://swapeazi.io/api/v1/tokenised-routes?q=... SwapEazi never sends, holds or settles money.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "q": {
+            "type": "string",
+            "description": "The payment in plain words: currency, where it starts (bank or country) and where it should land (bank or country), and whether it must move 24/7."
+          }
+        },
+        "required": [
+          "q"
+        ]
+      }
+    },
+    {
+      "name": "tokenised_bank_lookup",
+      "description": "Given a bank name or BIC (e.g. 'DBS' or 'CHASUS33'), the tokenised deposit networks public sources place it on (Kinexys, DBS Token Services, Partior, the Swift shared ledger), with its role, the network's status (live, pilot, announced) and the source for each. Says \"not enough evidence yet\" when no public source places the bank on a network. Same lookup: GET https://swapeazi.io/api/v1/tokenised-routes/banks?q=...",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "bank": {
+            "type": "string",
+            "description": "A bank name (e.g. DBS, J.P. Morgan, Standard Chartered) or a BIC (8 or 11 characters)."
+          }
+        },
+        "required": [
+          "bank"
+        ]
+      }
+    },
+    {
+      "name": "get_official_rate",
+      "description": "The official exchange rate per US dollar from central banks whose rates are hard for software to read, e.g. 'Bank of Ghana USD/GHS today'. Covers the Bank of Ghana, Central Bank of Nigeria, Bank of Botswana, Bank of Zambia, Banco de Moçambique, Reserve Bank of Malawi, Reserve Bank of Zimbabwe, Banque Centrale du Congo and other institutional fixings, read every hour from the publishers' own pages. Free: the latest rate with publisher, fixing date, source and whether it is fresh. Full answer (USD 0.25 per call by x402 in USDC on Base, or a paid key): up to 90 days of daily history and every publisher on record. Says so when no rate is on record; never estimates. The same data is GET https://swapeazi.io/api/v1/official-rates?currency=GHS.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "description": "ISO code, e.g. GHS, NGN, BWP, ZMW, MZN, MWK, ZWG, CDF."
+          },
+          "days": {
+            "type": "number",
+            "description": "Days of history for the full answer, 1 to 90 (default 30)."
+          },
+          "access_key": {
+            "type": "string",
+            "description": "A paid key (rk_...), if not sent as a Bearer header."
+          }
+        },
+        "required": [
+          "currency"
+        ]
+      }
+    },
+    {
+      "name": "check_payout_rate",
+      "description": "Check a payout provider's quote before paying, e.g. 'USD 25,000 to NGN at 1,545.20, fee 0.01%, rail NIP'. Returns the official rate the payment is measured against (publisher and date), the market rates read for the destination currency (exchange order books and P2P adverts, each with its source and time, labelled as what it is), the gap between the quote and each in money and percent, the all-in cost against the official rate with the fee included, flags where the quote sits beyond a documented official/market gap or above every market rate read, a Rate Receipt and an Ed25519 signature (verify at POST https://swapeazi.io/api/v1/attestations/verify). Works for any pair with an official rate; built for payouts into Nigeria (NGN, where providers pay at a market rate above the official one) and Ghana (GHS). Free within the daily allowance; a router key is not counted. The same check is POST https://swapeazi.io/api/v1/quote-check. Information, not advice: SwapEazi never touches the money; a person approves and pays through their own provider.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "description": "ISO code of the currency sent, e.g. USD."
+          },
+          "to": {
+            "type": "string",
+            "description": "ISO code of the currency the recipient gets, e.g. NGN or GHS."
+          },
+          "amount": {
+            "type": "number",
+            "description": "The amount sent, in the source currency, before the fee, e.g. 25000."
+          },
+          "quoted_rate": {
+            "type": "number",
+            "description": "The rate quoted: destination units per one source unit, e.g. 1545.20."
+          },
+          "fee_pct": {
+            "type": "number",
+            "description": "The fee as a percent of the amount, e.g. 0.01 for 0.01%. Charged on top unless fee_included."
+          },
+          "fee_amount": {
+            "type": "number",
+            "description": "Or a fixed fee in the source currency."
+          },
+          "fee_included": {
+            "type": "boolean",
+            "description": "True when the fee comes out of the amount sent."
+          },
+          "rail": {
+            "type": "string",
+            "description": "The payout rail, e.g. NIP, GIP or mobile money (echoed)."
+          },
+          "access_key": {
+            "type": "string",
+            "description": "A router key (rk_...), if not sent as a Bearer header: not counted against the free allowance."
+          }
+        },
+        "required": [
+          "from",
+          "to",
+          "amount",
+          "quoted_rate"
+        ]
+      }
+    },
+    {
+      "name": "record_settlement",
+      "description": "Connect your settlement events: send a payout provider's settlement event (provider, payout_id, from, to, amount_sent, quoted_rate, fee, amount_settled, settled_at, rail, status) and get a signed landing receipt. The quote is checked against the official rate of the settlement day and the market reads nearest to it (exchange order books, P2P adverts; NGN quotes above the official rate are labelled, not refused); what settled is set against what was quoted, in money and percent; flags say when it landed short, failed or was returned; the receipt carries an Ed25519 signature (verify at POST https://swapeazi.io/api/v1/attestations/verify). Stored append-only for your organisation; the monthly summary per provider is GET https://swapeazi.io/api/v1/landing-receipts/summary?provider=...&month=YYYY-MM. Needs a router key. The same call is POST https://swapeazi.io/api/v1/landing-receipts. SwapEazi never touches the money.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "provider": {
+            "type": "string",
+            "description": "The payout provider, e.g. Tabs."
+          },
+          "payout_id": {
+            "type": "string",
+            "description": "The provider's payout id, e.g. po_3f81c9."
+          },
+          "from": {
+            "type": "string",
+            "description": "ISO code of the currency sent, e.g. USD."
+          },
+          "to": {
+            "type": "string",
+            "description": "ISO code of the currency credited, e.g. NGN."
+          },
+          "amount_sent": {
+            "type": "number",
+            "description": "Amount sent, in the source currency, e.g. 25000."
+          },
+          "quoted_rate": {
+            "type": "number",
+            "description": "The rate the provider quoted, destination units per source unit, e.g. 1545.20."
+          },
+          "fee": {
+            "type": "number",
+            "description": "The fee in the source currency, charged on top, e.g. 2.5."
+          },
+          "amount_settled": {
+            "type": "number",
+            "description": "What the recipient was credited, in the destination currency, e.g. 38630000."
+          },
+          "settled_at": {
+            "type": "string",
+            "description": "When it settled, ISO 8601 with time zone, e.g. 2026-11-19T14:02:11Z."
+          },
+          "rail": {
+            "type": "string",
+            "description": "The payout rail, e.g. NIP."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "settled",
+              "failed",
+              "returned",
+              "pending"
+            ],
+            "description": "Default settled."
+          },
+          "access_key": {
+            "type": "string",
+            "description": "A router key (rk_...), if not sent as a Bearer header."
+          }
+        },
+        "required": [
+          "provider",
+          "payout_id",
+          "from",
+          "to",
+          "amount_sent",
+          "quoted_rate",
+          "settled_at"
+        ]
+      }
+    },
+    {
+      "name": "check_provider_liquidity",
+      "description": "Spec v1.0 name for liquidity_map: each venue type with whether the evidence read shows depth at the size, slippage and landing cost with a Rate Receipt, or Being measured with the reason. Same arguments as liquidity_map.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "pair": {
+            "type": "string",
+            "description": "e.g. EUR-ZMW. Or from and to."
+          },
+          "from": {
+            "type": "string",
+            "description": "ISO 4217 code of the source currency (what leaves), e.g. 'ZAR'."
+          },
+          "to": {
+            "type": "string",
+            "description": "ISO 4217 code of the destination currency (what lands), e.g. 'USD'."
+          },
+          "amount": {
+            "type": "number",
+            "description": "Ticket size, in the from currency unless amount_currency says otherwise."
+          },
+          "amount_currency": {
+            "type": "string",
+            "description": "The from or the to currency. Default from."
+          },
+          "access_key": {
+            "type": "string",
+            "description": "A router key (rk_...), if not sent as a Bearer header."
+          }
+        },
+        "required": [
+          "amount"
+        ]
+      }
+    },
+    {
+      "name": "prepare_payment_instruction",
+      "description": "Spec v1.0 name for run_payments: prepares each payment (payee validation, route assessment, instruction, approval digest) and returns each payment's lifecycle state. Never approves or sends. Same arguments as run_payments; sample: true for the synthetic run.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "payables": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            },
+            "description": "[{ reference, payee: { name, iban?, bic?, account_number?, routing_number?, branch_code?, country? }, amount, currency, due_date?, rail?: bank | provider | stablecoin, via?, wallet? }]"
+          },
+          "file": {
+            "type": "string",
+            "description": "Instead of payables: a payout CSV or pain.001 text."
+          },
+          "source_currency": {
+            "type": "string",
+            "description": "The currency the business pays from, e.g. ZAR."
+          },
+          "sample": {
+            "type": "boolean",
+            "description": "true: the built-in sample run (synthetic, labelled), no key needed."
+          },
+          "access_key": {
+            "type": "string",
+            "description": "A router key (rk_...), if not sent as a Bearer header."
+          }
+        }
+      }
+    },
+    {
+      "name": "request_payment_approval",
+      "description": "For a payment run: the payments awaiting approval with amount, route, assessment and approval_digest, the approver role, and the payments not ready with their lifecycle state and reason. Never approves: a named person approves with approve_payment_run.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "description": "The payment run (pr_...), or pr_sample."
+          },
+          "access_key": {
+            "type": "string",
+            "description": "The router key that made the run."
+          }
+        },
+        "required": [
+          "run_id"
+        ]
+      }
+    },
+    {
+      "name": "submit_payment",
+      "description": "Sends ONE approved, released payment of a run through the business's own connected rail account (sandbox), with an idempotency key; without connection_id it reads the submission's status. Refused unless approved and within the connection's cap. Production execution waits on an authorised provider agreement.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "description": "The payment run (pr_...), or pr_sample."
+          },
+          "access_key": {
+            "type": "string",
+            "description": "The router key that made the run."
+          },
+          "payment_id": {
+            "type": "string",
+            "description": "The approved payment in the run, e.g. 'p_001'."
+          },
+          "connection_id": {
+            "type": "string",
+            "description": "Your connected rail account to send through (from connect_rail_account). Omit to read the submission's status."
+          },
+          "account": {
+            "type": "string",
+            "description": "The payee account the person approved, to match."
+          }
+        },
+        "required": [
+          "run_id",
+          "payment_id"
+        ]
+      }
+    },
+    {
+      "name": "track_payment_settlement",
+      "description": "Spec v1.0 name for payment_run_status: each payment's lifecycle state (CREATED, ANALYSED, QUOTED, ROUTE_SELECTED, AWAITING_APPROVAL, APPROVED, SUBMITTED, PROCESSING, SETTLED, FAILED, REJECTED, EXPIRED, CANCELLED, REQUIRES_REVIEW) with the reason. SETTLED only on the provider's own confirmation.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "description": "The payment run (pr_...), or pr_sample."
+          },
+          "access_key": {
+            "type": "string",
+            "description": "The router key that made the run."
+          }
+        },
+        "required": [
+          "run_id"
+        ]
+      }
+    },
+    {
+      "name": "payment_index",
+      "description": "Lists real cross-border payment outcomes per corridor and size band: date, corridor, size band, route type (bank, payout_network, otc, exchange, stablecoin, card), the all-in cost in bps against the official or mid-market reference of that day, what the figure is (a payment that landed, receipt figures, a quoted rate, a published rate, a P2P advert median) and a source label on every row: MEASURED (SwapEazi's own reads and receipts), PUBLIC REPORT (a published rate, with its link), SELF-REPORTED (submitted by a business) or VERIFIED (submitted with a receipt SwapEazi matched). Also medians per corridor, size band and source; sources are never pooled. Providers are masked unless the submitter chose to name them. A record, not advice, not a quote and not a ranking. Free; same as GET /api/v1/index/payments.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "corridor": {
+            "type": "string",
+            "description": "Two currency codes, e.g. 'ZAR-MZN'. Or use from and to."
+          },
+          "from": {
+            "type": "string",
+            "description": "Currency sent, e.g. 'EUR'."
+          },
+          "to": {
+            "type": "string",
+            "description": "Currency received, e.g. 'ZAR'."
+          },
+          "currency": {
+            "type": "string",
+            "description": "Rows where this currency is sent or received."
+          },
+          "size": {
+            "type": "string",
+            "description": "Size band: under_20k_usd, 20k_100k_usd, 100k_1m_usd, 1m_10m_usd, 10m_plus_usd, unknown_size or all_sizes (a rate, any size)."
+          },
+          "route": {
+            "type": "string",
+            "description": "Route type: bank, payout_network, otc, exchange, stablecoin, card or not_stated."
+          },
+          "source": {
+            "type": "string",
+            "description": "measured, public_report, self_reported or verified."
+          },
+          "year": {
+            "type": "string",
+            "description": "Four digits, e.g. '2026'."
+          },
+          "limit": {
+            "type": "number",
+            "description": "Rows to return, 1 to 500 (default 100)."
+          },
+          "offset": {
+            "type": "number",
+            "description": "Rows to skip, for paging (next_offset from the last answer)."
+          }
+        }
+      }
+    },
+    {
+      "name": "add_payment_outcome",
+      "description": "Adds one payment the caller made to the SwapEazi Payment Index, voluntarily: currencies, amount sent, amount landed (after every deduction), the date it landed and the route type. SwapEazi works out the all-in cost against that day's reference with its landed-cost arithmetic and publishes the row as SELF-REPORTED; with a receipt or statement in files it is read and matched to the figures (amounts within 0.5%, date within 3 days) and published as VERIFIED, and the file is not kept unless keep_file is true. Refused with the reason when a field is invalid, the date is in the future or over two years old, the day has no reference, or the amounts are more than 15% from it. Costs below -50 or above 800 bps, or payments over USD 25m, are held for review, not published. No names, company or account details are taken; the provider is masked (e.g. 'a South African bank') unless show_provider is true. Returns a withdraw token. Same as POST /api/v1/index/payments.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "source_currency": {
+            "type": "string",
+            "description": "Currency sent, three letters, e.g. 'ZAR'."
+          },
+          "destination_currency": {
+            "type": "string",
+            "description": "Currency received, three letters, e.g. 'MZN'."
+          },
+          "amount_sent": {
+            "type": "number",
+            "description": "What left, in the currency sent."
+          },
+          "amount_landed": {
+            "type": "number",
+            "description": "What arrived, in the currency received, after every deduction."
+          },
+          "date": {
+            "type": "string",
+            "description": "The day it landed, YYYY-MM-DD."
+          },
+          "route_type": {
+            "type": "string",
+            "description": "bank, payout_network, otc, exchange, stablecoin, card or not_stated."
+          },
+          "provider_name": {
+            "type": "string",
+            "description": "Optional; shown on the row only when show_provider is true."
+          },
+          "provider_country": {
+            "type": "string",
+            "description": "Optional two-letter country of the provider, for the masked description."
+          },
+          "show_provider": {
+            "type": "boolean",
+            "description": "true: show provider_name on the row. Default false (masked)."
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            },
+            "description": "Optional receipt or statement for VERIFIED: [{ name, media_type, data (base64) }], PDF or image."
+          },
+          "keep_file": {
+            "type": "boolean",
+            "description": "true: keep the file after it is read. Default false: read, matched, not stored."
+          }
+        },
+        "required": [
+          "source_currency",
+          "destination_currency",
+          "amount_sent",
+          "amount_landed",
+          "date"
+        ]
+      }
+    },
+    {
+      "name": "corridor_cost",
+      "description": "Read-only corridor evidence: public published rates, public posts, on-chain pool prints and user receipts, summarised by corridor and provider type (bank, fintech, card, stablecoin). The free answer is the summary: how many rows, the median markup percent, the date range and the evidence label (published, user receipt, public post, on-chain, user-submitted). Row-level sources are not in the free answer. They are at GET https://swapeazi.io/api/v1/corridor-evidence/rows with a paid key or x402. Does not hold or move money. A record, not a ranking.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "corridor": {
+            "type": "string",
+            "description": "Currency pair as published, for example 'EUR/ZAR' or 'EUR-ZAR'."
+          },
+          "provider_type": {
+            "type": "string",
+            "description": "bank, fintech, card or stablecoin. Omit for every type."
+          },
+          "detail": {
+            "type": "string",
+            "enum": [
+              "summary",
+              "full"
+            ],
+            "description": "summary (the default) or full. Full rows need a paid key."
+          }
+        }
+      }
+    },
+    {
+      "name": "swapeazi_landed_cost",
+      "description": "What a single cross-border payment costs, in basis points, against an independent mid-market reference: give the amount sent, the amount that landed (or a provider says will land) and the date. Returns the Landed Drag Index with its margin of error and the evidence tier. Free, no key.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sourceCurrency": {
+            "type": "string",
+            "description": "ISO 4217 code the payment is funded in, e.g. 'GBP'."
+          },
+          "destinationCurrency": {
+            "type": "string",
+            "description": "ISO 4217 code the payment lands in, e.g. 'EUR'."
+          },
+          "inputAmount": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Amount sent, in the source currency."
+          },
+          "netLandedFiat": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Amount that landed or will land, in the destination currency, after every deduction."
+          },
+          "settledOn": {
+            "type": "string",
+            "description": "ISO date the payment settled. Omit it (or pass a future date) for a quote not yet accepted: it is measured against today's reference."
+          },
+          "midSpot": {
+            "type": "number",
+            "description": "Optional. Your own mid, destination units per source unit. Omit to use SwapEazi's reference."
+          }
+        },
+        "required": [
+          "sourceCurrency",
+          "destinationCurrency",
+          "inputAmount",
+          "netLandedFiat"
+        ]
+      }
+    },
+    {
+      "name": "swapeazi_route_compare",
+      "description": "The same payment sent two to four ways (a bank wire, a payment provider, a stablecoin route through an on-ramp and an off-ramp), each measured end to end against one independent reference: what left, what landed, each route's cost with a margin of error, and the exact gap between them. The rail does not change the method. Free within the daily allowance.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "description": "ISO 4217 code of the currency that left, e.g. 'ZAR'."
+          },
+          "to": {
+            "type": "string",
+            "description": "ISO 4217 code of the currency that landed, e.g. 'KES'."
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "quote",
+              "settled"
+            ],
+            "description": "Use quote for a live offer, settled for a payment already made. Public case stress scenarios are returned only in quote mode and only for matching currency pairs. Defaults to settled."
+          },
+          "date": {
+            "type": "string",
+            "description": "Optional payment date, YYYY-MM-DD. Quote mode requires today; settled mode uses the payment date."
+          },
+          "sent": {
+            "type": "number",
+            "description": "Optional amount sent, shared by every route that does not state its own."
+          },
+          "routes": {
+            "type": "array",
+            "description": "Two to four routes. Each: label, landed (in the to currency), and optionally sent and fee (both in the from currency).",
+            "items": {
+              "type": "object",
+              "properties": {
+                "label": {
+                  "type": "string",
+                  "description": "Your name for this route, e.g. 'Bank wire' or 'USDC via ramp'."
+                },
+                "sent": {
+                  "type": "number",
+                  "description": "Optional. Amount this route sent, in the from currency; defaults to the shared sent."
+                },
+                "fee": {
+                  "type": "number",
+                  "description": "Optional. Fees charged on top for this route, in the from currency."
+                },
+                "landed": {
+                  "type": "number",
+                  "description": "Amount this route landed, in the to currency, after every deduction."
+                }
+              },
+              "required": [
+                "landed"
+              ]
+            }
+          },
+          "annualVolume": {
+            "type": "number",
+            "description": "Optional yearly volume on this route in the from currency, to state the gap per year."
+          }
+        },
+        "required": [
+          "from",
+          "to",
+          "routes"
+        ]
+      }
+    },
+    {
+      "name": "analyse_payment_leakage",
+      "description": "Where the money leaks on your current provider: total cost against the official rate in money and bps, split into FX spread and fees, and the estimated saving against the recommended eligible route (ESTIMATED, never realised). Needs existing_provider. One analysis (POST /api/v1/payment-analyses), the same service for every payment-intelligence tool. Every figure labelled LIVE, INDICATIVE, HISTORICAL or ESTIMATED; estimated savings are never realised. Free: shares the route-assessment allowance.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "invoice_text": {
+            "type": "string",
+            "description": "Paste the invoice or a sentence (e.g. 'Invoice INV-2207, Lusaka Copper Supplies Ltd, Zambia. Amount due: EUR 80,000. Due 2026-11-20'). Or the fields below."
+          },
+          "amount": {
+            "type": "number",
+            "description": "Amount, in currency (default the source currency)."
+          },
+          "currency": {
+            "type": "string",
+            "description": "The currency of amount: the source currency, or the destination one (then it is what the supplier receives)."
+          },
+          "source_currency": {
+            "type": "string",
+            "description": "ISO code you pay from, e.g. EUR or ZAR."
+          },
+          "destination_currency": {
+            "type": "string",
+            "description": "ISO code the supplier is paid in, e.g. ZMW. Or destination_country."
+          },
+          "destination_country": {
+            "type": "string",
+            "description": "ISO 3166 alpha-2 or name, e.g. ZM or Mozambique."
+          },
+          "beneficiary_amount": {
+            "type": "number",
+            "description": "What the supplier must receive, in the destination currency (instead of amount)."
+          },
+          "due_date": {
+            "type": "string",
+            "description": "YYYY-MM-DD: a route that cannot settle by then is not eligible."
+          },
+          "priority": {
+            "type": "string",
+            "enum": [
+              "cost",
+              "speed",
+              "balanced"
+            ],
+            "description": "Sets the default scoring weights. Default balanced."
+          },
+          "weights": {
+            "type": "object",
+            "description": "Your own scoring weights: { total_cost, speed, reliability, liquidity, compliance }, non-negative, normalised to 1."
+          },
+          "existing_provider": {
+            "type": "object",
+            "description": "Your current provider: { provider, kind: quote | entered_rate | past_payment, rate (destination per source unit) or landed_amount, fees: { transaction, intermediary, payout } in the source currency, fees_deducted_destination, quoted_at, valid_until }."
+          },
+          "supplier": {
+            "type": "string",
+            "description": "Optional. The supplier's name as on the invoice, e.g. 'Lusaka Copper Supplies Ltd'; echoed in the analysis."
+          },
+          "reference": {
+            "type": "string",
+            "description": "Optional. Your invoice or payment reference, e.g. 'INV-2207'; echoed in the analysis."
+          },
+          "analysis_id": {
+            "type": "string",
+            "description": "Read a kept analysis (pa_...) instead of making a new one."
+          },
+          "access_key": {
+            "type": "string",
+            "description": "A router key (rk_...), if not sent as a Bearer header: names the routes and is not counted."
+          }
+        }
+      }
+    },
+    {
+      "name": "tokenized_finance_intel",
+      "description": "For a currency pair, explain documented tokenised deposit networks and payment instruments, their evidence status, access constraints and unknowns. A currency match is only a lead: it never confirms participating banks, executable FX liquidity, local payout, fees or end-to-end timing. Investment assets are excluded as payment routes. Free returns a concise masked preview; a paid key for this pair unlocks source-linked detail. No execution or advice.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "description": "ISO 4217 source currency, e.g. USD."
+          },
+          "to": {
+            "type": "string",
+            "description": "ISO 4217 destination currency, e.g. SGD."
+          },
+          "access_key": {
+            "type": "string",
+            "description": "Optional router key (rk_...), if not sent as a Bearer header."
+          }
+        },
+        "required": [
+          "from",
+          "to"
+        ]
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "io.github.MsingathiM/swapeazi",
+    "version": "2.5.0",
+    "remoteUrl": "https://swapeazi.io/api/mcp",
+    "publishedAt": "2026-11-19T10:15:32.745313Z",
+    "fetchedAt": "2026-11-26T10:40:47.803Z",
+    "toolsSha256": "fd97e1a2306c4e3e0d5c18b74af898b604d423cfded9b72d6fa6d770d026d5c8"
+  }
+}

@@ -1,0 +1,1688 @@
+{
+  "$schema": "../schema.json",
+  "name": "com.limecount/limecount",
+  "title": "Limecount",
+  "category": "Security & Identity",
+  "description": "Cookieless EU web analytics: sites, stats, goals, funnels, shares and API keys (OAuth).",
+  "tools": [
+    {
+      "name": "compare_periods",
+      "description": "Compara dos periodos arbitrarios. KPIs de dos rangos A/B con su variación; con `dimension`, además el top N de esa dimensión con la variación entre A y B. A es el periodo que se mide y B la referencia: `change` = (A − B) / B, así que para «esta semana frente a la anterior» A es esta semana y B la anterior.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "site_id": {
+            "type": "string",
+            "description": "Id de la web (campo `id` de `/v1/sites`)."
+          },
+          "a_from": {
+            "type": "string",
+            "format": "date",
+            "description": "Primer día del periodo A (el que se mide)."
+          },
+          "a_to": {
+            "type": "string",
+            "format": "date",
+            "description": "Último día del periodo A (el que se mide)."
+          },
+          "b_from": {
+            "type": "string",
+            "format": "date",
+            "description": "Primer día del periodo B (la referencia)."
+          },
+          "b_to": {
+            "type": "string",
+            "format": "date",
+            "description": "Último día del periodo B (la referencia)."
+          },
+          "dimension": {
+            "type": "string",
+            "enum": [
+              "pages",
+              "entries",
+              "sources",
+              "utm_source",
+              "utm_medium",
+              "utm_campaign",
+              "countries",
+              "regions",
+              "cities",
+              "zones",
+              "metros",
+              "devices",
+              "browsers",
+              "os",
+              "events",
+              "prev_pages",
+              "next_pages"
+            ],
+            "description": "Dimensión a desglosar (opcional)."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50,
+            "default": 5,
+            "description": "Máximo de filas del desglose."
+          }
+        },
+        "required": [
+          "site_id",
+          "a_from",
+          "a_to",
+          "b_from",
+          "b_to"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "create_annotation",
+      "description": "Crea una anotación. Nota de hasta 140 caracteres en una fecha de la gráfica. Máximo 500 por web (409 `annotation_limit`).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Id de la web (campo `id` de `/v1/sites`)."
+          },
+          "date": {
+            "type": "string",
+            "format": "date",
+            "description": "Día de la anotación (AAAA-MM-DD)."
+          },
+          "text": {
+            "type": "string",
+            "description": "Hasta 140 caracteres."
+          },
+          "idempotency_key": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "Opcional. Un reintento con el mismo valor devuelve la misma respuesta sin repetir la escritura."
+          }
+        },
+        "required": [
+          "id",
+          "date",
+          "text"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "create_api_key",
+      "description": "Crea una clave de API. Para un script, una integración u otro agente. `scope`: `read` (lectura), `write` (lectura y gestión de webs, objetivos, embudos y anotaciones) o `full` (además, ver claves). `env`: `live` o `test` (simulación: solo lee la web de demostración y las escrituras no se guardan; el plan de prueba solo admite `test`). `siteIds` limita la clave a esas webs. La clave completa solo aparece en esta respuesta. Solo conexiones OAuth de propietarios y administradores (`keys:write`).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Nombre, hasta 60 caracteres."
+          },
+          "scope": {
+            "type": "string",
+            "enum": [
+              "read",
+              "write",
+              "full"
+            ],
+            "default": "read",
+            "description": "`read`: lectura; `write`: además gestiona webs, objetivos, embudos y anotaciones; `full`: además ve las claves."
+          },
+          "env": {
+            "type": "string",
+            "enum": [
+              "live",
+              "test"
+            ],
+            "default": "live",
+            "description": "`live`: datos reales; `test`: simulación sobre la web de demostración, sin guardar escrituras."
+          },
+          "siteIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Webs a las que da acceso; vacío o ausente = todas."
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Caducidad opcional (ISO 8601, como mucho 5 años)."
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "create_funnel",
+      "description": "Crea un embudo. De 1 a 6 pasos; cada paso es un evento (`event`) o una ruta (`path`, admite `*` al final). Respeta el límite de embudos del plan. Con clave `env: test` se valida y se simula (`dry_run: true`).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Id de la web (campo `id` de `/v1/sites`)."
+          },
+          "name": {
+            "type": "string",
+            "description": "Nombre, hasta 80 caracteres."
+          },
+          "steps": {
+            "type": "array",
+            "description": "Pasos en orden, de 1 a 6.",
+            "minItems": 1,
+            "maxItems": 6,
+            "items": {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "event",
+                    "path"
+                  ]
+                },
+                "match": {
+                  "type": "string",
+                  "description": "Nombre del evento o ruta (admite `*` al final)."
+                },
+                "label": {
+                  "type": "string",
+                  "description": "Etiqueta opcional del paso."
+                }
+              },
+              "required": [
+                "type",
+                "match"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "isDefault": {
+            "type": "boolean",
+            "description": "Marcarlo como embudo por defecto del panel."
+          },
+          "idempotency_key": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "Opcional. Un reintento con el mismo valor devuelve la misma respuesta sin repetir la escritura."
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "steps"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "create_goal",
+      "description": "Crea un objetivo. Máximo 20 por web (409 `goal_limit`). Con clave `env: test` se valida la condición y se simula sin persistir.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Id de la web (campo `id` de `/v1/sites`)."
+          },
+          "name": {
+            "type": "string",
+            "description": "Nombre visible del objetivo."
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "event",
+              "path"
+            ],
+            "description": "`event`: un evento personalizado; `path`: la visita a una ruta."
+          },
+          "match": {
+            "type": "string",
+            "description": "Nombre de evento o ruta (admite un `*` al final)."
+          },
+          "idempotency_key": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "Opcional. Un reintento con el mismo valor devuelve la misma respuesta sin repetir la escritura."
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "type",
+          "match"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "create_share",
+      "description": "Crea un enlace público. Cualquiera con la URL ve las estadísticas de la web (solo lectura). Opcional: nombre, contraseña (8-128 caracteres) y caducidad. Respeta el límite de enlaces del plan.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Id de la web (campo `id` de `/v1/sites`)."
+          },
+          "name": {
+            "type": "string",
+            "description": "Nombre, hasta 60 caracteres."
+          },
+          "password": {
+            "type": "string",
+            "description": "Contraseña opcional, 8-128 caracteres."
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Caducidad opcional (ISO 8601)."
+          },
+          "idempotency_key": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "Opcional. Un reintento con el mismo valor devuelve la misma respuesta sin repetir la escritura."
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "create_site",
+      "description": "Crea una web. Dominio y zona horaria; devuelve `publicKey` y el snippet de instalación. Respeta el límite de webs del plan (409 `site_limit`). Con clave `env: test` se valida y se simula (`dry_run: true`) sin persistir ni consumir cupo.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "domain": {
+            "type": "string",
+            "description": "Solo el dominio, por ejemplo ejemplo.com."
+          },
+          "timezone": {
+            "type": "string",
+            "description": "Zona horaria IANA, por ejemplo Europe/Madrid."
+          },
+          "allowSubdomains": {
+            "type": "boolean",
+            "description": "Si es `true`, también cuenta las visitas de sus subdominios (blog.ejemplo.com)."
+          },
+          "idempotency_key": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "Opcional. Un reintento con el mismo valor devuelve la misma respuesta sin repetir la escritura."
+          }
+        },
+        "required": [
+          "domain",
+          "timezone"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "delete_annotation",
+      "description": "Borra una anotación. Destructivo: exige `confirm=true`.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Id de la web (campo `id` de `/v1/sites`)."
+          },
+          "annotationId": {
+            "type": "string",
+            "description": "Id de la anotación (campo `id` de `list_annotations`)."
+          },
+          "confirm": {
+            "type": "string",
+            "enum": [
+              "true"
+            ],
+            "description": "Debe ser `true`."
+          },
+          "idempotency_key": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "Opcional. Un reintento con el mismo valor devuelve la misma respuesta sin repetir la escritura."
+          }
+        },
+        "required": [
+          "id",
+          "annotationId",
+          "confirm"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "delete_funnel",
+      "description": "Borra un embudo. Destructivo: exige `confirm=true`.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Id de la web (campo `id` de `/v1/sites`)."
+          },
+          "funnelId": {
+            "type": "string",
+            "description": "Id del embudo (campo `id` de `list_funnels`)."
+          },
+          "confirm": {
+            "type": "string",
+            "enum": [
+              "true"
+            ],
+            "description": "Debe ser `true`."
+          },
+          "idempotency_key": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "Opcional. Un reintento con el mismo valor devuelve la misma respuesta sin repetir la escritura."
+          }
+        },
+        "required": [
+          "id",
+          "funnelId",
+          "confirm"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "delete_goal",
+      "description": "Borra un objetivo. Destructivo: exige `confirm=true` (400 `validation_failed` sin él).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Id de la web (campo `id` de `/v1/sites`)."
+          },
+          "goalId": {
+            "type": "string",
+            "description": "Id del objetivo (de `list_goals`)."
+          },
+          "confirm": {
+            "type": "string",
+            "enum": [
+              "true"
+            ],
+            "description": "Debe ser `true`."
+          },
+          "idempotency_key": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "Opcional. Un reintento con el mismo valor devuelve la misma respuesta sin repetir la escritura."
+          }
+        },
+        "required": [
+          "id",
+          "goalId",
+          "confirm"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "delete_share",
+      "description": "Borra un enlace público. Destructivo: la URL deja de funcionar. Exige `confirm=true`.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Id de la web (campo `id` de `/v1/sites`)."
+          },
+          "shareId": {
+            "type": "string",
+            "description": "Id del enlace (campo `id` de `list_shares`)."
+          },
+          "confirm": {
+            "type": "string",
+            "enum": [
+              "true"
+            ],
+            "description": "Debe ser `true`."
+          },
+          "idempotency_key": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "Opcional. Un reintento con el mismo valor devuelve la misma respuesta sin repetir la escritura."
+          }
+        },
+        "required": [
+          "id",
+          "shareId",
+          "confirm"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "export_stats",
+      "description": "Exporta las estadísticas en CSV. El mismo CSV que «Exportar» del panel (KPIs, serie diaria y desgloses), dentro de `data.csv`.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "site_id": {
+            "type": "string",
+            "description": "Id de la web (campo `id` de `/v1/sites`)."
+          },
+          "period": {
+            "type": "string",
+            "enum": [
+              "today",
+              "7d",
+              "30d",
+              "month",
+              "lastMonth",
+              "90d",
+              "12m",
+              "year",
+              "custom"
+            ],
+            "default": "30d",
+            "description": "Periodo, en días naturales de la zona horaria de la web. Con `custom` hay que enviar `from` y `to`."
+          },
+          "from": {
+            "type": "string",
+            "format": "date",
+            "description": "Primer día (YYYY-MM-DD, inclusivo). Sin `period` implica `period=custom`; con otro periodo es 400."
+          },
+          "to": {
+            "type": "string",
+            "format": "date",
+            "description": "Último día (YYYY-MM-DD, inclusivo). Sin `period` implica `period=custom`; con otro periodo es 400."
+          },
+          "compare": {
+            "type": "string",
+            "enum": [
+              "0",
+              "1"
+            ],
+            "default": "0",
+            "description": "Con `1` añade el periodo anterior de la misma duración."
+          },
+          "page": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "Solo vistas de esa ruta (por ejemplo `/precios`)."
+          },
+          "entry": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "Solo visitas cuya página de entrada es esa ruta."
+          },
+          "source": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "Fuente de tráfico (`google`, `newsletter`...)."
+          },
+          "utm_source": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "Valor de utm_source."
+          },
+          "utm_medium": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "Valor de utm_medium."
+          },
+          "utm_campaign": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "Valor de utm_campaign."
+          },
+          "country": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "País (código ISO 3166-1 alfa-2)."
+          },
+          "region": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "Región (nombre en inglés)."
+          },
+          "city": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "Ciudad (nombre en inglés)."
+          },
+          "device": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "`desktop`, `mobile`, `tablet` u `other`."
+          },
+          "browser": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "Navegador."
+          },
+          "os": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "Sistema operativo."
+          },
+          "event": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "Solo ese evento personalizado (no puede empezar por `_`)."
+          },
+          "zone": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "Solo las visitas de una zona de ciudades de la web (id de zona, el `value` de `breakdown?dimension=zones`). Una zona desconocida da un resultado vacío."
+          },
+          "metro": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "Solo las visitas de un área metropolitana del catálogo global (`cbsa-<n>` o `fua-<n>`, el `value` de `breakdown?dimension=metros`). Un área desconocida da un resultado vacío."
+          }
+        },
+        "required": [
+          "site_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_account",
+      "description": "Organización, plan, ámbitos y límites de la clave. Autodescubrimiento: la única ruta de `/v1` que responde aunque la prueba haya caducado.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_funnels",
+      "description": "Embudos. Embudos de la web con sus pasos y cifras (los propios o, si no tiene, los dos por defecto).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "site_id": {
+            "type": "string",
+            "description": "Id de la web (campo `id` de `/v1/sites`)."
+          },
+          "period": {
+            "type": "string",
+            "enum": [
+              "today",
+              "7d",
+              "30d",
+              "month",
+              "lastMonth",
+              "90d",
+              "12m",
+              "year",
+              "custom"
+            ],
+            "default": "30d",
+            "description": "Periodo, en días naturales de la zona horaria de la web. Con `custom` hay que enviar `from` y `to`."
+          },
+          "from": {
+            "type": "string",
+            "format": "date",
+            "description": "Primer día (YYYY-MM-DD, inclusivo). Sin `period` implica `period=custom`; con otro periodo es 400."
+          },
+          "to": {
+            "type": "string",
+            "format": "date",
+            "description": "Último día (YYYY-MM-DD, inclusivo). Sin `period` implica `period=custom`; con otro periodo es 400."
+          },
+          "compare": {
+            "type": "string",
+            "enum": [
+              "0",
+              "1"
+            ],
+            "default": "0",
+            "description": "Con `1` añade el periodo anterior de la misma duración."
+          },
+          "page": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "Solo vistas de esa ruta (por ejemplo `/precios`)."
+          },
+          "entry": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "Solo visitas cuya página de entrada es esa ruta."
+          },
+          "source": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "Fuente de tráfico (`google`, `newsletter`...)."
+          },
+          "utm_source": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "Valor de utm_source."
+          },
+          "utm_medium": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "Valor de utm_medium."
+          },
+          "utm_campaign": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "Valor de utm_campaign."
+          },
+          "country": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "País (código ISO 3166-1 alfa-2)."
+          },
+          "region": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "Región (nombre en inglés)."
+          },
+          "city": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "Ciudad (nombre en inglés)."
+          },
+          "device": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "`desktop`, `mobile`, `tablet` u `other`."
+          },
+          "browser": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "Navegador."
+          },
+          "os": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "Sistema operativo."
+          },
+          "event": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "Solo ese evento personalizado (no puede empezar por `_`)."
+          },
+          "zone": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "Solo las visitas de una zona de ciudades de la web (id de zona, el `value` de `breakdown?dimension=zones`). Una zona desconocida da un resultado vacío."
+          },
+          "metro": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "Solo las visitas de un área metropolitana del catálogo global (`cbsa-<n>` o `fua-<n>`, el `value` de `breakdown?dimension=metros`). Un área desconocida da un resultado vacío."
+          }
+        },
+        "required": [
+          "site_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_goals",
+      "description": "Objetivos y conversiones. Objetivos de la web con sus conversiones y tasa sobre las visitas.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "site_id": {
+            "type": "string",
+            "description": "Id de la web (campo `id` de `/v1/sites`)."
+          },
+          "period": {
+            "type": "string",
+            "enum": [
+              "today",
+              "7d",
+              "30d",
+              "month",
+              "lastMonth",
+              "90d",
+              "12m",
+              "year",
+              "custom"
+            ],
+            "default": "30d",
+            "description": "Periodo, en días naturales de la zona horaria de la web. Con `custom` hay que enviar `from` y `to`."
+          },
+          "from": {
+            "type": "string",
+            "format": "date",
+            "description": "Primer día (YYYY-MM-DD, inclusivo). Sin `period` implica `period=custom`; con otro periodo es 400."
+          },
+          "to": {
+            "type": "string",
+            "format": "date",
+            "description": "Último día (YYYY-MM-DD, inclusivo). Sin `period` implica `period=custom`; con otro periodo es 400."
+          },
+          "compare": {
+            "type": "string",
+            "enum": [
+              "0",
+              "1"
+            ],
+            "default": "0",
+            "description": "Con `1` añade el periodo anterior de la misma duración."
+          },
+          "page": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "Solo vistas de esa ruta (por ejemplo `/precios`)."
+          },
+          "entry": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "Solo visitas cuya página de entrada es esa ruta."
+          },
+          "source": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "Fuente de tráfico (`google`, `newsletter`...)."
+          },
+          "utm_source": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "Valor de utm_source."
+          },
+          "utm_medium": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "Valor de utm_medium."
+          },
+          "utm_campaign": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "Valor de utm_campaign."
+          },
+          "country": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "País (código ISO 3166-1 alfa-2)."
+          },
+          "region": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "Región (nombre en inglés)."
+          },
+          "city": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "Ciudad (nombre en inglés)."
+          },
+          "device": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "`desktop`, `mobile`, `tablet` u `other`."
+          },
+          "browser": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "Navegador."
+          },
+          "os": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "Sistema operativo."
+          },
+          "event": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "Solo ese evento personalizado (no puede empezar por `_`)."
+          },
+          "zone": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "Solo las visitas de una zona de ciudades de la web (id de zona, el `value` de `breakdown?dimension=zones`). Una zona desconocida da un resultado vacío."
+          },
+          "metro": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "Solo las visitas de un área metropolitana del catálogo global (`cbsa-<n>` o `fua-<n>`, el `value` de `breakdown?dimension=metros`). Un área desconocida da un resultado vacío."
+          }
+        },
+        "required": [
+          "site_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_site",
+      "description": "Ajustes de una web. Todos los ajustes de la web, los mismos que el panel: zona horaria, rutas excluidas, parámetros permitidos, retención, alertas, umbral geográfico, zonas, clave pública y snippet. Para cambiarlos, `update_site`.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Id de la web (campo `id` de `/v1/sites`)."
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_site_status",
+      "description": "Estado de instalación de una web. Instalación verificada, último evento (aproximado, por día), modo de medición y cuota del mes de la organización.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Id de la web (campo `id` de `/v1/sites`)."
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_stats_breakdown",
+      "description": "Desglose por dimensión. Filas ordenadas por la métrica principal. Las filas con menos de 3 se omiten (`data.omitted`). `next_pages` exige el filtro `page`. `zones` agrupa por las zonas de ciudades de la web (una ciudad cuenta en todas sus zonas; `share` es sobre el total de visitas del periodo). `metros` agrupa por área metropolitana del catálogo global (cada ciudad pertenece como mucho a un área; las áreas con menos de 5 visitas se omiten, sin fila `(other)`).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "site_id": {
+            "type": "string",
+            "description": "Id de la web (campo `id` de `/v1/sites`)."
+          },
+          "period": {
+            "type": "string",
+            "enum": [
+              "today",
+              "7d",
+              "30d",
+              "month",
+              "lastMonth",
+              "90d",
+              "12m",
+              "year",
+              "custom"
+            ],
+            "default": "30d",
+            "description": "Periodo, en días naturales de la zona horaria de la web. Con `custom` hay que enviar `from` y `to`."
+          },
+          "from": {
+            "type": "string",
+            "format": "date",
+            "description": "Primer día (YYYY-MM-DD, inclusivo). Sin `period` implica `period=custom`; con otro periodo es 400."
+          },
+          "to": {
+            "type": "string",
+            "format": "date",
+            "description": "Último día (YYYY-MM-DD, inclusivo). Sin `period` implica `period=custom`; con otro periodo es 400."
+          },
+          "compare": {
+            "type": "string",
+            "enum": [
+              "0",
+              "1"
+            ],
+            "default": "0",
+            "description": "Con `1` añade el periodo anterior de la misma duración."
+          },
+          "page": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "Solo vistas de esa ruta (por ejemplo `/precios`)."
+          },
+          "entry": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "Solo visitas cuya página de entrada es esa ruta."
+          },
+          "source": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "Fuente de tráfico (`google`, `newsletter`...)."
+          },
+          "utm_source": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "Valor de utm_source."
+          },
+          "utm_medium": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "Valor de utm_medium."
+          },
+          "utm_campaign": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "Valor de utm_campaign."
+          },
+          "country": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "País (código ISO 3166-1 alfa-2)."
+          },
+          "region": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "Región (nombre en inglés)."
+          },
+          "city": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "Ciudad (nombre en inglés)."
+          },
+          "device": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "`desktop`, `mobile`, `tablet` u `other`."
+          },
+          "browser": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "Navegador."
+          },
+          "os": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "Sistema operativo."
+          },
+          "event": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "Solo ese evento personalizado (no puede empezar por `_`)."
+          },
+          "zone": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "Solo las visitas de una zona de ciudades de la web (id de zona, el `value` de `breakdown?dimension=zones`). Una zona desconocida da un resultado vacío."
+          },
+          "metro": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "Solo las visitas de un área metropolitana del catálogo global (`cbsa-<n>` o `fua-<n>`, el `value` de `breakdown?dimension=metros`). Un área desconocida da un resultado vacío."
+          },
+          "dimension": {
+            "type": "string",
+            "enum": [
+              "pages",
+              "entries",
+              "sources",
+              "utm_source",
+              "utm_medium",
+              "utm_campaign",
+              "countries",
+              "regions",
+              "cities",
+              "zones",
+              "metros",
+              "devices",
+              "browsers",
+              "os",
+              "events",
+              "prev_pages",
+              "next_pages"
+            ],
+            "description": "Dimensión a desglosar."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000,
+            "default": 10,
+            "description": "Máximo de filas."
+          }
+        },
+        "required": [
+          "site_id",
+          "dimension"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_stats_overview",
+      "description": "KPIs del periodo. Los mismos indicadores que el panel, con su `kind` (`exact`/`estimated`). `sessions` y `visitors` solo se miden con la medición ampliada (visitantes que lo aceptan todo): son `null` (no medido, no cero) si el periodo no tiene ninguna página vista ampliada (`measurement.enhanced` = 0).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "site_id": {
+            "type": "string",
+            "description": "Id de la web (campo `id` de `/v1/sites`)."
+          },
+          "period": {
+            "type": "string",
+            "enum": [
+              "today",
+              "7d",
+              "30d",
+              "month",
+              "lastMonth",
+              "90d",
+              "12m",
+              "year",
+              "custom"
+            ],
+            "default": "30d",
+            "description": "Periodo, en días naturales de la zona horaria de la web. Con `custom` hay que enviar `from` y `to`."
+          },
+          "from": {
+            "type": "string",
+            "format": "date",
+            "description": "Primer día (YYYY-MM-DD, inclusivo). Sin `period` implica `period=custom`; con otro periodo es 400."
+          },
+          "to": {
+            "type": "string",
+            "format": "date",
+            "description": "Último día (YYYY-MM-DD, inclusivo). Sin `period` implica `period=custom`; con otro periodo es 400."
+          },
+          "compare": {
+            "type": "string",
+            "enum": [
+              "0",
+              "1"
+            ],
+            "default": "0",
+            "description": "Con `1` añade el periodo anterior de la misma duración."
+          },
+          "page": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "Solo vistas de esa ruta (por ejemplo `/precios`)."
+          },
+          "entry": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "Solo visitas cuya página de entrada es esa ruta."
+          },
+          "source": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "Fuente de tráfico (`google`, `newsletter`...)."
+          },
+          "utm_source": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "Valor de utm_source."
+          },
+          "utm_medium": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "Valor de utm_medium."
+          },
+          "utm_campaign": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "Valor de utm_campaign."
+          },
+          "country": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "País (código ISO 3166-1 alfa-2)."
+          },
+          "region": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "Región (nombre en inglés)."
+          },
+          "city": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "Ciudad (nombre en inglés)."
+          },
+          "device": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "`desktop`, `mobile`, `tablet` u `other`."
+          },
+          "browser": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "Navegador."
+          },
+          "os": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "Sistema operativo."
+          },
+          "event": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "Solo ese evento personalizado (no puede empezar por `_`)."
+          },
+          "zone": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "Solo las visitas de una zona de ciudades de la web (id de zona, el `value` de `breakdown?dimension=zones`). Una zona desconocida da un resultado vacío."
+          },
+          "metro": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "Solo las visitas de un área metropolitana del catálogo global (`cbsa-<n>` o `fua-<n>`, el `value` de `breakdown?dimension=metros`). Un área desconocida da un resultado vacío."
+          }
+        },
+        "required": [
+          "site_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_stats_timeseries",
+      "description": "Serie temporal. Un punto por intervalo, con ceros incluidos. `week` empieza en lunes (ISO) y `quarter` es trimestre natural, ambos en la zona de la web; los intervalos de los extremos pueden ser parciales. `hour` admite como máximo 31 días.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "site_id": {
+            "type": "string",
+            "description": "Id de la web (campo `id` de `/v1/sites`)."
+          },
+          "period": {
+            "type": "string",
+            "enum": [
+              "today",
+              "7d",
+              "30d",
+              "month",
+              "lastMonth",
+              "90d",
+              "12m",
+              "year",
+              "custom"
+            ],
+            "default": "30d",
+            "description": "Periodo, en días naturales de la zona horaria de la web. Con `custom` hay que enviar `from` y `to`."
+          },
+          "from": {
+            "type": "string",
+            "format": "date",
+            "description": "Primer día (YYYY-MM-DD, inclusivo). Sin `period` implica `period=custom`; con otro periodo es 400."
+          },
+          "to": {
+            "type": "string",
+            "format": "date",
+            "description": "Último día (YYYY-MM-DD, inclusivo). Sin `period` implica `period=custom`; con otro periodo es 400."
+          },
+          "compare": {
+            "type": "string",
+            "enum": [
+              "0",
+              "1"
+            ],
+            "default": "0",
+            "description": "Con `1` añade el periodo anterior de la misma duración."
+          },
+          "page": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "Solo vistas de esa ruta (por ejemplo `/precios`)."
+          },
+          "entry": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "Solo visitas cuya página de entrada es esa ruta."
+          },
+          "source": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "Fuente de tráfico (`google`, `newsletter`...)."
+          },
+          "utm_source": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "Valor de utm_source."
+          },
+          "utm_medium": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "Valor de utm_medium."
+          },
+          "utm_campaign": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "Valor de utm_campaign."
+          },
+          "country": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "País (código ISO 3166-1 alfa-2)."
+          },
+          "region": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "Región (nombre en inglés)."
+          },
+          "city": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "Ciudad (nombre en inglés)."
+          },
+          "device": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "`desktop`, `mobile`, `tablet` u `other`."
+          },
+          "browser": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "Navegador."
+          },
+          "os": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "Sistema operativo."
+          },
+          "event": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "Solo ese evento personalizado (no puede empezar por `_`)."
+          },
+          "zone": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "Solo las visitas de una zona de ciudades de la web (id de zona, el `value` de `breakdown?dimension=zones`). Una zona desconocida da un resultado vacío."
+          },
+          "metro": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "Solo las visitas de un área metropolitana del catálogo global (`cbsa-<n>` o `fua-<n>`, el `value` de `breakdown?dimension=metros`). Un área desconocida da un resultado vacío."
+          },
+          "interval": {
+            "type": "string",
+            "enum": [
+              "hour",
+              "day",
+              "week",
+              "month",
+              "quarter"
+            ],
+            "default": "day",
+            "description": "Intervalo de agrupación."
+          }
+        },
+        "required": [
+          "site_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "list_annotations",
+      "description": "Anotaciones de una web. Notas de la gráfica, opcionalmente entre dos fechas.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Id de la web (campo `id` de `/v1/sites`)."
+          },
+          "from": {
+            "type": "string",
+            "format": "date",
+            "description": "Desde (YYYY-MM-DD, inclusivo)."
+          },
+          "to": {
+            "type": "string",
+            "format": "date",
+            "description": "Hasta (YYYY-MM-DD, inclusivo)."
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "list_api_keys",
+      "description": "Claves de API de la organización. Claves activas (nunca la clave completa): nombre, prefijo, ámbitos, webs, entorno, caducidad y último uso.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "list_funnels",
+      "description": "Embudos de una web. Definición de los embudos guardados (pasos). Para sus conversiones, `get_funnels`.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Id de la web (campo `id` de `/v1/sites`)."
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "list_goals",
+      "description": "Objetivos de una web. Definición de los objetivos (nombre, tipo `event`/`path` y condición). Para sus conversiones, `get_goals`.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Id de la web (campo `id` de `/v1/sites`)."
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "list_shares",
+      "description": "Enlaces públicos de una web. Enlaces de solo lectura para compartir las estadísticas sin cuenta. Solo conexiones OAuth de propietarios y administradores (`shares:write`).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Id de la web (campo `id` de `/v1/sites`)."
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "list_sites",
+      "description": "Webs a las que da acceso la clave. Paginación por cursor: pasa `meta.next_cursor` de una página como `cursor` de la siguiente; sin `next_cursor` no queda ninguna más.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "default": 50,
+            "description": "Máximo de webs por página."
+          },
+          "cursor": {
+            "type": "string",
+            "maxLength": 100,
+            "description": "Cursor opaco de `meta.next_cursor` de la página anterior."
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "revoke_api_key",
+      "description": "Revoca una clave de API. Destructivo e inmediato: la clave deja de funcionar. Exige `confirm=true`.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "keyId": {
+            "type": "string",
+            "description": "Id de la clave (campo `id` de `list_api_keys`)."
+          },
+          "confirm": {
+            "type": "string",
+            "enum": [
+              "true"
+            ],
+            "description": "Debe ser `true`."
+          },
+          "idempotency_key": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "Opcional. Un reintento con el mismo valor devuelve la misma respuesta sin repetir la escritura."
+          }
+        },
+        "required": [
+          "keyId",
+          "confirm"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "update_site",
+      "description": "Edita una web. Parcial: zona horaria, rutas excluidas, parámetros permitidos, retención (≤ la del plan), alertas de tráfico, umbral geográfico y zonas. Con clave `env: test` se valida cada campo enviado y se devuelve un eco sin persistir (`dry_run: true`).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Id de la web (campo `id` de `/v1/sites`)."
+          },
+          "domain": {
+            "type": "string",
+            "description": "Nuevo dominio, por ejemplo ejemplo.com."
+          },
+          "allowSubdomains": {
+            "type": "boolean",
+            "description": "Contar también los subdominios."
+          },
+          "timezone": {
+            "type": "string",
+            "description": "Zona horaria IANA, por ejemplo Europe/Madrid."
+          },
+          "excludedPaths": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 500,
+            "description": "Lista COMPLETA de rutas excluidas (sustituye a la actual), por ejemplo [\"/admin\", \"/blog/*\"]."
+          },
+          "allowedQueryParams": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 500,
+            "description": "Lista COMPLETA de parámetros de query permitidos (sustituye a la actual)."
+          },
+          "retentionMonths": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "enum": [
+              3,
+              6,
+              12,
+              24,
+              60,
+              null
+            ],
+            "description": "Meses de historial (≤ lo que permite el plan); null = lo que permita el plan."
+          },
+          "trafficAlerts": {
+            "type": "boolean",
+            "description": "Alertas de tráfico por email (caída, pico, sin datos) a owner y admins."
+          },
+          "geoMinVisits": {
+            "type": "integer",
+            "enum": [
+              1,
+              2,
+              3,
+              5
+            ],
+            "description": "Visitas mínimas para mostrar una región o ciudad por separado."
+          },
+          "geoZones": {
+            "type": "array",
+            "maxItems": 20,
+            "description": "Lista COMPLETA de zonas de ciudades (sustituye a la actual); sin id = zona nueva.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "description": "Id de una zona existente (8 caracteres)."
+                },
+                "name": {
+                  "type": "string",
+                  "description": "Nombre de la zona (1 a 60 caracteres)."
+                },
+                "cities": {
+                  "type": "array",
+                  "minItems": 1,
+                  "maxItems": 50,
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "country": {
+                        "type": "string",
+                        "description": "ISO-2, por ejemplo ES."
+                      },
+                      "region": {
+                        "type": "string",
+                        "description": "Región tal como sale en las estadísticas."
+                      },
+                      "city": {
+                        "type": "string",
+                        "description": "Ciudad tal como sale en las estadísticas."
+                      }
+                    },
+                    "required": [
+                      "country",
+                      "region",
+                      "city"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "required": [
+                "name",
+                "cities"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "idempotency_key": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "Opcional. Un reintento con el mismo valor devuelve la misma respuesta sin repetir la escritura."
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "com.limecount/limecount",
+    "version": "1.0.2",
+    "remoteUrl": "https://api.limecount.com/mcp/open",
+    "publishedAt": "2026-11-19T10:55:09.640617Z",
+    "fetchedAt": "2026-11-26T10:40:47.803Z",
+    "toolsSha256": "ad809cc0f77309d80e5b7e5188e9352b476936ed3d16be27b4a67a1584fdf116"
+  }
+}

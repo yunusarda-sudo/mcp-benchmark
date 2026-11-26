@@ -1,0 +1,384 @@
+{
+  "$schema": "../schema.json",
+  "name": "lt.topimones/registry",
+  "title": "TOP Įmonės - Lithuanian company registry (beta)",
+  "category": "AI, LLMs & Agents",
+  "description": "Lithuanian company register data for AI agents: identity, tax, insolvency, procurement. No key.",
+  "repository": "https://github.com/Rekvizitai-UAB/topimones-mcp",
+  "tools": [
+    {
+      "name": "resolve_entity",
+      "description": "Resolve a name, a national id, a public id \"CC:id\", a VAT number or an LEI to up to 10 candidate entities (register identity only), each with its coverage tier and its public id (\"LT:110053842\"). Pass the two parts as country and id to get_entity and get_entity_history, the whole id to get_entity_series. Name pages carry meta.next_cursor; 200 candidates are reachable per query. An LEI needs no country (it is unique worldwide). Costs one identity disclosure per candidate; an id or identifier with no match counts one miss.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "q": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80,
+            "description": "A name (words of 3+ characters, any case, diacritics optional), a national id, a public id \"CC:id\", a VAT number or an LEI."
+          },
+          "country": {
+            "description": "ISO 3166-1 alpha-2. Required unless q is a full public id \"CC:id\" or an LEI (an LEI is unique worldwide).",
+            "type": "string",
+            "pattern": "^[A-Za-z]{2}$"
+          },
+          "cursor": {
+            "description": "meta.next_cursor of the previous page, with the same q and country.",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "q"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_entity",
+      "description": "The register identity of one entity by exact id (country + the national id, the part after \"LT:\" of a public id; resolve_entity finds it from a name), plus the enriched blocks asked for in include: financials, workforce, tax, debt, insolvency, procurement, score. A block is null when it is not asked for, not collected, not licensed or outside the entity's coverage tier; meta.withheld names the reason. An id outside coverage answers not_in_coverage, which does not mean the entity does not exist. With as_of=YYYY-MM-DD, the name, legal form and status valid on that date (null with unknown_for_date where no history covers it); enriched blocks are not dated in this version. Costs one identity disclosure, plus one detail disclosure when an enriched block is served.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "country": {
+            "type": "string",
+            "pattern": "^[A-Za-z]{2}$",
+            "description": "ISO 3166-1 alpha-2 country code, any case (e.g. \"LT\")."
+          },
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40,
+            "description": "National id as issued by the register (the part after \"CC:\" of a public id)."
+          },
+          "include": {
+            "default": [
+              "identity"
+            ],
+            "description": "Blocks to return besides identity (always returned). Default: identity only.",
+            "minItems": 1,
+            "maxItems": 8,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "identity",
+                "financials",
+                "workforce",
+                "tax",
+                "debt",
+                "insolvency",
+                "procurement",
+                "score"
+              ]
+            }
+          },
+          "detail": {
+            "default": "concise",
+            "description": "concise: the newest year of each yearly block (tax: also the last full year when the newest is the running, partial year); full: every year held.",
+            "type": "string",
+            "enum": [
+              "concise",
+              "full"
+            ]
+          },
+          "as_of": {
+            "description": "YYYY-MM-DD: the identity valid on that date, as we know it now. Not after today in the country's calendar; today = omitted.",
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          }
+        },
+        "required": [
+          "country",
+          "id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "search_entities",
+      "description": "To find one entity from a name or an id use resolve_entity; this lists many. Identity rows of entities matching filters: name words, legal form, status and registration window on the register; score_risk and vat_registered where the country has them and their source is licensed. A narrowing filter is required (a name word, or a legal form or status - not every status - with a registration window of whole calendar years, at most 5). Up to 20 rows a page, 200 per filter set, no totals; person-like legal forms are never listed. Costs one identity disclosure per row, plus one detail disclosure per row (at least one) with score_risk; an empty page with no next cursor counts one miss. legal_form also takes the common national abbreviation of a form. Identity filters all run before paging, so a page of identity filters is empty only at the end of the matches.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "country": {
+            "type": "string",
+            "pattern": "^[A-Za-z]{2}$",
+            "description": "ISO 3166-1 alpha-2 country code, any case (e.g. \"LT\")."
+          },
+          "name": {
+            "description": "Name words (3+ characters each, any case, diacritics optional).",
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 80
+          },
+          "legal_form": {
+            "description": "Legal forms: national labels or ISO 20275 ELF codes, as lookup_code kind=legal_form lists them, or the common national abbreviation of a form (lookup_code kind=legal_form with q set to it shows the form it names).",
+            "minItems": 1,
+            "maxItems": 10,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 120
+            }
+          },
+          "status": {
+            "description": "Register statuses.",
+            "minItems": 1,
+            "maxItems": 3,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "active",
+                "winding_up",
+                "insolvent"
+              ]
+            }
+          },
+          "registered_from": {
+            "description": "Registered on or after this date (YYYY-MM-DD). Without name it must be 1 January of a year (YYYY-01-01).",
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          },
+          "registered_to": {
+            "description": "Registered on or before this date (YYYY-MM-DD). Without name it must be 31 December (YYYY-12-31), at most 5 calendar years after registered_from.",
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          },
+          "score_risk": {
+            "description": "Enriched filter: published score risk level. Costs one detail disclosure per row.",
+            "minItems": 1,
+            "maxItems": 4,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "low",
+                "medium",
+                "high",
+                "critical"
+              ]
+            }
+          },
+          "vat_registered": {
+            "description": "Enriched filter: registered VAT payer now (true) or not / unknown (false).",
+            "type": "boolean"
+          },
+          "page_size": {
+            "default": 20,
+            "description": "Rows per page, 1-20 (at most 10 with an enriched filter).",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 20
+          },
+          "cursor": {
+            "description": "meta.next_cursor of the previous page, with the same filters.",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "country"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_entity_series",
+      "description": "Use it for values over several periods; for the current state of one entity, get_entity. Numbers over time for 1-5 entities given as whole public ids (\"LT:110053842\"): revenue, net_profit or tax_paid per year, insured or avg_wage per month, between from and to (at most 12 years or 24 months). A series whose source has no confirmed licence is null with not_licensed. Wages are withheld under the small-cell floor and where two months would isolate a few people. Costs one detail disclosure per entity served; an id outside coverage or without a published profile counts one miss.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "series": {
+            "type": "string",
+            "enum": [
+              "revenue",
+              "net_profit",
+              "tax_paid",
+              "insured",
+              "avg_wage"
+            ],
+            "description": "revenue, net_profit and tax_paid are yearly; insured and avg_wage are monthly."
+          },
+          "ids": {
+            "minItems": 1,
+            "maxItems": 5,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 4,
+              "maxLength": 50,
+              "pattern": "^[A-Za-z]{2}:[^,]+$"
+            },
+            "description": "1-5 different public ids \"CC:national_id\"."
+          },
+          "from": {
+            "type": "string",
+            "pattern": "^\\d{4}(-\\d{2})?$",
+            "description": "First period, inclusive: YYYY for grain year, YYYY-MM for grain month."
+          },
+          "to": {
+            "type": "string",
+            "pattern": "^\\d{4}(-\\d{2})?$",
+            "description": "Last period, inclusive. At most 12 years or 24 months after from."
+          },
+          "grain": {
+            "type": "string",
+            "enum": [
+              "year",
+              "month"
+            ],
+            "description": "Must match the series: year or month."
+          }
+        },
+        "required": [
+          "series",
+          "ids",
+          "from",
+          "to",
+          "grain"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_entity_history",
+      "description": "Use it for every period of an attribute; for the identity on one date, get_entity with as_of is simpler. The periods of the name, legal form and status of one entity (country + the national id, the part after \"LT:\" of a public id): each value with the day it was first observed (valid_from) and the day it was replaced (valid_to, exclusive; null = current). History starts at the first register load that recorded the attribute; before it the attribute is unknown (meta.withheld: unknown_for_date). Oldest first, at most 100 periods per page. An id outside coverage answers not_in_coverage, which does not mean the entity does not exist. Costs one identity disclosure.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "country": {
+            "type": "string",
+            "pattern": "^[A-Za-z]{2}$",
+            "description": "ISO 3166-1 alpha-2 country code, any case (e.g. \"LT\")."
+          },
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40,
+            "description": "National id as issued by the register (the part after \"CC:\" of a public id)."
+          },
+          "attributes": {
+            "default": [
+              "name",
+              "legal_form",
+              "status"
+            ],
+            "description": "Attributes whose periods to return. Default: all three.",
+            "minItems": 1,
+            "maxItems": 3,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "name",
+                "legal_form",
+                "status"
+              ]
+            }
+          },
+          "from": {
+            "description": "YYYY-MM-DD: only periods still valid on or after this date.",
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          },
+          "to": {
+            "description": "YYYY-MM-DD: only periods that started on or before this date.",
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          },
+          "cursor": {
+            "description": "meta.next_cursor of the previous page, with the same parameters.",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "country",
+          "id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "lookup_code",
+      "description": "The values the filters accept, per country: legal forms (ISO 20275 ELF code and national label; q also finds a common national abbreviation of the form) and register statuses (platform status and the national labels it maps from), every value a page at a time (meta.next_cursor). kind=activity is not served yet: its source has no confirmed licence, so it answers no rows with meta.withheld not_licensed. Costs one call only.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "activity",
+              "legal_form",
+              "status"
+            ]
+          },
+          "country": {
+            "type": "string",
+            "pattern": "^[A-Za-z]{2}$",
+            "description": "ISO 3166-1 alpha-2 country code, any case (e.g. \"LT\")."
+          },
+          "q": {
+            "description": "Words, a code or a code prefix. Required for activity; without it legal_form and status list every value, a page at a time.",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "limit": {
+            "default": 20,
+            "description": "Maximum rows per page, 1-20.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 20
+          },
+          "cursor": {
+            "description": "legal_form and status: meta.next_cursor of the previous page, with the same kind, country and q. Not for activity.",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "kind",
+          "country"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_coverage",
+      "description": "For one country: every data domain with its sources (licence, licence status, cadence, last successful run) and whether it is served or why not; the last completed register load; servable entity counts by coverage tier and status, rounded to hundreds. Your remaining daily usage is in meta.usage. Costs one call only.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "country": {
+            "type": "string",
+            "pattern": "^[A-Za-z]{2}$",
+            "description": "ISO 3166-1 alpha-2 country code, any case (e.g. \"LT\")."
+          }
+        },
+        "required": [
+          "country"
+        ],
+        "additionalProperties": false
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "lt.topimones/registry",
+    "version": "1.0.0-beta.1",
+    "remoteUrl": "https://www.topimones.lt/mcp",
+    "publishedAt": "2026-11-25T20:51:14.478424Z",
+    "fetchedAt": "2026-11-26T10:40:47.803Z",
+    "toolsSha256": "16c1d51a226ddc6fd93656720733e66194230fad034a211ddb3c7bae440288fe"
+  }
+}
