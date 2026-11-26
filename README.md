@@ -10,7 +10,7 @@
 
 **A deterministic linter, security inspector, and quantitative quality benchmark for Model Context Protocol (MCP) tool definitions.**
 
-[Web Playground](https://yunusarda-sudo.github.io/mcp-benchmark/) · [Leaderboard (854)](LEADERBOARD.md) · [Rules Catalog](https://yunusarda-sudo.github.io/mcp-benchmark/) · [npm Package](https://www.npmjs.com/package/mcp-benchmark)
+[Web Playground](https://yunusarda-sudo.github.io/mcp-benchmark/) · [Leaderboard (2,124)](LEADERBOARD.md) · [Rules Catalog](https://yunusarda-sudo.github.io/mcp-benchmark/) · [npm Package](https://www.npmjs.com/package/mcp-benchmark)
 
 </div>
 
@@ -183,7 +183,7 @@ Grades: **A+** ≥ 95, **A** ≥ 88, **B** ≥ 78, **C** ≥ 65, **D** ≥ 50, o
 
 The project continuously probes and benchmarks remote, auth-free servers from the [official MCP Registry](https://registry.modelcontextprotocol.io).
 
-All 854 synced servers are categorized into 16 domain sectors:
+All 2,124 synced servers are categorized into 16 domain sectors:
 * **AI, LLMs & Agents** · **Developer Tools & DevOps** · **Databases & Storage** · **Vector DBs & AI Search**
 * **Finance, Crypto & Web3** · **E-Commerce & Retail** · **Design, UI & 3D Media** · **Web Scraping & Automation**
 * **Communication & Alerting** · **Productivity & Notes** · **Healthcare & Wellness** · **Jobs, Career & Learning**
@@ -237,7 +237,7 @@ Last run: 73567 registry entries scanned, 43862 auth-free remote candidates, 932
 Probed newest first by registry publish date, at most 1500 per run and at most 3 listed servers per operator (registrable domain of the remote host).
 <!-- SYNC_INFO_END -->
 
-The complete ranked list of all 854 servers is published in **[LEADERBOARD.md](LEADERBOARD.md)**.
+The complete ranked list of all 2,124 servers is published in **[LEADERBOARD.md](LEADERBOARD.md)**.
 
 ---
 
