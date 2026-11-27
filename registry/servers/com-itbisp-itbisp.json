@@ -1,0 +1,677 @@
+{
+  "$schema": "../schema.json",
+  "name": "com.itbisp/itbisp",
+  "title": "ITBI API · Brazil real estate values",
+  "category": "Travel, Maps & Navigation",
+  "description": "Brazil real estate: 2.96M property transactions from city tax records (ITBI) in 6 capitals.",
+  "repository": "https://github.com/itbisp/itbisp-plugin",
+  "tools": [
+    {
+      "name": "buscar_imoveis",
+      "description": "Busca imóveis à venda na cidade de São Paulo (apartamento, casa, comercial, terreno), deduplicados entre imobiliárias. Passe o pedido da pessoa em q, em português ('3 quartos em Pinheiros até 1,5 mi perto do metrô, com varanda'); os campos estruturados completam ou corrigem o q. Cada imóvel traz url (a ficha no itbisp.com), preço, R$/m², nivel_preco (abaixo do mercado a 30%+ acima), metrô e características. Só venda, só a capital de São Paulo (sem Rio, BH, Porto Alegre, Recife nem Fortaleza: para essas, vendas_bairro e vendas_predio com cidade).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "q": {
+            "type": "string",
+            "description": "Pedido em português: '3 quartos perto do metrô em Pinheiros até 1,8 mi com varanda'. Veja termos_entendidos na resposta."
+          },
+          "bairro": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Um ou mais bairros, como as pessoas escrevem: [\"Pinheiros\", \"Vila Madalena\"]."
+          },
+          "rua": {
+            "type": "string",
+            "description": "Nome da rua, com ou sem 'Rua'/'Av.': \"Rua dos Pinheiros\"."
+          },
+          "estacao": {
+            "type": "string",
+            "description": "Estação de metrô/trem/monotrilho mais próxima do imóvel: \"Fradique Coutinho\", \"Faria Lima\"."
+          },
+          "metro_max_m": {
+            "type": "integer",
+            "minimum": 100,
+            "maximum": 5000,
+            "description": "Distância máxima (metros, em linha reta) até a estação mais próxima. 'Perto do metrô' ≈ 800."
+          },
+          "lat": {
+            "type": "number",
+            "description": "Latitude do ponto de referência (use com lon e raio_m)."
+          },
+          "lon": {
+            "type": "number",
+            "description": "Longitude do ponto de referência."
+          },
+          "raio_m": {
+            "type": "integer",
+            "minimum": 100,
+            "maximum": 10000,
+            "default": 1000,
+            "description": "Raio em metros em torno de lat/lon."
+          },
+          "bbox": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "minItems": 4,
+            "maxItems": 4,
+            "description": "Caixa [oeste, sul, leste, norte] em graus."
+          },
+          "poligono": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              }
+            },
+            "description": "Anel do polígono como lista de [lon, lat] (GeoJSON)."
+          },
+          "tipo": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "apartamento",
+                "casa",
+                "comercial",
+                "terreno",
+                "outro"
+              ]
+            },
+            "description": "Tipos aceitos. Studio/flat/kitnet/cobertura são 'apartamento'; sobrado é 'casa'."
+          },
+          "preco_min": {
+            "type": "number",
+            "description": "Preço mínimo em reais."
+          },
+          "preco_max": {
+            "type": "number",
+            "description": "Preço máximo em reais: 1,5 milhão = 1500000."
+          },
+          "area_min": {
+            "type": "number",
+            "description": "Área mínima em m² (privativa/útil do anúncio)."
+          },
+          "area_max": {
+            "type": "number",
+            "description": "Área máxima em m²."
+          },
+          "quartos_min": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Quartos (dormitórios), no mínimo."
+          },
+          "suites_min": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Suítes, no mínimo."
+          },
+          "vagas_min": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Vagas de garagem, no mínimo."
+          },
+          "so_preco_bom": {
+            "type": "boolean",
+            "default": false,
+            "description": "Só imóveis com pedido abaixo do mercado (comparados ao mesmo prédio, rua ou bairro e ao pago no ITBI)."
+          },
+          "ordem": {
+            "type": "string",
+            "enum": [
+              "relevancia",
+              "menor_preco",
+              "maior_preco",
+              "menor_m2",
+              "maior_area",
+              "maior_desconto",
+              "mais_recentes",
+              "mais_perto"
+            ],
+            "default": "relevancia",
+            "description": "Ordem. 'relevancia' põe primeiro preço bom, com foto e confirmado por várias imobiliárias; 'mais_perto' exige lat/lon."
+          },
+          "limite": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 20,
+            "default": 8,
+            "description": "Quantos imóveis devolver (1-20)."
+          },
+          "pagina": {
+            "type": "integer",
+            "minimum": 1,
+            "default": 1,
+            "description": "Página de resultados."
+          },
+          "caracteristicas": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "vista",
+                "varanda",
+                "varanda_gourmet",
+                "churrasqueira",
+                "piscina",
+                "academia",
+                "aceita_pet",
+                "playground",
+                "brinquedoteca",
+                "salao_festas",
+                "quadra",
+                "sauna",
+                "espaco_gourmet",
+                "portaria_24h",
+                "condominio_fechado",
+                "closet",
+                "lareira",
+                "mobiliado",
+                "ar_condicionado",
+                "escritorio",
+                "armarios_planejados",
+                "elevador",
+                "lavabo",
+                "novo_texto",
+                "reformado_texto",
+                "deposito",
+                "gerador"
+              ]
+            },
+            "description": "Características exigidas (todas valem), lidas dos anúncios."
+          },
+          "visao": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "reformado",
+                "andar_alto",
+                "alto_padrao",
+                "decorado"
+              ]
+            },
+            "description": "Etiquetas estimadas pela foto principal do anúncio (todas valem)."
+          },
+          "faixa_avaliacao": {
+            "type": "string",
+            "enum": [
+              "so_abaixo",
+              "ate_mercado",
+              "sem_muito_caros"
+            ],
+            "description": "Corta pelo selo de preço: so_abaixo (só abaixo do mercado), ate_mercado (tira os acima do mercado), sem_muito_caros (tira só os 30%+ acima)."
+          },
+          "um_por_predio": {
+            "type": "boolean",
+            "description": "Mostra no máximo um imóvel por prédio (o melhor de cada); cada resultado diz quantos outros estão à venda no prédio."
+          },
+          "subtipo": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "apartamento",
+                "cobertura",
+                "studio",
+                "casa",
+                "casa_condominio"
+              ]
+            },
+            "description": "Subtipo estimado pelo anúncio: cobertura, studio, casa_condominio (casa em condomínio fechado)..."
+          },
+          "reformado": {
+            "type": "boolean",
+            "description": "Só imóveis reformados, pela foto ou pelo texto do anúncio."
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "ficha_imovel",
+      "description": "Ficha de um imóvel: todos os anúncios (imobiliária, preço, link), histórico de preço, fotos, características, condomínio, IPTU, se o preço está bom e o que foi pago no prédio (ITBI). Aceita id ou url (link do anúncio em qualquer imobiliária, ou a ficha do itbisp). Use para 'esse anúncio está caro?', detalhes ou comparar imobiliárias.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "id do imóvel devolvido por buscar_imoveis (ex.: im_1217cd8f3590)."
+          },
+          "url": {
+            "type": "string",
+            "description": "Link do anúncio em qualquer imobiliária ou da ficha itbisp.com."
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "comparaveis_endereco",
+      "description": "Para um endereço de São Paulo (rua e número) ou lat/lon: imóveis à venda parecidos no prédio e em volta, R$/m² pedido, estimativa de preço pedido para a área e o pago no prédio e no distrito (ITBI). Use para 'quanto pedem no meu prédio?', 'esse preço está caro para essa rua?'.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "endereco": {
+            "type": "string",
+            "description": "Rua e número: \"Rua Fradique Coutinho, 1000\"."
+          },
+          "lat": {
+            "type": "number",
+            "description": "Latitude, se não houver endereço."
+          },
+          "lon": {
+            "type": "number",
+            "description": "Longitude."
+          },
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "apartamento",
+              "casa",
+              "comercial",
+              "terreno"
+            ],
+            "description": "Tipo do imóvel avaliado (padrão: o mais comum no prédio, ou apartamento)."
+          },
+          "area": {
+            "type": "number",
+            "description": "Área do imóvel avaliado em m²; filtra comparáveis de tamanho parecido e gera a estimativa."
+          },
+          "quartos": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Quartos do imóvel avaliado."
+          },
+          "raio_m": {
+            "type": "integer",
+            "minimum": 100,
+            "maximum": 3000,
+            "default": 600,
+            "description": "Raio dos comparáveis ao redor, em metros."
+          },
+          "limite": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 20,
+            "default": 8,
+            "description": "Quantos comparáveis listar. How many comparables."
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "resumo_bairro",
+      "description": "Oferta à venda num bairro de São Paulo: quantos imóveis, preço e R$/m² pedidos (total e por quartos), quantos abaixo do mercado e o pago no distrito em 12 meses (ITBI). Use para 'quanto custa um apartamento em Moema?'. Uma chamada por bairro.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "bairro": {
+            "type": "string",
+            "description": "Nome do bairro: \"Moema\", \"Vila Madalena\"."
+          },
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "apartamento",
+              "casa",
+              "comercial",
+              "terreno"
+            ],
+            "default": "apartamento",
+            "description": "Tipo de imóvel."
+          }
+        },
+        "required": [
+          "bairro"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "comparaveis_imovel",
+      "description": "Evidência do selo de preço de um imóvel: os parecidos usados na conta (preço, área, R$/m²), a mediana e as vendas do ITBI no mesmo prédio. Use para 'com o que vocês compararam?'.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "id do imóvel (campo id de buscar_imoveis), ex. im_bae2c52d4cc3."
+          },
+          "limite": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 30,
+            "default": 12,
+            "description": "Quantos comparáveis mostrar. How many comparables."
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    },
+    {
+      "name": "para_voce",
+      "description": "Ordena imóveis à venda pela rotina da pessoa: trajeto até o trabalho, distância de família ou escola, metrô, preço contra parecidos e o que ela não abre mão. Devolve nota, motivos e alertas por imóvel. Use quando citam trabalho, escola ou família ('trabalho na Faria Lima, pais em Santana, até 1,2 mi, 3 quartos'). Mande tudo em q ou os pontos com endereço.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "q": {
+            "type": "string",
+            "description": "Pedido em português: 'trabalho na Faria Lima, sogros na Rua Cardeal Arcoverde, até 1,8 mi, 3 quartos'. Lugares citados viram pontos."
+          },
+          "trabalho": {
+            "type": "string",
+            "description": "Endereço ou lugar do trabalho/estudo: 'Av. Paulista, 1000', 'Faria Lima', 'USP'."
+          },
+          "pessoas": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "quem": {
+                  "type": "string"
+                },
+                "onde": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "onde"
+              ]
+            },
+            "description": "Pessoas ou lugares para ficar perto: [{quem:'pais', onde:'Santana'}, {quem:'escola', onde:'Rua X, 100'}]."
+          },
+          "modo": {
+            "type": "string",
+            "enum": [
+              "transporte",
+              "carro",
+              "bike",
+              "a_pe"
+            ],
+            "default": "transporte",
+            "description": "Como vai ao trabalho. Commute mode."
+          },
+          "tempo_max": {
+            "type": "integer",
+            "minimum": 10,
+            "maximum": 120,
+            "default": 45,
+            "description": "Minutos aceitáveis até o trabalho."
+          },
+          "objetivo": {
+            "type": "string",
+            "enum": [
+              "morar",
+              "investir"
+            ],
+            "default": "morar"
+          },
+          "preco_max": {
+            "type": "number"
+          },
+          "quartos_min": {
+            "type": "integer"
+          },
+          "vagas_min": {
+            "type": "integer"
+          },
+          "area_min": {
+            "type": "number"
+          },
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "apartamento",
+              "casa"
+            ]
+          },
+          "bairros": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Bairros preferidos. Preferred neighborhoods."
+          },
+          "metro": {
+            "type": "string",
+            "enum": [
+              "sim",
+              "indiferente",
+              "nao_uso"
+            ],
+            "description": "'sim' quando metrô perto é importante."
+          },
+          "essenciais": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "varanda",
+                "vaga",
+                "pet",
+                "andar_alto",
+                "reformado",
+                "piscina",
+                "academia",
+                "lazer",
+                "silencioso",
+                "portaria_24h",
+                "mobiliado",
+                "varanda_gourmet"
+              ]
+            },
+            "description": "O que não abre mão. Must-haves."
+          },
+          "limite": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 20,
+            "default": 8
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "vendas_predio",
+      "description": "Preço pago de verdade num prédio de São Paulo (vendas do ITBI desde 2019) ou, com cidade, de Rio de Janeiro, Belo Horizonte, Porto Alegre, Recife ou Fortaleza: m² mediano corrigido pelo IPCA, número de vendas, faixa recente, tendência, última venda e estimativa para uma área. Use para 'quanto vale meu apê na Rua X, 123?'. Sem vendas no número, devolve os prédios mais perto na rua. Em São Paulo, com o código de acesso de assinante do itbisp.com (Minha conta) como Bearer, devolve também vendas_36_meses, a lista venda a venda com data, valor, área e andar. Sale prices in a building, São Paulo plus 5 other Brazilian capitals via cidade.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "endereco": {
+            "type": "string",
+            "description": "Rua e número: \"Rua Capote Valente, 1307\", \"Av. Paulista 1000\"."
+          },
+          "area": {
+            "type": "number",
+            "description": "Área do imóvel em m² para a estimativa (em São Paulo, a área construída do IPTU; nas outras cidades, a área que a cobertura indica)."
+          },
+          "slug": {
+            "type": "string",
+            "description": "Alternativa ao endereço: o final da URL itbisp.com/predio/<slug> (ou itbisp.com/<cidade>/predio/<slug>, com cidade)."
+          },
+          "cidade": {
+            "type": "string",
+            "enum": [
+              "sao-paulo",
+              "rio-de-janeiro",
+              "belo-horizonte",
+              "porto-alegre",
+              "fortaleza",
+              "recife"
+            ],
+            "default": "sao-paulo",
+            "description": "Opcional: cidade. Sem cidade é São Paulo. Outras capitais com vendas do ITBI: rio-de-janeiro, belo-horizonte, porto-alegre, fortaleza, recife (a tool cobertura diz o período e a base do valor de cada uma). Optional city; default São Paulo."
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "vendas_rua",
+      "description": "Vendas do ITBI numa rua de São Paulo ou, com cidade, de Rio de Janeiro, Belo Horizonte, Porto Alegre, Recife ou Fortaleza: m² e valor medianos desde 2024 por tipo, série por ano e os prédios com mais vendas. Use para 'qual o m² na Rua Oscar Freire?'. Ruas homônimas: passe bairro. Price per m² on a street, São Paulo plus 5 other Brazilian capitals via cidade.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "rua": {
+            "type": "string",
+            "description": "Nome da rua: \"Rua Oscar Freire\", \"Alameda Olga\"."
+          },
+          "bairro": {
+            "type": "string",
+            "description": "Opcional: bairro, para ruas com nome repetido."
+          },
+          "cidade": {
+            "type": "string",
+            "enum": [
+              "sao-paulo",
+              "rio-de-janeiro",
+              "belo-horizonte",
+              "porto-alegre",
+              "fortaleza",
+              "recife"
+            ],
+            "default": "sao-paulo",
+            "description": "Opcional: cidade. Sem cidade é São Paulo. Outras capitais com vendas do ITBI: rio-de-janeiro, belo-horizonte, porto-alegre, fortaleza, recife (a tool cobertura diz o período e a base do valor de cada uma). Optional city; default São Paulo."
+          }
+        },
+        "required": [
+          "rua"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "vendas_bairro",
+      "description": "Preço pago num bairro nos últimos 12 meses (ITBI): m² mediano, variação em 12 meses, faixa, posição no ranking, série por ano e ruas com mais vendas. São Paulo por padrão (96 distritos, bairros como Vila Olímpia e 'São Paulo' para a cidade); com cidade, bairros de Rio de Janeiro (Copacabana), Belo Horizonte (Savassi), Porto Alegre (Moinhos de Vento), Recife (Boa Viagem) e Fortaleza (Meireles), ou o nome da cidade para a cidade toda. Use para 'Pinheiros valorizou?'. Uma chamada por bairro. Neighborhood price per m², São Paulo plus 5 other Brazilian capitals via cidade.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "bairro": {
+            "type": "string",
+            "description": "Bairro ou distrito: \"Moema\", \"Vila Olímpia\", \"Tatuapé\"; \"São Paulo\" para a cidade. Com cidade: \"Copacabana\", \"Savassi\", \"Moinhos de Vento\", \"Boa Viagem\", \"Meireles\"."
+          },
+          "cidade": {
+            "type": "string",
+            "enum": [
+              "sao-paulo",
+              "rio-de-janeiro",
+              "belo-horizonte",
+              "porto-alegre",
+              "fortaleza",
+              "recife"
+            ],
+            "default": "sao-paulo",
+            "description": "Opcional: cidade. Sem cidade é São Paulo. Outras capitais com vendas do ITBI: rio-de-janeiro, belo-horizonte, porto-alegre, fortaleza, recife (a tool cobertura diz o período e a base do valor de cada uma). Optional city; default São Paulo."
+          }
+        },
+        "required": [
+          "bairro"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "ranking_bairros",
+      "description": "Ranking dos bairros pelo m² pago em 12 meses (ITBI): mais caros, mais baratos, maior alta ou queda. São Paulo por padrão (96 distritos, por zona e tipo); com cidade, os bairros de Rio de Janeiro, Belo Horizonte, Porto Alegre, Recife ou Fortaleza (só apartamentos, sem zona). Use para 'bairros mais caros', 'mais barato da zona leste'. Neighborhood ranking, São Paulo plus 5 other Brazilian capitals via cidade.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "ordem": {
+            "type": "string",
+            "enum": [
+              "mais_caros",
+              "mais_baratos",
+              "maior_alta",
+              "maior_queda"
+            ],
+            "default": "mais_caros",
+            "description": "Ordem."
+          },
+          "zona": {
+            "type": "string",
+            "enum": [
+              "centro",
+              "norte",
+              "sul",
+              "leste",
+              "oeste"
+            ],
+            "description": "Opcional: zona de São Paulo. Optional zone (São Paulo only)."
+          },
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "apartamento",
+              "casa"
+            ],
+            "description": "Opcional: só apartamentos ou só casas."
+          },
+          "limite": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 130,
+            "default": 10,
+            "description": "Quantos bairros (1–96 em São Paulo; até o total da cidade nas outras). How many."
+          },
+          "cidade": {
+            "type": "string",
+            "enum": [
+              "sao-paulo",
+              "rio-de-janeiro",
+              "belo-horizonte",
+              "porto-alegre",
+              "fortaleza",
+              "recife"
+            ],
+            "default": "sao-paulo",
+            "description": "Opcional: cidade. Sem cidade é São Paulo. Outras capitais com vendas do ITBI: rio-de-janeiro, belo-horizonte, porto-alegre, fortaleza, recife (a tool cobertura diz o período e a base do valor de cada uma). Optional city; default São Paulo."
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "cobertura",
+      "description": "Quais cidades têm vendas do ITBI no itbisp.com e o que cada uma cobre: período (primeira e última venda), número de vendas, o que é o valor (preço declarado, base de cálculo ou avaliação da Prefeitura), sobre que área sai o m² e o link do site. São Paulo, Rio de Janeiro, Belo Horizonte, Porto Alegre, Recife e Fortaleza. Use antes de comparar cidades ou quando perguntarem 'vocês têm dados de BH?'. Which Brazilian cities are covered, with period, sale counts and value basis.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "cidade": {
+            "type": "string",
+            "enum": [
+              "sao-paulo",
+              "rio-de-janeiro",
+              "belo-horizonte",
+              "porto-alegre",
+              "fortaleza",
+              "recife"
+            ],
+            "description": "Opcional: só esta cidade. Optional: a single city."
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "com.itbisp/itbisp",
+    "version": "0.4.0",
+    "remoteUrl": "https://itbisp.com/mcp",
+    "publishedAt": "2026-11-26T11:23:34.777186Z",
+    "fetchedAt": "2026-11-27T10:42:49.718Z",
+    "toolsSha256": "18a1307aa48bc75671de62a6fa7efd1cab60973c088f185ee69b76fe017cdd60"
+  }
+}

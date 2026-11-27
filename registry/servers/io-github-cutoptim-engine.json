@@ -1,0 +1,2680 @@
+{
+  "$schema": "../schema.json",
+  "name": "io.github.cutoptim/engine",
+  "title": "CutOptim Engine",
+  "category": "Developer Tools & DevOps",
+  "description": "Cutting optimization: 2D panels, 1D bars, timber and true-shape nesting via the CutOptim API.",
+  "repository": "https://github.com/cutoptim/engine-mcp",
+  "tools": [
+    {
+      "name": "optimize_2d",
+      "description": "Metered: one Engine API call. Cut rectangular parts from sheets (panels, plywood, glass, sheet metal) and get the layout, cut plan and yield. 2D panel optimization. Nest rectangular parts into rectangular sheets. Returns the placement of every part, the remaining offcuts, the guillotine cut plan and the yield metrics. Parts named in `matchedSets` (grain matching) are cut side by side from one piece of board, one kerf apart; each placed member says which set and position it is.",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "parts",
+          "stock"
+        ],
+        "properties": {
+          "parts": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": [
+                "w",
+                "h"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "maxLength": 200,
+                  "description": "Optional label, echoed on every placement. Defaults to `Part <1-based row index>`."
+                },
+                "w": {
+                  "type": "number",
+                  "exclusiveMinimum": 0,
+                  "description": "Part width. Unit-agnostic: pick one unit (mm, inch, …) for every length in the request and every length in the response is in that same unit. Nothing is converted server-side."
+                },
+                "h": {
+                  "type": "number",
+                  "exclusiveMinimum": 0,
+                  "description": "Part height. Unit-agnostic: pick one unit (mm, inch, …) for every length in the request and every length in the response is in that same unit. Nothing is converted server-side."
+                },
+                "qty": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "default": 1,
+                  "description": "How many identical copies. Expanded server-side into individual pieces; the sum across all rows must not exceed 2000."
+                },
+                "rotatable": {
+                  "type": "boolean",
+                  "default": true,
+                  "description": "May the part be turned 90°? Set false for print-direction parts. For grain, prefer `grain` — it says WHICH side the grain runs along, so the part is turned to match the sheet instead of being frozen in the orientation you happened to send."
+                },
+                "grain": {
+                  "type": "string",
+                  "enum": [
+                    "w",
+                    "h"
+                  ],
+                  "description": "Grain direction: the side of the part the grain runs along (`w` or `h`). On a sheet whose stock row has a `grain`, the part is placed with its grain along the sheet's, turned 90° when it has to be (`rotated: true` on the placement) — `rotatable` is then ignored for it. With `material`, only boards of the part's own material count. No grained stock → no effect, and `warnings` says so. In a matched set a member's own `grain` is not used: the set's `grain` decides, and a `grain:` line in `matchedSets[].warnings` names the members it overrides."
+                },
+                "grainGroup": {
+                  "type": "string",
+                  "maxLength": 200,
+                  "deprecated": true,
+                  "description": "DEPRECATED — still accepted and still working exactly as before. Parts sharing a group are kept on one sheet. If a group is too large for one sheet the members are split and a string in `warnings` names the group. It only keeps them on ONE SHEET: it does not place them next to each other, so it gives no continuous grain across them. For fronts whose figure must run on (a drawer front over two doors) use `matchedSets`."
+                },
+                "priority": {
+                  "type": "boolean",
+                  "description": "Must-cut. Wins board space over non-priority parts when stock is capped — only meaningful together with `options.respectStock`."
+                },
+                "edgeBanding": {
+                  "type": "object",
+                  "description": "Per-edge banding. Each side names the banding TYPE as a free-string reference (e.g. `\"ABS oak 22×1\"`); an absent or empty side is not banded. Library-independent — send your own ERP reference codes and the `edgeBanding` response block groups the metreage by that exact string. Metadata only: it never changes placement, it is summarised post-hoc into linear metres. 2D only.",
+                  "properties": {
+                    "top": {
+                      "type": "string",
+                      "maxLength": 200,
+                      "description": "Type reference for the top edge (runs the part width)."
+                    },
+                    "right": {
+                      "type": "string",
+                      "maxLength": 200,
+                      "description": "Type reference for the right edge (runs the part height)."
+                    },
+                    "bottom": {
+                      "type": "string",
+                      "maxLength": 200,
+                      "description": "Type reference for the bottom edge (runs the part width)."
+                    },
+                    "left": {
+                      "type": "string",
+                      "maxLength": 200,
+                      "description": "Type reference for the left edge (runs the part height)."
+                    }
+                  }
+                },
+                "material": {
+                  "type": "string",
+                  "maxLength": 200,
+                  "description": "Material identity — a HARD placement constraint. A part of material X is cut ONLY from stock of material X (unlike `edgeBanding`, this changes the layout). Free string, library-independent: send your own ERP code. Absent = the \"unspecified\" partition (matches only material-less stock). With no part or stock carrying `material`, the whole solve is byte-identical to before."
+                },
+                "meta": {
+                  "type": "object",
+                  "description": "Opaque JSON object (any keys) echoed back VERBATIM on the matching output (a part's meta on every placed piece of it; a stock row's meta on every sheet/rod cut from it). Attach ERP article numbers, order-line ids, customer refs to reconcile the cut plan with your system. Never parsed, never affects placement. Part meta follows its request row: the meta of each row lands on exactly its qty of placed pieces, even when rows share a name; stock meta by stock-row order."
+                },
+                "id": {
+                  "description": "The row's id, so a `matchedSets` layout can name it. Any JSON value is accepted here. Only an id a set REFERS TO is checked: it must be a non-empty string of printable characters, at most 64 long, or a safe integer (`7` and `\"7\"` are the same id), and it must be on exactly one part. Every other id is ignored, whatever it holds (a float, an object, null, repeated, long, empty): always without a non-empty `matchedSets`, and on the rows no set names with one — so an ERP article number is safe to send."
+                },
+                "qr": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 300,
+                  "description": "QR payload template for every copy of this row: returned resolved in `labels[].qr` and printed as a QR code (error correction level M) on each of the row's labels in `labelsPdf`. Exactly two tokens are filled in: `{piece}` (the copy, 1-based — the `k` of the `k/n` printed on the label) and `{of}` (the row's `qty`); any other `{…}` stays as sent. At most 300 UTF-8 bytes once filled in, printable characters only (no control characters); not together with `qrs`. A wrong value is a 400 `invalid_request` naming the field, before any quota is used. Metadata only: it never changes the plan or `planHash`. On a small label format a long payload can print below 0.4 mm per module, and `warnings` then says so. 2D only."
+                },
+                "qrs": {
+                  "type": "array",
+                  "minItems": 1,
+                  "maxItems": 2000,
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 300
+                  },
+                  "description": "One QR payload per copy of this row, used verbatim: copy `k` (the `k/n` printed on its label) gets entry `k`, in `labels[].qr` and on `labelsPdf`. Exactly `qty` entries (`qty` defaults to 1), each 1 to 300 UTF-8 bytes of printable characters; not together with `qr`. A wrong value is a 400 `invalid_request` naming the field, before any quota is used. 2D only."
+                }
+              }
+            },
+            "description": "The rectangular parts to cut, one row per part type (`w`, `h`, optional `qty`, `name`, grain, edge banding)."
+          },
+          "stock": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 50,
+            "items": {
+              "type": "object",
+              "required": [
+                "w",
+                "h"
+              ],
+              "properties": {
+                "w": {
+                  "type": "number",
+                  "exclusiveMinimum": 0,
+                  "description": "Sheet width. Unit-agnostic: pick one unit (mm, inch, …) for every length in the request and every length in the response is in that same unit. Nothing is converted server-side."
+                },
+                "h": {
+                  "type": "number",
+                  "exclusiveMinimum": 0,
+                  "description": "Sheet height. Unit-agnostic: pick one unit (mm, inch, …) for every length in the request and every length in the response is in that same unit. Nothing is converted server-side."
+                },
+                "qty": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "default": 1,
+                  "description": "How many sheets of this format are available. A HARD cap only when `options.respectStock` is true; otherwise the format is treated as unlimited. The sum across all rows must not exceed 5000."
+                },
+                "price": {
+                  "type": "number",
+                  "minimum": 0,
+                  "description": "Price per sheet. Drives `metrics.totalPrice` and `options.minimizeCost`."
+                },
+                "material": {
+                  "type": "string",
+                  "maxLength": 200,
+                  "description": "A stock unit of material X serves only material-X parts. Free string; see the part `material`."
+                },
+                "priority": {
+                  "type": "boolean",
+                  "description": "\"Use this stock up first\" — a soft preference ranked BELOW sheet/rod count. Steers which format is spent first without spending more of it."
+                },
+                "grain": {
+                  "type": "string",
+                  "enum": [
+                    "w",
+                    "h"
+                  ],
+                  "description": "Grain direction of this sheet: the side the grain runs along (`w` or `h`). Absent = no grain (MDF, melamine): parts without a `grain` rotate freely on it, while a part WITH a `grain` keeps the orientation the grained rows give it (send `material` to keep grained and plain boards apart). Echoed on every `sheets[]` entry cut from this row. Rows whose grain runs different ways may be mixed; `options.trim` and a forced `options.firstCut` still apply to each sheet in its own row's orientation."
+                },
+                "meta": {
+                  "type": "object",
+                  "description": "Opaque JSON object (any keys) echoed back VERBATIM on the matching output (a part's meta on every placed piece of it; a stock row's meta on every sheet/rod cut from it). Attach ERP article numbers, order-line ids, customer refs to reconcile the cut plan with your system. Never parsed, never affects placement. Part meta follows its request row: the meta of each row lands on exactly its qty of placed pieces, even when rows share a name; stock meta by stock-row order."
+                }
+              }
+            },
+            "description": "The sheet sizes to cut from, one row per size (`w`, `h`, optional `qty`, `price`)."
+          },
+          "options": {
+            "type": "object",
+            "properties": {
+              "kerf": {
+                "type": "number",
+                "minimum": 0,
+                "description": "Blade width. Unit-agnostic: pick one unit (mm, inch, …) for every length in the request and every length in the response is in that same unit. Nothing is converted server-side.",
+                "default": 0
+              },
+              "tolerance": {
+                "type": "number",
+                "minimum": 0,
+                "description": "Accept a cut that overshoots by up to this much, i.e. allow parts to encroach on the kerf. Turns \"two 501 mm parts do not fit a 1000 mm board\" into one board.",
+                "default": 0
+              },
+              "trim": {
+                "type": "object",
+                "description": "Per-side edge trim removed before nesting. Asymmetric on purpose: a damaged long edge may need more than the others, and a symmetric trim would then give a wrong plan, not merely a worse one. `left` shifts placements right, `top` shifts them down. The sides are those of each sheet as sent — also on a `grain` row whose grain runs the other way.",
+                "properties": {
+                  "left": {
+                    "type": "number",
+                    "minimum": 0,
+                    "description": "Unit-agnostic: pick one unit (mm, inch, …) for every length in the request and every length in the response is in that same unit. Nothing is converted server-side."
+                  },
+                  "right": {
+                    "type": "number",
+                    "minimum": 0,
+                    "description": "Unit-agnostic: pick one unit (mm, inch, …) for every length in the request and every length in the response is in that same unit. Nothing is converted server-side."
+                  },
+                  "top": {
+                    "type": "number",
+                    "minimum": 0,
+                    "description": "Unit-agnostic: pick one unit (mm, inch, …) for every length in the request and every length in the response is in that same unit. Nothing is converted server-side."
+                  },
+                  "bottom": {
+                    "type": "number",
+                    "minimum": 0,
+                    "description": "Unit-agnostic: pick one unit (mm, inch, …) for every length in the request and every length in the response is in that same unit. Nothing is converted server-side."
+                  }
+                }
+              },
+              "firstCut": {
+                "type": "string",
+                "enum": [
+                  "auto",
+                  "horizontal",
+                  "vertical"
+                ],
+                "default": "auto",
+                "description": "Force the orientation of the first cut across the board. `auto` searches both and also enables two extra strategy families that are not direction-aware. Applies to each sheet as sent, also on a `grain` row whose grain runs the other way."
+              },
+              "minimizeCost": {
+                "type": "boolean",
+                "default": false,
+                "description": "Rank candidate layouts by total stock price instead of sheet count. Needs `price` on the stock rows to mean anything."
+              },
+              "respectStock": {
+                "type": "boolean",
+                "default": false,
+                "description": "Treat each stock row's `qty` as a hard cap. Parts that then do not fit come back in `unplaced` instead of on an extra invented sheet."
+              },
+              "minOffcut": {
+                "type": "number",
+                "minimum": 0,
+                "description": "Output filter only: report a leftover rectangle only if its SHORT side is at least this. Does not change the layout.",
+                "default": 0
+              },
+              "maxCutStages": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 1,
+                "description": "Panel-saw stage limit — a count of machine PHASES (axis changes), not raw cut-tree depth. A real kitchen job is commonly 9 cuts deep but only 3 stages. An unsatisfiable limit still returns the best plan plus a string in `warnings`; it is never an error."
+              },
+              "minimizeRotations": {
+                "type": "boolean",
+                "default": false,
+                "description": "Prefer layouts that turn fewer parts, at a possible small yield cost."
+              },
+              "effort": {
+                "type": "string",
+                "enum": [
+                  "fast",
+                  "balanced"
+                ],
+                "default": "balanced",
+                "description": "Search depth, trading solve time against yield. `balanced` (the default) runs the full multi-strategy best-of. `fast` skips the two expensive refinements — the per-board area-combination search and the tail right-sizing that moves the last boards onto a smaller stock size: markedly faster on large jobs (hundreds of parts) for a small yield cost, while staying guillotine-valid and never denser than `balanced` — its candidate set is a strict subset. On small jobs the two are usually identical. Applies to engine `heuristic`; the `balanced` engine (MaxRects) ignores it."
+              },
+              "setOutlines": {
+                "default": true,
+                "description": "A boolean. With `matchedSets` and the `svg` export: draw the dashed frame and the \"SET A\" badge of every set instance, in ONE separate group (`<g id=\"matched-sets\" data-role=\"annotation\">`) a laser or CNC import can drop in one move. `false` leaves that group out (the position codes in the part labels stay). Read only in a request with sets — there a value other than `true`, `false` or `null` is a 400; without sets the field is ignored, whatever it holds."
+              },
+              "labels": {
+                "type": "object",
+                "additionalProperties": false,
+                "description": "Label settings — the same settings as the Label format panel of the CutOptim app, under these names. They shape `labelsPdf` and add `piece`, `of`, `sheetNo`, `stockRow` and `sheetMeta` to every `labels[]` entry. Every field is optional; `{}` is valid and only adds those fields. Absent: the label PDF is the A4 sheet and `labels[]` is exactly as without this object. Validated STRICTLY, unlike the rest of `options`: an unknown key, a wrong type or a value out of range is a 400 `invalid_request` with `details.path`, before any call is counted (also on `/v1/validate/2d`). `null` for a field means the field is absent. Sent without `include` `labels` or `labelsPdf`, it changes nothing and the answer says so in `warnings`. 2D only.",
+                "properties": {
+                  "format": {
+                    "type": "string",
+                    "enum": [
+                      "sheet",
+                      "roll",
+                      "apli-03056",
+                      "brother-dk-11201"
+                    ],
+                    "default": "sheet",
+                    "description": "`sheet` = the A4 sheet of labels (3 columns); `roll` = one label per page, `width` × `height` mm, for a label printer; `apli-03056` = APLI 03056 sheets (24 labels of 64.6 × 33.9 mm on A4, 3 × 8); `brother-dk-11201` = Brother DK-11201 roll labels (29 × 90 mm, one per page)."
+                  },
+                  "width": {
+                    "type": "number",
+                    "minimum": 20,
+                    "maximum": 300,
+                    "default": 100,
+                    "description": "Label width in mm, `roll` only."
+                  },
+                  "height": {
+                    "type": "number",
+                    "minimum": 15,
+                    "maximum": 300,
+                    "default": 40,
+                    "description": "Label height in mm, `roll` only."
+                  },
+                  "offset": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "description": "Printer offset in mm: moves everything printed on the label right (`x`) and down (`y`); negative values move it back. Applied rounded to 0.1 mm.",
+                    "properties": {
+                      "x": {
+                        "type": "number",
+                        "minimum": -20,
+                        "maximum": 20,
+                        "default": 0,
+                        "description": "Shift right in mm (negative = left)."
+                      },
+                      "y": {
+                        "type": "number",
+                        "minimum": -20,
+                        "maximum": 20,
+                        "default": 0,
+                        "description": "Shift down in mm (negative = up)."
+                      }
+                    }
+                  },
+                  "dimSize": {
+                    "type": "string",
+                    "enum": [
+                      "normal",
+                      "large",
+                      "xl"
+                    ],
+                    "default": "normal",
+                    "description": "Size of the dimension text on the label."
+                  },
+                  "partNo": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Print the part number, top left and largest: the 1-based row of the FIRST `parts` row with that name (rows sharing a name share a number; with unique names it equals `labels[].partNo`)."
+                  },
+                  "order": {
+                    "type": "string",
+                    "enum": [
+                      "input",
+                      "cut"
+                    ],
+                    "default": "input",
+                    "description": "`input` = labels in `parts` order; `cut` = sheet by sheet, in the order the saw plan frees the pieces."
+                  },
+                  "stages": {
+                    "type": "array",
+                    "maxItems": 6,
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 6
+                    },
+                    "description": "Work stages printed as a row of circles to tick off by pen; empty or absent = no row. Each entry is a built-in key — `rc` (rough cut), `c2s` (cut to size), `eb` (edge banded, printed only on a banded part), `s` (sanded), `d` (drilled, not printed yet) — or free text of at most 6 characters, printed as sent (keys are lower case: `RC` is free text). Spaces are trimmed; printable characters only."
+                  },
+                  "stageWords": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "description": "Your own word for a built-in stage key, at most 6 characters; empty or absent = the English abbreviation (RC, C2S, EB, S, D).",
+                    "properties": {
+                      "rc": {
+                        "type": "string",
+                        "maxLength": 6,
+                        "description": "Your word for `rc` (rough cut); default RC."
+                      },
+                      "c2s": {
+                        "type": "string",
+                        "maxLength": 6,
+                        "description": "Your word for `c2s` (cut to size); default C2S."
+                      },
+                      "eb": {
+                        "type": "string",
+                        "maxLength": 6,
+                        "description": "Your word for `eb` (edge banded); default EB."
+                      },
+                      "s": {
+                        "type": "string",
+                        "maxLength": 6,
+                        "description": "Your word for `s` (sanded); default S."
+                      },
+                      "d": {
+                        "type": "string",
+                        "maxLength": 6,
+                        "description": "Your word for `d` (drilled); default D."
+                      }
+                    }
+                  },
+                  "factoryEdges": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Mark FE on the edges of a piece that lie on a sheet edge with no `trim` on that side (the board's factory edge)."
+                  },
+                  "hiddenFaceHint": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Print the \"hidden side\" mark."
+                  },
+                  "parts": {
+                    "type": "array",
+                    "maxItems": 500,
+                    "items": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 999999
+                    },
+                    "description": "Print only the labels of these part numbers (the numbers `partNo` prints), e.g. to re-print after sanding. Empty or absent = all."
+                  }
+                }
+              }
+            },
+            "description": "Kerf, trim, first-cut direction, cost and stock rules, effort and label output; every field is optional."
+          },
+          "async": {
+            "type": "string",
+            "enum": [
+              "auto"
+            ],
+            "description": "Opt in to answers that may arrive later. With `\"auto\"` a job that finishes within the synchronous time limit still answers 200 with the plan, exactly as without it; a job that would outgrow the limit answers **202** with a `jobId` instead, keeps solving, and its plan is read with `GET /v1/jobs/{id}` (the same poll as engine `max`). The call is billed once, when the plan is written; a solve that fails is not billed. Without this field such a job answers 504 `solve_timeout` with the `jobId` in `details` and is not charged. The official SDKs send it and wait for the job for you."
+          },
+          "engine": {
+            "type": "string",
+            "enum": [
+              "heuristic",
+              "balanced",
+              "max"
+            ],
+            "default": "heuristic",
+            "description": "Which optimizer to run. `heuristic` is the guillotine multi-strategy packer: highest yield, every layout edge-to-edge saw-cuttable, always a full `cutPlan`. `balanced` is a MaxRects free-nesting packer: much faster on large jobs for a small yield cost, but its layouts are often not guillotine (`guillotineValid: false`, `cutPlan: null`), and it does not model `tolerance`, `minimizeCost`, `grainGroup`, `maxCutStages` or `minimizeRotations` — set one of those and a string in `warnings` tells you it was ignored. `max` is the ASYNCHRONOUS tree-search tier (2D only): it reaches the proven optimum on far more jobs at the cost of seconds-to-a-minute per solve, so instead of a plan it returns **202** with a `jobId` — poll `GET /v1/jobs/{id}` for the result. Still deterministic and guillotine-valid. Where the tier is not enabled on a deployment, `engine: \"max\"` fails closed with **503**. **What `max` models.** It packs ONE stock format at full sheet size with unlimited supply and a fixed 3-stage guillotine pattern. Anything that would make the returned plan physically WRONG is therefore REFUSED with **400** at submission — before a call is reserved and before you wait for the solve: a second `stock` row, `options.trim`, `options.respectStock`, any `material`, any `grainGroup`, a non-empty `matchedSets` (an empty one is fine). Options that only make the plan less tuned are accepted and listed in `warnings`: `tolerance`, `minimizeCost`, `maxCutStages` (fixed at 3), `minimizeRotations`, `firstCut`, `effort`. A `max` result reports no `offcuts`. Send those jobs to `heuristic`. The default never changes silently."
+          },
+          "include": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "cutPlan",
+                "offcuts",
+                "svg",
+                "csv",
+                "dxf",
+                "labels",
+                "planHash",
+                "pdf",
+                "labelsPdf"
+              ]
+            },
+            "description": "Three kinds of token. NARROWING (`cutPlan`, `offcuts`): omit the field entirely to get both; a present array keeps only the narrowing tokens it lists (an empty array drops both). ADDITIVE EXPORT (`svg`, `csv`, `dxf`): each adds an inline export STRING to the response (`svg` a standalone 2D layout — 2D only, a warning is returned for 1D/wood; `dxf` an R12/AC1009 drawing; `csv` a cut list, RFC 4180 quoted (a part name with a comma or a quote stays one field) and formula-injection-guarded (a name beginning with `=`, `+`, `-`, `@`, TAB or CR is prefixed with an apostrophe so a spreadsheet reads it as text, not a formula — CWE-1236). 2D DATA (`labels`, `planHash`, `pdf`, `labelsPdf`): `labels` adds per-piece label data (`labels[]`, see `Label2D`), `planHash` a 64-hex fingerprint of the plan (the same plan always gives the same hash), `pdf` the cutting-plan PDF and `labelsPdf` the label PDF, both base64-encoded and drawn by the same code as the CutOptim app. These four are 2D only: a 1D or wood request returns a `warnings` entry instead. `pdf` renders at most 500 parts (total quantity); a larger 2D request with `pdf` is a 413 `too_large` with `details.path: \"include\"`. Export and data tokens do not affect narrowing, so `[\"svg\"]` adds svg and — listing no narrowing token — drops cutPlan/offcuts; use `[\"cutPlan\",\"offcuts\",\"svg\"]` to keep everything."
+          },
+          "matchedSets": {
+            "maxItems": 50,
+            "items": {
+              "type": "object",
+              "required": [
+                "id",
+                "layout"
+              ],
+              "description": "Parts cut out of ONE piece of board, side by side or one above the other, exactly one kerf apart, so the figure of the veneer runs on across them (a drawer front over two doors). The set travels through the optimizer as one rectangle — the block — and comes back as its members. Every refusal is a 400 before the quota is reserved; a size mismatch is a warning (`matchedSets[].warnings`), not an error. At most 24 members per set; a part can be in one set only. Engines `heuristic` and `balanced` (which does not rank `priority`, so under `respectStock` a set can lose its place there); `max` refuses a request with sets (400 `details.unsupported`).",
+              "properties": {
+                "id": {
+                  "type": [
+                    "string",
+                    "integer"
+                  ],
+                  "maxLength": 64,
+                  "description": "Unique among the sets; at most 64 characters. Echoed on every member placement and in `matchedSets[]` of the response (as a string)."
+                },
+                "name": {
+                  "type": "string",
+                  "maxLength": 200,
+                  "description": "Optional label, echoed in the response rollup. Printable characters only."
+                },
+                "qty": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "default": 1,
+                  "description": "How many instances (three identical cabinets → 3). The parts' `qty` must cover every instance."
+                },
+                "grain": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "enum": [
+                    "w",
+                    "h",
+                    null
+                  ],
+                  "description": "The SET's grain: along the block's width (`w`) or height (`h`); it decides the direction of every member (their own `grain` is not used inside the block). Absent/null = no grain: the block may turn when every member is `rotatable`."
+                },
+                "onMiss": {
+                  "type": "string",
+                  "enum": [
+                    "split",
+                    "unplaced"
+                  ],
+                  "default": "split",
+                  "description": "When the block fits no stock sheet: `split` places the members one by one (with a warning), `unplaced` lists them in `unplaced`."
+                },
+                "installGap": {
+                  "type": "number",
+                  "minimum": 0,
+                  "description": "The gap between the members ON THE CABINET (default: the kerf). The `align` check measures the lines with it; on the sheet the members still stand one kerf apart, and when the kerf is wider a `gap:` warning says so. Unit-agnostic: pick one unit (mm, inch, …) for every length in the request and every length in the response is in that same unit. Nothing is converted server-side."
+                },
+                "layout": {
+                  "type": "object",
+                  "required": [
+                    "dir",
+                    "lines"
+                  ],
+                  "description": "Where each member sits, as lines of `parts[].id` values. `rows`: each line is a row of members side by side, the rows stacked top to bottom (`[[\"DF\"], [\"DOOR\", \"DOOR\"]]` = a drawer front over two doors). `cols`: each line is a column of members one above the other, the columns side by side. A part may appear more than once in one set. Positions are numbered in reading order: top to bottom, left to right.",
+                  "properties": {
+                    "dir": {
+                      "type": "string",
+                      "enum": [
+                        "rows",
+                        "cols"
+                      ],
+                      "description": "`rows`: each line is a row of members side by side, the rows stacked top to bottom. `cols`: each line is a column, the columns side by side."
+                    },
+                    "lines": {
+                      "type": "array",
+                      "minItems": 1,
+                      "items": {
+                        "type": "array",
+                        "minItems": 1,
+                        "items": {
+                          "type": [
+                            "string",
+                            "integer"
+                          ]
+                        }
+                      },
+                      "description": "The members, as `parts[].id` values — `[[\"DF\"], [\"DOOR\", \"DOOR\"]]` is a drawer front over two doors."
+                    }
+                  }
+                }
+              }
+            },
+            "description": "Matched sets (grain matching): groups of parts cut side by side from one piece of board. Send a NON-EMPTY ARRAY of sets (at most 50); members are named by `parts[].id`. Only a non-empty array switches the feature on: absent, `null`, `[]` — and any value that is not an array — is a request without sets, answered exactly as before (no error). With sets the response adds `sheets[].parts[].matchedSet` on every member and a `matchedSets` rollup; `csv` gains `Set` and `Position` columns at the end, `svg` the `matched-sets` frame group, `dxf` the position code on LABELS; `pdf` and `labelsPdf` draw the members as ordinary parts for now (a `warnings` line says so; the set marks are in `sheets[].parts[].matchedSet`, `csv` and `svg`). Engine `max` refuses a non-empty array (400 `details.unsupported`); an empty one is fine. 2D only: the 1D, wood and nest endpoints ignore this field and `parts[].id`."
+          }
+        }
+      }
+    },
+    {
+      "name": "optimize_1d",
+      "description": "Metered: one Engine API call. Cut lengths from bars, tubes, profiles or rolls and get the cutting pattern per bar. 1D / linear optimization (bars, profiles, tube). Cut parts of a given length from stock bars. Returns the rods used, the position of every part along each rod, the leftover length and the yield metrics.",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "parts",
+          "stock"
+        ],
+        "properties": {
+          "parts": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": [
+                "length"
+              ],
+              "description": "A linear part. There is no `rotatable` or `grainGroup` in 1D.",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "maxLength": 200,
+                  "description": "Optional label. Defaults to `Part <1-based row index>`."
+                },
+                "length": {
+                  "type": "number",
+                  "exclusiveMinimum": 0,
+                  "description": "Cut length. Unit-agnostic: pick one unit (mm, inch, …) for every length in the request and every length in the response is in that same unit. Nothing is converted server-side."
+                },
+                "qty": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "default": 1,
+                  "description": "How many copies. The sum across all rows must not exceed 2000."
+                },
+                "priority": {
+                  "type": "boolean",
+                  "description": "Must-cut; wins stock when `options.respectStock` caps it."
+                },
+                "material": {
+                  "type": "string",
+                  "maxLength": 200,
+                  "description": "Material identity — a HARD placement constraint. A part of material X is cut ONLY from stock of material X (unlike `edgeBanding`, this changes the layout). Free string, library-independent: send your own ERP code. Absent = the \"unspecified\" partition (matches only material-less stock). With no part or stock carrying `material`, the whole solve is byte-identical to before."
+                },
+                "meta": {
+                  "type": "object",
+                  "description": "Opaque JSON object (any keys) echoed back VERBATIM on the matching output (a part's meta on every placed piece of it; a stock row's meta on every sheet/rod cut from it). Attach ERP article numbers, order-line ids, customer refs to reconcile the cut plan with your system. Never parsed, never affects placement. Part meta follows its request row: the meta of each row lands on exactly its qty of placed pieces, even when rows share a name; stock meta by stock-row order."
+                },
+                "ends": {
+                  "type": "object",
+                  "description": "The angled ends of a part, read only with `options.mitrePairing`. Two parts of one section whose facing ends lie in one plane (after a turn `flip` allows) can be cut with ONE saw cut between them: the triangle between the long and the short point is not wasted. Without `mitrePairing` the ends are not used (a warning says so) and the part packs as its `length`.",
+                  "properties": {
+                    "start": {
+                      "type": "object",
+                      "required": [
+                        "angle"
+                      ],
+                      "description": "One end cut of a part, in degrees from square (0 = a square end), signed. The part is measured long point to long point (`length` is its overall length). A part whose two end cuts would cross inside its section (shorter than its leads) cannot be made: a 400 `invalid_request` naming `parts[i].ends` says how long it must at least be.",
+                      "properties": {
+                        "angle": {
+                          "type": "number",
+                          "exclusiveMinimum": -90,
+                          "exclusiveMaximum": 90,
+                          "description": "The face angle: the mitre or plumb cut as seen on the `depth` side (wood: on `sh` as entered)."
+                        },
+                        "bevel": {
+                          "type": "number",
+                          "exclusiveMinimum": -90,
+                          "exclusiveMaximum": 90,
+                          "default": 0,
+                          "description": "The edge angle: the bevel as seen on the `thickness` side (wood: on `sw` as entered). A compound cut has both."
+                        }
+                      }
+                    },
+                    "end": {
+                      "type": "object",
+                      "required": [
+                        "angle"
+                      ],
+                      "description": "One end cut of a part, in degrees from square (0 = a square end), signed. The part is measured long point to long point (`length` is its overall length). A part whose two end cuts would cross inside its section (shorter than its leads) cannot be made: a 400 `invalid_request` naming `parts[i].ends` says how long it must at least be.",
+                      "properties": {
+                        "angle": {
+                          "type": "number",
+                          "exclusiveMinimum": -90,
+                          "exclusiveMaximum": 90,
+                          "description": "The face angle: the mitre or plumb cut as seen on the `depth` side (wood: on `sh` as entered)."
+                        },
+                        "bevel": {
+                          "type": "number",
+                          "exclusiveMinimum": -90,
+                          "exclusiveMaximum": 90,
+                          "default": 0,
+                          "description": "The edge angle: the bevel as seen on the `thickness` side (wood: on `sw` as entered). A compound cut has both."
+                        }
+                      }
+                    }
+                  }
+                },
+                "flip": {
+                  "type": "string",
+                  "enum": [
+                    "none",
+                    "face",
+                    "edge",
+                    "any"
+                  ],
+                  "default": "none",
+                  "description": "Mitre pairing only: which 180° turns of the part on the bar are allowed, so its angled end can meet a neighbour's. `none` (default — a profiled moulding or one-sided stock), `face` (end for end, the crown or top edge stays up — roof members), `edge` (end for end over the edge — flat stock, frames), `any`."
+                },
+                "depth": {
+                  "type": "number",
+                  "exclusiveMinimum": 0,
+                  "description": "Mitre pairing only: the side of the bar the `angle` of `ends` is seen on. Required with `ends` (a 1D part has no cross-section to take it from). Unit-agnostic: pick one unit (mm, inch, …) for every length in the request and every length in the response is in that same unit. Nothing is converted server-side."
+                },
+                "thickness": {
+                  "type": "number",
+                  "exclusiveMinimum": 0,
+                  "description": "Mitre pairing only: the other side, the one the `bevel` is seen on. Required with `ends`. Unit-agnostic: pick one unit (mm, inch, …) for every length in the request and every length in the response is in that same unit. Nothing is converted server-side."
+                }
+              }
+            },
+            "description": "The lengths to cut, one row per part type (`length`, optional `qty`, `name`, mitred `ends`)."
+          },
+          "stock": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 50,
+            "items": {
+              "type": "object",
+              "required": [
+                "length"
+              ],
+              "properties": {
+                "length": {
+                  "type": "number",
+                  "exclusiveMinimum": 0,
+                  "description": "Bar length. Unit-agnostic: pick one unit (mm, inch, …) for every length in the request and every length in the response is in that same unit. Nothing is converted server-side."
+                },
+                "qty": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "default": 1,
+                  "description": "Bars available. A hard cap only with `options.respectStock`."
+                },
+                "price": {
+                  "type": "number",
+                  "minimum": 0,
+                  "description": "Price per bar."
+                },
+                "material": {
+                  "type": "string",
+                  "maxLength": 200,
+                  "description": "A stock unit of material X serves only material-X parts. Free string; see the part `material`."
+                },
+                "priority": {
+                  "type": "boolean",
+                  "description": "\"Use this stock up first\" — a soft preference ranked BELOW sheet/rod count. Steers which format is spent first without spending more of it."
+                },
+                "meta": {
+                  "type": "object",
+                  "description": "Opaque JSON object (any keys) echoed back VERBATIM on the matching output (a part's meta on every placed piece of it; a stock row's meta on every sheet/rod cut from it). Attach ERP article numbers, order-line ids, customer refs to reconcile the cut plan with your system. Never parsed, never affects placement. Part meta follows its request row: the meta of each row lands on exactly its qty of placed pieces, even when rows share a name; stock meta by stock-row order."
+                }
+              }
+            },
+            "description": "The bar lengths to cut from, one row per length (`length`, optional `qty`, `price`)."
+          },
+          "options": {
+            "type": "object",
+            "description": "The 1D option set is deliberately smaller: there is no `firstCut`, `maxCutStages` or `minimizeRotations`, because none of them means anything on a bar.",
+            "properties": {
+              "kerf": {
+                "type": "number",
+                "minimum": 0,
+                "description": "Blade width. Unit-agnostic: pick one unit (mm, inch, …) for every length in the request and every length in the response is in that same unit. Nothing is converted server-side.",
+                "default": 0
+              },
+              "tolerance": {
+                "type": "number",
+                "minimum": 0,
+                "description": "Accept cuts overshooting by up to this much. Pieces that only fitted thanks to it are counted in `metrics.toleranceAcceptedCount` and noted in `warnings`.",
+                "default": 0
+              },
+              "trim": {
+                "type": "object",
+                "description": "A bar has two ends, not four edges. `start` is the leading trim (it shifts the first part along the bar, so the first `pos` equals `start`); `end` is the trailing trim.",
+                "properties": {
+                  "start": {
+                    "type": "number",
+                    "minimum": 0,
+                    "description": "Unit-agnostic: pick one unit (mm, inch, …) for every length in the request and every length in the response is in that same unit. Nothing is converted server-side."
+                  },
+                  "end": {
+                    "type": "number",
+                    "minimum": 0,
+                    "description": "Unit-agnostic: pick one unit (mm, inch, …) for every length in the request and every length in the response is in that same unit. Nothing is converted server-side."
+                  }
+                }
+              },
+              "minimizeCost": {
+                "type": "boolean",
+                "default": false,
+                "description": "Rank by total bar price."
+              },
+              "respectStock": {
+                "type": "boolean",
+                "default": false,
+                "description": "Treat `qty` as a hard cap."
+              },
+              "minOffcut": {
+                "type": "number",
+                "minimum": 0,
+                "description": "Output filter: report a leftover only if it is at least this long.",
+                "default": 0
+              },
+              "mitrePairing": {
+                "type": "boolean",
+                "default": false,
+                "description": "Pair parts of one section whose facing ends (`parts[].ends`) can share ONE saw cut. Off by default: a request without it is solved exactly as before. On, a plan with pairs is returned only when it ranks strictly better than the unpaired plan by the packer's own ranking (parts placed first, then material — or price with `minimizeCost`); otherwise the unpaired plan comes back. Pairs only, no chains of three or more."
+              }
+            }
+          },
+          "async": {
+            "type": "string",
+            "enum": [
+              "auto"
+            ],
+            "description": "Opt in to answers that may arrive later. With `\"auto\"` a job that finishes within the synchronous time limit still answers 200 with the plan, exactly as without it; a job that would outgrow the limit answers **202** with a `jobId` instead, keeps solving, and its plan is read with `GET /v1/jobs/{id}` (the same poll as engine `max`). The call is billed once, when the plan is written; a solve that fails is not billed. Without this field such a job answers 504 `solve_timeout` with the `jobId` in `details` and is not charged. The official SDKs send it and wait for the job for you."
+          },
+          "engine": {
+            "type": "string",
+            "enum": [
+              "heuristic",
+              "balanced"
+            ],
+            "default": "heuristic",
+            "description": "`max` is not offered here: it is a 2D (and, separately, nesting) tier, and `engine: \"max\"` on this path is a **400** before a call is charged. In 1D `balanced` resolves to the same packer as `heuristic` — the linear packer is already a best-of-multiple-strategies search, so there is no separate balanced mode. The value is accepted and echoed back so a single client can send one engine id for both endpoints."
+          },
+          "include": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "cutPlan",
+                "offcuts",
+                "svg",
+                "csv",
+                "dxf",
+                "labels",
+                "planHash",
+                "pdf",
+                "labelsPdf"
+              ]
+            },
+            "description": "Three kinds of token. NARROWING (`cutPlan`, `offcuts`): omit the field entirely to get both; a present array keeps only the narrowing tokens it lists (an empty array drops both). ADDITIVE EXPORT (`svg`, `csv`, `dxf`): each adds an inline export STRING to the response (`svg` a standalone 2D layout — 2D only, a warning is returned for 1D/wood; `dxf` an R12/AC1009 drawing; `csv` a cut list, RFC 4180 quoted (a part name with a comma or a quote stays one field) and formula-injection-guarded (a name beginning with `=`, `+`, `-`, `@`, TAB or CR is prefixed with an apostrophe so a spreadsheet reads it as text, not a formula — CWE-1236). 2D DATA (`labels`, `planHash`, `pdf`, `labelsPdf`): `labels` adds per-piece label data (`labels[]`, see `Label2D`), `planHash` a 64-hex fingerprint of the plan (the same plan always gives the same hash), `pdf` the cutting-plan PDF and `labelsPdf` the label PDF, both base64-encoded and drawn by the same code as the CutOptim app. These four are 2D only: a 1D or wood request returns a `warnings` entry instead. `pdf` renders at most 500 parts (total quantity); a larger 2D request with `pdf` is a 413 `too_large` with `details.path: \"include\"`. Export and data tokens do not affect narrowing, so `[\"svg\"]` adds svg and — listing no narrowing token — drops cutPlan/offcuts; use `[\"cutPlan\",\"offcuts\",\"svg\"]` to keep everything."
+          }
+        }
+      }
+    },
+    {
+      "name": "optimize_wood",
+      "description": "Metered: one Engine API call. Cut timber parts grouped by cross-section from matching stock lengths. Timber optimization (cross-section-aware 1D). Cut lengths from bars that have a CROSS-SECTION. Unlike `/v1/optimize/1d`, where every bar can serve every part, a 50×150 part can only come out of 50×150 stock — so the job is split by cross-section, each section is matched to its own stock and solved separately, and the response carries both per-section and job-wide totals.\n\nFanning the same job out into several `/v1/optimize/1d` calls is not equivalent: it costs one call per section against your quota, moves the stock matching to your code, and cannot distinguish \"no material of this section\" from \"did not fit\" — which this endpoint reports separately as `unmatched` and `unplaced`.\n\n`sw` and `sh` may be given in either order: 50×100 and 100×50 are the same bar turned over and are matched as one section. The response reports the normalised short/long form.",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "parts",
+          "stock"
+        ],
+        "properties": {
+          "parts": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": [
+                "sw",
+                "sh",
+                "length"
+              ],
+              "description": "A timber part. Same as a 1D part plus the CROSS-SECTION, which decides which stock it can come out of at all.",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "maxLength": 200,
+                  "description": "Optional label. Defaults to `Part <1-based row index>`."
+                },
+                "sw": {
+                  "type": "number",
+                  "exclusiveMinimum": 0,
+                  "description": "One side of the cross-section. ORDER DOES NOT MATTER — 50×100 and 100×50 are the same bar turned over and land in the same section. Unit-agnostic: pick one unit (mm, inch, …) for every length in the request and every length in the response is in that same unit. Nothing is converted server-side."
+                },
+                "sh": {
+                  "type": "number",
+                  "exclusiveMinimum": 0,
+                  "description": "The other side of the cross-section. Unit-agnostic: pick one unit (mm, inch, …) for every length in the request and every length in the response is in that same unit. Nothing is converted server-side."
+                },
+                "length": {
+                  "type": "number",
+                  "exclusiveMinimum": 0,
+                  "description": "Cut length. Unit-agnostic: pick one unit (mm, inch, …) for every length in the request and every length in the response is in that same unit. Nothing is converted server-side."
+                },
+                "qty": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "default": 1,
+                  "description": "How many copies. The sum across all rows must not exceed 2000."
+                },
+                "priority": {
+                  "type": "boolean",
+                  "description": "Must-cut; wins stock when `options.respectStock` caps it. Applied WITHIN the part's own cross-section, since another section's bars could not have yielded it anyway."
+                },
+                "material": {
+                  "type": "string",
+                  "maxLength": 200,
+                  "description": "Material identity — composes WITH the cross-section: two materials at the same 50×50 become two sections (a 50×50 Pine-Treated part cannot come from a 50×50 Pine-Untreated bar). Free string, library-independent. Absent = today's section-only grouping."
+                },
+                "meta": {
+                  "type": "object",
+                  "description": "Opaque JSON object (any keys) echoed back VERBATIM on the matching output (a part's meta on every placed piece of it; a stock row's meta on every sheet/rod cut from it). Attach ERP article numbers, order-line ids, customer refs to reconcile the cut plan with your system. Never parsed, never affects placement. Part meta follows its request row: the meta of each row lands on exactly its qty of placed pieces, even when rows share a name; stock meta by stock-row order."
+                },
+                "ends": {
+                  "type": "object",
+                  "description": "Angled ends (mitre pairing). The `angle` is seen on `sh` AS ENTERED and the `bevel` on `sw`, so send the section the way the angles were measured.",
+                  "properties": {
+                    "start": {
+                      "type": "object",
+                      "required": [
+                        "angle"
+                      ],
+                      "description": "One end cut of a part, in degrees from square (0 = a square end), signed. The part is measured long point to long point (`length` is its overall length). A part whose two end cuts would cross inside its section (shorter than its leads) cannot be made: a 400 `invalid_request` naming `parts[i].ends` says how long it must at least be.",
+                      "properties": {
+                        "angle": {
+                          "type": "number",
+                          "exclusiveMinimum": -90,
+                          "exclusiveMaximum": 90,
+                          "description": "The face angle: the mitre or plumb cut as seen on the `depth` side (wood: on `sh` as entered)."
+                        },
+                        "bevel": {
+                          "type": "number",
+                          "exclusiveMinimum": -90,
+                          "exclusiveMaximum": 90,
+                          "default": 0,
+                          "description": "The edge angle: the bevel as seen on the `thickness` side (wood: on `sw` as entered). A compound cut has both."
+                        }
+                      }
+                    },
+                    "end": {
+                      "type": "object",
+                      "required": [
+                        "angle"
+                      ],
+                      "description": "One end cut of a part, in degrees from square (0 = a square end), signed. The part is measured long point to long point (`length` is its overall length). A part whose two end cuts would cross inside its section (shorter than its leads) cannot be made: a 400 `invalid_request` naming `parts[i].ends` says how long it must at least be.",
+                      "properties": {
+                        "angle": {
+                          "type": "number",
+                          "exclusiveMinimum": -90,
+                          "exclusiveMaximum": 90,
+                          "description": "The face angle: the mitre or plumb cut as seen on the `depth` side (wood: on `sh` as entered)."
+                        },
+                        "bevel": {
+                          "type": "number",
+                          "exclusiveMinimum": -90,
+                          "exclusiveMaximum": 90,
+                          "default": 0,
+                          "description": "The edge angle: the bevel as seen on the `thickness` side (wood: on `sw` as entered). A compound cut has both."
+                        }
+                      }
+                    }
+                  }
+                },
+                "flip": {
+                  "type": "string",
+                  "enum": [
+                    "none",
+                    "face",
+                    "edge",
+                    "any"
+                  ],
+                  "default": "none",
+                  "description": "Mitre pairing only: which 180° turns of the part on the bar are allowed, so its angled end can meet a neighbour's. `none` (default — a profiled moulding or one-sided stock), `face` (end for end, the crown or top edge stays up — roof members), `edge` (end for end over the edge — flat stock, frames), `any`."
+                }
+              }
+            },
+            "description": "The timber parts to cut, one row per part type: cross-section `sw` × `sh`, `length`, optional `qty`."
+          },
+          "stock": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 50,
+            "items": {
+              "type": "object",
+              "required": [
+                "sw",
+                "sh",
+                "length"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "maxLength": 200,
+                  "description": "Optional stock label, echoed back as `sections[].stockName` so a plan can name the material an operator has to fetch."
+                },
+                "sw": {
+                  "type": "number",
+                  "exclusiveMinimum": 0,
+                  "description": "One side of the cross-section (either order). Unit-agnostic: pick one unit (mm, inch, …) for every length in the request and every length in the response is in that same unit. Nothing is converted server-side."
+                },
+                "sh": {
+                  "type": "number",
+                  "exclusiveMinimum": 0,
+                  "description": "The other side of the cross-section. Unit-agnostic: pick one unit (mm, inch, …) for every length in the request and every length in the response is in that same unit. Nothing is converted server-side."
+                },
+                "length": {
+                  "type": "number",
+                  "exclusiveMinimum": 0,
+                  "description": "Bar length. Unit-agnostic: pick one unit (mm, inch, …) for every length in the request and every length in the response is in that same unit. Nothing is converted server-side."
+                },
+                "qty": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "default": 1,
+                  "description": "Bars available. A hard cap only with `options.respectStock`."
+                },
+                "price": {
+                  "type": "number",
+                  "minimum": 0,
+                  "description": "Price per bar."
+                },
+                "material": {
+                  "type": "string",
+                  "maxLength": 200,
+                  "description": "A stock unit of material X serves only material-X parts. Free string; see the part `material`."
+                },
+                "priority": {
+                  "type": "boolean",
+                  "description": "\"Use this stock up first\" — a soft preference ranked BELOW sheet/rod count. Steers which format is spent first without spending more of it."
+                },
+                "meta": {
+                  "type": "object",
+                  "description": "Opaque JSON object (any keys) echoed back VERBATIM on the matching output (a part's meta on every placed piece of it; a stock row's meta on every sheet/rod cut from it). Attach ERP article numbers, order-line ids, customer refs to reconcile the cut plan with your system. Never parsed, never affects placement. Part meta follows its request row: the meta of each row lands on exactly its qty of placed pieces, even when rows share a name; stock meta by stock-row order."
+                }
+              }
+            },
+            "description": "At most 50 rows. Since every cross-section needs at least one stock row, this is also the practical ceiling on cross-sections in a single job; a wider catalogue should be split into several requests."
+          },
+          "options": {
+            "type": "object",
+            "description": "Identical to `Options1D` — a cross-section changes what fits, not how a bar is cut.",
+            "properties": {
+              "kerf": {
+                "type": "number",
+                "minimum": 0,
+                "description": "Blade width. Unit-agnostic: pick one unit (mm, inch, …) for every length in the request and every length in the response is in that same unit. Nothing is converted server-side.",
+                "default": 0
+              },
+              "tolerance": {
+                "type": "number",
+                "minimum": 0,
+                "description": "Accept cuts overshooting by up to this much. Counted in `metrics.toleranceAcceptedCount` and noted in `warnings`.",
+                "default": 0
+              },
+              "trim": {
+                "type": "object",
+                "description": "A bar has two ends, not four edges. `start` is the leading trim (it shifts the first part along the bar, so the first `pos` equals `start`); `end` is the trailing trim.",
+                "properties": {
+                  "start": {
+                    "type": "number",
+                    "minimum": 0,
+                    "description": "Unit-agnostic: pick one unit (mm, inch, …) for every length in the request and every length in the response is in that same unit. Nothing is converted server-side."
+                  },
+                  "end": {
+                    "type": "number",
+                    "minimum": 0,
+                    "description": "Unit-agnostic: pick one unit (mm, inch, …) for every length in the request and every length in the response is in that same unit. Nothing is converted server-side."
+                  }
+                }
+              },
+              "minimizeCost": {
+                "type": "boolean",
+                "default": false,
+                "description": "Rank by total bar price."
+              },
+              "respectStock": {
+                "type": "boolean",
+                "default": false,
+                "description": "Treat `qty` as a hard cap. Applied PER CROSS-SECTION."
+              },
+              "minOffcut": {
+                "type": "number",
+                "minimum": 0,
+                "description": "Output filter: report a leftover only if it is at least this long.",
+                "default": 0
+              },
+              "mitrePairing": {
+                "type": "boolean",
+                "default": false,
+                "description": "Pair parts of one section whose facing ends (`parts[].ends`) can share ONE saw cut. Off by default: a request without it is solved exactly as before. On, a plan with pairs is returned only when it ranks strictly better than the unpaired plan by the packer's own ranking (parts placed first, then material — or price with `minimizeCost`); otherwise the unpaired plan comes back. Pairs only, no chains of three or more."
+              }
+            }
+          },
+          "async": {
+            "type": "string",
+            "enum": [
+              "auto"
+            ],
+            "description": "Opt in to answers that may arrive later. With `\"auto\"` a job that finishes within the synchronous time limit still answers 200 with the plan, exactly as without it; a job that would outgrow the limit answers **202** with a `jobId` instead, keeps solving, and its plan is read with `GET /v1/jobs/{id}` (the same poll as engine `max`). The call is billed once, when the plan is written; a solve that fails is not billed. Without this field such a job answers 504 `solve_timeout` with the `jobId` in `details` and is not charged. The official SDKs send it and wait for the job for you."
+          },
+          "engine": {
+            "type": "string",
+            "enum": [
+              "heuristic",
+              "balanced"
+            ],
+            "default": "heuristic",
+            "description": "As in 1D, `max` is not offered here (a **400** before a call is charged). `balanced` resolves to the same packer as `heuristic`: within a section a timber job is a length problem, and free nesting has nothing to offer it. The value is accepted, echoed back, and a warning states which packer actually ran."
+          },
+          "include": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "cutPlan",
+                "offcuts",
+                "svg",
+                "csv",
+                "dxf",
+                "labels",
+                "planHash",
+                "pdf",
+                "labelsPdf"
+              ]
+            },
+            "description": "Three kinds of token. NARROWING (`cutPlan`, `offcuts`): omit the field entirely to get both; a present array keeps only the narrowing tokens it lists (an empty array drops both). ADDITIVE EXPORT (`svg`, `csv`, `dxf`): each adds an inline export STRING to the response (`svg` a standalone 2D layout — 2D only, a warning is returned for 1D/wood; `dxf` an R12/AC1009 drawing; `csv` a cut list, RFC 4180 quoted (a part name with a comma or a quote stays one field) and formula-injection-guarded (a name beginning with `=`, `+`, `-`, `@`, TAB or CR is prefixed with an apostrophe so a spreadsheet reads it as text, not a formula — CWE-1236). 2D DATA (`labels`, `planHash`, `pdf`, `labelsPdf`): `labels` adds per-piece label data (`labels[]`, see `Label2D`), `planHash` a 64-hex fingerprint of the plan (the same plan always gives the same hash), `pdf` the cutting-plan PDF and `labelsPdf` the label PDF, both base64-encoded and drawn by the same code as the CutOptim app. These four are 2D only: a 1D or wood request returns a `warnings` entry instead. `pdf` renders at most 500 parts (total quantity); a larger 2D request with `pdf` is a 413 `too_large` with `details.path: \"include\"`. Export and data tokens do not affect narrowing, so `[\"svg\"]` adds svg and — listing no narrowing token — drops cutPlan/offcuts; use `[\"cutPlan\",\"offcuts\",\"svg\"]` to keep everything."
+          }
+        }
+      }
+    },
+    {
+      "name": "optimize_nest",
+      "description": "Metered: one Engine API call (needs an API key; not available with the demo key). Nest free-form polygon parts on sheets. True-shape (irregular / polygon) nesting. Pack ARBITRARY POLYGONS onto fixed sheets, letting parts interlock into each other's concave pockets — an L-bracket, a gasket, a laser-cut profile. This is a different class from the rectangular modes: a part is an outline (`polygon`, optional interior `holes`), not a width×height, so a bounding-box packer's notch-air is reclaimed. On a representative 272-part job it uses 6 sheets where the same parts by bounding box need 9 (−33 % material).\n\nTwo things the rectangular API cannot express come for free here: per-sheet EXCLUSION ZONES (`stock[].exclusions` — a defect, a clamp footprint, a pre-printed area; a `quality`-0 zone is a no-go region for any part), and true-shape holes. Material partition (`material`) and the opaque `meta` passthrough work exactly as on the other modes.\n\n⚠️ `density` is the placed POLYGON area over used sheet area — the honest fill, with concave pockets counted as empty. It is NOT comparable to a rectangular packer's `yieldPct` (which counts each bounding box as solid and so reads higher for a worse result); the cross-comparable metric is `sheetCount` on the same parts.\n\nA placed part carries the rigid transform (`rotation` in degrees, then `x`/`y` translation), NOT a re-emitted polygon: your input outline plus that transform reconstructs the placement exactly. Deterministic (a pinned seed); set `options.seed` to reproduce a layout.\n\nEngines: `lbf` (default) is synchronous and instant. Besides its own pass it tries the parts restricted to the right angles they allow, and their bounding boxes packed by an exact rectangle packer — which finds grids a sampling search misses (three 500-wide parts on a 1500-wide sheet at zero spacing) — and keeps whichever ranks best; on a tie, the plan that fills its sheets front to back, then the one with fewer parts off the right angles. `max` is ASYNCHRONOUS: the call answers **202** with a `jobId`, and you poll `GET /v1/jobs/{id}` for the result — the same response shape, with `engine: \"max\"`. It runs the `lbf` pass first and then a time-budgeted search (`options.timeBudgetMs`, default 60 s, 10–180 s) that fills sheets one at a time looking for a layout with FEWER sheets; it never returns more sheets than `lbf` would — nor a plan that ranks worse by the sheet-size ranking below — and says in `warnings` when it kept the `lbf` layout. Several sheet sizes per material and `respectStock` are modelled; a `polygon` sheet or `exclusions` (which its strip search cannot model) are served by the `lbf` pass inside the job, with a warning — never refused. `sparrow` is a deprecated alias of `max`.\n\n**Sheet sizes and cost.** With two or more stock rows for a material, both engines compare arrangements (your order, each row alone, cheapest-first) and then re-nest each sheet — the least-filled first — onto the cheaper or smaller rows, so a plan may MIX sizes (e.g. two large sheets and a small last one). Ranking: most must-cut (`priority`) parts placed → most parts placed → (with `minimizeCost`) lowest total price → least total sheet area → fewest sheets. `sheets[].stock` and `stockUsage[]` say which row each sheet came from. **Used area.** `sheets[].usedWidth` / `usedHeight` are the farthest extent of any placed part from the sheet origin (the corner the parts are packed into), `usedArea` their product, and `stockUsage[].usedArea` the sum per row — the numbers an ERP needs to charge a partial sheet (full sheet, a horizontal or vertical cut, or the bounding box; the charging rule stays yours). Both engines compact the least-filled sheet of each material: its parts are re-nested on the same sheet with rotation SUBSETS of what each part allows ({0,180}, {0,90,180,270}, a single orientation — never a new angle) and the variant with the smallest used area is kept; with `max` that sheet is then also re-packed by the search itself, along the sheet's height and (on a one-sheet plan) along its width, and the tighter layout is kept under the same rule. Sheet count, sizes, price and placed parts never change. `options.compact: false` returns the uncompacted layout, and `options.compactFor` (`box` · `horizontal` · `vertical`) picks the measure to minimise when you charge a full-width or full-height strip. `metrics.cutLength` / `sheets[].cutLength` is the summed perimeter of the placed parts' outlines and holes; `pierces` counts one per closed contour (no common-line cutting, lead-ins or micro-joints — your CAM adds those).\n\n**Parts from CAD files.** A part may carry `source` — an SVG or DXF document — instead of `polygon` coordinates; the server reads the outline (and its holes) out of the file with the same parser the CutOptim app uses. The file replaces ONLY the geometry, and the response then carries an `imported` block saying what the files contributed. One file describes ONE part; `POST /v1/import/nest` splits a multi-part drawing first. Nothing is stored: the bytes are parsed in memory and gone with the response. Because a drawing is far larger than a JSON parts list, this path accepts a **10 MB body** (the rectangular endpoints keep 1 MB), with per-file and per-request character caps on `source.content`.",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "parts",
+          "stock"
+        ],
+        "properties": {
+          "parts": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "description": "A part. Give its outline as `polygon` coordinates OR as a `source` file — exactly one of the two (both, or neither, is a 400).",
+              "oneOf": [
+                {
+                  "required": [
+                    "polygon"
+                  ]
+                },
+                {
+                  "required": [
+                    "source"
+                  ]
+                }
+              ],
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "maxLength": 200,
+                  "description": "Optional label, echoed on every placement. Defaults to `source.filename` without its extension when a file was given, otherwise `Part <1-based row index>`."
+                },
+                "polygon": {
+                  "type": "array",
+                  "description": "An ordered ring of ≥3 vertices. May be given closed (first == last) or open; the DTO layer normalises. Winding order is not required — it is oriented internally.",
+                  "items": {
+                    "type": "array",
+                    "description": "An [x, y] vertex, in the caller's chosen unit.",
+                    "items": {
+                      "type": "number"
+                    },
+                    "minItems": 2,
+                    "maxItems": 2
+                  },
+                  "minItems": 3
+                },
+                "source": {
+                  "type": "object",
+                  "required": [
+                    "content"
+                  ],
+                  "description": "Read this part's outline out of an SVG or DXF FILE instead of listing coordinates. The same parser the CutOptim app uses for its Nesting mode runs server-side, so a part library that already exists as CAD files needs no path/arc flattener of your own.\n\n**The file replaces ONLY the geometry.** `qty`, `material`, `allowedRotations`, `minQuality`, `priority` and `meta` behave exactly as they do on a `polygon` part.\n\n**Exactly ONE outline per source.** Holes are folded in automatically (a ring contained in another becomes a hole), so a typical single-part drawing — outline plus bolt holes — is one outline. A file describing several separate parts is a 400 that names `POST /v1/import/nest`, which splits it.\n\n**Nothing is stored.** The bytes exist only as this request body, are parsed in memory and are gone when the response is written: no disk, no database, no temp file, no log line. There is nothing to delete and nothing retained.\n\n**Units are reported, never applied.** A DXF may declare `$INSUNITS`; it comes back in `imported.units` and several disagreeing files produce a warning, but coordinates pass through verbatim — this API converts nothing (see the unit rule on `/v1/optimize/nest`).",
+                  "properties": {
+                    "content": {
+                      "type": "string",
+                      "maxLength": 4000000,
+                      "description": "The file TEXT — not base64, not a URL, not a multipart upload: both formats are text documents, so they travel inside the JSON body like any other field. Max 4,000,000 characters per file and 8,000,000 across the request; over either is a 413. ⚠️ The HTTP body cap differs by path: 10 MB on `/v1/optimize/nest` and `/v1/import/nest`, but the DEFAULT 1 MB on `/v1/validate/nest`, which is the only nest path that needs no key. A source body over 1 MB therefore validates on the optimize path, not the free one."
+                    },
+                    "format": {
+                      "type": "string",
+                      "enum": [
+                        "svg",
+                        "dxf"
+                      ],
+                      "description": "Omit to sniff the content (an `<svg` tag ⇒ svg, otherwise dxf). An explicit format always wins — including over a misleading `filename` extension."
+                    },
+                    "filename": {
+                      "type": "string",
+                      "maxLength": 200,
+                      "description": "Used for format detection AND as the part name when the row has no `name` (extension stripped). Never touches a filesystem."
+                    },
+                    "flattenTolerance": {
+                      "type": "number",
+                      "exclusiveMinimum": 0,
+                      "default": 0.2,
+                      "description": "Curve / arc flattening tolerance, in the FILE's own coordinate unit. Larger = fewer vertices. This is the lever when a dense outline trips the 2,000-vertex per-ring cap."
+                    }
+                  }
+                },
+                "holes": {
+                  "type": "array",
+                  "items": {
+                    "type": "array",
+                    "description": "An ordered ring of ≥3 vertices. May be given closed (first == last) or open; the DTO layer normalises. Winding order is not required — it is oriented internally.",
+                    "items": {
+                      "type": "array",
+                      "description": "An [x, y] vertex, in the caller's chosen unit.",
+                      "items": {
+                        "type": "number"
+                      },
+                      "minItems": 2,
+                      "maxItems": 2
+                    },
+                    "minItems": 3
+                  },
+                  "description": "Optional interior holes — a part with a cut-out. NOT accepted together with `source`: the file already carries its own holes."
+                },
+                "qty": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "default": 1,
+                  "description": "Copies to place."
+                },
+                "allowedRotations": {
+                  "oneOf": [
+                    {
+                      "type": "array",
+                      "items": {
+                        "type": "number"
+                      }
+                    },
+                    {
+                      "type": "string",
+                      "enum": [
+                        "continuous"
+                      ]
+                    }
+                  ],
+                  "description": "Allowed rotations in DEGREES (e.g. [0,90,180,270]). Omit or \"continuous\" for free rotation."
+                },
+                "minQuality": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "default": 1,
+                  "description": "The part may only be placed where sheet quality ≥ this. Default 1 → it avoids every quality-0 exclusion zone. Raise it to keep the part off inferior-but-not-forbidden zones too."
+                },
+                "priority": {
+                  "type": "boolean",
+                  "description": "Must-cut. With `options.respectStock` (a capped supply, where not every part may fit) these parts are placed first, so a plain part never takes the sheet space a must-cut part needs, and every plan comparison ranks the plan that keeps more of them ahead. Honoured by both engines. Without `respectStock` every part that fits is placed anyway, so the flag changes nothing. A must-cut part that fits no sheet is still listed in `unplaced`."
+                },
+                "material": {
+                  "type": "string",
+                  "maxLength": 200,
+                  "description": "A part of material X nests only on material-X sheets; the job is partitioned by material."
+                },
+                "meta": {
+                  "type": "object",
+                  "description": "Opaque JSON (your ERP ids), echoed verbatim on every placed copy. Never affects the layout."
+                }
+              }
+            },
+            "description": "One or more parts to nest, one NestPart per row."
+          },
+          "stock": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "description": "A stock sheet type: either a rectangle (w & h) OR an arbitrary polygon outline (an off-cut remnant). Exactly one of {w & h} | polygon.",
+              "properties": {
+                "w": {
+                  "type": "number",
+                  "exclusiveMinimum": 0,
+                  "description": "Rectangular sheet size. Give w & h OR polygon, not both."
+                },
+                "h": {
+                  "type": "number",
+                  "exclusiveMinimum": 0,
+                  "description": "Rectangular sheet size. Give w & h OR polygon, not both."
+                },
+                "polygon": {
+                  "type": "array",
+                  "description": "Arbitrary sheet outline (an off-cut remnant, a non-rectangular board) instead of w & h.",
+                  "items": {
+                    "type": "array",
+                    "description": "An [x, y] vertex, in the caller's chosen unit.",
+                    "items": {
+                      "type": "number"
+                    },
+                    "minItems": 2,
+                    "maxItems": 2
+                  },
+                  "minItems": 3
+                },
+                "qty": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "default": 1,
+                  "description": "A HARD cap only when options.respectStock is true."
+                },
+                "price": {
+                  "type": "number",
+                  "minimum": 0,
+                  "description": "Per-sheet price. Summed into `totalPrice` / `stockUsage[].totalPrice`, and the ranking key of `options.minimizeCost`."
+                },
+                "cost": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "description": "Integer relative per-sheet cost, used by `options.minimizeCost` for a row that has no `price` (e.g. when price is not money)."
+                },
+                "material": {
+                  "type": "string",
+                  "maxLength": 200,
+                  "description": "This sheet serves only material-matching parts."
+                },
+                "exclusions": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "polygon"
+                    ],
+                    "description": "An exclusion / inferior-quality zone ON a sheet: a defect, a clamp footprint, a pre-printed area — something the rectangular API cannot express.",
+                    "properties": {
+                      "polygon": {
+                        "type": "array",
+                        "description": "An ordered ring of ≥3 vertices. May be given closed (first == last) or open; the DTO layer normalises. Winding order is not required — it is oriented internally.",
+                        "items": {
+                          "type": "array",
+                          "description": "An [x, y] vertex, in the caller's chosen unit.",
+                          "items": {
+                            "type": "number"
+                          },
+                          "minItems": 2,
+                          "maxItems": 2
+                        },
+                        "minItems": 3
+                      },
+                      "quality": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "default": 0,
+                        "description": "A zone of quality Q is a hazard for any part whose `minQuality` exceeds Q. Default 0 = hard-forbidden for any part with the default `minQuality` of 1."
+                      }
+                    }
+                  },
+                  "description": "Per-sheet excluded / inferior zones: a defect, a clamp footprint, a pre-printed area — what the rectangular API cannot express."
+                },
+                "meta": {
+                  "type": "object",
+                  "description": "Echoed on every sheet cut from this stock row."
+                },
+                "roll": {
+                  "type": "boolean",
+                  "description": "Marker mode: this row is a ROLL of width `w` and free length (fabric, leather, film, any roll good). Give `w` only — no `h`, `polygon` or `exclusions` — and make it the only stock row. The answer is ONE sheet `w` wide whose `h` is the shortest length found (also `metrics.length`), edge gap included at both ends. Both engines: `lbf` answers synchronously; `max` (async) starts from that marker and spends `options.timeBudgetMs` on a strip search that may shorten it, never lengthen it."
+                },
+                "maxLength": {
+                  "type": "number",
+                  "exclusiveMinimum": 0,
+                  "maximum": 200000,
+                  "description": "With `roll` only: the longest the marker may be (at most 200000). Parts that do not fit within it are returned in `unplaced` — a roll never becomes a second sheet. Omit it and the length is unbounded up to 200000."
+                }
+              }
+            },
+            "description": "One or more sheet types, one NestStock per row."
+          },
+          "options": {
+            "type": "object",
+            "description": "Solve options. All optional.",
+            "properties": {
+              "minSeparation": {
+                "type": "number",
+                "minimum": 0,
+                "description": "Minimum clearance between parts and between a part and any hazard (sheet edge / zone). Use for kerf / beam / torch width. Default 0. The sheet-edge part can be set separately with `edgeClearance`."
+              },
+              "edgeClearance": {
+                "type": "number",
+                "minimum": 0,
+                "description": "Minimum distance between any part and the SHEET EDGE, independent of `minSeparation` (e.g. 5 between parts, 0 or 10 at the edge). Omit it and the edge keeps `minSeparation` (the previous behaviour, unchanged). Both engines. Rectangular sheets only — with a `polygon` sheet it is a 400, as is a value that leaves no room on a sheet (the sheet minus twice `edgeClearance − minSeparation` must stay positive). Exclusion zones keep `minSeparation`, like parts."
+              },
+              "timeBudgetMs": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Search budget for engine `max`, in milliseconds (default 60000; clamped to 10000–180000, and a clamp is reported in `warnings`). Ignored by `lbf` (no search budget). The job finishes about 1–2 s after the budget, plus any time spent queued; for a job of a few dozen parts 15000 is usually enough. Poll `GET /v1/jobs/{id}` every 2–3 s — polling costs no quota."
+              },
+              "seed": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Determinism: fixed seed → reproducible layout. Omit and the server pins a fixed default, so the response stays reproducible."
+              },
+              "minimizeCost": {
+                "type": "boolean",
+                "description": "How engine `lbf` chooses the sheet size when a material has two or more stock rows. It always tries the rows in your order, each row on its own and a cheapest-first order, and keeps the best, so the result does not depend on the order you list them in. Ranking: most must-cut (`parts[].priority`) parts placed → most parts placed → (with `minimizeCost`) lowest total price → least total sheet area → fewest sheets. `minimizeCost` ranks by `price` (or `cost` when a row has no price) only when EVERY row of that material carries one; otherwise it falls back to sheet area and says so in `warnings`. Since 2026-09-22 (F3) the plan may also MIX sizes within a material: every sheet, least-filled first, is re-nested onto the cheaper or smaller rows and replaced when the whole plan ranks better — typically the half-empty last sheet moves to a smaller size. Engine `max` uses the same ranking to decide whether its search result replaces the `lbf` plan."
+              },
+              "respectStock": {
+                "type": "boolean",
+                "description": "Treat each stock qty as a hard cap (both engines; the mixed-size re-nest never uses more sheets of a row than its qty)."
+              },
+              "simplifyTolerance": {
+                "type": "number",
+                "minimum": 0,
+                "description": "Polygon simplification tolerance (max area deviation as a fraction). Speeds up dense DXF outlines with hundreds of vertices. 0 disables."
+              },
+              "compact": {
+                "type": "boolean",
+                "default": true,
+                "description": "Compact the least-filled sheet of each material (both engines, default on). After the plan is final, that sheet's parts are re-nested on the same sheet with rotation SUBSETS of what each part allows — {0,180}, {0,90,180,270} and a single orientation, intersected with a discrete `allowedRotations`, never a new angle — and the variant with the smallest used area (`sheets[].usedWidth × usedHeight`) is kept. With engine `max` the sheet (when it holds two or more parts) is then also re-packed by the strip search itself — along the sheet's height and, on a one-sheet plan, also along its width; a few seconds on top of the search budget, under a hard time limit — and the result replaces the sheet only when it is strictly smaller under `compactFor` and keeps the spacing and the edge clearance. Sheet count, sizes, price and placed parts are unchanged by construction. Runs within a work budget (a very full last sheet may be left as it is). `false` returns the uncompacted layout."
+              },
+              "compactFor": {
+                "type": "string",
+                "enum": [
+                  "box",
+                  "horizontal",
+                  "vertical"
+                ],
+                "default": "box",
+                "description": "Which used measure the compaction minimises — match it to how you charge a partial sheet. `box` (default): the smallest used bounding area (`usedArea`). `horizontal`: the lowest `usedHeight`, for charging a strip across the full sheet width. `vertical`: the smallest `usedWidth`, for charging a strip over the full sheet height. Ties fall back to the used area; the strip modes also try every copy turned a quarter (90° or 270°, where `allowedRotations` permits it). It only changes which compacted layout is kept: sheet count, sizes, price and placed parts never change, and the result is never worse than the uncompacted layout on that measure. Ignored with `compact: false`."
+              }
+            }
+          },
+          "engine": {
+            "type": "string",
+            "enum": [
+              "lbf",
+              "max",
+              "sparrow"
+            ],
+            "default": "lbf",
+            "description": "`lbf` (default) is single-pass, synchronous and instant. `max` is ASYNCHRONOUS: 202 + poll `GET /v1/jobs/{id}`; it runs `lbf` first, then a time-budgeted search that fills sheets one at a time looking for FEWER sheets, and never returns more than `lbf`, nor a plan that ranks worse (price with `minimizeCost`, otherwise sheet area). It accepts several sheet sizes per material and `respectStock`; a `polygon` sheet or exclusion zones are served by `lbf` inside the job, with a warning. `sparrow` is a deprecated alias of `max`."
+          },
+          "include": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "svg",
+                "dxf"
+              ]
+            },
+            "description": "Additive inline export of the achieved layout. `svg` returns a self-contained, styled `<svg>` string (one titled band per sheet, parts drawn as filled polygons with holes, exclusion zones hatched); `dxf` returns an R12 document (closed `POLYLINE`/`VERTEX` outlines on STOCK/PARTS/HOLES/ZONES layers, part names on LABELS). Both are unit-agnostic, exactly like the request coordinates. The geometry in `sheets[]` is returned either way."
+          }
+        }
+      }
+    },
+    {
+      "name": "validate_2d",
+      "description": "Free, no key needed: checks a 2D request without solving it. Same arguments as optimize_2d (field descriptions there). Validate a 2D request — free, no key, no quota, no solve. Schema-validate the SAME body `/v1/optimize/2d` takes, WITHOUT solving or spending a call. 200 `{valid:true, warnings}` (warnings flag parts that fit no stock — an approximate, solve-free probe), or 400 with the exact bad field path. Open like `/v1/health`: validate payloads during integration before you even have a key. The engine verdict matches the optimize path exactly, `engine: \"max\"` included: a body this endpoint accepts is one `/v1/optimize/2d` will accept, and one it refuses (400 for an option the max tier cannot model, 503 where that tier is not enabled) is refused there too.",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "parts",
+          "stock"
+        ],
+        "properties": {
+          "parts": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": [
+                "w",
+                "h"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                "w": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "h": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "qty": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "default": 1
+                },
+                "rotatable": {
+                  "type": "boolean",
+                  "default": true
+                },
+                "grain": {
+                  "type": "string",
+                  "enum": [
+                    "w",
+                    "h"
+                  ]
+                },
+                "grainGroup": {
+                  "type": "string",
+                  "maxLength": 200,
+                  "deprecated": true
+                },
+                "priority": {
+                  "type": "boolean"
+                },
+                "edgeBanding": {
+                  "type": "object",
+                  "properties": {
+                    "top": {
+                      "type": "string",
+                      "maxLength": 200
+                    },
+                    "right": {
+                      "type": "string",
+                      "maxLength": 200
+                    },
+                    "bottom": {
+                      "type": "string",
+                      "maxLength": 200
+                    },
+                    "left": {
+                      "type": "string",
+                      "maxLength": 200
+                    }
+                  }
+                },
+                "material": {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                "meta": {
+                  "type": "object"
+                },
+                "id": {},
+                "qr": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 300
+                },
+                "qrs": {
+                  "type": "array",
+                  "minItems": 1,
+                  "maxItems": 2000,
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 300
+                  }
+                }
+              }
+            },
+            "description": "The rectangular parts to cut, one row per part type (`w`, `h`, optional `qty`, `name`, grain, edge banding)."
+          },
+          "stock": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 50,
+            "items": {
+              "type": "object",
+              "required": [
+                "w",
+                "h"
+              ],
+              "properties": {
+                "w": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "h": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "qty": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "default": 1
+                },
+                "price": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "material": {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                "priority": {
+                  "type": "boolean"
+                },
+                "grain": {
+                  "type": "string",
+                  "enum": [
+                    "w",
+                    "h"
+                  ]
+                },
+                "meta": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The sheet sizes to cut from, one row per size (`w`, `h`, optional `qty`, `price`)."
+          },
+          "options": {
+            "type": "object",
+            "properties": {
+              "kerf": {
+                "type": "number",
+                "minimum": 0,
+                "default": 0
+              },
+              "tolerance": {
+                "type": "number",
+                "minimum": 0,
+                "default": 0
+              },
+              "trim": {
+                "type": "object",
+                "properties": {
+                  "left": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "right": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "top": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "bottom": {
+                    "type": "number",
+                    "minimum": 0
+                  }
+                }
+              },
+              "firstCut": {
+                "type": "string",
+                "enum": [
+                  "auto",
+                  "horizontal",
+                  "vertical"
+                ],
+                "default": "auto"
+              },
+              "minimizeCost": {
+                "type": "boolean",
+                "default": false
+              },
+              "respectStock": {
+                "type": "boolean",
+                "default": false
+              },
+              "minOffcut": {
+                "type": "number",
+                "minimum": 0,
+                "default": 0
+              },
+              "maxCutStages": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 1
+              },
+              "minimizeRotations": {
+                "type": "boolean",
+                "default": false
+              },
+              "effort": {
+                "type": "string",
+                "enum": [
+                  "fast",
+                  "balanced"
+                ],
+                "default": "balanced"
+              },
+              "setOutlines": {
+                "default": true
+              },
+              "labels": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "format": {
+                    "type": "string",
+                    "enum": [
+                      "sheet",
+                      "roll",
+                      "apli-03056",
+                      "brother-dk-11201"
+                    ],
+                    "default": "sheet"
+                  },
+                  "width": {
+                    "type": "number",
+                    "minimum": 20,
+                    "maximum": 300,
+                    "default": 100
+                  },
+                  "height": {
+                    "type": "number",
+                    "minimum": 15,
+                    "maximum": 300,
+                    "default": 40
+                  },
+                  "offset": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "x": {
+                        "type": "number",
+                        "minimum": -20,
+                        "maximum": 20,
+                        "default": 0
+                      },
+                      "y": {
+                        "type": "number",
+                        "minimum": -20,
+                        "maximum": 20,
+                        "default": 0
+                      }
+                    }
+                  },
+                  "dimSize": {
+                    "type": "string",
+                    "enum": [
+                      "normal",
+                      "large",
+                      "xl"
+                    ],
+                    "default": "normal"
+                  },
+                  "partNo": {
+                    "type": "boolean",
+                    "default": false
+                  },
+                  "order": {
+                    "type": "string",
+                    "enum": [
+                      "input",
+                      "cut"
+                    ],
+                    "default": "input"
+                  },
+                  "stages": {
+                    "type": "array",
+                    "maxItems": 6,
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 6
+                    }
+                  },
+                  "stageWords": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "rc": {
+                        "type": "string",
+                        "maxLength": 6
+                      },
+                      "c2s": {
+                        "type": "string",
+                        "maxLength": 6
+                      },
+                      "eb": {
+                        "type": "string",
+                        "maxLength": 6
+                      },
+                      "s": {
+                        "type": "string",
+                        "maxLength": 6
+                      },
+                      "d": {
+                        "type": "string",
+                        "maxLength": 6
+                      }
+                    }
+                  },
+                  "factoryEdges": {
+                    "type": "boolean",
+                    "default": false
+                  },
+                  "hiddenFaceHint": {
+                    "type": "boolean",
+                    "default": false
+                  },
+                  "parts": {
+                    "type": "array",
+                    "maxItems": 500,
+                    "items": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 999999
+                    }
+                  }
+                }
+              }
+            },
+            "description": "Kerf, trim, first-cut direction, cost and stock rules, effort and label output; every field is optional."
+          },
+          "async": {
+            "type": "string",
+            "enum": [
+              "auto"
+            ],
+            "description": "Opt in to answers that may arrive later. With `\"auto\"` a job that finishes within the synchronous time limit still answers 200 with the plan, exactly as without it; a job that would outgrow the limit answers **202** with a `jobId` instead, keeps solving, and its plan is read with `GET /v1/jobs/{id}` (the same poll as engine `max`). The call is billed once, when the plan is written; a solve that fails is not billed. Without this field such a job answers 504 `solve_timeout` with the `jobId` in `details` and is not charged. The official SDKs send it and wait for the job for you."
+          },
+          "engine": {
+            "type": "string",
+            "enum": [
+              "heuristic",
+              "balanced",
+              "max"
+            ],
+            "default": "heuristic",
+            "description": "Which optimizer to run. `heuristic` is the guillotine multi-strategy packer: highest yield, every layout edge-to-edge saw-cuttable, always a full `cutPlan`. `balanced` is a MaxRects free-nesting packer: much faster on large jobs for a small yield cost, but its layouts are often not guillotine (`guillotineValid: false`, `cutPlan: null`), and it does not model `tolerance`, `minimizeCost`, `grainGroup`, `maxCutStages` or `minimizeRotations` — set one of those and a string in `warnings` tells you it was ignored. `max` is the ASYNCHRONOUS tree-search tier (2D only): it reaches the proven optimum on far more jobs at the cost of seconds-to-a-minute per solve, so instead of a plan it returns **202** with a `jobId` — poll `GET /v1/jobs/{id}` for the result. Still deterministic and guillotine-valid. Where the tier is not enabled on a deployment, `engine: \"max\"` fails closed with **503**. **What `max` models.** It packs ONE stock format at full sheet size with unlimited supply and a fixed 3-stage guillotine pattern. Anything that would make the returned plan physically WRONG is therefore REFUSED with **400** at submission — before a call is reserved and before you wait for the solve: a second `stock` row, `options.trim`, `options.respectStock`, any `material`, any `grainGroup`, a non-empty `matchedSets` (an empty one is fine). Options that only make the plan less tuned are accepted and listed in `warnings`: `tolerance`, `minimizeCost`, `maxCutStages` (fixed at 3), `minimizeRotations`, `firstCut`, `effort`. A `max` result reports no `offcuts`. Send those jobs to `heuristic`. The default never changes silently."
+          },
+          "include": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "cutPlan",
+                "offcuts",
+                "svg",
+                "csv",
+                "dxf",
+                "labels",
+                "planHash",
+                "pdf",
+                "labelsPdf"
+              ]
+            },
+            "description": "Three kinds of token. NARROWING (`cutPlan`, `offcuts`): omit the field entirely to get both; a present array keeps only the narrowing tokens it lists (an empty array drops both). ADDITIVE EXPORT (`svg`, `csv`, `dxf`): each adds an inline export STRING to the response (`svg` a standalone 2D layout — 2D only, a warning is returned for 1D/wood; `dxf` an R12/AC1009 drawing; `csv` a cut list, RFC 4180 quoted (a part name with a comma or a quote stays one field) and formula-injection-guarded (a name beginning with `=`, `+`, `-`, `@`, TAB or CR is prefixed with an apostrophe so a spreadsheet reads it as text, not a formula — CWE-1236). 2D DATA (`labels`, `planHash`, `pdf`, `labelsPdf`): `labels` adds per-piece label data (`labels[]`, see `Label2D`), `planHash` a 64-hex fingerprint of the plan (the same plan always gives the same hash), `pdf` the cutting-plan PDF and `labelsPdf` the label PDF, both base64-encoded and drawn by the same code as the CutOptim app. These four are 2D only: a 1D or wood request returns a `warnings` entry instead. `pdf` renders at most 500 parts (total quantity); a larger 2D request with `pdf` is a 413 `too_large` with `details.path: \"include\"`. Export and data tokens do not affect narrowing, so `[\"svg\"]` adds svg and — listing no narrowing token — drops cutPlan/offcuts; use `[\"cutPlan\",\"offcuts\",\"svg\"]` to keep everything."
+          },
+          "matchedSets": {
+            "maxItems": 50,
+            "items": {
+              "type": "object",
+              "required": [
+                "id",
+                "layout"
+              ],
+              "properties": {
+                "id": {
+                  "type": [
+                    "string",
+                    "integer"
+                  ],
+                  "maxLength": 64
+                },
+                "name": {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                "qty": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "default": 1
+                },
+                "grain": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "enum": [
+                    "w",
+                    "h",
+                    null
+                  ]
+                },
+                "onMiss": {
+                  "type": "string",
+                  "enum": [
+                    "split",
+                    "unplaced"
+                  ],
+                  "default": "split"
+                },
+                "installGap": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "layout": {
+                  "type": "object",
+                  "required": [
+                    "dir",
+                    "lines"
+                  ],
+                  "properties": {
+                    "dir": {
+                      "type": "string",
+                      "enum": [
+                        "rows",
+                        "cols"
+                      ]
+                    },
+                    "lines": {
+                      "type": "array",
+                      "minItems": 1,
+                      "items": {
+                        "type": "array",
+                        "minItems": 1,
+                        "items": {
+                          "type": [
+                            "string",
+                            "integer"
+                          ]
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "description": "Matched sets (grain matching): groups of parts cut side by side from one piece of board. Send a NON-EMPTY ARRAY of sets (at most 50); members are named by `parts[].id`. Only a non-empty array switches the feature on: absent, `null`, `[]` — and any value that is not an array — is a request without sets, answered exactly as before (no error). With sets the response adds `sheets[].parts[].matchedSet` on every member and a `matchedSets` rollup; `csv` gains `Set` and `Position` columns at the end, `svg` the `matched-sets` frame group, `dxf` the position code on LABELS; `pdf` and `labelsPdf` draw the members as ordinary parts for now (a `warnings` line says so; the set marks are in `sheets[].parts[].matchedSet`, `csv` and `svg`). Engine `max` refuses a non-empty array (400 `details.unsupported`); an empty one is fine. 2D only: the 1D, wood and nest endpoints ignore this field and `parts[].id`."
+          }
+        }
+      }
+    },
+    {
+      "name": "validate_1d",
+      "description": "Free, no key needed: checks a 1D request without solving it. Same arguments as optimize_1d (field descriptions there). Validate a 1D request — free, no key, no quota, no solve. Schema-validate the SAME body `/v1/optimize/1d` takes, WITHOUT solving or spending a call. See `/v1/validate/2d`.",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "parts",
+          "stock"
+        ],
+        "properties": {
+          "parts": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": [
+                "length"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                "length": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "qty": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "default": 1
+                },
+                "priority": {
+                  "type": "boolean"
+                },
+                "material": {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                "meta": {
+                  "type": "object"
+                },
+                "ends": {
+                  "type": "object",
+                  "properties": {
+                    "start": {
+                      "type": "object",
+                      "required": [
+                        "angle"
+                      ],
+                      "properties": {
+                        "angle": {
+                          "type": "number",
+                          "exclusiveMinimum": -90,
+                          "exclusiveMaximum": 90
+                        },
+                        "bevel": {
+                          "type": "number",
+                          "exclusiveMinimum": -90,
+                          "exclusiveMaximum": 90,
+                          "default": 0
+                        }
+                      }
+                    },
+                    "end": {
+                      "type": "object",
+                      "required": [
+                        "angle"
+                      ],
+                      "properties": {
+                        "angle": {
+                          "type": "number",
+                          "exclusiveMinimum": -90,
+                          "exclusiveMaximum": 90
+                        },
+                        "bevel": {
+                          "type": "number",
+                          "exclusiveMinimum": -90,
+                          "exclusiveMaximum": 90,
+                          "default": 0
+                        }
+                      }
+                    }
+                  }
+                },
+                "flip": {
+                  "type": "string",
+                  "enum": [
+                    "none",
+                    "face",
+                    "edge",
+                    "any"
+                  ],
+                  "default": "none"
+                },
+                "depth": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "thickness": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                }
+              }
+            },
+            "description": "The lengths to cut, one row per part type (`length`, optional `qty`, `name`, mitred `ends`)."
+          },
+          "stock": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 50,
+            "items": {
+              "type": "object",
+              "required": [
+                "length"
+              ],
+              "properties": {
+                "length": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "qty": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "default": 1
+                },
+                "price": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "material": {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                "priority": {
+                  "type": "boolean"
+                },
+                "meta": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The bar lengths to cut from, one row per length (`length`, optional `qty`, `price`)."
+          },
+          "options": {
+            "type": "object",
+            "properties": {
+              "kerf": {
+                "type": "number",
+                "minimum": 0,
+                "default": 0
+              },
+              "tolerance": {
+                "type": "number",
+                "minimum": 0,
+                "default": 0
+              },
+              "trim": {
+                "type": "object",
+                "properties": {
+                  "start": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "end": {
+                    "type": "number",
+                    "minimum": 0
+                  }
+                }
+              },
+              "minimizeCost": {
+                "type": "boolean",
+                "default": false
+              },
+              "respectStock": {
+                "type": "boolean",
+                "default": false
+              },
+              "minOffcut": {
+                "type": "number",
+                "minimum": 0,
+                "default": 0
+              },
+              "mitrePairing": {
+                "type": "boolean",
+                "default": false
+              }
+            },
+            "description": "The 1D option set is deliberately smaller: there is no `firstCut`, `maxCutStages` or `minimizeRotations`, because none of them means anything on a bar."
+          },
+          "async": {
+            "type": "string",
+            "enum": [
+              "auto"
+            ],
+            "description": "Opt in to answers that may arrive later. With `\"auto\"` a job that finishes within the synchronous time limit still answers 200 with the plan, exactly as without it; a job that would outgrow the limit answers **202** with a `jobId` instead, keeps solving, and its plan is read with `GET /v1/jobs/{id}` (the same poll as engine `max`). The call is billed once, when the plan is written; a solve that fails is not billed. Without this field such a job answers 504 `solve_timeout` with the `jobId` in `details` and is not charged. The official SDKs send it and wait for the job for you."
+          },
+          "engine": {
+            "type": "string",
+            "enum": [
+              "heuristic",
+              "balanced"
+            ],
+            "default": "heuristic",
+            "description": "`max` is not offered here: it is a 2D (and, separately, nesting) tier, and `engine: \"max\"` on this path is a **400** before a call is charged. In 1D `balanced` resolves to the same packer as `heuristic` — the linear packer is already a best-of-multiple-strategies search, so there is no separate balanced mode. The value is accepted and echoed back so a single client can send one engine id for both endpoints."
+          },
+          "include": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "cutPlan",
+                "offcuts",
+                "svg",
+                "csv",
+                "dxf",
+                "labels",
+                "planHash",
+                "pdf",
+                "labelsPdf"
+              ]
+            },
+            "description": "Three kinds of token. NARROWING (`cutPlan`, `offcuts`): omit the field entirely to get both; a present array keeps only the narrowing tokens it lists (an empty array drops both). ADDITIVE EXPORT (`svg`, `csv`, `dxf`): each adds an inline export STRING to the response (`svg` a standalone 2D layout — 2D only, a warning is returned for 1D/wood; `dxf` an R12/AC1009 drawing; `csv` a cut list, RFC 4180 quoted (a part name with a comma or a quote stays one field) and formula-injection-guarded (a name beginning with `=`, `+`, `-`, `@`, TAB or CR is prefixed with an apostrophe so a spreadsheet reads it as text, not a formula — CWE-1236). 2D DATA (`labels`, `planHash`, `pdf`, `labelsPdf`): `labels` adds per-piece label data (`labels[]`, see `Label2D`), `planHash` a 64-hex fingerprint of the plan (the same plan always gives the same hash), `pdf` the cutting-plan PDF and `labelsPdf` the label PDF, both base64-encoded and drawn by the same code as the CutOptim app. These four are 2D only: a 1D or wood request returns a `warnings` entry instead. `pdf` renders at most 500 parts (total quantity); a larger 2D request with `pdf` is a 413 `too_large` with `details.path: \"include\"`. Export and data tokens do not affect narrowing, so `[\"svg\"]` adds svg and — listing no narrowing token — drops cutPlan/offcuts; use `[\"cutPlan\",\"offcuts\",\"svg\"]` to keep everything."
+          }
+        }
+      }
+    },
+    {
+      "name": "validate_wood",
+      "description": "Free, no key needed: checks a timber request without solving it. Same arguments as optimize_wood (field descriptions there). Validate a wood request — free, no key, no quota, no solve. Schema-validate the SAME body `/v1/optimize/wood` takes, WITHOUT solving or spending a call. Warnings flag parts with no matching-section stock long enough. See `/v1/validate/2d`.",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "parts",
+          "stock"
+        ],
+        "properties": {
+          "parts": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": [
+                "sw",
+                "sh",
+                "length"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                "sw": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "sh": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "length": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "qty": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "default": 1
+                },
+                "priority": {
+                  "type": "boolean"
+                },
+                "material": {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                "meta": {
+                  "type": "object"
+                },
+                "ends": {
+                  "type": "object",
+                  "properties": {
+                    "start": {
+                      "type": "object",
+                      "required": [
+                        "angle"
+                      ],
+                      "properties": {
+                        "angle": {
+                          "type": "number",
+                          "exclusiveMinimum": -90,
+                          "exclusiveMaximum": 90
+                        },
+                        "bevel": {
+                          "type": "number",
+                          "exclusiveMinimum": -90,
+                          "exclusiveMaximum": 90,
+                          "default": 0
+                        }
+                      }
+                    },
+                    "end": {
+                      "type": "object",
+                      "required": [
+                        "angle"
+                      ],
+                      "properties": {
+                        "angle": {
+                          "type": "number",
+                          "exclusiveMinimum": -90,
+                          "exclusiveMaximum": 90
+                        },
+                        "bevel": {
+                          "type": "number",
+                          "exclusiveMinimum": -90,
+                          "exclusiveMaximum": 90,
+                          "default": 0
+                        }
+                      }
+                    }
+                  }
+                },
+                "flip": {
+                  "type": "string",
+                  "enum": [
+                    "none",
+                    "face",
+                    "edge",
+                    "any"
+                  ],
+                  "default": "none"
+                }
+              }
+            },
+            "description": "The timber parts to cut, one row per part type: cross-section `sw` × `sh`, `length`, optional `qty`."
+          },
+          "stock": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 50,
+            "items": {
+              "type": "object",
+              "required": [
+                "sw",
+                "sh",
+                "length"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                "sw": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "sh": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "length": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "qty": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "default": 1
+                },
+                "price": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "material": {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                "priority": {
+                  "type": "boolean"
+                },
+                "meta": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "At most 50 rows. Since every cross-section needs at least one stock row, this is also the practical ceiling on cross-sections in a single job; a wider catalogue should be split into several requests."
+          },
+          "options": {
+            "type": "object",
+            "properties": {
+              "kerf": {
+                "type": "number",
+                "minimum": 0,
+                "default": 0
+              },
+              "tolerance": {
+                "type": "number",
+                "minimum": 0,
+                "default": 0
+              },
+              "trim": {
+                "type": "object",
+                "properties": {
+                  "start": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "end": {
+                    "type": "number",
+                    "minimum": 0
+                  }
+                }
+              },
+              "minimizeCost": {
+                "type": "boolean",
+                "default": false
+              },
+              "respectStock": {
+                "type": "boolean",
+                "default": false
+              },
+              "minOffcut": {
+                "type": "number",
+                "minimum": 0,
+                "default": 0
+              },
+              "mitrePairing": {
+                "type": "boolean",
+                "default": false
+              }
+            },
+            "description": "Identical to `Options1D` — a cross-section changes what fits, not how a bar is cut."
+          },
+          "async": {
+            "type": "string",
+            "enum": [
+              "auto"
+            ],
+            "description": "Opt in to answers that may arrive later. With `\"auto\"` a job that finishes within the synchronous time limit still answers 200 with the plan, exactly as without it; a job that would outgrow the limit answers **202** with a `jobId` instead, keeps solving, and its plan is read with `GET /v1/jobs/{id}` (the same poll as engine `max`). The call is billed once, when the plan is written; a solve that fails is not billed. Without this field such a job answers 504 `solve_timeout` with the `jobId` in `details` and is not charged. The official SDKs send it and wait for the job for you."
+          },
+          "engine": {
+            "type": "string",
+            "enum": [
+              "heuristic",
+              "balanced"
+            ],
+            "default": "heuristic",
+            "description": "As in 1D, `max` is not offered here (a **400** before a call is charged). `balanced` resolves to the same packer as `heuristic`: within a section a timber job is a length problem, and free nesting has nothing to offer it. The value is accepted, echoed back, and a warning states which packer actually ran."
+          },
+          "include": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "cutPlan",
+                "offcuts",
+                "svg",
+                "csv",
+                "dxf",
+                "labels",
+                "planHash",
+                "pdf",
+                "labelsPdf"
+              ]
+            },
+            "description": "Three kinds of token. NARROWING (`cutPlan`, `offcuts`): omit the field entirely to get both; a present array keeps only the narrowing tokens it lists (an empty array drops both). ADDITIVE EXPORT (`svg`, `csv`, `dxf`): each adds an inline export STRING to the response (`svg` a standalone 2D layout — 2D only, a warning is returned for 1D/wood; `dxf` an R12/AC1009 drawing; `csv` a cut list, RFC 4180 quoted (a part name with a comma or a quote stays one field) and formula-injection-guarded (a name beginning with `=`, `+`, `-`, `@`, TAB or CR is prefixed with an apostrophe so a spreadsheet reads it as text, not a formula — CWE-1236). 2D DATA (`labels`, `planHash`, `pdf`, `labelsPdf`): `labels` adds per-piece label data (`labels[]`, see `Label2D`), `planHash` a 64-hex fingerprint of the plan (the same plan always gives the same hash), `pdf` the cutting-plan PDF and `labelsPdf` the label PDF, both base64-encoded and drawn by the same code as the CutOptim app. These four are 2D only: a 1D or wood request returns a `warnings` entry instead. `pdf` renders at most 500 parts (total quantity); a larger 2D request with `pdf` is a 413 `too_large` with `details.path: \"include\"`. Export and data tokens do not affect narrowing, so `[\"svg\"]` adds svg and — listing no narrowing token — drops cutPlan/offcuts; use `[\"cutPlan\",\"offcuts\",\"svg\"]` to keep everything."
+          }
+        }
+      }
+    },
+    {
+      "name": "validate_nest",
+      "description": "Free, no key needed: checks a nesting request without solving it. Same arguments as optimize_nest (field descriptions there). Validate a nest request — free, no key, no quota, no solve. Schema-validate the SAME body `/v1/optimize/nest` takes, WITHOUT solving or spending a call. Reports `engineEnabled` (whether the nesting engine is built into this deployment) and warns about parts whose bounding box fits no stock sheet. For `engine: \"max\"` the verdict matches the optimize path exactly: 400 for anything outside the preview scope, 503 where the async tier is not enabled, and otherwise a warning that the job will be asynchronous. See `/v1/validate/2d`.",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "parts",
+          "stock"
+        ],
+        "properties": {
+          "parts": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "oneOf": [
+                {
+                  "required": [
+                    "polygon"
+                  ]
+                },
+                {
+                  "required": [
+                    "source"
+                  ]
+                }
+              ],
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                "polygon": {
+                  "type": "array",
+                  "items": {
+                    "type": "array",
+                    "items": {
+                      "type": "number"
+                    },
+                    "minItems": 2,
+                    "maxItems": 2
+                  },
+                  "minItems": 3
+                },
+                "source": {
+                  "type": "object",
+                  "required": [
+                    "content"
+                  ],
+                  "properties": {
+                    "content": {
+                      "type": "string",
+                      "maxLength": 4000000
+                    },
+                    "format": {
+                      "type": "string",
+                      "enum": [
+                        "svg",
+                        "dxf"
+                      ]
+                    },
+                    "filename": {
+                      "type": "string",
+                      "maxLength": 200
+                    },
+                    "flattenTolerance": {
+                      "type": "number",
+                      "exclusiveMinimum": 0,
+                      "default": 0.2
+                    }
+                  }
+                },
+                "holes": {
+                  "type": "array",
+                  "items": {
+                    "type": "array",
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "number"
+                      },
+                      "minItems": 2,
+                      "maxItems": 2
+                    },
+                    "minItems": 3
+                  }
+                },
+                "qty": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "default": 1
+                },
+                "allowedRotations": {
+                  "oneOf": [
+                    {
+                      "type": "array",
+                      "items": {
+                        "type": "number"
+                      }
+                    },
+                    {
+                      "type": "string",
+                      "enum": [
+                        "continuous"
+                      ]
+                    }
+                  ]
+                },
+                "minQuality": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "default": 1
+                },
+                "priority": {
+                  "type": "boolean"
+                },
+                "material": {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                "meta": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "One or more parts to nest, one NestPart per row."
+          },
+          "stock": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "properties": {
+                "w": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "h": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "polygon": {
+                  "type": "array",
+                  "items": {
+                    "type": "array",
+                    "items": {
+                      "type": "number"
+                    },
+                    "minItems": 2,
+                    "maxItems": 2
+                  },
+                  "minItems": 3
+                },
+                "qty": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "default": 1
+                },
+                "price": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "cost": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "material": {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                "exclusions": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "polygon"
+                    ],
+                    "properties": {
+                      "polygon": {
+                        "type": "array",
+                        "items": {
+                          "type": "array",
+                          "items": {
+                            "type": "number"
+                          },
+                          "minItems": 2,
+                          "maxItems": 2
+                        },
+                        "minItems": 3
+                      },
+                      "quality": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "default": 0
+                      }
+                    }
+                  }
+                },
+                "meta": {
+                  "type": "object"
+                },
+                "roll": {
+                  "type": "boolean"
+                },
+                "maxLength": {
+                  "type": "number",
+                  "exclusiveMinimum": 0,
+                  "maximum": 200000
+                }
+              }
+            },
+            "description": "One or more sheet types, one NestStock per row."
+          },
+          "options": {
+            "type": "object",
+            "properties": {
+              "minSeparation": {
+                "type": "number",
+                "minimum": 0
+              },
+              "edgeClearance": {
+                "type": "number",
+                "minimum": 0
+              },
+              "timeBudgetMs": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "seed": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "minimizeCost": {
+                "type": "boolean"
+              },
+              "respectStock": {
+                "type": "boolean"
+              },
+              "simplifyTolerance": {
+                "type": "number",
+                "minimum": 0
+              },
+              "compact": {
+                "type": "boolean",
+                "default": true
+              },
+              "compactFor": {
+                "type": "string",
+                "enum": [
+                  "box",
+                  "horizontal",
+                  "vertical"
+                ],
+                "default": "box"
+              }
+            },
+            "description": "Solve options. All optional."
+          },
+          "engine": {
+            "type": "string",
+            "enum": [
+              "lbf",
+              "max",
+              "sparrow"
+            ],
+            "default": "lbf",
+            "description": "`lbf` (default) is single-pass, synchronous and instant. `max` is ASYNCHRONOUS: 202 + poll `GET /v1/jobs/{id}`; it runs `lbf` first, then a time-budgeted search that fills sheets one at a time looking for FEWER sheets, and never returns more than `lbf`, nor a plan that ranks worse (price with `minimizeCost`, otherwise sheet area). It accepts several sheet sizes per material and `respectStock`; a `polygon` sheet or exclusion zones are served by `lbf` inside the job, with a warning. `sparrow` is a deprecated alias of `max`."
+          },
+          "include": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "svg",
+                "dxf"
+              ]
+            },
+            "description": "Additive inline export of the achieved layout. `svg` returns a self-contained, styled `<svg>` string (one titled band per sheet, parts drawn as filled polygons with holes, exclusion zones hatched); `dxf` returns an R12 document (closed `POLYLINE`/`VERTEX` outlines on STOCK/PARTS/HOLES/ZONES layers, part names on LABELS). Both are unit-agnostic, exactly like the request coordinates. The geometry in `sheets[]` is returned either way."
+          }
+        }
+      }
+    },
+    {
+      "name": "get_job",
+      "description": "Free (needs the key that submitted the job). Reads an engine \"max\" job; when it succeeded, the plan is in result. Poll an async max-engine job. Fetch the status (and, when finished, the plan) of a job submitted with `engine: \"max\"`. A job is `queued`, then `running`, then `succeeded` (with `result` = the same response shape a synchronous solve of that `mode` returns, carrying `engine: \"max\"` — a 2D plan for `mode: \"2d\"`, a nest for `mode: \"nest\"`) or `failed` (with `error`). Polling spends no quota, but the key must still be usable: a revoked key or a lapsed API subscription is refused with 403 here exactly as it is on every other authenticated path. A caller sees only its own jobs — a job id belonging to another account is reported as 401 \"job not found\", indistinguishable from one that does not exist, so ids cannot be probed.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "jobId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The jobId from the 202 submission."
+          }
+        },
+        "required": [
+          "jobId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_usage",
+      "description": "Free (needs an API key). Shows the plan, the calls used and left this month, and when the period ends. The account's current-month usage and quota. Read-only. Does not consume quota and does not send rate-limit headers. The period is the UTC calendar month.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "io.github.cutoptim/engine",
+    "version": "0.1.3",
+    "remoteUrl": "https://api.cutoptim.com/mcp",
+    "publishedAt": "2026-11-18T23:53:05.087443Z",
+    "fetchedAt": "2026-11-27T10:42:49.718Z",
+    "toolsSha256": "3997c260d283c4d96f6ef04f28bbf60ad83a7bcee03d11190a390ae35f932a8c"
+  }
+}

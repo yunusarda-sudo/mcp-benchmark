@@ -4,7 +4,7 @@
 
 [![npm version](https://img.shields.io/npm/v/mcp-benchmark.svg)](https://www.npmjs.com/package/mcp-benchmark)
 [![CI](https://github.com/yunusarda-sudo/mcp-benchmark/actions/workflows/ci.yml/badge.svg)](https://github.com/yunusarda-sudo/mcp-benchmark/actions/workflows/ci.yml)
-[![MCP Registry Servers](https://img.shields.io/badge/MCP_Registry-2781_Servers-blueviolet)](LEADERBOARD.md)
+[![MCP Registry Servers](https://img.shields.io/badge/MCP_Registry-3404_Servers-blueviolet)](LEADERBOARD.md)
 [![Web Playground](https://img.shields.io/badge/Web_Playground-Live-10b981)](https://yunusarda-sudo.github.io/mcp-benchmark/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
@@ -197,16 +197,16 @@ Explore the full interactive leaderboard with sorting, search, and tool inspecti
 <!-- NEW_RELEASES_START -->
 | Published | Server | Grade | TQI | Tools | Data |
 |:---|:---|:---:|---:|---:|:---:|
-| 2026-11-26 | [**ntimer**](https://github.com/Lmxai/ntimer-mcp) · `io.github.Lmxai/ntimer` | `A` | 92 | 22 | [json](registry/servers/io-github-lmxai-ntimer.json) |
-| 2026-11-26 | **Araras** · `cloud.araras/araras` | `A` | 91 | 23 | [json](registry/servers/cloud-araras-araras.json) |
-| 2026-11-26 | [**cuttingfloor**](https://github.com/Mvp2o-ai/cuttingfloor) · `io.github.Mvp2o-ai/cuttingfloor` | `A` | 89 | 77 | [json](registry/servers/io-github-mvp2o-ai-cuttingfloor.json) |
-| 2026-11-26 | [**AnonPolls**](https://github.com/mdashrraf/AnonPollsPro) · `com.anonpolls/anonpolls` | `B` | 80 | 2 | [json](registry/servers/com-anonpolls-anonpolls.json) |
-| 2026-11-26 | **Where Tomorrow** · `com.where-tomorrow/where-tomorrow` | `A` | 94 | 4 | [json](registry/servers/com-where-tomorrow-where-tomorrow.json) |
-| 2026-11-26 | [**Bonusly MCP by usefulapi**](https://github.com/m190/usefulapi-mcp) · `io.usefulapi/bonusly` | `A` | 93 | 17 | [json](registry/servers/io-usefulapi-bonusly.json) |
-| 2026-11-26 | [**Qovery MCP by usefulapi**](https://github.com/m190/usefulapi-mcp) · `io.usefulapi/qovery` | `A+` | 95 | 20 | [json](registry/servers/io-usefulapi-qovery.json) |
-| 2026-11-26 | [**Discourse MCP by usefulapi**](https://github.com/m190/usefulapi-mcp) · `io.usefulapi/discourse` | `A+` | 95 | 14 | [json](registry/servers/io-usefulapi-discourse.json) |
-| 2026-11-26 | **TruCommerce Catalogue Pilot** · `io.github.viren040/trucommerce-catalogue` | `B` | 87 | 4 | [json](registry/servers/io-github-viren040-trucommerce-catalogue.json) |
-| 2026-11-26 | [**SwarmMemo**](https://github.com/Hugo0/swarmmemo) · `com.swarmmemo/bulletin` | `A` | 88 | 22 | [json](registry/servers/com-swarmmemo-bulletin.json) |
+| 2026-11-27 | [**Muhurat by Devalok**](https://github.com/devalok-design/muhurat-mcp) · `day.muhurat/muhurat` | `A` | 89 | 9 | [json](registry/servers/day-muhurat-muhurat.json) |
+| 2026-11-27 | **IBDÅ** · `co.ibda/ibda` | `A` | 92 | 5 | [json](registry/servers/co-ibda-ibda.json) |
+| 2026-11-27 | **AgentStall: Africa and India data** · `io.github.nileshmakan2/agentstall` | `B` | 87 | 33 | [json](registry/servers/io-github-nileshmakan2-agentstall.json) |
+| 2026-11-27 | **Skin Bliss** · `com.getskinbliss/skin-bliss` | `A` | 91 | 2 | [json](registry/servers/com-getskinbliss-skin-bliss.json) |
+| 2026-11-27 | [**ColorID Paint Colors**](https://github.com/zeisoft/colorid-mcp) · `org.colorid/paint-colors` | `A` | 90 | 3 | [json](registry/servers/org-colorid-paint-colors.json) |
+| 2026-11-27 | **The notacompany newsletter** · `com.notacompany/newsletter` | `A` | 89 | 18 | [json](registry/servers/com-notacompany-newsletter.json) |
+| 2026-11-27 | **6102TTK — Turkish Commercial Law Decisions** · `com.6102ttk/karar-arama` | `A+` | 95 | 5 | [json](registry/servers/com-6102ttk-karar-arama.json) |
+| 2026-11-27 | [**BrainChain**](https://github.com/usebrainchain/brainchain-mcp) · `com.usebrainchain/brainchain` | `B` | 79 | 18 | [json](registry/servers/com-usebrainchain-brainchain.json) |
+| 2026-11-27 | **GoThere Japan Transit &amp; Travel** · `online.gothere/japan-travel` | `A` | 90 | 5 | [json](registry/servers/online-gothere-japan-travel.json) |
+| 2026-11-27 | **TheCitationChecker — Academic Citation &amp; DOI Verifier** · `com.thecitationchecker/citation-checker` | `A` | 92 | 2 | [json](registry/servers/com-thecitationchecker-citation-checker.json) |
 <!-- NEW_RELEASES_END -->
 
 ### Top Synced Servers
@@ -214,26 +214,26 @@ Explore the full interactive leaderboard with sorting, search, and tool inspecti
 <!-- LEADERBOARD_TOP_START -->
 | # | Server | Grade | TQI | Tools | Tokens/tool | Data |
 |---:|:---|:---:|---:|---:|---:|:---:|
-| 1 | **ae.brainy/brainy-48** | `A+` | 100 | 4 | 185 | [json](registry/servers/ae-brainy-brainy-48.json) |
-| 2 | **Sidetrip GitHub** · `ai.sidetrip.connect/github` | `A+` | 100 | 6 | 163 | [json](registry/servers/ai-sidetrip-connect-github.json) |
-| 3 | **Sidetrip Hacker News** · `ai.sidetrip.connect/hackernews` | `A+` | 100 | 5 | 142 | [json](registry/servers/ai-sidetrip-connect-hackernews.json) |
-| 4 | **Sidetrip demo: Less Annoying CRM** · `ai.sidetrip.connect/lacrm` | `A+` | 100 | 2 | 189 | [json](registry/servers/ai-sidetrip-connect-lacrm.json) |
-| 5 | **Game Chronica** · `com.gamechronica/gamechronica` | `A+` | 100 | 3 | 146 | [json](registry/servers/com-gamechronica-gamechronica.json) |
-| 6 | [**Wigoo**](https://github.com/youssbim/wigoo-mcp) · `com.getwigoo/wigoo` | `A+` | 100 | 4 | 222 | [json](registry/servers/com-getwigoo-wigoo.json) |
+| 1 | **Sidetrip GitHub** · `ai.sidetrip.connect/github` | `A+` | 100 | 6 | 163 | [json](registry/servers/ai-sidetrip-connect-github.json) |
+| 2 | **Sidetrip Hacker News** · `ai.sidetrip.connect/hackernews` | `A+` | 100 | 5 | 142 | [json](registry/servers/ai-sidetrip-connect-hackernews.json) |
+| 3 | **Sidetrip demo: Less Annoying CRM** · `ai.sidetrip.connect/lacrm` | `A+` | 100 | 2 | 189 | [json](registry/servers/ai-sidetrip-connect-lacrm.json) |
+| 4 | **Game Chronica** · `com.gamechronica/gamechronica` | `A+` | 100 | 3 | 146 | [json](registry/servers/com-gamechronica-gamechronica.json) |
+| 5 | [**Wigoo**](https://github.com/youssbim/wigoo-mcp) · `com.getwigoo/wigoo` | `A+` | 100 | 4 | 222 | [json](registry/servers/com-getwigoo-wigoo.json) |
+| 6 | [**LifeVerse Product Discovery**](https://github.com/lifeversegu/lifeverse-mcp) · `com.gufreelancer.lifeverse/public-catalog` | `A+` | 100 | 4 | 110 | [json](registry/servers/com-gufreelancer-lifeverse-public-catalog.json) |
 | 7 | **QIXUA China-EU Trade, Supplier Risk &amp; China Proxy MCP** · `com.hainanqingxuan/china-eu-trade-mcp` | `A+` | 100 | 5 | 371 | [json](registry/servers/com-hainanqingxuan-china-eu-trade-mcp.json) |
 | 8 | **Injection Check** · `com.injectioncheck/injectioncheck` | `A+` | 100 | 1 | 197 | [json](registry/servers/com-injectioncheck-injectioncheck.json) |
 | 9 | **It's My Life Dog video info** · `com.itsmylifedog/video` | `A+` | 100 | 4 | 107 | [json](registry/servers/com-itsmylifedog-video.json) |
 | 10 | **GiftBack** · `com.joingiftback/giftback` | `A+` | 100 | 3 | 250 | [json](registry/servers/com-joingiftback-giftback.json) |
 | 11 | **Klarum** · `com.klarum/klarum` | `A+` | 100 | 3 | 110 | [json](registry/servers/com-klarum-klarum.json) |
-| 12 | **トゥーンエル** · `com.tooneru/manga` | `A+` | 100 | 6 | 128 | [json](registry/servers/com-tooneru-manga.json) |
-| 13 | **GStars** · `dev.gstars/gstars` | `A+` | 100 | 4 | 219 | [json](registry/servers/dev-gstars-gstars.json) |
-| 14 | [**Startups Españolas press desk**](https://github.com/martinschenk/startups-espanolas-mcp) · `es.startups-espanolas/notas-de-prensa` | `A+` | 100 | 5 | 181 | [json](registry/servers/es-startups-espanolas-notas-de-prensa.json) |
-| 15 | **AI Verified** · `io.aiverified/verify-business` | `A+` | 100 | 1 | 162 | [json](registry/servers/io-aiverified-verify-business.json) |
+| 12 | **ScanGoal** · `com.scangoal/mcp` | `A+` | 100 | 5 | 116 | [json](registry/servers/com-scangoal-mcp.json) |
+| 13 | **トゥーンエル** · `com.tooneru/manga` | `A+` | 100 | 6 | 128 | [json](registry/servers/com-tooneru-manga.json) |
+| 14 | **VIN Decoder by Underwriters Technologies** · `com.undtec/vin` | `A+` | 100 | 1 | 103 | [json](registry/servers/com-undtec-vin.json) |
+| 15 | **GStars** · `dev.gstars/gstars` | `A+` | 100 | 4 | 219 | [json](registry/servers/dev-gstars-gstars.json) |
 <!-- LEADERBOARD_TOP_END -->
 
 <!-- SYNC_INFO_START -->
-**2781 servers · 40773 tools · last sync 2026-11-26.**
-Last run: 74854 registry entries scanned, 44747 auth-free remote candidates, 913 returned tools, 565 required authentication, 22 failed (probe cap reached).
+**3404 servers · 49269 tools · last sync 2026-11-27.**
+Last run: 75806 registry entries scanned, 45331 auth-free remote candidates, 878 returned tools, 597 required authentication, 25 failed (probe cap reached).
 Probed newest first by registry publish date, at most 1500 per run and at most 3 listed servers per operator (registrable domain of the remote host).
 <!-- SYNC_INFO_END -->
 

@@ -1,0 +1,3491 @@
+{
+  "$schema": "../schema.json",
+  "name": "app.divekit/mcp",
+  "title": "Dive Kit",
+  "category": "Other",
+  "description": "Experimental. Plan scuba decompression dives, gas blends and gas use with Dive Kit. Reference only.",
+  "tools": [
+    {
+      "name": "plan_dive",
+      "description": "Computes the decompression plan for one dive, open circuit (OC) or closed-circuit rebreather (CCR): stop table, runtime, time to surface (TTS), gas used per cylinder, ascent pressure, CNS/OTU, gas density, warnings, contingencies, CCR bailout and a Dive Kit share link. Defaults unless given: GF 50/80, reserve thirds, SAC 20/15 L/min, last stop 6 m (20 ft), EN 13319 water, sea level. Use this when a diver wants a deco schedule, the gas a planned dive needs, or a what-if comparison (deeper, longer, a lost gas, other gradient factors) on air, nitrox or trimix. Not for: MOD, END or other gas facts at one depth (gas_specs), a best mix (best_mix), the longest bottom time the gas allows (find_max_bottom_time), no-stop time (check_no_deco), or dive logging.\n\nComputed by Dive Kit's Bühlmann ZH-L16C engine. Results are an experimental planning aid: relay the safety_notice.\n\nplan_name labels it (\"45m 20min 21/35+EANx50\"); audience (beginner, recreational, technical) tunes wording. A cylinder takes a preset (al80, twin_12l, stage_11l …; lookup_cylinders finds others) or cylinder_size and start_pressure; missing ones default to an AL80 (11.1 L at 3000 psi, 206.84 bar). descent_gas names a travel gas for a hypoxic bottom mix. scenarios compares what-ifs in one call: deeper_3m, longer_3min, lost:<id>, gf:40/85, last_stop:3.\n\n`units` sets every depth, pressure, volume, rate and temperature: metric (m, bar, L) or imperial (ft, psi, ft³). PPO₂ is always bar, mixes %, times minutes.\n\nOmit any other field for its Dive Kit default; the result lists each default it applied. get_guide('inputs_reference') lists every field, get_guide('workflow') the planning conversation. Stateless: send the whole plan every call.\n\nExample: {\"plan_name\":\"45m 20min 21/35+EANx50\",\"levels\":[{\"depth\":45,\"bottom_time_min\":20}],\"cylinders\":[{\"id\":\"back\",\"oxygen_pct\":21,\"helium_pct\":35,\"preset\":\"twin_12l\",\"start_pressure\":220},{\"id\":\"deco\",\"oxygen_pct\":50,\"preset\":\"stage_11l\"}],\"scenarios\":[\"base\",\"gf:40/85\"]}",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "plan_name": {
+            "description": "Short human label shown in the approval card; fill it first, e.g. 40m 20min air+EANx50. Also titles the plan table and share link, which keep its first 24 characters (a longer name is cut, never refused).",
+            "type": "string"
+          },
+          "audience": {
+            "description": "Optional: who the answer is for, from the conversation. beginner: new to deco, plain words. recreational (default): some training. technical: trained deco or CCR diver, terms and tables. Shapes the wording only, never a number.",
+            "type": "string",
+            "enum": [
+              "beginner",
+              "recreational",
+              "technical"
+            ]
+          },
+          "units": {
+            "description": "metric (m, bar, L, L/min, °C) or imperial (ft, psi, ft³, ft³/min, °F). Applies to every input and output value except PPO₂/setpoints (bar), mixes (%), density (g/L). Default metric.",
+            "type": "string",
+            "enum": [
+              "metric",
+              "imperial"
+            ]
+          },
+          "response_format": {
+            "description": "concise: plan table, gas, warnings, scenario summary. detailed: adds every setting used, per-level NDL, full warning details and the bailout table. Default concise.",
+            "type": "string",
+            "enum": [
+              "concise",
+              "detailed"
+            ]
+          },
+          "mode": {
+            "description": "oc (open circuit, default) or ccr (closed-circuit rebreather). Set ccr for every rebreather plan: the ccr, ccr_deco_schedule, ccr_dilout_switches and bailout fields need it. On ccr, `cylinders` are the open-circuit bailout gases; the rig itself is in `ccr`.",
+            "type": "string",
+            "enum": [
+              "oc",
+              "ccr"
+            ]
+          },
+          "levels": {
+            "minItems": 1,
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "depth": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 700,
+                  "description": "Level depth (m or ft, per units). 1 to 200 m (3 to 650 ft). Required."
+                },
+                "bottom_time_min": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 360,
+                  "description": "Minutes at this depth, excluding the descent to it (unless behavior.include_travel_in_level_time is true). 0 to 360. 0 = arrival only: passes through this depth on this gas, used for a no-stop check or a travel-gas leg. Required."
+                },
+                "gas": {
+                  "description": "Cylinder id this level breathes, or \"auto\" (default): the richest gas legal at this depth by PPO₂ cap, hypoxic floor and density limit. On ccr, auto means the loop on the onboard diluent.",
+                  "type": "string",
+                  "maxLength": 12
+                },
+                "breathe": {
+                  "description": "ccr only. loop (default) or oc: dive this level open circuit on `gas`.",
+                  "type": "string",
+                  "enum": [
+                    "loop",
+                    "oc"
+                  ]
+                },
+                "setpoint": {
+                  "type": "number",
+                  "minimum": 0.4,
+                  "maximum": 1.6,
+                  "description": "ccr only. Loop PPO₂ for this level in bar, 0.4 to 1.6. Default ccr.setpoints.bottom."
+                },
+                "diluent": {
+                  "description": "ccr only. \"onboard\" (default) or a cylinder id to breathe through the loop as a dilout on this level.",
+                  "type": "string",
+                  "maxLength": 12
+                }
+              },
+              "required": [
+                "depth",
+                "bottom_time_min"
+              ],
+              "additionalProperties": false
+            },
+            "description": "Dive levels in the order dived, 1 to 20. The first is level_number 1."
+          },
+          "descent_gas": {
+            "description": "oc only. Cylinder id of a travel gas for the descent, for a hypoxic bottom mix (e.g. 12/60) that cannot be breathed near the surface. When level 1 is deeper than that gas's MOD, a 0-minute level on it at its MOD (whole m or ft) is added before level 1, and the result numbers that level first. Default none.",
+            "type": "string",
+            "maxLength": 12
+          },
+          "cylinders": {
+            "minItems": 1,
+            "maxItems": 10,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 12,
+                  "description": "Short name used by levels and contingencies, 1 to 12 letters, digits, _ or -, e.g. back, s50, o2. Unique."
+                },
+                "preset": {
+                  "description": "A common cylinder instead of cylinder_size, rated_pressure, twinset and the fill (explicit fields win). al80/s80: aluminium 80, 11.1 L, 3000 psi. al40, al63: aluminium 40/63, 3000 psi. hp80, hp100, hp120: US high-pressure steel, 3442 psi. lp85: US low-pressure steel, 2640 psi. single_10l, single_12l, single_15l: one EU steel cylinder at 232 bar. twin_10l, twin_12l, twin_15l: back-mounted doubles, 232 bar each. stage_11l: aluminium stage (AL80 size), 200 bar. stage_7l: 7 L stage, 200 bar. o2_3l, dil_3l: 3 L rebreather cylinder, 232 bar.",
+                  "type": "string",
+                  "enum": [
+                    "al80",
+                    "al40",
+                    "al63",
+                    "hp80",
+                    "hp100",
+                    "hp120",
+                    "lp85",
+                    "s80",
+                    "single_10l",
+                    "single_12l",
+                    "single_15l",
+                    "twin_10l",
+                    "twin_12l",
+                    "twin_15l",
+                    "stage_11l",
+                    "stage_7l",
+                    "o2_3l",
+                    "dil_3l"
+                  ]
+                },
+                "oxygen_pct": {
+                  "type": "number",
+                  "minimum": 5,
+                  "maximum": 100,
+                  "description": "Oxygen percent, 5 to 100. Air is 21, EANx50 is 50, trimix 18/45 is 18."
+                },
+                "helium_pct": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 95,
+                  "description": "Helium percent, 0 to 95, oxygen_pct + helium_pct at most 100. Trimix 18/45 is 45. Default 0."
+                },
+                "cylinder_size": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 400,
+                  "description": "12 = one 12 L cylinder (metric). 77.4 = an AL80 in ft³ (imperial, with rated_pressure 3000). Metric: water volume of ONE cylinder in litres, the number stamped on the neck, 1 to 25.5. Imperial: rated capacity in ft³ from the spec sheet (an AL80 holds less than its name), 1 to 400. Or pass preset. Default with neither: an AL80 (11.1 L, 77.4 ft³ at 3000 psi)."
+                },
+                "rated_pressure": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 7252,
+                  "description": "Imperial only: the working pressure the capacity is rated at, psi, 725 to 7252 (3000 for an AL80). Default: the preset's, else 3000. Ignored on metric."
+                },
+                "start_pressure": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 7252,
+                  "description": "Pressure in the cylinder at the start of the dive (bar or psi, per units), 0 to 500 bar (0 to 7252 psi). Default: the preset's fill, else 206.84 bar (3000 psi)."
+                },
+                "twinset": {
+                  "type": "boolean",
+                  "description": "true for back-mounted doubles or a sidemount pair breathed as one supply: doubles the gas at the same pressure. Default: the preset's, else false."
+                },
+                "exclude_from_deco": {
+                  "type": "boolean",
+                  "description": "true keeps this cylinder out of automatic ascent switching (pony, buddy bottle). Still priced; a level can still name it. Default false."
+                },
+                "reserve_pressure": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 4351,
+                  "description": "Custom reserve for this cylinder (bar or psi, per units), 5 to 300 bar (50 to 4351 psi). Default: the reserve rule. Moves warnings and find_max_bottom_time, never the stops."
+                }
+              },
+              "required": [
+                "id",
+                "oxygen_pct"
+              ],
+              "additionalProperties": false
+            },
+            "description": "Every open-circuit cylinder carried: back gas, stages, deco gases; on ccr, bailout gases. 1 to 10. Give preset or cylinder_size and start_pressure when known; omitted ones default (an AL80, 11.1 L at 3000 psi) and the result marks them."
+          },
+          "gradient_factors": {
+            "description": "Gradient factors. Lower is more conservative. Default 50/80. If high cannot surface the plan, the engine raises it and warns.",
+            "type": "object",
+            "properties": {
+              "low": {
+                "type": "number",
+                "minimum": 10,
+                "maximum": 100,
+                "description": "GF low, percent, 10 to 100. Sets the first stop depth. Default 50."
+              },
+              "high": {
+                "type": "number",
+                "minimum": 10,
+                "maximum": 100,
+                "description": "GF high, percent, 10 to 100. Sets the shallow stops and surfacing margin. Default 80."
+              }
+            },
+            "additionalProperties": false
+          },
+          "stops": {
+            "description": "Stop grid and stop-time rounding.",
+            "type": "object",
+            "properties": {
+              "last_stop_depth": {
+                "type": "number",
+                "description": "Final stop depth: 3, 4.5 or 6 m; 10, 15 or 20 ft. Default 6 m (20 ft)."
+              },
+              "stop_spacing": {
+                "type": "number",
+                "description": "Distance between stops: 3, 6 or 9 m; 10, 20 or 30 ft. Default 3 m (10 ft)."
+              },
+              "time_rounding": {
+                "description": "1s, 30s or 1min. Applied inside the engine; a stop is never shorter than the obligation. Default 1min.",
+                "type": "string",
+                "enum": [
+                  "1s",
+                  "30s",
+                  "1min"
+                ]
+              }
+            },
+            "additionalProperties": false
+          },
+          "environment": {
+            "description": "Water and altitude.",
+            "type": "object",
+            "properties": {
+              "water": {
+                "type": "string",
+                "enum": [
+                  "salt",
+                  "fresh",
+                  "en13319",
+                  "red_sea"
+                ],
+                "description": "Water type, from its density: en13319 (EN 13319, the dive computer standard) 10.00 m per bar, salt 9.95, fresh 10.20, red_sea 9.92. Default en13319."
+              },
+              "temperature": {
+                "type": "number",
+                "minimum": -2,
+                "maximum": 104,
+                "description": "Deprecated and ignored: gas density is at 0 °C (STP), as the 5.2 / 6.2 g/L limits are, so water temperature changes no figure. Accepted for older clients and kept in the share link, -2 to 40 °C (28 to 104 °F)."
+              },
+              "altitude": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 32800,
+                "description": "Surface altitude (m or ft, per units), 0 to 10000 m (0 to 32800 ft). Default 0."
+              }
+            },
+            "additionalProperties": false
+          },
+          "rates": {
+            "description": "Ascent and descent rates, per units.",
+            "type": "object",
+            "properties": {
+              "ascent_deep": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 330,
+                "description": "Ascent rate below rate_change_depth (m/min or ft/min), 1 to 100 m/min. Default 9 m/min (30 ft/min)."
+              },
+              "ascent_shallow": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 330,
+                "description": "Ascent rate from rate_change_depth to the surface (m/min or ft/min), 1 to 100 m/min. Default 3 m/min (10 ft/min)."
+              },
+              "rate_change_depth": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 660,
+                "description": "Depth where the ascent rate changes (m or ft), 3 to 200 m. Default 6 m (20 ft)."
+              },
+              "descent": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 330,
+                "description": "Descent rate (m/min or ft/min), 1 to 100 m/min. Default 20 m/min (66 ft/min)."
+              }
+            },
+            "additionalProperties": false
+          },
+          "ppo2": {
+            "description": "PPO₂ limits in bar.",
+            "type": "object",
+            "properties": {
+              "max_all": {
+                "type": "number",
+                "minimum": 1,
+                "maximum": 1.6,
+                "description": "One PPO₂ cap in bar for every gas, 1.0 to 1.6 (e.g. 1.4 for recreational nitrox). Sets all three bands; a band field given too wins for its band."
+              },
+              "max_under_28pct_o2": {
+                "type": "number",
+                "minimum": 1,
+                "maximum": 1.6,
+                "description": "PPO₂ cap in bar for gases under 28% O₂, 1.0 to 1.6. Sets their MOD and switch depth. Default 1.4."
+              },
+              "max_28_to_44pct_o2": {
+                "type": "number",
+                "minimum": 1,
+                "maximum": 1.6,
+                "description": "PPO₂ cap in bar for gases from 28% to under 45% O₂, 1.0 to 1.6. Default 1.5."
+              },
+              "max_45pct_o2_and_up": {
+                "type": "number",
+                "minimum": 1,
+                "maximum": 1.6,
+                "description": "PPO₂ cap in bar for gases of 45% O₂ and over, 1.0 to 1.6. Default 1.6."
+              },
+              "min": {
+                "type": "number",
+                "minimum": 0.16,
+                "maximum": 0.21,
+                "description": "Lowest PPO₂ in bar before a hypoxia warning, 0.16 to 0.21. Warnings only. Default 0.18."
+              }
+            },
+            "additionalProperties": false
+          },
+          "gas_consumption": {
+            "description": "Breathing rates.",
+            "type": "object",
+            "properties": {
+              "working_sac": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 200,
+                "description": "Surface air consumption (SAC, also called RMV) for descent, bottom and the deep ascent (L/min or ft³/min, per units), 1 to 200 L/min (0.05 to 7.1 ft³/min). Default 20 L/min (0.71 ft³/min). Gas figures only."
+              },
+              "deco_sac": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 200,
+                "description": "SAC from the first stop up (L/min or ft³/min). Default 15 L/min (0.53 ft³/min). Gas figures only."
+              },
+              "ccr_metabolic_o2": {
+                "type": "number",
+                "minimum": 0.4,
+                "maximum": 2,
+                "description": "ccr: planning assumption for oxygen use, L/min in both unit systems, 0.4 to 2.0. Default 0.85."
+              }
+            },
+            "additionalProperties": false
+          },
+          "reserve": {
+            "description": "Gas reserve rule. Moves the gas status and warnings, never the stops.",
+            "type": "object",
+            "properties": {
+              "rule": {
+                "description": "thirds, fourths, fifths, sixths or fixed. Default thirds. Below 50 bar (725 psi) is always critical.",
+                "type": "string",
+                "enum": [
+                  "thirds",
+                  "fourths",
+                  "fifths",
+                  "sixths",
+                  "fixed"
+                ]
+              },
+              "fixed_pressure": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 7252,
+                "description": "Reserve for rule fixed (bar or psi, per units). Default 50 bar (725 psi)."
+              }
+            },
+            "additionalProperties": false
+          },
+          "gas_switch": {
+            "description": "Gas switching.",
+            "type": "object",
+            "properties": {
+              "switch_at": {
+                "description": "mod: switch at the deco gas MOD (default). stop: at the next stop.",
+                "type": "string",
+                "enum": [
+                  "mod",
+                  "stop"
+                ]
+              },
+              "switch_time_s": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 300,
+                "description": "Seconds held at each OC switch on the old gas, 0 to 300 in 30 s steps. Default 0."
+              },
+              "when_cylinder_empty": {
+                "description": "show_shortfall (default): stay on it and report how much more gas is needed. switch_gas: move to the richest safe gas left.",
+                "type": "string",
+                "enum": [
+                  "show_shortfall",
+                  "switch_gas"
+                ]
+              }
+            },
+            "additionalProperties": false
+          },
+          "oxygen_breaks": {
+            "description": "Oxygen breaks.",
+            "type": "object",
+            "properties": {
+              "enabled": {
+                "type": "boolean",
+                "description": "Insert oxygen breaks on high-PPO₂ stops. Default false."
+              },
+              "o2_minutes": {
+                "type": "number",
+                "minimum": 5,
+                "maximum": 30,
+                "description": "Minutes on high PPO₂ before a break, 5 to 30. Default 20."
+              },
+              "break_minutes": {
+                "type": "number",
+                "minimum": 1,
+                "maximum": 10,
+                "description": "Break length in minutes, 1 to 10. Default 5."
+              },
+              "min_ppo2": {
+                "type": "number",
+                "minimum": 0.8,
+                "maximum": 1.8,
+                "description": "PPO₂ in bar at or above which a stop counts toward the break clock, 0.8 to 1.8. Default 1.4."
+              },
+              "apply_on_loop": {
+                "type": "boolean",
+                "description": "ccr: also break on the loop. Not carried in share links. Default false."
+              },
+              "loop_setpoint": {
+                "type": "number",
+                "minimum": 0.4,
+                "maximum": 1.6,
+                "description": "ccr: loop setpoint in bar during a break. Default 0.7."
+              }
+            },
+            "additionalProperties": false
+          },
+          "behavior": {
+            "description": "Profile and model switches.",
+            "type": "object",
+            "properties": {
+              "include_travel_in_level_time": {
+                "type": "boolean",
+                "description": "true: level time includes the descent to it (dive-computer runtime style). Default false."
+              },
+              "o2_narcotic": {
+                "type": "boolean",
+                "description": "Count oxygen in END. END and warnings only. Default false."
+              },
+              "stay_on_loop": {
+                "type": "boolean",
+                "description": "ccr: true (default) keeps the whole ascent on the loop; false lets an OC deco gas take over where its PPO₂ is higher. Not carried in share links."
+              }
+            },
+            "additionalProperties": false
+          },
+          "warning_thresholds": {
+            "description": "Warning thresholds. Warnings only, never the stops.",
+            "type": "object",
+            "properties": {
+              "density_warning": {
+                "type": "number",
+                "minimum": 3,
+                "maximum": 8,
+                "description": "Gas density warning in g/L, 3 to 8. Default 5.2."
+              },
+              "density_critical": {
+                "type": "number",
+                "minimum": 3,
+                "maximum": 8,
+                "description": "Gas density critical in g/L, 3 to 8; also vetoes a gas in auto. Default 6.2."
+              },
+              "end_max": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 330,
+                "description": "Highest END before a warning (m or ft, per units), 20 to 100 m. Default 30 m (100 ft)."
+              },
+              "cns_pct": {
+                "type": "number",
+                "minimum": 50,
+                "maximum": 100,
+                "description": "CNS percent warning, 50 to 100. Default 80."
+              },
+              "otu": {
+                "type": "number",
+                "minimum": 200,
+                "maximum": 500,
+                "description": "OTU warning, 200 to 500. Default 300."
+              }
+            },
+            "additionalProperties": false
+          },
+          "ccr": {
+            "description": "The rebreather (mode ccr only).",
+            "type": "object",
+            "properties": {
+              "diluent_oxygen_pct": {
+                "type": "number",
+                "minimum": 5,
+                "maximum": 100,
+                "description": "Onboard diluent oxygen percent. Default 21."
+              },
+              "diluent_helium_pct": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 95,
+                "description": "Onboard diluent helium percent. Default 0."
+              },
+              "diluent_size": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 400,
+                "description": "Diluent cylinder: litres (metric) or ft³ rated at 3000 psi (imperial). Default 3 L."
+              },
+              "diluent_start_pressure": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 7252,
+                "description": "Diluent cylinder fill (bar or psi). Default 232 bar (3365 psi)."
+              },
+              "o2_size": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 400,
+                "description": "Oxygen cylinder: litres (metric) or ft³ rated at 3000 psi (imperial). Default 3 L."
+              },
+              "o2_start_pressure": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 7252,
+                "description": "Oxygen cylinder fill (bar or psi). Default 232 bar (3365 psi)."
+              },
+              "diluent_breathable_oc": {
+                "type": "boolean",
+                "description": "true if the BOV or a regulator can breathe the onboard diluent open circuit. It then joins the bailout pool last. Default false."
+              },
+              "loop_volume": {
+                "type": "number",
+                "minimum": 2,
+                "maximum": 15,
+                "description": "Loop volume, litres in both unit systems, 2 to 15. Default 6."
+              },
+              "setpoints": {
+                "description": "Loop setpoints in bar.",
+                "type": "object",
+                "properties": {
+                  "descent": {
+                    "type": "number",
+                    "minimum": 0.4,
+                    "maximum": 1.6,
+                    "description": "Descent setpoint in bar. Default 0.7."
+                  },
+                  "bottom": {
+                    "type": "number",
+                    "minimum": 0.4,
+                    "maximum": 1.6,
+                    "description": "Bottom setpoint in bar, the level default. Default 1.0."
+                  },
+                  "deco": {
+                    "type": "number",
+                    "minimum": 0.4,
+                    "maximum": 1.6,
+                    "description": "Deco setpoint in bar, used where ccr_deco_schedule has no step. Default 1.4."
+                  }
+                },
+                "additionalProperties": false
+              },
+              "descent_switch_depth": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 660,
+                "description": "Depth (m or ft) where the descent setpoint hands over to bottom, first descent only. Default 18 m (60 ft)."
+              }
+            },
+            "additionalProperties": false
+          },
+          "ccr_deco_schedule": {
+            "description": "ccr deco setpoint steps, up to 10. Default [40 m: 1.5, 23 m: 1.6]. Send [] for the single ccr.setpoints.deco.",
+            "maxItems": 10,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "depth": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 660,
+                  "description": "Depth (m or ft): the step applies at this depth and shallower."
+                },
+                "setpoint": {
+                  "type": "number",
+                  "minimum": 0.4,
+                  "maximum": 1.6,
+                  "description": "Setpoint in bar."
+                }
+              },
+              "required": [
+                "depth",
+                "setpoint"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "ccr_dilout_switches": {
+            "description": "ccr: at each depth and shallower, the loop breathes that cylinder as diluent (a dilout). Up to 6. Default none.",
+            "maxItems": 6,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "depth": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 660,
+                  "description": "Depth (m or ft): the switch applies at this depth and shallower."
+                },
+                "cylinder": {
+                  "type": "string",
+                  "maxLength": 12,
+                  "description": "Cylinder id breathed as diluent, or \"onboard\" to switch back."
+                }
+              },
+              "required": [
+                "depth",
+                "cylinder"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "bailout": {
+            "description": "ccr only: the bailout view.",
+            "type": "object",
+            "properties": {
+              "view": {
+                "description": "ccr: which ascent the table shows. loop (default), end_of_profile, after_level, at_run_time, on_ascent. The worst-case bailout check runs on every view.",
+                "type": "string",
+                "enum": [
+                  "loop",
+                  "end_of_profile",
+                  "after_level",
+                  "at_run_time",
+                  "on_ascent"
+                ]
+              },
+              "level_number": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 20,
+                "description": "For after_level: the level (1-based) the diver bails at the end of."
+              },
+              "run_time_min": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1000,
+                "description": "For at_run_time: minutes on the Run clock."
+              },
+              "depth": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 660,
+                "description": "For on_ascent: depth (m or ft) the diver leaves the loop on the final ascent."
+              }
+            },
+            "additionalProperties": false
+          },
+          "scenarios": {
+            "description": "Which plans to compute, default [\"base\"]. base; deeper_3m, deeper_5m (imperial: deeper_10ft, deeper_20ft), longer_3min, longer_5min, deeper_and_longer_3, deeper_and_longer_5 (applied to the deepest level); lost:<cylinder id> (that cylinder never carried); custom:<name> (defined in contingencies); gf:<low>/<high> (e.g. gf:40/85), last_stop:<depth> (3, 4.5, 6 m or 10, 15, 20 ft) and stop_rounding:<1s|30s|1min> (the base plan with that one setting changed, to compare settings in one call); all (not the variants). Each one returns its own table and a comparison row. Up to 10. Ask for more in a later call.",
+            "maxItems": 10,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 40,
+              "description": "One scenario key."
+            }
+          },
+          "contingencies": {
+            "description": "Custom contingencies, up to 6, each requested with scenarios \"custom:<name>\" (or \"all\").",
+            "maxItems": 6,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 24,
+                  "description": "Name of this contingency, 1 to 24 characters. Request it with scenarios \"custom:<name>\". Unique."
+                },
+                "lost_cylinders": {
+                  "description": "Cylinder ids lost in this contingency, comma-separated, e.g. \"s50,o2\". Default none.",
+                  "type": "string",
+                  "maxLength": 130
+                },
+                "fails_after_level": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 20,
+                  "description": "Level number (1-based) after which the lost cylinders are gone. Omit: they are never carried."
+                },
+                "level_number": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 20,
+                  "description": "Level number (1-based) the depth and time changes apply to. Default the deepest (last on a tie)."
+                },
+                "depth_change": {
+                  "type": "number",
+                  "minimum": -100,
+                  "maximum": 100,
+                  "description": "Depth added to that level (m or ft, per units), -30 to 30 m (-100 to 100 ft). Default 0."
+                },
+                "time_change_min": {
+                  "type": "number",
+                  "minimum": -60,
+                  "maximum": 60,
+                  "description": "Minutes added to that level, -60 to 60. Default 0."
+                },
+                "working_sac": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 200,
+                  "description": "Working SAC for this contingency only (L/min or ft³/min, per units). Default gas_consumption.working_sac."
+                },
+                "deco_sac": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 200,
+                  "description": "Deco SAC for this contingency only (L/min or ft³/min, per units). Default gas_consumption.deco_sac."
+                },
+                "stress_sac": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 200,
+                  "description": "Hard-breathing surface rate, SAC (L/min or ft³/min, per units), from the end of the bottom (on bailout: from leaving the loop), gas only. Needs stress_minutes, stress_until_gas_switch or stress_whole_ascent."
+                },
+                "stress_minutes": {
+                  "type": "number",
+                  "minimum": 1,
+                  "maximum": 60,
+                  "description": "Minutes the stress_sac burst lasts, 1 to 60."
+                },
+                "stress_whole_ascent": {
+                  "type": "boolean",
+                  "description": "true: the stress_sac burst lasts to the surface. Default false."
+                },
+                "stress_until_gas_switch": {
+                  "type": "boolean",
+                  "description": "true: the stress_sac burst lasts until the next gas switch (the surface if none). Wins over stress_minutes and stress_whole_ascent."
+                },
+                "delay_min": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 60,
+                  "description": "A hold at depth before the ascent starts, 0 to 60 minutes. Moves the schedule. Default 0."
+                }
+              },
+              "required": [
+                "name"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "modifiers": {
+            "description": "Plan modifiers: a stress breathing burst (gas only) and a delay before the ascent (moves the schedule).",
+            "type": "object",
+            "properties": {
+              "stress_sac": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 200,
+                "description": "Hard-breathing surface rate, SAC (L/min or ft³/min, per units), from the end of the bottom (on bailout: from leaving the loop), gas only. Needs stress_minutes, stress_until_gas_switch or stress_whole_ascent."
+              },
+              "stress_minutes": {
+                "type": "number",
+                "minimum": 1,
+                "maximum": 60,
+                "description": "Minutes the stress_sac burst lasts, 1 to 60."
+              },
+              "stress_whole_ascent": {
+                "type": "boolean",
+                "description": "true: the stress_sac burst lasts to the surface. Default false."
+              },
+              "stress_until_gas_switch": {
+                "type": "boolean",
+                "description": "true: the stress_sac burst lasts until the next gas switch (the surface if none). Wins over stress_minutes and stress_whole_ascent."
+              },
+              "delay_min": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 60,
+                "description": "A hold at depth before the ascent starts, 0 to 60 minutes. Moves the schedule. Default 0."
+              },
+              "working_sac": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 200,
+                "description": "Working SAC override for the whole plan (L/min or ft³/min). Default gas_consumption.working_sac."
+              },
+              "deco_sac": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 200,
+                "description": "Deco SAC override for the whole plan (L/min or ft³/min). Default gas_consumption.deco_sac."
+              }
+            },
+            "additionalProperties": false
+          },
+          "repetitive": {
+            "description": "Repetitive dive: the previous dive and the surface interval.",
+            "type": "object",
+            "properties": {
+              "surface_interval_min": {
+                "type": "number",
+                "minimum": 15,
+                "maximum": 1440,
+                "description": "Surface interval since the previous dive, 15 to 1440 minutes."
+              },
+              "previous_share_url": {
+                "description": "The share link of the previous dive's plan_dive result. Its tissue loading seeds this dive.",
+                "type": "string",
+                "maxLength": 8000
+              }
+            },
+            "required": [
+              "surface_interval_min"
+            ],
+            "additionalProperties": false
+          },
+          "table_columns": {
+            "description": "Extra table columns. PPO₂ is always shown.",
+            "type": "object",
+            "properties": {
+              "cns": {
+                "type": "boolean",
+                "description": "Add a running CNS column. Default false."
+              },
+              "gas_remaining": {
+                "type": "boolean",
+                "description": "Add a gas-remaining column (bar or psi). Default false."
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "levels",
+          "cylinders"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "find_max_bottom_time",
+      "description": "Finds the longest whole-minute bottom time on one level of an open-circuit plan: the longest that keeps every cylinder at or above its reserve (limit reserve), whose time to surface fits a budget (limit tts), or that needs no stop (limit no_deco). Use this when a diver asks how long they can stay at a depth before gas runs short, how long fits a TTS budget, or how long a level of a multi-level plan can last without stops. Not for CCR plans. For the no-stop time at one depth, check_no_deco is simpler.\n\nTakes the same fields as plan_dive, at the top level, plus the level to extend (default the deepest, last on a tie; the same level longer_3min lengthens). Cylinders as in plan_dive. On a level shallower than an earlier one the answer can be a window (\"from 7 min\"). The empty-cylinder setting is ignored: every cylinder is judged on its own reserve. The answer is a gas ceiling with no allowance for gas sharing, cold, current or work. Returns the answer, the plan table at that time and its Dive Kit share link.\n\nUnits and defaults as in plan_dive.\n\nExample: {\"plan_name\":\"45m on 21/35\",\"units\":\"metric\",\"levels\":[{\"depth\":45,\"bottom_time_min\":20}],\"cylinders\":[{\"id\":\"back\",\"oxygen_pct\":21,\"helium_pct\":35,\"preset\":\"twin_12l\",\"start_pressure\":220},{\"id\":\"deco\",\"oxygen_pct\":50,\"preset\":\"stage_11l\"}],\"limit\":\"reserve\",\"level_number\":1}",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "plan_name": {
+            "description": "Short human label shown in the approval card; fill it first, e.g. 40m 20min air+EANx50. Also titles the plan table and share link, which keep its first 24 characters (a longer name is cut, never refused).",
+            "type": "string"
+          },
+          "audience": {
+            "description": "Optional: who the answer is for, from the conversation. beginner: new to deco, plain words. recreational (default): some training. technical: trained deco or CCR diver, terms and tables. Shapes the wording only, never a number.",
+            "type": "string",
+            "enum": [
+              "beginner",
+              "recreational",
+              "technical"
+            ]
+          },
+          "units": {
+            "description": "metric (m, bar, L, L/min, °C) or imperial (ft, psi, ft³, ft³/min, °F). Applies to every input and output value except PPO₂/setpoints (bar), mixes (%), density (g/L). Default metric.",
+            "type": "string",
+            "enum": [
+              "metric",
+              "imperial"
+            ]
+          },
+          "mode": {
+            "description": "oc (open circuit, default) or ccr (closed-circuit rebreather). Set ccr for every rebreather plan: the ccr, ccr_deco_schedule, ccr_dilout_switches and bailout fields need it. On ccr, `cylinders` are the open-circuit bailout gases; the rig itself is in `ccr`.",
+            "type": "string",
+            "enum": [
+              "oc",
+              "ccr"
+            ]
+          },
+          "levels": {
+            "minItems": 1,
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "depth": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 700,
+                  "description": "Level depth (m or ft, per units). 1 to 200 m (3 to 650 ft). Required."
+                },
+                "bottom_time_min": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 360,
+                  "description": "Minutes at this depth, excluding the descent to it (unless behavior.include_travel_in_level_time is true). 0 to 360. 0 = arrival only: passes through this depth on this gas, used for a no-stop check or a travel-gas leg. Required."
+                },
+                "gas": {
+                  "description": "Cylinder id this level breathes, or \"auto\" (default): the richest gas legal at this depth by PPO₂ cap, hypoxic floor and density limit. On ccr, auto means the loop on the onboard diluent.",
+                  "type": "string",
+                  "maxLength": 12
+                },
+                "breathe": {
+                  "description": "ccr only. loop (default) or oc: dive this level open circuit on `gas`.",
+                  "type": "string",
+                  "enum": [
+                    "loop",
+                    "oc"
+                  ]
+                },
+                "setpoint": {
+                  "type": "number",
+                  "minimum": 0.4,
+                  "maximum": 1.6,
+                  "description": "ccr only. Loop PPO₂ for this level in bar, 0.4 to 1.6. Default ccr.setpoints.bottom."
+                },
+                "diluent": {
+                  "description": "ccr only. \"onboard\" (default) or a cylinder id to breathe through the loop as a dilout on this level.",
+                  "type": "string",
+                  "maxLength": 12
+                }
+              },
+              "required": [
+                "depth",
+                "bottom_time_min"
+              ],
+              "additionalProperties": false
+            },
+            "description": "Dive levels in the order dived, 1 to 20. The first is level_number 1."
+          },
+          "descent_gas": {
+            "description": "oc only. Cylinder id of a travel gas for the descent, for a hypoxic bottom mix (e.g. 12/60) that cannot be breathed near the surface. When level 1 is deeper than that gas's MOD, a 0-minute level on it at its MOD (whole m or ft) is added before level 1, and the result numbers that level first. Default none.",
+            "type": "string",
+            "maxLength": 12
+          },
+          "cylinders": {
+            "minItems": 1,
+            "maxItems": 10,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 12,
+                  "description": "Short name used by levels and contingencies, 1 to 12 letters, digits, _ or -, e.g. back, s50, o2. Unique."
+                },
+                "preset": {
+                  "description": "A common cylinder instead of cylinder_size, rated_pressure, twinset and the fill (explicit fields win). al80/s80: aluminium 80, 11.1 L, 3000 psi. al40, al63: aluminium 40/63, 3000 psi. hp80, hp100, hp120: US high-pressure steel, 3442 psi. lp85: US low-pressure steel, 2640 psi. single_10l, single_12l, single_15l: one EU steel cylinder at 232 bar. twin_10l, twin_12l, twin_15l: back-mounted doubles, 232 bar each. stage_11l: aluminium stage (AL80 size), 200 bar. stage_7l: 7 L stage, 200 bar. o2_3l, dil_3l: 3 L rebreather cylinder, 232 bar.",
+                  "type": "string",
+                  "enum": [
+                    "al80",
+                    "al40",
+                    "al63",
+                    "hp80",
+                    "hp100",
+                    "hp120",
+                    "lp85",
+                    "s80",
+                    "single_10l",
+                    "single_12l",
+                    "single_15l",
+                    "twin_10l",
+                    "twin_12l",
+                    "twin_15l",
+                    "stage_11l",
+                    "stage_7l",
+                    "o2_3l",
+                    "dil_3l"
+                  ]
+                },
+                "oxygen_pct": {
+                  "type": "number",
+                  "minimum": 5,
+                  "maximum": 100,
+                  "description": "Oxygen percent, 5 to 100. Air is 21, EANx50 is 50, trimix 18/45 is 18."
+                },
+                "helium_pct": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 95,
+                  "description": "Helium percent, 0 to 95, oxygen_pct + helium_pct at most 100. Trimix 18/45 is 45. Default 0."
+                },
+                "cylinder_size": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 400,
+                  "description": "12 = one 12 L cylinder (metric). 77.4 = an AL80 in ft³ (imperial, with rated_pressure 3000). Metric: water volume of ONE cylinder in litres, the number stamped on the neck, 1 to 25.5. Imperial: rated capacity in ft³ from the spec sheet (an AL80 holds less than its name), 1 to 400. Or pass preset. Default with neither: an AL80 (11.1 L, 77.4 ft³ at 3000 psi)."
+                },
+                "rated_pressure": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 7252,
+                  "description": "Imperial only: the working pressure the capacity is rated at, psi, 725 to 7252 (3000 for an AL80). Default: the preset's, else 3000. Ignored on metric."
+                },
+                "start_pressure": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 7252,
+                  "description": "Pressure in the cylinder at the start of the dive (bar or psi, per units), 0 to 500 bar (0 to 7252 psi). Default: the preset's fill, else 206.84 bar (3000 psi)."
+                },
+                "twinset": {
+                  "type": "boolean",
+                  "description": "true for back-mounted doubles or a sidemount pair breathed as one supply: doubles the gas at the same pressure. Default: the preset's, else false."
+                },
+                "exclude_from_deco": {
+                  "type": "boolean",
+                  "description": "true keeps this cylinder out of automatic ascent switching (pony, buddy bottle). Still priced; a level can still name it. Default false."
+                },
+                "reserve_pressure": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 4351,
+                  "description": "Custom reserve for this cylinder (bar or psi, per units), 5 to 300 bar (50 to 4351 psi). Default: the reserve rule. Moves warnings and find_max_bottom_time, never the stops."
+                }
+              },
+              "required": [
+                "id",
+                "oxygen_pct"
+              ],
+              "additionalProperties": false
+            },
+            "description": "Every open-circuit cylinder carried: back gas, stages, deco gases; on ccr, bailout gases. 1 to 10. Give preset or cylinder_size and start_pressure when known; omitted ones default (an AL80, 11.1 L at 3000 psi) and the result marks them."
+          },
+          "gradient_factors": {
+            "description": "Gradient factors. Lower is more conservative. Default 50/80. If high cannot surface the plan, the engine raises it and warns.",
+            "type": "object",
+            "properties": {
+              "low": {
+                "type": "number",
+                "minimum": 10,
+                "maximum": 100,
+                "description": "GF low, percent, 10 to 100. Sets the first stop depth. Default 50."
+              },
+              "high": {
+                "type": "number",
+                "minimum": 10,
+                "maximum": 100,
+                "description": "GF high, percent, 10 to 100. Sets the shallow stops and surfacing margin. Default 80."
+              }
+            },
+            "additionalProperties": false
+          },
+          "stops": {
+            "description": "Stop grid and stop-time rounding.",
+            "type": "object",
+            "properties": {
+              "last_stop_depth": {
+                "type": "number",
+                "description": "Final stop depth: 3, 4.5 or 6 m; 10, 15 or 20 ft. Default 6 m (20 ft)."
+              },
+              "stop_spacing": {
+                "type": "number",
+                "description": "Distance between stops: 3, 6 or 9 m; 10, 20 or 30 ft. Default 3 m (10 ft)."
+              },
+              "time_rounding": {
+                "description": "1s, 30s or 1min. Applied inside the engine; a stop is never shorter than the obligation. Default 1min.",
+                "type": "string",
+                "enum": [
+                  "1s",
+                  "30s",
+                  "1min"
+                ]
+              }
+            },
+            "additionalProperties": false
+          },
+          "environment": {
+            "description": "Water and altitude.",
+            "type": "object",
+            "properties": {
+              "water": {
+                "type": "string",
+                "enum": [
+                  "salt",
+                  "fresh",
+                  "en13319",
+                  "red_sea"
+                ],
+                "description": "Water type, from its density: en13319 (EN 13319, the dive computer standard) 10.00 m per bar, salt 9.95, fresh 10.20, red_sea 9.92. Default en13319."
+              },
+              "temperature": {
+                "type": "number",
+                "minimum": -2,
+                "maximum": 104,
+                "description": "Deprecated and ignored: gas density is at 0 °C (STP), as the 5.2 / 6.2 g/L limits are, so water temperature changes no figure. Accepted for older clients and kept in the share link, -2 to 40 °C (28 to 104 °F)."
+              },
+              "altitude": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 32800,
+                "description": "Surface altitude (m or ft, per units), 0 to 10000 m (0 to 32800 ft). Default 0."
+              }
+            },
+            "additionalProperties": false
+          },
+          "rates": {
+            "description": "Ascent and descent rates, per units.",
+            "type": "object",
+            "properties": {
+              "ascent_deep": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 330,
+                "description": "Ascent rate below rate_change_depth (m/min or ft/min), 1 to 100 m/min. Default 9 m/min (30 ft/min)."
+              },
+              "ascent_shallow": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 330,
+                "description": "Ascent rate from rate_change_depth to the surface (m/min or ft/min), 1 to 100 m/min. Default 3 m/min (10 ft/min)."
+              },
+              "rate_change_depth": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 660,
+                "description": "Depth where the ascent rate changes (m or ft), 3 to 200 m. Default 6 m (20 ft)."
+              },
+              "descent": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 330,
+                "description": "Descent rate (m/min or ft/min), 1 to 100 m/min. Default 20 m/min (66 ft/min)."
+              }
+            },
+            "additionalProperties": false
+          },
+          "ppo2": {
+            "description": "PPO₂ limits in bar.",
+            "type": "object",
+            "properties": {
+              "max_all": {
+                "type": "number",
+                "minimum": 1,
+                "maximum": 1.6,
+                "description": "One PPO₂ cap in bar for every gas, 1.0 to 1.6 (e.g. 1.4 for recreational nitrox). Sets all three bands; a band field given too wins for its band."
+              },
+              "max_under_28pct_o2": {
+                "type": "number",
+                "minimum": 1,
+                "maximum": 1.6,
+                "description": "PPO₂ cap in bar for gases under 28% O₂, 1.0 to 1.6. Sets their MOD and switch depth. Default 1.4."
+              },
+              "max_28_to_44pct_o2": {
+                "type": "number",
+                "minimum": 1,
+                "maximum": 1.6,
+                "description": "PPO₂ cap in bar for gases from 28% to under 45% O₂, 1.0 to 1.6. Default 1.5."
+              },
+              "max_45pct_o2_and_up": {
+                "type": "number",
+                "minimum": 1,
+                "maximum": 1.6,
+                "description": "PPO₂ cap in bar for gases of 45% O₂ and over, 1.0 to 1.6. Default 1.6."
+              },
+              "min": {
+                "type": "number",
+                "minimum": 0.16,
+                "maximum": 0.21,
+                "description": "Lowest PPO₂ in bar before a hypoxia warning, 0.16 to 0.21. Warnings only. Default 0.18."
+              }
+            },
+            "additionalProperties": false
+          },
+          "gas_consumption": {
+            "description": "Breathing rates.",
+            "type": "object",
+            "properties": {
+              "working_sac": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 200,
+                "description": "Surface air consumption (SAC, also called RMV) for descent, bottom and the deep ascent (L/min or ft³/min, per units), 1 to 200 L/min (0.05 to 7.1 ft³/min). Default 20 L/min (0.71 ft³/min). Gas figures only."
+              },
+              "deco_sac": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 200,
+                "description": "SAC from the first stop up (L/min or ft³/min). Default 15 L/min (0.53 ft³/min). Gas figures only."
+              },
+              "ccr_metabolic_o2": {
+                "type": "number",
+                "minimum": 0.4,
+                "maximum": 2,
+                "description": "ccr: planning assumption for oxygen use, L/min in both unit systems, 0.4 to 2.0. Default 0.85."
+              }
+            },
+            "additionalProperties": false
+          },
+          "reserve": {
+            "description": "Gas reserve rule. Moves the gas status and warnings, never the stops.",
+            "type": "object",
+            "properties": {
+              "rule": {
+                "description": "thirds, fourths, fifths, sixths or fixed. Default thirds. Below 50 bar (725 psi) is always critical.",
+                "type": "string",
+                "enum": [
+                  "thirds",
+                  "fourths",
+                  "fifths",
+                  "sixths",
+                  "fixed"
+                ]
+              },
+              "fixed_pressure": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 7252,
+                "description": "Reserve for rule fixed (bar or psi, per units). Default 50 bar (725 psi)."
+              }
+            },
+            "additionalProperties": false
+          },
+          "gas_switch": {
+            "description": "Gas switching.",
+            "type": "object",
+            "properties": {
+              "switch_at": {
+                "description": "mod: switch at the deco gas MOD (default). stop: at the next stop.",
+                "type": "string",
+                "enum": [
+                  "mod",
+                  "stop"
+                ]
+              },
+              "switch_time_s": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 300,
+                "description": "Seconds held at each OC switch on the old gas, 0 to 300 in 30 s steps. Default 0."
+              },
+              "when_cylinder_empty": {
+                "description": "show_shortfall (default): stay on it and report how much more gas is needed. switch_gas: move to the richest safe gas left.",
+                "type": "string",
+                "enum": [
+                  "show_shortfall",
+                  "switch_gas"
+                ]
+              }
+            },
+            "additionalProperties": false
+          },
+          "oxygen_breaks": {
+            "description": "Oxygen breaks.",
+            "type": "object",
+            "properties": {
+              "enabled": {
+                "type": "boolean",
+                "description": "Insert oxygen breaks on high-PPO₂ stops. Default false."
+              },
+              "o2_minutes": {
+                "type": "number",
+                "minimum": 5,
+                "maximum": 30,
+                "description": "Minutes on high PPO₂ before a break, 5 to 30. Default 20."
+              },
+              "break_minutes": {
+                "type": "number",
+                "minimum": 1,
+                "maximum": 10,
+                "description": "Break length in minutes, 1 to 10. Default 5."
+              },
+              "min_ppo2": {
+                "type": "number",
+                "minimum": 0.8,
+                "maximum": 1.8,
+                "description": "PPO₂ in bar at or above which a stop counts toward the break clock, 0.8 to 1.8. Default 1.4."
+              },
+              "apply_on_loop": {
+                "type": "boolean",
+                "description": "ccr: also break on the loop. Not carried in share links. Default false."
+              },
+              "loop_setpoint": {
+                "type": "number",
+                "minimum": 0.4,
+                "maximum": 1.6,
+                "description": "ccr: loop setpoint in bar during a break. Default 0.7."
+              }
+            },
+            "additionalProperties": false
+          },
+          "behavior": {
+            "description": "Profile and model switches.",
+            "type": "object",
+            "properties": {
+              "include_travel_in_level_time": {
+                "type": "boolean",
+                "description": "true: level time includes the descent to it (dive-computer runtime style). Default false."
+              },
+              "o2_narcotic": {
+                "type": "boolean",
+                "description": "Count oxygen in END. END and warnings only. Default false."
+              },
+              "stay_on_loop": {
+                "type": "boolean",
+                "description": "ccr: true (default) keeps the whole ascent on the loop; false lets an OC deco gas take over where its PPO₂ is higher. Not carried in share links."
+              }
+            },
+            "additionalProperties": false
+          },
+          "warning_thresholds": {
+            "description": "Warning thresholds. Warnings only, never the stops.",
+            "type": "object",
+            "properties": {
+              "density_warning": {
+                "type": "number",
+                "minimum": 3,
+                "maximum": 8,
+                "description": "Gas density warning in g/L, 3 to 8. Default 5.2."
+              },
+              "density_critical": {
+                "type": "number",
+                "minimum": 3,
+                "maximum": 8,
+                "description": "Gas density critical in g/L, 3 to 8; also vetoes a gas in auto. Default 6.2."
+              },
+              "end_max": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 330,
+                "description": "Highest END before a warning (m or ft, per units), 20 to 100 m. Default 30 m (100 ft)."
+              },
+              "cns_pct": {
+                "type": "number",
+                "minimum": 50,
+                "maximum": 100,
+                "description": "CNS percent warning, 50 to 100. Default 80."
+              },
+              "otu": {
+                "type": "number",
+                "minimum": 200,
+                "maximum": 500,
+                "description": "OTU warning, 200 to 500. Default 300."
+              }
+            },
+            "additionalProperties": false
+          },
+          "ccr": {
+            "description": "The rebreather (mode ccr only).",
+            "type": "object",
+            "properties": {
+              "diluent_oxygen_pct": {
+                "type": "number",
+                "minimum": 5,
+                "maximum": 100,
+                "description": "Onboard diluent oxygen percent. Default 21."
+              },
+              "diluent_helium_pct": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 95,
+                "description": "Onboard diluent helium percent. Default 0."
+              },
+              "diluent_size": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 400,
+                "description": "Diluent cylinder: litres (metric) or ft³ rated at 3000 psi (imperial). Default 3 L."
+              },
+              "diluent_start_pressure": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 7252,
+                "description": "Diluent cylinder fill (bar or psi). Default 232 bar (3365 psi)."
+              },
+              "o2_size": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 400,
+                "description": "Oxygen cylinder: litres (metric) or ft³ rated at 3000 psi (imperial). Default 3 L."
+              },
+              "o2_start_pressure": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 7252,
+                "description": "Oxygen cylinder fill (bar or psi). Default 232 bar (3365 psi)."
+              },
+              "diluent_breathable_oc": {
+                "type": "boolean",
+                "description": "true if the BOV or a regulator can breathe the onboard diluent open circuit. It then joins the bailout pool last. Default false."
+              },
+              "loop_volume": {
+                "type": "number",
+                "minimum": 2,
+                "maximum": 15,
+                "description": "Loop volume, litres in both unit systems, 2 to 15. Default 6."
+              },
+              "setpoints": {
+                "description": "Loop setpoints in bar.",
+                "type": "object",
+                "properties": {
+                  "descent": {
+                    "type": "number",
+                    "minimum": 0.4,
+                    "maximum": 1.6,
+                    "description": "Descent setpoint in bar. Default 0.7."
+                  },
+                  "bottom": {
+                    "type": "number",
+                    "minimum": 0.4,
+                    "maximum": 1.6,
+                    "description": "Bottom setpoint in bar, the level default. Default 1.0."
+                  },
+                  "deco": {
+                    "type": "number",
+                    "minimum": 0.4,
+                    "maximum": 1.6,
+                    "description": "Deco setpoint in bar, used where ccr_deco_schedule has no step. Default 1.4."
+                  }
+                },
+                "additionalProperties": false
+              },
+              "descent_switch_depth": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 660,
+                "description": "Depth (m or ft) where the descent setpoint hands over to bottom, first descent only. Default 18 m (60 ft)."
+              }
+            },
+            "additionalProperties": false
+          },
+          "ccr_deco_schedule": {
+            "description": "ccr deco setpoint steps, up to 10. Default [40 m: 1.5, 23 m: 1.6]. Send [] for the single ccr.setpoints.deco.",
+            "maxItems": 10,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "depth": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 660,
+                  "description": "Depth (m or ft): the step applies at this depth and shallower."
+                },
+                "setpoint": {
+                  "type": "number",
+                  "minimum": 0.4,
+                  "maximum": 1.6,
+                  "description": "Setpoint in bar."
+                }
+              },
+              "required": [
+                "depth",
+                "setpoint"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "ccr_dilout_switches": {
+            "description": "ccr: at each depth and shallower, the loop breathes that cylinder as diluent (a dilout). Up to 6. Default none.",
+            "maxItems": 6,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "depth": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 660,
+                  "description": "Depth (m or ft): the switch applies at this depth and shallower."
+                },
+                "cylinder": {
+                  "type": "string",
+                  "maxLength": 12,
+                  "description": "Cylinder id breathed as diluent, or \"onboard\" to switch back."
+                }
+              },
+              "required": [
+                "depth",
+                "cylinder"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "bailout": {
+            "description": "ccr only: the bailout view.",
+            "type": "object",
+            "properties": {
+              "view": {
+                "description": "ccr: which ascent the table shows. loop (default), end_of_profile, after_level, at_run_time, on_ascent. The worst-case bailout check runs on every view.",
+                "type": "string",
+                "enum": [
+                  "loop",
+                  "end_of_profile",
+                  "after_level",
+                  "at_run_time",
+                  "on_ascent"
+                ]
+              },
+              "level_number": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 20,
+                "description": "For after_level: the level (1-based) the diver bails at the end of."
+              },
+              "run_time_min": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1000,
+                "description": "For at_run_time: minutes on the Run clock."
+              },
+              "depth": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 660,
+                "description": "For on_ascent: depth (m or ft) the diver leaves the loop on the final ascent."
+              }
+            },
+            "additionalProperties": false
+          },
+          "contingencies": {
+            "description": "Custom contingencies, up to 6, each requested with scenarios \"custom:<name>\" (or \"all\").",
+            "maxItems": 6,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 24,
+                  "description": "Name of this contingency, 1 to 24 characters. Request it with scenarios \"custom:<name>\". Unique."
+                },
+                "lost_cylinders": {
+                  "description": "Cylinder ids lost in this contingency, comma-separated, e.g. \"s50,o2\". Default none.",
+                  "type": "string",
+                  "maxLength": 130
+                },
+                "fails_after_level": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 20,
+                  "description": "Level number (1-based) after which the lost cylinders are gone. Omit: they are never carried."
+                },
+                "level_number": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 20,
+                  "description": "Level number (1-based) the depth and time changes apply to. Default the deepest (last on a tie)."
+                },
+                "depth_change": {
+                  "type": "number",
+                  "minimum": -100,
+                  "maximum": 100,
+                  "description": "Depth added to that level (m or ft, per units), -30 to 30 m (-100 to 100 ft). Default 0."
+                },
+                "time_change_min": {
+                  "type": "number",
+                  "minimum": -60,
+                  "maximum": 60,
+                  "description": "Minutes added to that level, -60 to 60. Default 0."
+                },
+                "working_sac": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 200,
+                  "description": "Working SAC for this contingency only (L/min or ft³/min, per units). Default gas_consumption.working_sac."
+                },
+                "deco_sac": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 200,
+                  "description": "Deco SAC for this contingency only (L/min or ft³/min, per units). Default gas_consumption.deco_sac."
+                },
+                "stress_sac": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 200,
+                  "description": "Hard-breathing surface rate, SAC (L/min or ft³/min, per units), from the end of the bottom (on bailout: from leaving the loop), gas only. Needs stress_minutes, stress_until_gas_switch or stress_whole_ascent."
+                },
+                "stress_minutes": {
+                  "type": "number",
+                  "minimum": 1,
+                  "maximum": 60,
+                  "description": "Minutes the stress_sac burst lasts, 1 to 60."
+                },
+                "stress_whole_ascent": {
+                  "type": "boolean",
+                  "description": "true: the stress_sac burst lasts to the surface. Default false."
+                },
+                "stress_until_gas_switch": {
+                  "type": "boolean",
+                  "description": "true: the stress_sac burst lasts until the next gas switch (the surface if none). Wins over stress_minutes and stress_whole_ascent."
+                },
+                "delay_min": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 60,
+                  "description": "A hold at depth before the ascent starts, 0 to 60 minutes. Moves the schedule. Default 0."
+                }
+              },
+              "required": [
+                "name"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "modifiers": {
+            "description": "Plan modifiers: a stress breathing burst (gas only) and a delay before the ascent (moves the schedule).",
+            "type": "object",
+            "properties": {
+              "stress_sac": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 200,
+                "description": "Hard-breathing surface rate, SAC (L/min or ft³/min, per units), from the end of the bottom (on bailout: from leaving the loop), gas only. Needs stress_minutes, stress_until_gas_switch or stress_whole_ascent."
+              },
+              "stress_minutes": {
+                "type": "number",
+                "minimum": 1,
+                "maximum": 60,
+                "description": "Minutes the stress_sac burst lasts, 1 to 60."
+              },
+              "stress_whole_ascent": {
+                "type": "boolean",
+                "description": "true: the stress_sac burst lasts to the surface. Default false."
+              },
+              "stress_until_gas_switch": {
+                "type": "boolean",
+                "description": "true: the stress_sac burst lasts until the next gas switch (the surface if none). Wins over stress_minutes and stress_whole_ascent."
+              },
+              "delay_min": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 60,
+                "description": "A hold at depth before the ascent starts, 0 to 60 minutes. Moves the schedule. Default 0."
+              },
+              "working_sac": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 200,
+                "description": "Working SAC override for the whole plan (L/min or ft³/min). Default gas_consumption.working_sac."
+              },
+              "deco_sac": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 200,
+                "description": "Deco SAC override for the whole plan (L/min or ft³/min). Default gas_consumption.deco_sac."
+              }
+            },
+            "additionalProperties": false
+          },
+          "repetitive": {
+            "description": "Repetitive dive: the previous dive and the surface interval.",
+            "type": "object",
+            "properties": {
+              "surface_interval_min": {
+                "type": "number",
+                "minimum": 15,
+                "maximum": 1440,
+                "description": "Surface interval since the previous dive, 15 to 1440 minutes."
+              },
+              "previous_share_url": {
+                "description": "The share link of the previous dive's plan_dive result. Its tissue loading seeds this dive.",
+                "type": "string",
+                "maxLength": 8000
+              }
+            },
+            "required": [
+              "surface_interval_min"
+            ],
+            "additionalProperties": false
+          },
+          "table_columns": {
+            "description": "Extra table columns. PPO₂ is always shown.",
+            "type": "object",
+            "properties": {
+              "cns": {
+                "type": "boolean",
+                "description": "Add a running CNS column. Default false."
+              },
+              "gas_remaining": {
+                "type": "boolean",
+                "description": "Add a gas-remaining column (bar or psi). Default false."
+              }
+            },
+            "additionalProperties": false
+          },
+          "limit": {
+            "description": "reserve (default): longest time that leaves every cylinder at or above its reserve. tts: longest time whose time to surface fits tts_budget_min. no_deco: longest time with no required stop at GF high (gas is not checked).",
+            "type": "string",
+            "enum": [
+              "reserve",
+              "tts",
+              "no_deco"
+            ]
+          },
+          "tts_budget_min": {
+            "description": "For limit tts: the longest acceptable time to surface, 5 to 360 minutes. Required with tts.",
+            "type": "number",
+            "minimum": 5,
+            "maximum": 360
+          },
+          "level_number": {
+            "description": "1-based level to extend. Default the deepest (last on a tie).",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 20
+          },
+          "scenario": {
+            "description": "Search so this one scenario still meets the limit: deeper_3m, deeper_5m (imperial: deeper_10ft, deeper_20ft), longer_3min, longer_5min, deeper_and_longer_3, deeper_and_longer_5, lost:<cylinder id>, custom:<name>, or a variant (gf:40/85, last_stop:3, stop_rounding:30s). Default base. The answer is still a base-plan bottom time.",
+            "type": "string",
+            "maxLength": 40
+          }
+        },
+        "required": [
+          "levels",
+          "cylinders"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "check_no_deco",
+      "description": "Use this when the diver asks how long they can stay at a depth without decompression stops (no-deco limit, NDL, no-stop time). Returns the minutes left after the descent at GF high, the PPO₂ of the gas there and its MOD at 1.4 bar, a safety-stop reminder and a Dive Kit share link. Suits beginners and recreational divers. Not for a full dive plan (plan_dive) or a gas-limited bottom time (find_max_bottom_time).\n\nComputed by the Dive Kit app's Bühlmann ZH-L16C engine; agency tables and dive computers differ. Default gas air, GF 50/80. For \"is 25 min at 30 m ok?\" send bottom_time_min: the answer says within or over, and by how much. For a repetitive dive pass the previous result's share link and the surface interval.\n\nExample: {\"depth\":18}",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "units": {
+            "type": "string",
+            "enum": [
+              "metric",
+              "imperial"
+            ],
+            "description": "metric (m, bar, L, °C) or imperial (ft, psi, ft³, °F): the unit system for every value in and out. Default metric."
+          },
+          "depth": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1000,
+            "description": "Depth in m (metric) or ft (imperial), 1 to 200 m (3 to 650 ft). Required."
+          },
+          "bottom_time_min": {
+            "description": "Planned minutes at the depth after the descent, 1 to 300. When given, the answer says whether it is within the no-stop time and by how much. Example: 25 for \"is 25 min at 30 m ok?\".",
+            "type": "number",
+            "minimum": 1,
+            "maximum": 300
+          },
+          "oxygen_pct": {
+            "description": "Oxygen percentage of the gas, 5 to 100. Default 21 (air). Example: 32 for EANx32.",
+            "type": "number",
+            "minimum": 5,
+            "maximum": 100
+          },
+          "helium_pct": {
+            "description": "Helium percentage, 0 to 95. Default 0.",
+            "type": "number",
+            "minimum": 0,
+            "maximum": 95
+          },
+          "gradient_factors": {
+            "description": "Gradient factors. The no-stop time is computed at GF high.",
+            "type": "object",
+            "properties": {
+              "low": {
+                "description": "GF low, percent, 10 to 100. Default 50.",
+                "type": "number",
+                "minimum": 10,
+                "maximum": 100
+              },
+              "high": {
+                "description": "GF high, percent, 10 to 100. Sets the no-stop limit. Default 80.",
+                "type": "number",
+                "minimum": 10,
+                "maximum": 100
+              }
+            },
+            "additionalProperties": false
+          },
+          "water": {
+            "type": "string",
+            "enum": [
+              "salt",
+              "fresh",
+              "en13319",
+              "red_sea"
+            ],
+            "description": "Water type, from its density: en13319 (EN 13319, the dive computer standard) 10.00 m per bar, salt 9.95, fresh 10.20, red_sea 9.92. Default en13319."
+          },
+          "altitude": {
+            "description": "Surface altitude (m or ft, per units), 0 to 10000 m (0 to 32800 ft). Default 0.",
+            "type": "number",
+            "minimum": 0,
+            "maximum": 32800
+          },
+          "previous_share_url": {
+            "description": "Repetitive dive: the share link of the previous dive's plan_dive or check_no_deco result. Send with surface_interval_min.",
+            "type": "string",
+            "maxLength": 8000
+          },
+          "surface_interval_min": {
+            "description": "Repetitive dive: surface interval since the previous dive, 15 to 1440 minutes. Send with previous_share_url.",
+            "type": "number",
+            "minimum": 15,
+            "maximum": 1440
+          }
+        },
+        "required": [
+          "depth"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "read_share_link",
+      "description": "Decodes a Dive Kit share link (https://divekit.app/share/deco-plan/...) into the plan_dive input it carries: profile, gases, CCR rig, settings, custom contingencies, modifiers and repetitive tissue state, in the requested units. Use this when a diver pastes a Dive Kit link and wants the plan recomputed or changed. Not for links from other apps, and not a schedule: it returns inputs.\n\nResults baked into the link are ignored; plan_dive recomputes them. Links do not carry behavior.stay_on_loop or the loop oxygen-break toggle, so those return as defaults and the result says so.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "url": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 8000,
+            "description": "The full Dive Kit share link, including anything after ?."
+          },
+          "units": {
+            "type": "string",
+            "enum": [
+              "metric",
+              "imperial"
+            ],
+            "description": "metric (m, bar, L, °C) or imperial (ft, psi, ft³, °F): the unit system for every value in and out. Default metric."
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "gas_specs",
+      "description": "Returns the facts for one breathing gas: maximum operating depth (MOD) at its Dive Kit PPO₂ band cap and at 1.4 bar, minimum depth for hypoxic mixes and, at a depth, PPO₂, equivalent narcotic depth (END), equivalent air depth (EAD) and gas density. Use this when the diver asks whether a gas is OK at a depth, its MOD, END, EAD or density. Not for planning a dive (plan_dive) or picking a gas (best_mix).\n\nMixes are O₂ % and He %; depth follows units. The band cap is 1.4 bar under 28% O₂, 1.5 to under 45%, 1.6 at 45% and over, unless ppo2_max is given. No engine call.\n\nExample: {\"oxygen_pct\":32,\"depth\":35}",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "units": {
+            "type": "string",
+            "enum": [
+              "metric",
+              "imperial"
+            ],
+            "description": "metric (m, bar, L, °C) or imperial (ft, psi, ft³, °F): the unit system for every value in and out. Default metric."
+          },
+          "oxygen_pct": {
+            "type": "number",
+            "minimum": 5,
+            "maximum": 100,
+            "description": "Oxygen percentage of the mix, 5 to 100. Example: 32 for EANx32, 18 for 18/45. Required."
+          },
+          "helium_pct": {
+            "description": "Helium percentage of the mix, 0 to 95. Default 0 (nitrox or air).",
+            "type": "number",
+            "minimum": 0,
+            "maximum": 95
+          },
+          "depth": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1000,
+            "description": "Depth in m (metric) or ft (imperial) where to report PPO₂, END, EAD and gas density. Omit for MOD and minimum depth only."
+          },
+          "ppo2_max": {
+            "description": "PPO₂ limit in bar for the MOD, 1.0 to 1.6. Default: the Dive Kit band cap for the mix (1.4 under 28% O₂, 1.5 to under 45%, 1.6 at 45% and over). The MOD at 1.4 bar is always shown too.",
+            "type": "number",
+            "minimum": 1,
+            "maximum": 1.6
+          },
+          "water": {
+            "type": "string",
+            "enum": [
+              "salt",
+              "fresh",
+              "en13319",
+              "red_sea"
+            ],
+            "description": "Water type, from its density: en13319 (EN 13319, the dive computer standard) 10.00 m per bar, salt 9.95, fresh 10.20, red_sea 9.92. Default en13319."
+          },
+          "temperature": {
+            "description": "Deprecated and ignored: gas density is quoted at 0 °C (STP), as the 5.2 / 6.2 g/L limits are. Accepted for older clients, -2 to 40 °C (28 to 104 °F).",
+            "type": "number",
+            "minimum": -2,
+            "maximum": 104
+          },
+          "altitude": {
+            "description": "Surface altitude (m or ft, per units), 0 to 10000 m (32800 ft). Lowers the surface pressure depths are measured from. Default 0.",
+            "type": "number",
+            "minimum": 0,
+            "maximum": 32800
+          },
+          "o2_narcotic": {
+            "description": "Count oxygen as narcotic in the END. Default false (Dive Kit default).",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "oxygen_pct"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "best_mix",
+      "description": "Use this when the diver asks what gas to breathe at a depth or which deco gases to carry: returns the richest bottom mix within a PPO₂ limit (default 1.4 bar) and an END limit (default 30 m, 98 ft), the nearest standard fill inside the same limits, and the standard deco gas ladder for that depth with switch depths. Not for checking one named gas (gas_specs) or planning the dive (plan_dive).\n\nThe ladder is the common choice, not a prescription: none to 30 m, EANx50 to 45 m, EANx50 and oxygen to 60 m, and a travel gas deeper. A bottom mix under 18% O₂ needs descent_gas in plan_dive. No engine call.\n\nExample: {\"depth\":50}",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "units": {
+            "type": "string",
+            "enum": [
+              "metric",
+              "imperial"
+            ],
+            "description": "metric (m, bar, L, °C) or imperial (ft, psi, ft³, °F): the unit system for every value in and out. Default metric."
+          },
+          "depth": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1000,
+            "description": "Target (maximum) depth in m (metric) or ft (imperial). Required."
+          },
+          "ppo2_max": {
+            "description": "PPO₂ limit in bar at the target depth, 1.0 to 1.6. Default 1.4, a working bottom-gas limit.",
+            "type": "number",
+            "minimum": 1,
+            "maximum": 1.6
+          },
+          "target_end": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1000,
+            "description": "Deepest equivalent narcotic depth (END) allowed at depth, in m or ft. Helium is added to meet it. Default 30 m (98 ft)."
+          },
+          "water": {
+            "type": "string",
+            "enum": [
+              "salt",
+              "fresh",
+              "en13319",
+              "red_sea"
+            ],
+            "description": "Water type, from its density: en13319 (EN 13319, the dive computer standard) 10.00 m per bar, salt 9.95, fresh 10.20, red_sea 9.92. Default en13319."
+          },
+          "temperature": {
+            "description": "Deprecated and ignored: gas density is quoted at 0 °C (STP), as the 5.2 / 6.2 g/L limits are. Accepted for older clients, -2 to 40 °C (28 to 104 °F).",
+            "type": "number",
+            "minimum": -2,
+            "maximum": 104
+          },
+          "altitude": {
+            "description": "Surface altitude (m or ft, per units), 0 to 10000 m (32800 ft). Default 0.",
+            "type": "number",
+            "minimum": 0,
+            "maximum": 32800
+          },
+          "style": {
+            "description": "auto (default): nitrox when it meets target_end, else trimix. nitrox: no helium, END reported but not enforced. trimix: the standard fill comes from the trimix list.",
+            "type": "string",
+            "enum": [
+              "auto",
+              "nitrox",
+              "trimix"
+            ]
+          }
+        },
+        "required": [
+          "depth"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_guide",
+      "description": "Returns one section of the Dive Kit planning guide as markdown. Use this when you need to explain a term, a warning or deco theory, or to check what a planning conversation needs: workflow, tool chains, every input with unit, default and range (inputs_reference), deco theory, gradient factors, gas choice, gas planning, gas consumption, blending, weighting, CCR, bailout and contingencies, every warning, repetitive dives, worked examples, conventions, limits, sources; start_here is the index. Not for numbers: every figure comes from the planning tools.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "topic": {
+            "type": "string",
+            "enum": [
+              "start_here",
+              "workflow",
+              "tool_chains",
+              "inputs_reference",
+              "glossary",
+              "glossary_equipment",
+              "deco_theory",
+              "gradient_factors",
+              "gas_selection",
+              "gas_planning",
+              "gas_consumption",
+              "gas_blending",
+              "blending_continuous_and_decant",
+              "buoyancy_and_weighting",
+              "ccr",
+              "bailout_and_contingencies",
+              "warnings",
+              "repetitive_dives",
+              "worked_examples",
+              "why_plans_differ",
+              "conventions",
+              "limits_and_safety",
+              "sources"
+            ],
+            "description": "Guide section to return. Pick glossary for what a word means, deco_theory for how the model works, limits_and_safety for \"is it safe\". start_here: index of the guide and tools. workflow: how a planning conversation runs and what plan_dive needs. tool_chains: how one tool's result feeds the next, six recipes. inputs_reference: every input with unit, default and range. glossary: diver words, abbreviations and plan-table marks mapped to plain meaning and to fields. glossary_equipment: cylinders, rigs and every cylinders[].preset id with its size and fill. deco_theory: Bühlmann ZH-L16C and decompression basics. gradient_factors: what GF low/high do. gas_selection: choosing bottom and deco gases. gas_planning: gas volumes, reserves and turn pressure. gas_consumption: breathing rate (SAC, RMV), rmv_sac and gas_usage. gas_blending: plan_blend, mix_result and fill-station practice. blending_continuous_and_decant: blend_continuous and decant. buoyancy_and_weighting: buoyancy_check, weighting and failure cases. ccr: closed-circuit rebreather planning. bailout_and_contingencies: bailout and lost-gas plans. warnings: every warning and what it means. repetitive_dives: surface intervals and residual loading. worked_examples: complete example plans. why_plans_differ: why planners disagree. conventions: why Dive Kit numbers differ from textbook formulas. limits_and_safety: what this server does not do. sources: references."
+          }
+        },
+        "required": [
+          "topic"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "lookup_cylinders",
+      "description": "Returns scuba cylinders from Dive Kit's vetted open cylinder dataset: water volume, rated capacity, working pressure, material, typical use and, for five or fewer matches, weight, buoyancy and brands. Each row gives the plan_dive cylinder fields (a preset or cylinder_size) that describe it. Use this when a diver asks which cylinder something is, what it holds (\"what's an HP100 in litres\", \"what does an AL80 hold\"), or names a cylinder you need to size for plan_dive. Not for gas mixes (gas_specs) or gas used on a dive (plan_dive).\n\nThis is Dive Kit's own curated data (MIT licence, open.divekit.app), not a web search. No engine call.\n\nExample: {\"query\":\"hp100\",\"units\":\"imperial\"}",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "query": {
+            "description": "Free text: a name, brand or use, e.g. \"hp100\", \"al80\", \"luxfer\", \"sidemount\". A number matches the water volume in L, the rated ft³, the working pressure in bar or the number in the name: \"12\" finds 12 L cylinders, \"80\" finds the AL80 and HP80. Every word must match. Omit for every cylinder.",
+            "type": "string",
+            "maxLength": 100
+          },
+          "material": {
+            "description": "aluminum or steel. Omit for both.",
+            "type": "string",
+            "enum": [
+              "aluminum",
+              "steel"
+            ]
+          },
+          "units": {
+            "type": "string",
+            "enum": [
+              "metric",
+              "imperial"
+            ],
+            "description": "metric (m, bar, L, °C) or imperial (ft, psi, ft³, °F): the unit system for every value in and out. Default metric."
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "lookup_certifications",
+      "description": "Returns diving certifications from Dive Kit's vetted open dataset of agencies and courses: prerequisites, equivalent courses at other agencies, depth and gas limits, notes and links. Use this when a diver asks what a course allows (\"what does PADI Tec 45 let me do\"), what they need before a course (\"what do I need before a trimix course\"), whether two courses are equivalent (\"is SSI X equivalent to PADI Y\"), or what an agency offers. Not for planning a dive.\n\nThis is Dive Kit's own curated data (MIT licence, open.divekit.app), not a web search; agency rules change, so point the diver to the agency for the final word. No engine call.\n\nExample: {\"agency\":\"PADI\",\"query\":\"tec 45\"}",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "query": {
+            "description": "Free text against the course name, abbreviation, former names, notes and limits, e.g. \"tec 45\", \"trimix\", \"advanced nitrox\", \"cave\". Every word must match.",
+            "type": "string",
+            "maxLength": 100
+          },
+          "agency": {
+            "description": "Agency abbreviation or id, any case: PADI, SSI, NAUI, SDI, TDI, CMAS, BSAC, RAID, IANTD, GUE, UTD, ANDI, NSS-CDS, ISE, and others. Alone, it returns the agency and a list of its courses.",
+            "type": "string",
+            "maxLength": 40
+          },
+          "category": {
+            "description": "recreational, rescue, specialty, technical, rebreather, professional, cave, freediving or other.",
+            "type": "string",
+            "enum": [
+              "recreational",
+              "rescue",
+              "specialty",
+              "technical",
+              "rebreather",
+              "professional",
+              "cave",
+              "freediving",
+              "other"
+            ]
+          },
+          "id": {
+            "description": "Exact certification id from an earlier result, e.g. cert-padi-tec-45.",
+            "type": "string",
+            "maxLength": 80
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "convert_units",
+      "description": "Converts one diving figure between units: pressure (bar, psi, MPa), volume (L, ft³), depth (m, ft), temperature (°C, °F, K), weight (kg, lb) and breathing rate (L/min, ft³/min, bar/min, psi/min). Use this when a diver gives a figure in the other unit system or asks what it reads in another unit. Returns the converted value and the factor used. Not for depth to pressure (gas_specs) or a cylinder's capacity (lookup_cylinders).\n\nquantity names the kind; from and to take unit tokens: bar, psi, mpa; l, cuft; m, ft; c, f, k; kg, lb; l_min, cuft_min, bar_min, psi_min. Converting between a litres rate and bar_min or psi_min needs cylinder_size (water litres of the cylinder, both cylinders for a twinset), because a pressure drop per minute is litres only on one cylinder. Factors are Dive Kit's exact ones (1 bar = 14.5038 psi, 1 ft = 0.3048 m). No engine call.\n\nExample: {\"quantity\":\"pressure\",\"value\":3000,\"from\":\"psi\",\"to\":\"bar\"}",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "quantity": {
+            "type": "string",
+            "enum": [
+              "pressure",
+              "volume",
+              "depth",
+              "temperature",
+              "weight",
+              "breathing_rate"
+            ],
+            "description": "Kind of figure: pressure, volume, depth, temperature, weight or breathing_rate."
+          },
+          "value": {
+            "type": "number",
+            "minimum": -1000000,
+            "maximum": 1000000,
+            "description": "The figure to convert: 0 or more, except a temperature."
+          },
+          "from": {
+            "type": "string",
+            "enum": [
+              "bar",
+              "psi",
+              "mpa",
+              "l",
+              "cuft",
+              "m",
+              "ft",
+              "c",
+              "f",
+              "k",
+              "kg",
+              "lb",
+              "l_min",
+              "cuft_min",
+              "bar_min",
+              "psi_min"
+            ],
+            "description": "Unit of value: bar, psi, mpa (pressure); l, cuft (volume); m, ft (depth); c, f, k (temperature); kg, lb (weight); l_min, cuft_min, bar_min, psi_min (breathing_rate)."
+          },
+          "to": {
+            "type": "string",
+            "enum": [
+              "bar",
+              "psi",
+              "mpa",
+              "l",
+              "cuft",
+              "m",
+              "ft",
+              "c",
+              "f",
+              "k",
+              "kg",
+              "lb",
+              "l_min",
+              "cuft_min",
+              "bar_min",
+              "psi_min"
+            ],
+            "description": "Unit to convert to, from the same list as from: bar, psi, mpa, l, cuft, m, ft, c, f, k, kg, lb, l_min, cuft_min, bar_min, psi_min."
+          },
+          "cylinder_size": {
+            "description": "Water volume in litres of the cylinder a bar_min or psi_min rate is read on (both cylinders of a twinset, e.g. 24). Required to convert between a litres rate (l_min, cuft_min) and bar_min or psi_min; bar_min to psi_min needs none.",
+            "type": "number",
+            "minimum": 0.5,
+            "maximum": 60
+          }
+        },
+        "required": [
+          "quantity",
+          "value",
+          "from",
+          "to"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "gas_usage",
+      "description": "Returns the gas one open-circuit cylinder spends over a planned profile: per segment the gas used (volume and pressure), what is left, the runtime and a status, plus the reserve, the turn pressure and the first segment that drops below each. Use this when a diver asks whether a cylinder covers a no-stop or multilevel dive, how much gas a dive uses, or their turn pressure. Not for decompression dives (plan_dive charges deco gas) or measuring a breathing rate (rmv_sac).\n\nsac is the surface breathing rate in L/min (ft³/min imperial), default 20; rmv_sac's rmv and plan_dive's gas_consumption.working_sac are the same figure. Cylinder fields as in plan_dive (preset, cylinder_size, rated_pressure, twinset, start_pressure); default one AL80 at 3000 psi (206.84 bar). reserve as in plan_dive (thirds; fixed defaults to 50 bar, 725 psi). water defaults to en13319; altitude (m or ft) defaults to sea level. Real-gas volumes; the cylinder is assumed to hold air (plan_dive takes any mix). No engine call.\n\nExample: {\"preset\":\"al80\",\"segments\":[{\"depth\":18,\"duration_min\":40},{\"depth\":5,\"duration_min\":3}]}",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "units": {
+            "type": "string",
+            "enum": [
+              "metric",
+              "imperial"
+            ],
+            "description": "metric (m, bar, L, °C) or imperial (ft, psi, ft³, °F): the unit system for every value in and out. Default metric."
+          },
+          "preset": {
+            "description": "A common cylinder instead of cylinder_size, as in plan_dive: al80, al40, al63, hp80, hp100, hp120, lp85, s80, single_10l, single_12l, single_15l, twin_10l, twin_12l, twin_15l, stage_11l, stage_7l, o2_3l, dil_3l. twin_ presets are a manifolded pair.",
+            "type": "string",
+            "enum": [
+              "al80",
+              "al40",
+              "al63",
+              "hp80",
+              "hp100",
+              "hp120",
+              "lp85",
+              "s80",
+              "single_10l",
+              "single_12l",
+              "single_15l",
+              "twin_10l",
+              "twin_12l",
+              "twin_15l",
+              "stage_11l",
+              "stage_7l",
+              "o2_3l",
+              "dil_3l"
+            ]
+          },
+          "cylinder_size": {
+            "description": "Metric: water volume of ONE cylinder in litres, the number stamped on the neck. Imperial: rated capacity in ft³ at rated_pressure (an AL80 is 77.4). Default: the preset's, else an AL80 (11.1 L).",
+            "type": "number",
+            "minimum": 0.5,
+            "maximum": 400
+          },
+          "rated_pressure": {
+            "description": "Imperial only: the psi the capacity is rated at. Default: the preset's, else 3000. Ignored on metric.",
+            "type": "number",
+            "minimum": 725,
+            "maximum": 7252
+          },
+          "twinset": {
+            "description": "true for two cylinders on a manifold, filled or breathed together: doubles the volume. Default: the preset's, else false.",
+            "type": "boolean"
+          },
+          "start_pressure": {
+            "description": "Fill at the start (bar or psi, per units). Default: the preset's fill, else 206.84 bar (3000 psi).",
+            "type": "number",
+            "minimum": 0,
+            "maximum": 7252
+          },
+          "sac": {
+            "description": "Surface breathing rate, L/min (ft³/min imperial): the same figure as rmv_sac rmv and plan_dive gas_consumption.working_sac. Default 20 L/min (0.71 ft³/min).",
+            "type": "number",
+            "minimum": 0.03,
+            "maximum": 200
+          },
+          "segments": {
+            "minItems": 1,
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "depth": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1000,
+                  "description": "Depth of this segment (m or ft)."
+                },
+                "duration_min": {
+                  "type": "number",
+                  "minimum": 0.1,
+                  "maximum": 600,
+                  "description": "Minutes at this depth, 0.1 to 600."
+                },
+                "sac": {
+                  "description": "This segment's breathing rate when it differs (hard work, a calm stop). Default: the top-level sac.",
+                  "type": "number",
+                  "minimum": 0.03,
+                  "maximum": 200
+                }
+              },
+              "required": [
+                "depth",
+                "duration_min"
+              ],
+              "additionalProperties": false
+            },
+            "description": "The profile in order, one entry per depth. Put descent and ascent time into the nearest segment."
+          },
+          "reserve": {
+            "description": "Reserve the cylinder must keep, as in plan_dive: rule thirds (default), fourths, fifths, sixths or fixed with fixed_pressure.",
+            "type": "object",
+            "properties": {
+              "rule": {
+                "description": "thirds, fourths, fifths, sixths or fixed. Default thirds. Below 50 bar (725 psi) is always critical.",
+                "type": "string",
+                "enum": [
+                  "thirds",
+                  "fourths",
+                  "fifths",
+                  "sixths",
+                  "fixed"
+                ]
+              },
+              "fixed_pressure": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 7252,
+                "description": "Reserve for rule fixed (bar or psi, per units). Default 50 bar (725 psi)."
+              }
+            },
+            "additionalProperties": false
+          },
+          "water": {
+            "type": "string",
+            "enum": [
+              "salt",
+              "fresh",
+              "en13319",
+              "red_sea"
+            ],
+            "description": "Water type, from its density: en13319 (EN 13319, the dive computer standard) 10.00 m per bar, salt 9.95, fresh 10.20, red_sea 9.92. Default en13319."
+          },
+          "altitude": {
+            "description": "Altitude (m or ft, per units), 0 to 10000 m (32800 ft). Lowers the surface pressure the math adds to gauge readings. Default 0.",
+            "type": "number",
+            "minimum": 0,
+            "maximum": 32800
+          }
+        },
+        "required": [
+          "segments"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "mix_result",
+      "description": "Returns the mix and pressure a cylinder ends with after gases are added in order: each addition's pressure and mix before and after, the cooling step, and the final O₂ %, He % and pressure. Use this when a diver or blender asks what a fill produced (\"50 bar of air, 40 bar of oxygen, then air to 200\"), or to check a plan_blend plan: send its mix_result_current as current and its mix_result_additions as additions. Not for planning toward a target (plan_blend) or joining two cylinders with a whip (decant).\n\nPressures are gauge (bar or psi, per units); mixes are O₂ % and He %. environment sets altitude and the ambient and fill temperatures (defaults sea level, 20 °C, fill equal to ambient); a hot fill settles lower. Real-gas mixing. Analyse the cylinder once it has cooled: the analysed mix, not this one, goes into plan_dive. No engine call.\n\nExample: {\"current\":{\"oxygen_pct\":21,\"pressure\":50},\"additions\":[{\"oxygen_pct\":100,\"pressure_added\":35},{\"oxygen_pct\":21,\"pressure_added\":115}]}",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "units": {
+            "type": "string",
+            "enum": [
+              "metric",
+              "imperial"
+            ],
+            "description": "metric (m, bar, L, °C) or imperial (ft, psi, ft³, °F): the unit system for every value in and out. Default metric."
+          },
+          "current": {
+            "type": "object",
+            "properties": {
+              "oxygen_pct": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 100,
+                "description": "Oxygen % in the cylinder before the first addition, as analysed. Air is 21."
+              },
+              "helium_pct": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 100,
+                "description": "Helium % before the first addition. Default 0."
+              },
+              "pressure": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 7252,
+                "description": "Gauge pressure before the first addition (bar or psi, per units); 0 for empty."
+              }
+            },
+            "required": [
+              "oxygen_pct",
+              "pressure"
+            ],
+            "additionalProperties": false,
+            "description": "The cylinder before gas goes in. plan_blend gives it as mix_result_current."
+          },
+          "additions": {
+            "minItems": 1,
+            "maxItems": 12,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "oxygen_pct": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 100,
+                  "description": "Oxygen % of the gas added: 100 oxygen, 21 air, 0 helium, 32 a nitrox bank."
+                },
+                "helium_pct": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 100,
+                  "description": "Helium % of the gas added: 100 for helium. Default 0."
+                },
+                "pressure_added": {
+                  "type": "number",
+                  "minimum": 0.1,
+                  "maximum": 7252,
+                  "description": "Gauge pressure this gas adds (bar or psi, per units): the cylinder gauge after minus before."
+                }
+              },
+              "required": [
+                "oxygen_pct",
+                "pressure_added"
+              ],
+              "additionalProperties": false
+            },
+            "description": "Gases added, in order. plan_blend gives them as mix_result_additions."
+          },
+          "environment": {
+            "description": "Altitude and temperatures. Default sea level, 20 °C, fill at ambient.",
+            "type": "object",
+            "properties": {
+              "altitude": {
+                "description": "Altitude (m or ft, per units), 0 to 10000 m (32800 ft). Lowers the surface pressure the math adds to gauge readings. Default 0.",
+                "type": "number",
+                "minimum": 0,
+                "maximum": 32800
+              },
+              "ambient_temperature": {
+                "description": "Temperature the cylinder cools to (°C or °F, per units), -50 to 100 °C. Default 20 °C (68 °F).",
+                "type": "number",
+                "minimum": -58,
+                "maximum": 212
+              },
+              "fill_temperature": {
+                "description": "Gas temperature right after filling (°C or °F). Above ambient, the plan fills to a hot pressure that settles to the target. Default: ambient.",
+                "type": "number",
+                "minimum": -58,
+                "maximum": 212
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "current",
+          "additions"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "plan_blend",
+      "description": "Returns a partial-pressure blending plan from what a cylinder holds to a target mix and pressure: bleed, helium, oxygen and top-up steps with the gauge pressure to stop at, the mix after each step, the cooling step, the mix achieved, the gas drawn from each bank and alternative plans. Use this when a diver or blender asks how to fill nitrox or trimix (\"fill my twin 12s to 21/35 from 60 bar of 18/45\") or whether their banks can reach a mix. Not for a fill already done (mix_result), continuous-flow blending (blend_continuous) or decanting (decant).\n\ncurrent is the cylinder as analysed now: oxygen_pct, helium_pct, pressure, and preset or cylinder_size as in plan_dive (default AL80 size). target: oxygen_pct, helium_pct, pressure. banks default to unlimited air, oxygen and helium; a finite bank needs pressure and cylinder_size together. A target the banks cannot reach returns feasible false with the reason and the partial plan, not an error. To verify, send mix_result_current and mix_result_additions to mix_result; then gas_specs, and plan_dive with the analysed mix. Oxygen above 40% needs oxygen-clean equipment and blender training. No engine call.\n\nExample: {\"current\":{\"oxygen_pct\":21,\"pressure\":50,\"preset\":\"twin_12l\"},\"target\":{\"oxygen_pct\":21,\"helium_pct\":35,\"pressure\":220}}",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "units": {
+            "type": "string",
+            "enum": [
+              "metric",
+              "imperial"
+            ],
+            "description": "metric (m, bar, L, °C) or imperial (ft, psi, ft³, °F): the unit system for every value in and out. Default metric."
+          },
+          "current": {
+            "type": "object",
+            "properties": {
+              "oxygen_pct": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 100,
+                "description": "Oxygen % of the gas in the cylinder now, as analysed, 0 to 100. Air is 21; an empty cylinder is 21 at pressure 0."
+              },
+              "helium_pct": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 100,
+                "description": "Helium % now, 0 to 100. Default 0."
+              },
+              "pressure": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 7252,
+                "description": "Gauge pressure now (bar or psi, per units), 0 to 500 bar (7252 psi)."
+              },
+              "preset": {
+                "description": "A common cylinder instead of cylinder_size, as in plan_dive: al80, al40, al63, hp80, hp100, hp120, lp85, s80, single_10l, single_12l, single_15l, twin_10l, twin_12l, twin_15l, stage_11l, stage_7l, o2_3l, dil_3l. twin_ presets are a manifolded pair.",
+                "type": "string",
+                "enum": [
+                  "al80",
+                  "al40",
+                  "al63",
+                  "hp80",
+                  "hp100",
+                  "hp120",
+                  "lp85",
+                  "s80",
+                  "single_10l",
+                  "single_12l",
+                  "single_15l",
+                  "twin_10l",
+                  "twin_12l",
+                  "twin_15l",
+                  "stage_11l",
+                  "stage_7l",
+                  "o2_3l",
+                  "dil_3l"
+                ]
+              },
+              "cylinder_size": {
+                "description": "Metric: water volume of ONE cylinder in litres, the number stamped on the neck. Imperial: rated capacity in ft³ at rated_pressure (an AL80 is 77.4). Default: the preset's, else an AL80 (11.1 L).",
+                "type": "number",
+                "minimum": 0.5,
+                "maximum": 400
+              },
+              "rated_pressure": {
+                "description": "Imperial only: the psi the capacity is rated at. Default: the preset's, else 3000. Ignored on metric.",
+                "type": "number",
+                "minimum": 725,
+                "maximum": 7252
+              },
+              "twinset": {
+                "description": "true for two cylinders on a manifold, filled or breathed together: doubles the volume. Default: the preset's, else false.",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "oxygen_pct",
+              "pressure"
+            ],
+            "additionalProperties": false,
+            "description": "The cylinder now: analysed mix, gauge pressure and size (default AL80 size)."
+          },
+          "target": {
+            "type": "object",
+            "properties": {
+              "oxygen_pct": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 100,
+                "description": "Target oxygen %, 0 to 100 (EANx32 is 32, trimix 21/35 is 21)."
+              },
+              "helium_pct": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 100,
+                "description": "Target helium %, 0 to 100. Default 0."
+              },
+              "pressure": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 7252,
+                "description": "Target gauge pressure once the cylinder has cooled (bar or psi, per units)."
+              }
+            },
+            "required": [
+              "oxygen_pct",
+              "pressure"
+            ],
+            "additionalProperties": false,
+            "description": "The mix and settled pressure to reach."
+          },
+          "banks": {
+            "description": "Gas supplies in the order the blender lists them; bank numbers in the result count from 1. Default: unlimited air, oxygen and helium.",
+            "minItems": 1,
+            "maxItems": 8,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "oxygen_pct": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 100,
+                  "description": "Oxygen % of this supply: 21 air, 100 oxygen, 0 helium, 32 a nitrox bank."
+                },
+                "helium_pct": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 100,
+                  "description": "Helium % of this supply: 100 for helium, or a premixed bank. Default 0."
+                },
+                "pressure": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 7252,
+                  "description": "A cylinder bank's gauge pressure now (bar or psi), given with cylinder_size. Omit both for an unlimited supply such as a compressor."
+                },
+                "cylinder_size": {
+                  "description": "A cylinder bank's water volume in litres (metric) or rated ft³ at rated_pressure (imperial), given with pressure.",
+                  "type": "number",
+                  "minimum": 0.5,
+                  "maximum": 20000
+                },
+                "rated_pressure": {
+                  "description": "Imperial only: the psi the bank's ft³ is rated at. Default 3000.",
+                  "type": "number",
+                  "minimum": 725,
+                  "maximum": 7252
+                }
+              },
+              "required": [
+                "oxygen_pct"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "environment": {
+            "description": "Altitude and temperatures. Default sea level, 20 °C, fill at ambient.",
+            "type": "object",
+            "properties": {
+              "altitude": {
+                "description": "Altitude (m or ft, per units), 0 to 10000 m (32800 ft). Lowers the surface pressure the math adds to gauge readings. Default 0.",
+                "type": "number",
+                "minimum": 0,
+                "maximum": 32800
+              },
+              "ambient_temperature": {
+                "description": "Temperature the cylinder cools to (°C or °F, per units), -50 to 100 °C. Default 20 °C (68 °F).",
+                "type": "number",
+                "minimum": -58,
+                "maximum": 212
+              },
+              "fill_temperature": {
+                "description": "Gas temperature right after filling (°C or °F). Above ambient, the plan fills to a hot pressure that settles to the target. Default: ambient.",
+                "type": "number",
+                "minimum": -58,
+                "maximum": 212
+              }
+            },
+            "additionalProperties": false
+          },
+          "max_plans": {
+            "description": "Plans to return, 1 to 5: the best one plus alternatives. Default 3.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 5
+          }
+        },
+        "required": [
+          "current",
+          "target"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "blend_continuous",
+      "description": "Returns the settings for continuous-flow blending through a compressor intake: each feed gas's share of the intake flow, the analyzer readings to aim for after the first injection and at the end, and the pressure to bleed to first when the cylinder's gas is in the way. Use this when a blender fills with fixed air, oxygen and helium feeds (a nitrox stick or membrane) and asks what ratios or analyzer targets give a mix. Not for partial-pressure fills (plan_blend).\n\ncurrent is the cylinder now, as in plan_blend; target: oxygen_pct, helium_pct, pressure. injection_order he_first (default) or o2_first picks which intermediate analyzer reading the text leads with; both come back. bleed_step rounds the bleed down to a gauge mark, default 5 bar (100 psi). An impossible mix returns feasible false with the reason. No engine call.\n\nExample: {\"current\":{\"oxygen_pct\":21,\"pressure\":0},\"target\":{\"oxygen_pct\":32,\"pressure\":200}}",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "units": {
+            "type": "string",
+            "enum": [
+              "metric",
+              "imperial"
+            ],
+            "description": "metric (m, bar, L, °C) or imperial (ft, psi, ft³, °F): the unit system for every value in and out. Default metric."
+          },
+          "current": {
+            "type": "object",
+            "properties": {
+              "oxygen_pct": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 100,
+                "description": "Oxygen % of the gas in the cylinder now, as analysed, 0 to 100. Air is 21; an empty cylinder is 21 at pressure 0."
+              },
+              "helium_pct": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 100,
+                "description": "Helium % now, 0 to 100. Default 0."
+              },
+              "pressure": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 7252,
+                "description": "Gauge pressure now (bar or psi, per units), 0 to 500 bar (7252 psi)."
+              },
+              "preset": {
+                "description": "A common cylinder instead of cylinder_size, as in plan_dive: al80, al40, al63, hp80, hp100, hp120, lp85, s80, single_10l, single_12l, single_15l, twin_10l, twin_12l, twin_15l, stage_11l, stage_7l, o2_3l, dil_3l. twin_ presets are a manifolded pair.",
+                "type": "string",
+                "enum": [
+                  "al80",
+                  "al40",
+                  "al63",
+                  "hp80",
+                  "hp100",
+                  "hp120",
+                  "lp85",
+                  "s80",
+                  "single_10l",
+                  "single_12l",
+                  "single_15l",
+                  "twin_10l",
+                  "twin_12l",
+                  "twin_15l",
+                  "stage_11l",
+                  "stage_7l",
+                  "o2_3l",
+                  "dil_3l"
+                ]
+              },
+              "cylinder_size": {
+                "description": "Metric: water volume of ONE cylinder in litres, the number stamped on the neck. Imperial: rated capacity in ft³ at rated_pressure (an AL80 is 77.4). Default: the preset's, else an AL80 (11.1 L).",
+                "type": "number",
+                "minimum": 0.5,
+                "maximum": 400
+              },
+              "rated_pressure": {
+                "description": "Imperial only: the psi the capacity is rated at. Default: the preset's, else 3000. Ignored on metric.",
+                "type": "number",
+                "minimum": 725,
+                "maximum": 7252
+              },
+              "twinset": {
+                "description": "true for two cylinders on a manifold, filled or breathed together: doubles the volume. Default: the preset's, else false.",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "oxygen_pct",
+              "pressure"
+            ],
+            "additionalProperties": false,
+            "description": "The cylinder now: analysed mix, gauge pressure and size."
+          },
+          "target": {
+            "type": "object",
+            "properties": {
+              "oxygen_pct": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 100,
+                "description": "Target oxygen %, 0 to 100 (EANx32 is 32, trimix 21/35 is 21)."
+              },
+              "helium_pct": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 100,
+                "description": "Target helium %, 0 to 100. Default 0."
+              },
+              "pressure": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 7252,
+                "description": "Target gauge pressure once the cylinder has cooled (bar or psi, per units)."
+              }
+            },
+            "required": [
+              "oxygen_pct",
+              "pressure"
+            ],
+            "additionalProperties": false,
+            "description": "The mix and settled pressure to reach."
+          },
+          "altitude": {
+            "description": "Altitude (m or ft, per units), 0 to 10000 m (32800 ft). Lowers the surface pressure the math adds to gauge readings. Default 0.",
+            "type": "number",
+            "minimum": 0,
+            "maximum": 32800
+          },
+          "injection_order": {
+            "description": "Order the feeds join the intake: he_first (helium, then oxygen; the default) or o2_first. Picks which intermediate analyzer reading the text leads with; both are returned.",
+            "type": "string",
+            "enum": [
+              "he_first",
+              "o2_first"
+            ]
+          },
+          "bleed_step": {
+            "description": "Gauge step the bleed pressure rounds down to (bar or psi). Default 5 bar (100 psi).",
+            "type": "number",
+            "minimum": 1,
+            "maximum": 500
+          }
+        },
+        "required": [
+          "current",
+          "target"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "decant",
+      "description": "Returns what happens when two cylinders are joined with a transfill whip: the pressure both settle to, each cylinder's pressure and mix afterwards, and how much gas moved. With a target mix it also returns where to close the valve, the mix the receiver reaches and what the donor keeps, or why the target is out of reach. Use this when a diver tops up one cylinder from another (\"top my 50 bar EANx32 from a full EANx50\") or asks whether a decant reaches a mix. Not for bank fills (plan_blend).\n\nreceiver and donor as plan_blend's current: oxygen_pct, helium_pct, pressure, and preset or cylinder_size (default AL80 size). Gas flows from the higher pressure to the lower. The warm gas and the whip make the first gauge reading high: analyse after it cools. An unreachable target returns feasible false with the reason. No engine call.\n\nExample: {\"receiver\":{\"oxygen_pct\":32,\"pressure\":50,\"cylinder_size\":12},\"donor\":{\"oxygen_pct\":50,\"pressure\":200,\"cylinder_size\":12},\"target\":{\"oxygen_pct\":40}}",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "units": {
+            "type": "string",
+            "enum": [
+              "metric",
+              "imperial"
+            ],
+            "description": "metric (m, bar, L, °C) or imperial (ft, psi, ft³, °F): the unit system for every value in and out. Default metric."
+          },
+          "receiver": {
+            "type": "object",
+            "properties": {
+              "oxygen_pct": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 100,
+                "description": "Oxygen % of the gas in the cylinder now, as analysed, 0 to 100. Air is 21; an empty cylinder is 21 at pressure 0."
+              },
+              "helium_pct": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 100,
+                "description": "Helium % now, 0 to 100. Default 0."
+              },
+              "pressure": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 7252,
+                "description": "Gauge pressure now (bar or psi, per units), 0 to 500 bar (7252 psi)."
+              },
+              "preset": {
+                "description": "A common cylinder instead of cylinder_size, as in plan_dive: al80, al40, al63, hp80, hp100, hp120, lp85, s80, single_10l, single_12l, single_15l, twin_10l, twin_12l, twin_15l, stage_11l, stage_7l, o2_3l, dil_3l. twin_ presets are a manifolded pair.",
+                "type": "string",
+                "enum": [
+                  "al80",
+                  "al40",
+                  "al63",
+                  "hp80",
+                  "hp100",
+                  "hp120",
+                  "lp85",
+                  "s80",
+                  "single_10l",
+                  "single_12l",
+                  "single_15l",
+                  "twin_10l",
+                  "twin_12l",
+                  "twin_15l",
+                  "stage_11l",
+                  "stage_7l",
+                  "o2_3l",
+                  "dil_3l"
+                ]
+              },
+              "cylinder_size": {
+                "description": "Metric: water volume of ONE cylinder in litres, the number stamped on the neck. Imperial: rated capacity in ft³ at rated_pressure (an AL80 is 77.4). Default: the preset's, else an AL80 (11.1 L).",
+                "type": "number",
+                "minimum": 0.5,
+                "maximum": 400
+              },
+              "rated_pressure": {
+                "description": "Imperial only: the psi the capacity is rated at. Default: the preset's, else 3000. Ignored on metric.",
+                "type": "number",
+                "minimum": 725,
+                "maximum": 7252
+              },
+              "twinset": {
+                "description": "true for two cylinders on a manifold, filled or breathed together: doubles the volume. Default: the preset's, else false.",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "oxygen_pct",
+              "pressure"
+            ],
+            "additionalProperties": false,
+            "description": "The cylinder being topped up: analysed mix, gauge pressure, size."
+          },
+          "donor": {
+            "type": "object",
+            "properties": {
+              "oxygen_pct": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 100,
+                "description": "Oxygen % of the gas in the cylinder now, as analysed, 0 to 100. Air is 21; an empty cylinder is 21 at pressure 0."
+              },
+              "helium_pct": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 100,
+                "description": "Helium % now, 0 to 100. Default 0."
+              },
+              "pressure": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 7252,
+                "description": "Gauge pressure now (bar or psi, per units), 0 to 500 bar (7252 psi)."
+              },
+              "preset": {
+                "description": "A common cylinder instead of cylinder_size, as in plan_dive: al80, al40, al63, hp80, hp100, hp120, lp85, s80, single_10l, single_12l, single_15l, twin_10l, twin_12l, twin_15l, stage_11l, stage_7l, o2_3l, dil_3l. twin_ presets are a manifolded pair.",
+                "type": "string",
+                "enum": [
+                  "al80",
+                  "al40",
+                  "al63",
+                  "hp80",
+                  "hp100",
+                  "hp120",
+                  "lp85",
+                  "s80",
+                  "single_10l",
+                  "single_12l",
+                  "single_15l",
+                  "twin_10l",
+                  "twin_12l",
+                  "twin_15l",
+                  "stage_11l",
+                  "stage_7l",
+                  "o2_3l",
+                  "dil_3l"
+                ]
+              },
+              "cylinder_size": {
+                "description": "Metric: water volume of ONE cylinder in litres, the number stamped on the neck. Imperial: rated capacity in ft³ at rated_pressure (an AL80 is 77.4). Default: the preset's, else an AL80 (11.1 L).",
+                "type": "number",
+                "minimum": 0.5,
+                "maximum": 400
+              },
+              "rated_pressure": {
+                "description": "Imperial only: the psi the capacity is rated at. Default: the preset's, else 3000. Ignored on metric.",
+                "type": "number",
+                "minimum": 725,
+                "maximum": 7252
+              },
+              "twinset": {
+                "description": "true for two cylinders on a manifold, filled or breathed together: doubles the volume. Default: the preset's, else false.",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "oxygen_pct",
+              "pressure"
+            ],
+            "additionalProperties": false,
+            "description": "The cylinder the gas comes from: analysed mix, gauge pressure, size."
+          },
+          "target": {
+            "description": "A mix to aim the receiver at; the result says where to close the valve, or why it is out of reach.",
+            "type": "object",
+            "properties": {
+              "oxygen_pct": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 100,
+                "description": "Oxygen % wanted in the receiver."
+              },
+              "helium_pct": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 100,
+                "description": "Helium % wanted in the receiver. Default 0."
+              }
+            },
+            "required": [
+              "oxygen_pct"
+            ],
+            "additionalProperties": false
+          },
+          "altitude": {
+            "description": "Altitude (m or ft, per units), 0 to 10000 m (32800 ft). Lowers the surface pressure the math adds to gauge readings. Default 0.",
+            "type": "number",
+            "minimum": 0,
+            "maximum": 32800
+          }
+        },
+        "required": [
+          "receiver",
+          "donor"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "rmv_sac",
+      "description": "Returns the gas consumption rate computed from a logged dive's cylinder pressures: RMV (surface litres a minute, what plan_dive and gas_usage take) and SAC (pressure drop a minute on that cylinder), overall and per segment. Use this when a diver gives start and end pressures and asks their SAC, RMV or breathing rate. Give the cylinder's mix for trimix; air is assumed. Not for planning gas (gas_usage, plan_dive).\n\nEach segment is one stretch on one cylinder: depth, duration_min, start_pressure, end_pressure, the cylinder (preset, cylinder_size, rated_pressure, twinset; default AL80) and its mix (oxygen_pct, helium_pct; default air). RMV uses the same real-gas model as the planners: any RMV plans the same dive back to the measured end pressure in plan_dive, and an air RMV does in gas_usage, which assumes air (a trimix RMV reads about 1 to 2 bar optimistic there). SAC is the gauge drop over time and depth. Segments must not overlap in time; the tool cannot check that. sac is null when the segments used different cylinders, and sac_per_cylinder lists each, with the weighted average depth. plan_dive_gas_consumption.working_sac is ready to paste into plan_dive. water defaults to en13319. No engine call.\n\nExample: {\"segments\":[{\"depth\":20,\"duration_min\":20,\"start_pressure\":200,\"end_pressure\":140,\"preset\":\"single_12l\"}]}",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "units": {
+            "type": "string",
+            "enum": [
+              "metric",
+              "imperial"
+            ],
+            "description": "metric (m, bar, L, °C) or imperial (ft, psi, ft³, °F): the unit system for every value in and out. Default metric."
+          },
+          "segments": {
+            "minItems": 1,
+            "maxItems": 12,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "depth": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1000,
+                  "description": "Average depth of this stretch (m or ft)."
+                },
+                "duration_min": {
+                  "type": "number",
+                  "minimum": 0.1,
+                  "maximum": 600,
+                  "description": "Minutes of this stretch, 0.1 to 600."
+                },
+                "start_pressure": {
+                  "type": "number",
+                  "minimum": 1,
+                  "maximum": 7252,
+                  "description": "Gauge reading at the start of the stretch (bar or psi, per units)."
+                },
+                "end_pressure": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 7252,
+                  "description": "Gauge reading at the end (bar or psi); lower than start_pressure."
+                },
+                "oxygen_pct": {
+                  "description": "Oxygen % of the gas in the cylinder. Default 21 (air). Give it with helium_pct for trimix.",
+                  "type": "number",
+                  "minimum": 5,
+                  "maximum": 100
+                },
+                "helium_pct": {
+                  "description": "Helium % of the gas in the cylinder. Default 0.",
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 95
+                },
+                "preset": {
+                  "description": "A common cylinder instead of cylinder_size, as in plan_dive: al80, al40, al63, hp80, hp100, hp120, lp85, s80, single_10l, single_12l, single_15l, twin_10l, twin_12l, twin_15l, stage_11l, stage_7l, o2_3l, dil_3l. twin_ presets are a manifolded pair.",
+                  "type": "string",
+                  "enum": [
+                    "al80",
+                    "al40",
+                    "al63",
+                    "hp80",
+                    "hp100",
+                    "hp120",
+                    "lp85",
+                    "s80",
+                    "single_10l",
+                    "single_12l",
+                    "single_15l",
+                    "twin_10l",
+                    "twin_12l",
+                    "twin_15l",
+                    "stage_11l",
+                    "stage_7l",
+                    "o2_3l",
+                    "dil_3l"
+                  ]
+                },
+                "cylinder_size": {
+                  "description": "Metric: water volume of ONE cylinder in litres, the number stamped on the neck. Imperial: rated capacity in ft³ at rated_pressure (an AL80 is 77.4). Default: the preset's, else an AL80 (11.1 L).",
+                  "type": "number",
+                  "minimum": 0.5,
+                  "maximum": 400
+                },
+                "rated_pressure": {
+                  "description": "Imperial only: the psi the capacity is rated at. Default: the preset's, else 3000. Ignored on metric.",
+                  "type": "number",
+                  "minimum": 725,
+                  "maximum": 7252
+                },
+                "twinset": {
+                  "description": "true for two cylinders on a manifold, filled or breathed together: doubles the volume. Default: the preset's, else false.",
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "depth",
+                "duration_min",
+                "start_pressure",
+                "end_pressure"
+              ],
+              "additionalProperties": false
+            },
+            "description": "Stretches of the logged dive, each on one cylinder, not overlapping in time."
+          },
+          "water": {
+            "type": "string",
+            "enum": [
+              "salt",
+              "fresh",
+              "en13319",
+              "red_sea"
+            ],
+            "description": "Water type, from its density: en13319 (EN 13319, the dive computer standard) 10.00 m per bar, salt 9.95, fresh 10.20, red_sea 9.92. Default en13319."
+          }
+        },
+        "required": [
+          "segments"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "buoyancy_check",
+      "description": "Returns a weighting check for one rig: how much lead to add or remove to be neutral at the end of the dive, the net buoyancy at the start (full cylinders at the target depth) and the end (near-empty cylinders at 3 m), what a flooded drysuit, a failed wing or a dropped stage would do and how to recover, and advisories. Use this when a diver asks how much weight they need, whether a rig is balanced, or how a change of suit, cylinder or water moves it. Not for gas planning.\n\ncylinders take a role (single, twinset, sidemount, stage) and cylinder: a lookup_cylinders id (al80, steel12-232) or a plan_dive preset, or cylinder_size and empty_buoyancy (sea water, with valve), plus empty_weight if known, for one not in the data. Weights are kg (lb imperial); gear weight is positive when it sinks. Omitted fields take Dive Kit defaults (salt water, 30 m, a 5 mm full wetsuit, a 16 kg wing, no body offset), listed in assumptions. Body buoyancy comes only from a measured body_offset (diver), never from body measurements; without one it is taken as neutral. An estimate to start from: confirm with an in-water weight check. Compare two setups with two calls. No engine call.\n\nExample: {\"cylinders\":[{\"role\":\"single\",\"cylinder\":\"al80\"}],\"exposure\":{\"type\":\"wetsuit\",\"thickness_mm\":7},\"gear\":[{\"label\":\"belt\",\"weight\":6,\"ditchable\":true}]}",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "units": {
+            "type": "string",
+            "enum": [
+              "metric",
+              "imperial"
+            ],
+            "description": "metric (m, bar, L, °C) or imperial (ft, psi, ft³, °F): the unit system for every value in and out. Default metric."
+          },
+          "water": {
+            "type": "string",
+            "enum": [
+              "salt",
+              "fresh",
+              "en13319",
+              "red_sea"
+            ],
+            "description": "Water type, from its density: en13319 (EN 13319, the dive computer standard) 10.00 m per bar, salt 9.95, fresh 10.20, red_sea 9.92. Default en13319."
+          },
+          "target_depth": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1000,
+            "description": "Deepest point of the dive (m or ft), where full cylinders are checked. Default 30 m (98 ft)."
+          },
+          "cylinders": {
+            "description": "Cylinders on the rig. Default one single AL80.",
+            "minItems": 1,
+            "maxItems": 6,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "role": {
+                  "type": "string",
+                  "enum": [
+                    "single",
+                    "twinset",
+                    "sidemount",
+                    "stage"
+                  ],
+                  "description": "single, twinset (two on a manifold), sidemount (a pair, one each side) or stage (one slung cylinder; one entry per stage)."
+                },
+                "cylinder": {
+                  "description": "A lookup_cylinders id (al80, steel12-232, hp100) or a plan_dive preset (al80, twin_12l, stage_11l). For twinset and sidemount name ONE cylinder of the pair. Default al80.",
+                  "type": "string",
+                  "maxLength": 40
+                },
+                "cylinder_size": {
+                  "description": "For a cylinder not in the data: water litres of one cylinder, or ft³ at rated_pressure on imperial. Needs empty_buoyancy.",
+                  "type": "number",
+                  "minimum": 0.5,
+                  "maximum": 400
+                },
+                "rated_pressure": {
+                  "description": "Imperial only, with cylinder_size: the psi its ft³ is rated at. Default 3000.",
+                  "type": "number",
+                  "minimum": 725,
+                  "maximum": 7252
+                },
+                "empty_buoyancy": {
+                  "type": "number",
+                  "minimum": -100,
+                  "maximum": 250,
+                  "description": "For a cylinder not in the data: buoyancy of one empty cylinder in sea water with its valve, kg (lb imperial), negative when it sinks. From the maker's sheet."
+                },
+                "empty_weight": {
+                  "type": "number",
+                  "minimum": -100,
+                  "maximum": 250,
+                  "description": "For a cylinder not in the data: weight of one empty cylinder without its valve, kg (lb imperial). Optional: with it the conversion to other water matches a cylinder in the data. Without it the conversion uses the internal volume, which understates the shift."
+                },
+                "regulator": {
+                  "description": "Regulator on each cylinder: travel, standard, cold_water or none. Default by role: standard (single, sidemount), cold_water (twinset), travel (stage).",
+                  "type": "string",
+                  "enum": [
+                    "travel",
+                    "standard",
+                    "cold_water",
+                    "none"
+                  ]
+                },
+                "rigging": {
+                  "description": "Count bands, manifold or stage hardware. Default true for twinset, sidemount and stage.",
+                  "type": "boolean"
+                },
+                "cylinder_lead": {
+                  "type": "number",
+                  "minimum": -100,
+                  "maximum": 250,
+                  "description": "Lead fixed to each cylinder (a tail or V-weight), kg (lb). Default 0."
+                },
+                "oxygen_pct": {
+                  "description": "Oxygen % of the gas in it. Default 21.",
+                  "type": "number",
+                  "minimum": 5,
+                  "maximum": 100
+                },
+                "helium_pct": {
+                  "description": "Helium % of the gas in it. Default 0.",
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 95
+                },
+                "start_pressure": {
+                  "description": "Fill at the start (bar or psi). Default: the preset fill, else the dataset working pressure.",
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 7252
+                }
+              },
+              "required": [
+                "role"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "exposure": {
+            "description": "Exposure suit. Default a 5 mm full wetsuit.",
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "none",
+                  "wetsuit",
+                  "drysuit"
+                ],
+                "description": "none, wetsuit or drysuit."
+              },
+              "thickness_mm": {
+                "description": "Wetsuit neoprene thickness in mm (both unit systems), 0 to 10. Default 5.",
+                "type": "number",
+                "minimum": 0,
+                "maximum": 10
+              },
+              "neoprene": {
+                "description": "Wetsuit foam: soft (new, compresses most), standard (default) or old (about 20% less lift).",
+                "type": "string",
+                "enum": [
+                  "soft",
+                  "standard",
+                  "old"
+                ]
+              },
+              "cut": {
+                "description": "Wetsuit cut: full (default), shorty or farmer_john.",
+                "type": "string",
+                "enum": [
+                  "full",
+                  "shorty",
+                  "farmer_john"
+                ]
+              },
+              "hood_mm": {
+                "description": "Hood thickness in mm; 0 or omitted for none.",
+                "type": "number",
+                "minimum": 0,
+                "maximum": 10
+              },
+              "gloves_mm": {
+                "description": "Glove thickness in mm; 0 or omitted for none.",
+                "type": "number",
+                "minimum": 0,
+                "maximum": 10
+              },
+              "booties_mm": {
+                "description": "Bootie thickness in mm; 0 or omitted for none.",
+                "type": "number",
+                "minimum": 0,
+                "maximum": 10
+              },
+              "vest_mm": {
+                "description": "Vest or hooded vest thickness in mm; 0 or omitted for none.",
+                "type": "number",
+                "minimum": 0,
+                "maximum": 10
+              },
+              "undersuit": {
+                "description": "Drysuit undersuit: light, medium (default) or heavy.",
+                "type": "string",
+                "enum": [
+                  "light",
+                  "medium",
+                  "heavy"
+                ]
+              },
+              "custom_lift": {
+                "type": "number",
+                "minimum": -100,
+                "maximum": 250,
+                "description": "Measured suit lift at the surface, kg (lb), instead of the model."
+              }
+            },
+            "required": [
+              "type"
+            ],
+            "additionalProperties": false
+          },
+          "wing": {
+            "description": "Buoyancy devices.",
+            "type": "object",
+            "properties": {
+              "lift": {
+                "type": "number",
+                "minimum": -100,
+                "maximum": 250,
+                "description": "Wing lift, kg (lb). Default 16 kg."
+              },
+              "redundant_bladder_lift": {
+                "type": "number",
+                "minimum": -100,
+                "maximum": 250,
+                "description": "Second bladder lift, kg (lb); omit for none."
+              },
+              "smb_lift": {
+                "type": "number",
+                "minimum": -100,
+                "maximum": 250,
+                "description": "Emergency lift from an SMB, kg (lb); omit for none."
+              },
+              "lift_bag_lift": {
+                "type": "number",
+                "minimum": -100,
+                "maximum": 250,
+                "description": "Emergency lift from a lift bag, kg (lb); omit for none."
+              }
+            },
+            "additionalProperties": false
+          },
+          "gear": {
+            "description": "Lead and other gear. Omit to get the lead the rig needs from zero.",
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "label": {
+                  "type": "string",
+                  "maxLength": 40,
+                  "description": "What it is: belt, trim pockets, backplate, torch."
+                },
+                "weight": {
+                  "type": "number",
+                  "minimum": -100,
+                  "maximum": 250,
+                  "description": "In-water weight, kg (lb), positive when it sinks (a 6 kg belt is 6)."
+                },
+                "ditchable": {
+                  "description": "Can be dropped in an emergency. Default false.",
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "label",
+                "weight"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "diver": {
+            "description": "Optional. A measured body_offset; without one the body is taken as neutral.",
+            "type": "object",
+            "properties": {
+              "body_offset": {
+                "type": "number",
+                "minimum": -100,
+                "maximum": 250,
+                "description": "The diver's own buoyancy with no suit or gear, from an in-water float test at the end of a breath out, kg (lb): positive floats, negative sinks."
+              },
+              "body_offset_water": {
+                "type": "string",
+                "enum": [
+                  "salt",
+                  "fresh",
+                  "en13319",
+                  "red_sea"
+                ],
+                "description": "Water type, from its density: en13319 (EN 13319, the dive computer standard) 10.00 m per bar, salt 9.95, fresh 10.20, red_sea 9.92. Default en13319."
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "lookup_references",
+      "description": "Returns vetted references from Dive Kit's open references dataset, with links. Use this when a diver asks for a source. Call it before answering any question about deco theory, physiology, gas limits, blending practice, standards or training, so the answer names its source. Not for calculations. If nothing matches, the result lists where to search next; say that source is not Dive Kit-vetted.\n\nEach reference gives title, authors, year, type, publisher, link or DOI, access, and what it is authoritative for (gradient factors, oxygen toxicity, gas density, blending and oxygen cleaning, real gas, buoyancy, gas management, training). Not for cylinders (lookup_cylinders) or courses (lookup_certifications).\n\ntopic narrows by subject and type by kind of source; the enums are in the input schema. query matches every word against the title, authors, publisher, notes and what the source is authoritative for. This is Dive Kit's own curated data (MIT licence, open.divekit.app), not a web search. No engine call.\n\nExample: {\"topic\":\"gradient_factors\"}",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "query": {
+            "description": "Free text; every word must match the title, authors, publisher, notes or what the source is authoritative for, e.g. \"baker m-values\", \"oxygen cleaning\", \"neoprene\". Accents are ignored.",
+            "type": "string",
+            "maxLength": 100
+          },
+          "topic": {
+            "description": "Subject: deco_theory, gradient_factors, oxygen_toxicity, gas_density, icd, hpns, ccr, gas_selection, gas_planning, gas_blending, oxygen_handling, real_gas, cylinders, buoyancy, breathing_rate, conventions, training, emergencies, cross_checks, community.",
+            "type": "string",
+            "enum": [
+              "deco_theory",
+              "gradient_factors",
+              "oxygen_toxicity",
+              "gas_density",
+              "icd",
+              "hpns",
+              "ccr",
+              "gas_selection",
+              "gas_planning",
+              "gas_blending",
+              "oxygen_handling",
+              "real_gas",
+              "cylinders",
+              "buoyancy",
+              "breathing_rate",
+              "conventions",
+              "training",
+              "emergencies",
+              "cross_checks",
+              "community"
+            ]
+          },
+          "type": {
+            "description": "Kind of source: paper, book, standard, manual, article, blog, thread, dataset, website, talk, software, video, podcast, course_material, report.",
+            "type": "string",
+            "enum": [
+              "paper",
+              "book",
+              "standard",
+              "manual",
+              "article",
+              "blog",
+              "thread",
+              "dataset",
+              "website",
+              "talk",
+              "software",
+              "video",
+              "podcast",
+              "course_material",
+              "report"
+            ]
+          },
+          "limit": {
+            "description": "Most references to return, 1 to 20. Default 10.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 20
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "app.divekit/mcp",
+    "version": "0.6.1",
+    "remoteUrl": "https://api.divekit.app/mcp",
+    "publishedAt": "2026-11-27T03:34:10.503702Z",
+    "fetchedAt": "2026-11-27T10:42:49.718Z",
+    "toolsSha256": "0550f0cf5890cdc3cee6fb876ee3b162a51caab5a3ccd1457a33363cd0588ab7"
+  }
+}

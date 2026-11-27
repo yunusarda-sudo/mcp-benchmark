@@ -1,0 +1,637 @@
+{
+  "$schema": "../schema.json",
+  "name": "io.github.YUZU-Hub/wiring-diagram-mcp",
+  "title": "VoltPlan Wiring Diagrams",
+  "category": "Developer Tools & DevOps",
+  "description": "Generate 12V/24V/48V wiring diagrams and size wires, fuses, batteries, solar, and inverters.",
+  "repository": "https://github.com/YUZU-Hub/wiring-diagram-mcp",
+  "tools": [
+    {
+      "name": "generate_wiring_diagram",
+      "description": "Generate an electrical wiring diagram for campers, boats, or off-grid setups. Returns the schematic as an image (batteries, chargers, protection components, loads) and a link that opens it in the VoltPlan editor to refine, save and turn into a shopping list. Protection components (shunt, main switch, low-voltage cutoff) are auto-generated when both batteries and loads are provided. Show the user the editor link.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "systemName": {
+            "type": "string",
+            "description": "Name of the electrical system (e.g. \"My Camper Van\")"
+          },
+          "batteries": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "description": "Battery name (e.g. \"LiFePO4 100Ah\")"
+                },
+                "voltage": {
+                  "type": "number",
+                  "description": "Nominal voltage (e.g. 12, or 12.8 for LiFePO4)"
+                },
+                "capacityAh": {
+                  "type": "number",
+                  "description": "Capacity in amp-hours. Give this or energyWh."
+                },
+                "energyWh": {
+                  "type": "number",
+                  "description": "Energy in watt-hours. Calculated from capacityAh × voltage when omitted."
+                }
+              },
+              "required": [
+                "name",
+                "voltage"
+              ],
+              "additionalProperties": false
+            },
+            "description": "Batteries in the system"
+          },
+          "loads": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "description": "Load name (e.g. \"LED Lights\")"
+                },
+                "power": {
+                  "type": "number",
+                  "description": "Power consumption in watts. Give this or current."
+                },
+                "current": {
+                  "type": "number",
+                  "description": "Current draw in amps. Calculated from power / voltage when omitted."
+                },
+                "voltage": {
+                  "type": "number",
+                  "description": "Operating voltage. Defaults to the first battery's voltage (or 12 V)."
+                }
+              },
+              "required": [
+                "name"
+              ],
+              "additionalProperties": false
+            },
+            "description": "Electrical loads / consumers"
+          },
+          "chargers": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "description": "Charger name (e.g. \"MPPT Solar Charger\")"
+                },
+                "inputVoltage": {
+                  "type": "number",
+                  "description": "Input voltage. For shore/generator (AC) chargers use the regional mains voltage: 230 V in Europe, UK, Australia, most of Asia and Africa; 120 V in North America and Japan. For solar/wind use the panel or turbine output voltage. For alternator use the vehicle system voltage (typically 14 V)."
+                },
+                "outputVoltage": {
+                  "type": "number",
+                  "description": "Output voltage. Defaults to the first battery's voltage (or 12 V)."
+                },
+                "power": {
+                  "type": "number",
+                  "description": "Power rating in watts"
+                },
+                "sourceType": {
+                  "type": "string",
+                  "enum": [
+                    "shore",
+                    "solar",
+                    "wind",
+                    "generator",
+                    "alternator"
+                  ],
+                  "description": "Type of power source feeding this charger"
+                }
+              },
+              "required": [
+                "name",
+                "inputVoltage",
+                "power"
+              ],
+              "additionalProperties": false
+            },
+            "description": "Chargers with their power sources"
+          },
+          "format": {
+            "type": "string",
+            "enum": [
+              "png",
+              "svg"
+            ],
+            "default": "png",
+            "description": "png (default): an image the client displays. svg: SVG markup as text, without component icons, for clients that save or post-process files."
+          }
+        },
+        "required": [
+          "systemName"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "find_components",
+      "description": "Find real products in VoltPlan's curated component catalogue that match a spec, e.g. a 200 Ah 12 V LiFePO4 battery or a 2000 W pure-sine inverter. Results come closest rating first. The catalogue is small and curated, so results may deviate from the requested spec; check the listed specs. Use it after the calculators (calculate_battery_bank, calculate_solar_size, calculate_inverter_size) have sized the part. Returns product pages and buy links for each product; show them to the user.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "category": {
+            "type": "string",
+            "enum": [
+              "battery",
+              "solar_panel",
+              "solar_charge_controller",
+              "dc_dc_charger",
+              "ac_charger",
+              "inverter",
+              "power_station",
+              "battery_monitor",
+              "appliance"
+            ],
+            "description": "Kind of product: battery, solar_panel, solar_charge_controller (MPPT/PWM), dc_dc_charger (alternator / B2B charger), ac_charger (shore / mains battery charger), inverter (incl. inverter-chargers), power_station (portable power station), battery_monitor (shunt / battery monitor), appliance (loads such as fridges, heaters, fans)"
+          },
+          "systemVoltage": {
+            "type": "number",
+            "enum": [
+              12,
+              24,
+              48
+            ],
+            "description": "System (battery bank) voltage: 12, 24 or 48. Leaves out products built for another voltage. Ignored for solar_panel, power_station and battery_monitor."
+          },
+          "powerWatts": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Target power rating in watts: inverter continuous W, charger or controller output W, panel W, power station AC output W, appliance W. Ranks results; not used for batteries."
+          },
+          "capacityAh": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Batteries only: target capacity in amp-hours. Ranks results."
+          },
+          "capacityWh": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Batteries and power stations: target energy in watt-hours. Ranks results; for batteries capacityAh wins when both are given."
+          },
+          "pureSine": {
+            "type": "boolean",
+            "description": "true: only pure sine wave products (inverter, power_station)."
+          },
+          "query": {
+            "type": "string",
+            "maxLength": 100,
+            "description": "Free-text filter; every word must appear in the product (e.g. \"LiFePO4\", \"Victron\")."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10,
+            "default": 5,
+            "description": "Maximum number of products to return (1-10, default: 5)"
+          }
+        },
+        "required": [
+          "category"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "build_bom",
+      "description": "Build the shopping list (bill of materials) for the same system generate_wiring_diagram takes: components with matching products from VoltPlan's catalogue, cable per gauge with lengths, fuses, fuse holders, terminals and tools, sized with the same rules as the diagram. Returns buy links for every line and a link that opens the system in the VoltPlan editor; show them to the user.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "systemName": {
+            "type": "string",
+            "description": "Name of the electrical system (e.g. \"My Camper Van\")"
+          },
+          "batteries": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "description": "Battery name (e.g. \"LiFePO4 100Ah\")"
+                },
+                "voltage": {
+                  "type": "number",
+                  "description": "Nominal voltage (e.g. 12, or 12.8 for LiFePO4)"
+                },
+                "capacityAh": {
+                  "type": "number",
+                  "description": "Capacity in amp-hours. Give this or energyWh."
+                },
+                "energyWh": {
+                  "type": "number",
+                  "description": "Energy in watt-hours. Calculated from capacityAh × voltage when omitted."
+                }
+              },
+              "required": [
+                "name",
+                "voltage"
+              ],
+              "additionalProperties": false
+            },
+            "description": "Batteries in the system"
+          },
+          "loads": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "description": "Load name (e.g. \"LED Lights\")"
+                },
+                "power": {
+                  "type": "number",
+                  "description": "Power consumption in watts. Give this or current."
+                },
+                "current": {
+                  "type": "number",
+                  "description": "Current draw in amps. Calculated from power / voltage when omitted."
+                },
+                "voltage": {
+                  "type": "number",
+                  "description": "Operating voltage. Defaults to the first battery's voltage (or 12 V)."
+                }
+              },
+              "required": [
+                "name"
+              ],
+              "additionalProperties": false
+            },
+            "description": "Electrical loads / consumers"
+          },
+          "chargers": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "description": "Charger name (e.g. \"MPPT Solar Charger\")"
+                },
+                "inputVoltage": {
+                  "type": "number",
+                  "description": "Input voltage. For shore/generator (AC) chargers use the regional mains voltage: 230 V in Europe, UK, Australia, most of Asia and Africa; 120 V in North America and Japan. For solar/wind use the panel or turbine output voltage. For alternator use the vehicle system voltage (typically 14 V)."
+                },
+                "outputVoltage": {
+                  "type": "number",
+                  "description": "Output voltage. Defaults to the first battery's voltage (or 12 V)."
+                },
+                "power": {
+                  "type": "number",
+                  "description": "Power rating in watts"
+                },
+                "sourceType": {
+                  "type": "string",
+                  "enum": [
+                    "shore",
+                    "solar",
+                    "wind",
+                    "generator",
+                    "alternator"
+                  ],
+                  "description": "Type of power source feeding this charger"
+                }
+              },
+              "required": [
+                "name",
+                "inputVoltage",
+                "power"
+              ],
+              "additionalProperties": false
+            },
+            "description": "Chargers with their power sources"
+          }
+        },
+        "required": [
+          "systemName"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "list_component_types",
+      "description": "List all available component types and example configurations for building wiring diagrams. Use this to understand what parameters are needed before calling generate_wiring_diagram.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "calculate_wire_gauge",
+      "description": "Calculate the recommended wire gauge / cable cross-section for a DC circuit. Considers both ampacity (current carrying capacity) and voltage drop to recommend the optimal cable size. Also returns total resistance, power loss, and a fuse recommendation. Supports copper conductors from 0.75 mm² (18 AWG) to 240 mm² (300 MCM).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "voltage": {
+            "type": "number",
+            "description": "System voltage in volts (e.g. 12, 24, 48)"
+          },
+          "current": {
+            "type": "number",
+            "description": "Load current in amps. Provide either current or power."
+          },
+          "power": {
+            "type": "number",
+            "description": "Load power in watts. Will be converted to current using the voltage. Provide either current or power."
+          },
+          "cableLengthM": {
+            "type": "number",
+            "description": "One-way cable length in meters"
+          },
+          "maxVoltageDropPercent": {
+            "type": "number",
+            "default": 3,
+            "description": "Maximum acceptable voltage drop in percent (default: 3%)"
+          },
+          "temperatureCelsius": {
+            "type": "number",
+            "default": 20,
+            "description": "Ambient temperature in °C (default: 20°C). Affects copper resistance."
+          },
+          "isRoundTrip": {
+            "type": "boolean",
+            "default": true,
+            "description": "Account for both positive and negative conductor (default: true). Set to false for chassis-ground returns."
+          }
+        },
+        "required": [
+          "voltage",
+          "cableLengthM"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "calculate_power_budget",
+      "description": "Calculate total daily energy consumption from a list of electrical loads. Each load specifies its power draw, how many hours per day it runs, and quantity. Returns total daily energy (Wh and Ah), peak power draw, and average power. This is typically the first step in sizing a battery bank and solar system.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "systemVoltage": {
+            "type": "number",
+            "description": "System voltage in volts (e.g. 12, 24, 48)"
+          },
+          "loads": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "description": "Name of the load (e.g. \"LED Lights\")"
+                },
+                "powerWatts": {
+                  "type": "number",
+                  "description": "Power consumption of a single unit in watts"
+                },
+                "hoursPerDay": {
+                  "type": "number",
+                  "description": "Average hours of use per day"
+                },
+                "quantity": {
+                  "type": "number",
+                  "default": 1,
+                  "description": "Number of identical units (default: 1)"
+                }
+              },
+              "required": [
+                "name",
+                "powerWatts",
+                "hoursPerDay"
+              ],
+              "additionalProperties": false
+            },
+            "description": "List of electrical loads to include in the budget"
+          }
+        },
+        "required": [
+          "systemVoltage",
+          "loads"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "calculate_battery_bank",
+      "description": "Calculate the recommended battery bank size based on daily energy consumption. Accounts for days of autonomy (how many days without charging) and depth of discharge. Returns required capacity, number of batteries, and wiring configuration.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "dailyConsumptionWh": {
+            "type": "number",
+            "description": "Daily energy consumption in watt-hours (from calculate_power_budget)"
+          },
+          "daysOfAutonomy": {
+            "type": "number",
+            "default": 2,
+            "description": "Days the system should run without any charging (default: 2)"
+          },
+          "depthOfDischargePercent": {
+            "type": "number",
+            "default": 80,
+            "description": "Usable percentage of battery capacity. LiFePO4: 80-90%, AGM: 50%, Gel: 50% (default: 80)"
+          },
+          "systemVoltage": {
+            "type": "number",
+            "description": "Target system voltage in volts (e.g. 12, 24, 48)"
+          },
+          "singleBatteryAh": {
+            "type": "number",
+            "description": "Capacity of a single battery in amp-hours (e.g. 100, 200)"
+          },
+          "singleBatteryVoltage": {
+            "type": "number",
+            "description": "Voltage of a single battery (e.g. 12.8 for LiFePO4, 12 for lead-acid)"
+          }
+        },
+        "required": [
+          "dailyConsumptionWh",
+          "systemVoltage",
+          "singleBatteryAh",
+          "singleBatteryVoltage"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "calculate_solar_size",
+      "description": "Calculate the required solar panel wattage to cover daily energy consumption. Accounts for peak sun hours at the location and system efficiency losses (MPPT conversion, wiring, temperature derating). Returns required wattage and common panel configurations.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "dailyConsumptionWh": {
+            "type": "number",
+            "description": "Daily energy consumption in watt-hours (from calculate_power_budget)"
+          },
+          "peakSunHours": {
+            "type": "number",
+            "description": "Average daily peak sun hours for the location. Examples: Northern Europe winter 1-2h, summer 4-6h. Southern US 5-6h. Equatorial regions 5-7h."
+          },
+          "systemEfficiency": {
+            "type": "number",
+            "default": 0.85,
+            "description": "Overall system efficiency factor (default: 0.85). Accounts for MPPT losses, wiring losses, temperature derating, and panel soiling."
+          }
+        },
+        "required": [
+          "dailyConsumptionWh",
+          "peakSunHours"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "calculate_charging_time",
+      "description": "Estimate how long it takes to charge a battery bank from a given state of charge to a target level. Accounts for the bulk charging phase (constant current, up to ~80% SoC) and the slower absorption phase (tapering current, 80-100% SoC). Works for any charging source: solar, shore power, alternator.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "batteryCapacityAh": {
+            "type": "number",
+            "description": "Total battery bank capacity in amp-hours"
+          },
+          "batteryVoltage": {
+            "type": "number",
+            "description": "Battery bank voltage (e.g. 12, 24, 48)"
+          },
+          "currentStateOfChargePercent": {
+            "type": "number",
+            "description": "Current state of charge in percent (e.g. 20 for 20%)"
+          },
+          "targetStateOfChargePercent": {
+            "type": "number",
+            "default": 100,
+            "description": "Target state of charge in percent (default: 100)"
+          },
+          "chargePowerWatts": {
+            "type": "number",
+            "description": "Charger output power in watts"
+          },
+          "chargeCurrentAmps": {
+            "type": "number",
+            "description": "Maximum charge current in amps (if limited by the charger or battery BMS). If omitted, calculated from power and voltage."
+          }
+        },
+        "required": [
+          "batteryCapacityAh",
+          "batteryVoltage",
+          "currentStateOfChargePercent",
+          "chargePowerWatts"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "calculate_inverter_size",
+      "description": "Calculate the recommended inverter size for running AC loads from a DC battery system. Accounts for continuous power, startup surge power (motors typically surge 2-3x), and includes a 25% headroom for the continuous rating. Returns the recommended inverter wattage and the DC current draw at system voltage.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "systemVoltage": {
+            "type": "number",
+            "description": "DC system voltage (e.g. 12, 24, 48)"
+          },
+          "loads": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "description": "Name of the AC load (e.g. \"Microwave\", \"Coffee Machine\")"
+                },
+                "continuousWatts": {
+                  "type": "number",
+                  "description": "Continuous power draw in watts"
+                },
+                "surgeWatts": {
+                  "type": "number",
+                  "description": "Startup surge power in watts (for motors, compressors). If omitted, assumed equal to continuous watts."
+                },
+                "quantity": {
+                  "type": "number",
+                  "default": 1,
+                  "description": "Number of identical units (default: 1)"
+                }
+              },
+              "required": [
+                "name",
+                "continuousWatts"
+              ],
+              "additionalProperties": false
+            },
+            "description": "List of AC loads that will run through the inverter"
+          }
+        },
+        "required": [
+          "systemVoltage",
+          "loads"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "calculate_battery_config",
+      "description": "Determine how to arrange batteries in series and/or parallel to achieve a target voltage and capacity. Returns the number of batteries needed, the wiring configuration (e.g. 2S3P), and step-by-step wiring instructions.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "targetVoltage": {
+            "type": "number",
+            "description": "Desired system voltage (e.g. 12, 24, 48)"
+          },
+          "targetCapacityAh": {
+            "type": "number",
+            "description": "Desired total capacity in amp-hours"
+          },
+          "singleBatteryVoltage": {
+            "type": "number",
+            "description": "Nominal voltage of one battery (e.g. 12.8 for LiFePO4, 12 for lead-acid, 3.2 for LiFePO4 cells)"
+          },
+          "singleBatteryAh": {
+            "type": "number",
+            "description": "Capacity of one battery in amp-hours"
+          }
+        },
+        "required": [
+          "targetVoltage",
+          "targetCapacityAh",
+          "singleBatteryVoltage",
+          "singleBatteryAh"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "io.github.YUZU-Hub/wiring-diagram-mcp",
+    "version": "0.5.0",
+    "remoteUrl": "https://mcp.voltplan.app/mcp",
+    "publishedAt": "2026-11-18T22:42:49.99275Z",
+    "fetchedAt": "2026-11-27T10:42:49.718Z",
+    "toolsSha256": "bfab19dec782918238e4851d79d83ca19a209820f103f28ecb0f686a45366ee5"
+  }
+}

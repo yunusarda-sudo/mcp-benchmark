@@ -1,0 +1,918 @@
+{
+  "$schema": "../schema.json",
+  "name": "dev.tradestats/tradestats",
+  "title": "TradeStats - customs trade statistics",
+  "category": "Other",
+  "description": "Customs trade statistics API and MCP: monthly imports/exports by HS code and partner. Japan, US, UK.",
+  "tools": [
+    {
+      "name": "search_items",
+      "description": "Find product codes of one reporter by words from the product name (customs wording, e.g. \"lithium-ion\", \"frozen shrimp\", \"integrated circuits\") or by a code prefix (digits, e.g. \"8708\" or \"30\"). Japanese words work too (kanji, katakana or hiragana) and search the Japanese product names of HS6, or of HS4/HS2 with level; each hit carries description_ja when a Japanese name exists. Use it first when you do not know the exact code; when you know the code, go straight to get_item_summary. Returns code, description, unit, and the first and last month with data. level defaults to hs6 on a build that serves HS6 and above (national-level series exist there only for a few listed codes; each hit says series_available, and for false gives hs6_parent), and to the reporter's national level (most detailed) on a build with full national series; use hs6/hs4/hs2 for broader groups (a code prefix with level hs4 or hs6 lists the codes under a chapter or heading, in code order and capped at limit, so a long list is cut off). Matching ignores case, hyphens and simple plurals, and knows common spelling variants (aluminum/aluminium, sulfur/sulphur, color/colour, tire/tyre) and one product synonym (passenger cars = motor cars); there are no other synonyms. Each hit says in available_in whether the code exists for import and/or export (with the period) and whether net trade (get_balance) is available. It returns codes, not trade values. Customs trade statistics of several reporting countries (Japan JP, United States US, United Kingdom GB) from their official customs data, monthly, by HS product code and partner country. value fields are in the reporter's currency (currency: JPY, USD, GBP or EUR) and *_usd fields in US dollars; ratios and shares are fractions precomputed from the full dataset; every answer carries reporter, currency, data_through (latest published month), the reporter's attribution, and notes. Maximum 200 rows per answer. Numbers in answers are rounded once, at the end: amounts (value, *_usd, v12 ...) to 2 decimals, quantity and kg to 3, unit prices (unit_price*) to 4 significant digits below 100 and 2 decimals from 100 up (never rounded to 0), and ratios, shares and growth rates (yoy*, mom*, share*, hhi*, chg3y) to 6; whole numbers and null are left as they are. A null quantity, kg or unit price comes with a *_unavailable_reason (mixed_units, weight_only, no_quantity_in_source, no_weight_in_source, source_gap, withheld; get_catalog lists them in null_reasons), and a missing seasonality with seasonality_unavailable_reason. The national level (JP 9-digit, US 10-digit, GB 8-digit codes) differs between reporters and between import and export; EU has no national level (HS6 only); HS6, HS4 and HS2 are shared. Import and export are separate datasets, so reporter and flow are always required for product figures. Rankings (limit) are limited to the top 20 without an API key (more is refused with out_of_scope) and to 100 with a free API key. Start with get_catalog (coverage, your access limits, which tool to use) or, when you already know the code, get_item_summary for a one-call overview of a product.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "reporter": {
+            "type": "string",
+            "enum": [
+              "JP",
+              "US",
+              "GB"
+            ],
+            "description": "Required. The reporting country whose customs statistics are read: \"JP\" (Japan), \"US\" (United States) or \"GB\" (United Kingdom). Partners are the other countries."
+          },
+          "query": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "Words from the product name, all of which must match (e.g. \"frozen shrimp\", \"semiconductor machines\"), or digits for a code prefix (e.g. \"8507\", \"3004\"). Up to 6 words are used."
+          },
+          "flow": {
+            "type": "string",
+            "enum": [
+              "import",
+              "export"
+            ],
+            "description": "Required. \"import\" (goods entering the reporting country) or \"export\" (goods leaving it); there is no combined view: \"both\" does not exist. For a comparison across countries use compare_countries, for exports minus imports use get_balance."
+          },
+          "level": {
+            "type": "string",
+            "description": "Code level to search: the reporter's national level (JP hs9, US hs10, GB cn8; EU has none), hs6, hs4 or hs2. Default: hs6 on a build that serves HS6 and above, otherwise the national level (most detailed; numbering differs between import and export)."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50,
+            "description": "Maximum results (default 20, max 50)."
+          }
+        },
+        "required": [
+          "reporter",
+          "query",
+          "flow"
+        ]
+      }
+    },
+    {
+      "name": "get_series",
+      "description": "Monthly time series for one product (HS2/4/6 or national code) of one reporter and partner country (default: world total). Per month: value and value_usd, quantity, kilograms, unit price (per unit and per kg), year-over-year and month-over-month change, share of the country total and trailing-12-month share, flags for months whose changes are not comparable because of a reclassification or definition change. When available it also includes precomputed signals: 3- and 6-month moving averages, deviation from them, acceleration, 12-month volatility and a 36-month anomaly score, each with the number of months used. Use from/to (YYYY-MM, or just YYYY for a whole year) to choose the range; the latest 200 months are returned at most. A monthly answer also carries totals, the sums over the rows returned (months_with_value, value, value_usd, quantity only when every row has one in a single unit, kg, unit_price = value / quantity and unit_price_kg as ratios of sums; complete says whether every month of the range has a row and nothing was cut by the 200-row limit). When quantity, kg or unit_price is null the row says why (quantity_unavailable_reason, kg_unavailable_reason, unit_price_unavailable_reason; for mixed_units also child_units, the units below the code). freq \"year\" returns calendar-year totals instead (value, quantity, unit price, year-over-year changes; the current year is flagged ytd). Use it for history, trends and quantity or unit-price questions (e.g. frozen shrimp 030617 by year, or lithium-ion batteries 850760 from one country by month). For a quick overview of the latest figures use get_item_summary instead; for the busy and slow months use get_seasonality. Not included: forecasts, partner detail (see get_partners). Customs trade statistics of several reporting countries (Japan JP, United States US, United Kingdom GB) from their official customs data, monthly, by HS product code and partner country. value fields are in the reporter's currency (currency: JPY, USD, GBP or EUR) and *_usd fields in US dollars; ratios and shares are fractions precomputed from the full dataset; every answer carries reporter, currency, data_through (latest published month), the reporter's attribution, and notes. Maximum 200 rows per answer. Numbers in answers are rounded once, at the end: amounts (value, *_usd, v12 ...) to 2 decimals, quantity and kg to 3, unit prices (unit_price*) to 4 significant digits below 100 and 2 decimals from 100 up (never rounded to 0), and ratios, shares and growth rates (yoy*, mom*, share*, hhi*, chg3y) to 6; whole numbers and null are left as they are. A null quantity, kg or unit price comes with a *_unavailable_reason (mixed_units, weight_only, no_quantity_in_source, no_weight_in_source, source_gap, withheld; get_catalog lists them in null_reasons), and a missing seasonality with seasonality_unavailable_reason. The national level (JP 9-digit, US 10-digit, GB 8-digit codes) differs between reporters and between import and export; EU has no national level (HS6 only); HS6, HS4 and HS2 are shared. Import and export are separate datasets, so reporter and flow are always required for product figures. Rankings (limit) are limited to the top 20 without an API key (more is refused with out_of_scope) and to 100 with a free API key. Start with get_catalog (coverage, your access limits, which tool to use) or, when you already know the code, get_item_summary for a one-call overview of a product.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "reporter": {
+            "type": "string",
+            "enum": [
+              "JP",
+              "US",
+              "GB"
+            ],
+            "description": "Required. The reporting country whose customs statistics are read: \"JP\" (Japan), \"US\" (United States) or \"GB\" (United Kingdom). Partners are the other countries."
+          },
+          "flow": {
+            "type": "string",
+            "enum": [
+              "import",
+              "export"
+            ],
+            "description": "Required. \"import\" (goods entering the reporting country) or \"export\" (goods leaving it); there is no combined view: \"both\" does not exist. For a comparison across countries use compare_countries, for exports minus imports use get_balance."
+          },
+          "code": {
+            "type": "string",
+            "description": "HS product code with 2, 4 or 6 digits, or the reporter's national code (JP 9 digits, US 10, GB 8; a reporter without a national level, such as EU, has HS6 as its finest level); dots are ignored (e.g. \"85\", \"8507\", \"850760\" or \"8507.60\"). National codes differ between reporters and between import and export; find codes with search_items. On a build that serves HS6 and above a national code without a series answers fine_digits_not_served: retry with its 6-digit parent."
+          },
+          "country": {
+            "type": "string",
+            "description": "Partner country: ISO 3166 alpha-2 code (e.g. \"CN\", \"DE\", \"VN\") or the name as published; omit for the world total (WLD)."
+          },
+          "from": {
+            "type": "string",
+            "pattern": "^\\d{4}(-(0[1-9]|1[0-2]))?$",
+            "description": "First month, YYYY-MM (e.g. \"2024-01\"), or a year, YYYY (e.g. \"2000\", read as YYYY-01). With freq \"year\" the year of this month is the first year. Default: the first month with data."
+          },
+          "to": {
+            "type": "string",
+            "pattern": "^\\d{4}(-(0[1-9]|1[0-2]))?$",
+            "description": "Last month, YYYY-MM, or a year, YYYY (e.g. \"2025\", read as YYYY-12). Default: latest published month."
+          },
+          "freq": {
+            "type": "string",
+            "enum": [
+              "month",
+              "year"
+            ],
+            "description": "month (default): one row per month. year: calendar-year totals (value, quantity, unit price, year-over-year changes; the current year is flagged ytd); from/to select the years."
+          },
+          "include_signals": {
+            "type": "boolean",
+            "description": "Include precomputed signals (moving averages, acceleration, volatility, anomaly score) for monthly rows (default true). Set false for a smaller answer."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200,
+            "description": "Optional, monthly rows only. Number of NEWEST months to return (default and maximum 200); earlier months are cut off and complete is false. Use from/to to choose a range instead."
+          }
+        },
+        "required": [
+          "reporter",
+          "flow",
+          "code"
+        ]
+      }
+    },
+    {
+      "name": "get_partners",
+      "description": "Trading partners of one reporter for one product. window 12 (default) covers the latest 12 months: each partner's 12-month value (and value_usd), share, year-over-year change against the previous 12 months, the 3-year change and rank; sort \"growth\" ranks by growth instead of size and, unless min_value is given, leaves out partners below a default floor (the larger of US$ 1,000,000 and 1% of the world 12-month value) because small bases give large percentages; min_value (US dollars) sets another floor (0 shows every partner). window 1 gives one month (any month, with month). Both include other (the world total minus the partners shown), country-concentration measures (HHI, number of partners, top partner and its share) and partner_count (every partner with trade in the window, whatever limit or min_value), partners_returned, truncated (limit cut off partners) and partners_below_floor (partners under min_value or the default growth floor). Use it to see who buys from or supplies the reporter, how concentrated the supply is and who is growing (e.g. where the United Kingdom's lithium-ion batteries 850760 come from and China's share). get_partners covers one product across all its partners over 12 months (or one month); use get_ranking instead to rank the products of one partner, or to find the biggest month-on-year movers; use get_new_markets for partners that are new or have doubled. Not included: partner history over time (use get_series with country). Customs trade statistics of several reporting countries (Japan JP, United States US, United Kingdom GB) from their official customs data, monthly, by HS product code and partner country. value fields are in the reporter's currency (currency: JPY, USD, GBP or EUR) and *_usd fields in US dollars; ratios and shares are fractions precomputed from the full dataset; every answer carries reporter, currency, data_through (latest published month), the reporter's attribution, and notes. Maximum 200 rows per answer. Numbers in answers are rounded once, at the end: amounts (value, *_usd, v12 ...) to 2 decimals, quantity and kg to 3, unit prices (unit_price*) to 4 significant digits below 100 and 2 decimals from 100 up (never rounded to 0), and ratios, shares and growth rates (yoy*, mom*, share*, hhi*, chg3y) to 6; whole numbers and null are left as they are. A null quantity, kg or unit price comes with a *_unavailable_reason (mixed_units, weight_only, no_quantity_in_source, no_weight_in_source, source_gap, withheld; get_catalog lists them in null_reasons), and a missing seasonality with seasonality_unavailable_reason. The national level (JP 9-digit, US 10-digit, GB 8-digit codes) differs between reporters and between import and export; EU has no national level (HS6 only); HS6, HS4 and HS2 are shared. Import and export are separate datasets, so reporter and flow are always required for product figures. Rankings (limit) are limited to the top 20 without an API key (more is refused with out_of_scope) and to 100 with a free API key. Start with get_catalog (coverage, your access limits, which tool to use) or, when you already know the code, get_item_summary for a one-call overview of a product.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "reporter": {
+            "type": "string",
+            "enum": [
+              "JP",
+              "US",
+              "GB"
+            ],
+            "description": "Required. The reporting country whose customs statistics are read: \"JP\" (Japan), \"US\" (United States) or \"GB\" (United Kingdom). Partners are the other countries."
+          },
+          "flow": {
+            "type": "string",
+            "enum": [
+              "import",
+              "export"
+            ],
+            "description": "Required. \"import\" (goods entering the reporting country) or \"export\" (goods leaving it); there is no combined view: \"both\" does not exist. For a comparison across countries use compare_countries, for exports minus imports use get_balance."
+          },
+          "code": {
+            "type": "string",
+            "description": "HS product code with 2, 4 or 6 digits, or the reporter's national code (JP 9 digits, US 10, GB 8; a reporter without a national level, such as EU, has HS6 as its finest level); dots are ignored (e.g. \"85\", \"8507\", \"850760\" or \"8507.60\"). National codes differ between reporters and between import and export; find codes with search_items. On a build that serves HS6 and above a national code without a series answers fine_digits_not_served: retry with its 6-digit parent."
+          },
+          "window": {
+            "type": "integer",
+            "enum": [
+              1,
+              12
+            ],
+            "description": "12 (default): the latest 12 months, latest month only. 1: a single month (use month for any other month)."
+          },
+          "sort": {
+            "type": "string",
+            "enum": [
+              "value",
+              "growth"
+            ],
+            "description": "value (default) ranks by size; growth ranks by year-over-year growth of the 12-month total (window 12 only; without min_value it leaves out partners below the larger of US$ 1,000,000 and 1% of the world 12-month value)."
+          },
+          "min_value": {
+            "type": "number",
+            "description": "Drop partners whose value (12-month total, or the month for window 1) is below this many US dollars. With sort growth it replaces the default floor; 0 shows every partner."
+          },
+          "month": {
+            "type": "string",
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+            "description": "Month YYYY-MM. Default: latest. With window 12 it must be the latest month; use window 1 for others."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200,
+            "description": "Number of partners (default 20). Without an API key the maximum is 20 (more is refused with out_of_scope); with a free API key 100; never more than 200 rows per answer."
+          }
+        },
+        "required": [
+          "reporter",
+          "flow",
+          "code"
+        ]
+      }
+    },
+    {
+      "name": "get_ranking",
+      "description": "Rankings of one reporter for a month. kind \"items_for_country\": the largest products (at the chosen level) for a partner country (default: world total). kind \"countries_for_item\": the largest partner countries for one product code. kind \"movers_up\" / \"movers_down\": the products with the largest US-dollar increase / decrease versus the same month a year earlier (for a partner, default world; kept for the world total and some partners), with previous-year value, change and year-over-year percent. month defaults to the latest. Results are precomputed ranks; limit is capped by your key tier (default top 20 without a key). Use it for \"what does Japan buy from Vietnam?\" (items_for_country) or \"which products from China jumped this month?\" (movers_up with country). get_ranking looks at a single month; for one product's partners over the latest 12 months, with growth and concentration, use get_partners instead; for one product's overview use get_item_summary. Customs trade statistics of several reporting countries (Japan JP, United States US, United Kingdom GB) from their official customs data, monthly, by HS product code and partner country. value fields are in the reporter's currency (currency: JPY, USD, GBP or EUR) and *_usd fields in US dollars; ratios and shares are fractions precomputed from the full dataset; every answer carries reporter, currency, data_through (latest published month), the reporter's attribution, and notes. Maximum 200 rows per answer. Numbers in answers are rounded once, at the end: amounts (value, *_usd, v12 ...) to 2 decimals, quantity and kg to 3, unit prices (unit_price*) to 4 significant digits below 100 and 2 decimals from 100 up (never rounded to 0), and ratios, shares and growth rates (yoy*, mom*, share*, hhi*, chg3y) to 6; whole numbers and null are left as they are. A null quantity, kg or unit price comes with a *_unavailable_reason (mixed_units, weight_only, no_quantity_in_source, no_weight_in_source, source_gap, withheld; get_catalog lists them in null_reasons), and a missing seasonality with seasonality_unavailable_reason. The national level (JP 9-digit, US 10-digit, GB 8-digit codes) differs between reporters and between import and export; EU has no national level (HS6 only); HS6, HS4 and HS2 are shared. Import and export are separate datasets, so reporter and flow are always required for product figures. Rankings (limit) are limited to the top 20 without an API key (more is refused with out_of_scope) and to 100 with a free API key. Start with get_catalog (coverage, your access limits, which tool to use) or, when you already know the code, get_item_summary for a one-call overview of a product.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "reporter": {
+            "type": "string",
+            "enum": [
+              "JP",
+              "US",
+              "GB"
+            ],
+            "description": "Required. The reporting country whose customs statistics are read: \"JP\" (Japan), \"US\" (United States) or \"GB\" (United Kingdom). Partners are the other countries."
+          },
+          "flow": {
+            "type": "string",
+            "enum": [
+              "import",
+              "export"
+            ],
+            "description": "Required. \"import\" (goods entering the reporting country) or \"export\" (goods leaving it); there is no combined view: \"both\" does not exist. For a comparison across countries use compare_countries, for exports minus imports use get_balance."
+          },
+          "level": {
+            "type": "string",
+            "description": "Level of the products being ranked: the reporter's national level (JP hs9, US hs10, GB cn8; EU has none), hs6, hs4 or hs2; with countries_for_item it is the level of code."
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "items_for_country",
+              "countries_for_item",
+              "movers_up",
+              "movers_down"
+            ],
+            "description": "What to rank. items_for_country: largest products for country (or the world). countries_for_item: largest partner countries for code. movers_up / movers_down: products with the largest US-dollar increase / decrease versus the same month a year earlier, for country (or the world)."
+          },
+          "code": {
+            "type": "string",
+            "description": "Product code with the number of digits of level (e.g. \"8542\" with level hs4, \"300490\" with hs6). Required for kind countries_for_item; ignored otherwise."
+          },
+          "country": {
+            "type": "string",
+            "description": "Partner country for items_for_country and the movers kinds: ISO 3166 alpha-2 code (e.g. \"VN\") or the name as published. Omit for the world total. Ignored for countries_for_item."
+          },
+          "month": {
+            "type": "string",
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+            "description": "Month YYYY-MM. Default: latest."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200,
+            "description": "Rows to return (default 20). Without an API key the maximum is 20 (more is refused with out_of_scope); with a free API key 100; never more than 200 rows per answer."
+          }
+        },
+        "required": [
+          "reporter",
+          "flow",
+          "level",
+          "kind"
+        ]
+      }
+    },
+    {
+      "name": "get_balance",
+      "description": "Trade balance of one reporter for a product and partner country (default: world total) by month: export value, import value and balance (exports minus imports), in the reporter's currency and in US dollars. A month with trade in one direction only shows the other side as 0 only when that direction is published for the month, has no source gap, AND the chapter has no undisclosed (withheld) amount that month; otherwise the other side and the balance are null (months_unknown counts them; never treat null as 0). For the United Kingdom (GB) most one-direction chapter-months are null for this reason. Available at HS6, HS4 and HS2 only, because national import and export codes are different numbering systems. This tool combines both flows, so it takes no flow argument. Use from/to (YYYY-MM, or just YYYY for a whole year) for the range. Use it for \"does the United Kingdom run a surplus or a deficit with Germany in vehicles and parts (chapter 87)?\"; for one direction alone, with quantities and prices, use get_series. Customs trade statistics of several reporting countries (Japan JP, United States US, United Kingdom GB) from their official customs data, monthly, by HS product code and partner country. value fields are in the reporter's currency (currency: JPY, USD, GBP or EUR) and *_usd fields in US dollars; ratios and shares are fractions precomputed from the full dataset; every answer carries reporter, currency, data_through (latest published month), the reporter's attribution, and notes. Maximum 200 rows per answer. Numbers in answers are rounded once, at the end: amounts (value, *_usd, v12 ...) to 2 decimals, quantity and kg to 3, unit prices (unit_price*) to 4 significant digits below 100 and 2 decimals from 100 up (never rounded to 0), and ratios, shares and growth rates (yoy*, mom*, share*, hhi*, chg3y) to 6; whole numbers and null are left as they are. A null quantity, kg or unit price comes with a *_unavailable_reason (mixed_units, weight_only, no_quantity_in_source, no_weight_in_source, source_gap, withheld; get_catalog lists them in null_reasons), and a missing seasonality with seasonality_unavailable_reason. The national level (JP 9-digit, US 10-digit, GB 8-digit codes) differs between reporters and between import and export; EU has no national level (HS6 only); HS6, HS4 and HS2 are shared. Import and export are separate datasets, so reporter and flow are always required for product figures. Rankings (limit) are limited to the top 20 without an API key (more is refused with out_of_scope) and to 100 with a free API key. Start with get_catalog (coverage, your access limits, which tool to use) or, when you already know the code, get_item_summary for a one-call overview of a product.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "reporter": {
+            "type": "string",
+            "enum": [
+              "JP",
+              "US",
+              "GB"
+            ],
+            "description": "Required. The reporting country whose customs statistics are read: \"JP\" (Japan), \"US\" (United States) or \"GB\" (United Kingdom). Partners are the other countries."
+          },
+          "level": {
+            "type": "string",
+            "enum": [
+              "hs6",
+              "hs4",
+              "hs2"
+            ],
+            "description": "HS level of code: hs6, hs4 or hs2 (national codes are not combined, because import and export numbering differ there)."
+          },
+          "code": {
+            "type": "string",
+            "description": "HS code with the number of digits of level (e.g. \"87\" with hs2, \"8486\" with hs4, \"850760\" with hs6); dots are ignored."
+          },
+          "country": {
+            "type": "string",
+            "description": "Partner country: ISO 3166 alpha-2 code (e.g. \"CN\", \"DE\", \"VN\") or the name as published; omit for the world total (WLD)."
+          },
+          "from": {
+            "type": "string",
+            "pattern": "^\\d{4}(-(0[1-9]|1[0-2]))?$",
+            "description": "First month, YYYY-MM, or a year, YYYY (read as YYYY-01). Default: the first month with data."
+          },
+          "to": {
+            "type": "string",
+            "pattern": "^\\d{4}(-(0[1-9]|1[0-2]))?$",
+            "description": "Last month, YYYY-MM, or a year, YYYY (read as YYYY-12). Default: the latest month published for both flows."
+          }
+        },
+        "required": [
+          "reporter",
+          "level",
+          "code"
+        ]
+      }
+    },
+    {
+      "name": "compare_countries",
+      "description": "One product (HS2, HS4 or HS6 code, e.g. \"850760\" lithium-ion batteries, \"8708\" auto parts, \"72\" iron and steel, \"030617\" frozen shrimp) side by side across several reporting countries (default: every reporter currently available, as listed by get_catalog) for one flow. Every country is measured over the same 12 months, ending at common_month (the latest month all compared countries have published, normally the earliest of their latest months). Per country: the 12-month value in US dollars on a comparable basis (imports CIF, exports FOB; the US export value is FAS and the notes say so), the previous 12 months and year-over-year change, kilograms, the unit price in US dollars per kg (only where weights exist; kg_coverage says what share of the value has a weight) and the 3 largest partners with their shares. A country without the code is status \"no_code\" and one with a missing month status \"no_data\"; they are never shown as 0. Partner definitions differ between countries (origin, consignment, destination); the notes explain it. Use it for \"which country trades more of X\" or \"how do unit prices compare\"; national codes (JP 9 digits, US 10, GB 8) are rejected. Use get_mirror_trade instead to put one country's exports to another next to that country's imports from it, and get_item_summary for the full detail of one country. Customs trade statistics of several reporting countries (Japan JP, United States US, United Kingdom GB) from their official customs data, monthly, by HS product code and partner country. value fields are in the reporter's currency (currency: JPY, USD, GBP or EUR) and *_usd fields in US dollars; ratios and shares are fractions precomputed from the full dataset; every answer carries reporter, currency, data_through (latest published month), the reporter's attribution, and notes. Maximum 200 rows per answer. Numbers in answers are rounded once, at the end: amounts (value, *_usd, v12 ...) to 2 decimals, quantity and kg to 3, unit prices (unit_price*) to 4 significant digits below 100 and 2 decimals from 100 up (never rounded to 0), and ratios, shares and growth rates (yoy*, mom*, share*, hhi*, chg3y) to 6; whole numbers and null are left as they are. A null quantity, kg or unit price comes with a *_unavailable_reason (mixed_units, weight_only, no_quantity_in_source, no_weight_in_source, source_gap, withheld; get_catalog lists them in null_reasons), and a missing seasonality with seasonality_unavailable_reason. The national level (JP 9-digit, US 10-digit, GB 8-digit codes) differs between reporters and between import and export; EU has no national level (HS6 only); HS6, HS4 and HS2 are shared. Import and export are separate datasets, so reporter and flow are always required for product figures. Rankings (limit) are limited to the top 20 without an API key (more is refused with out_of_scope) and to 100 with a free API key. Start with get_catalog (coverage, your access limits, which tool to use) or, when you already know the code, get_item_summary for a one-call overview of a product.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "HS product code with 2, 4 or 6 digits (e.g. \"85\", \"8708\" or \"850760\"; dots are ignored). National codes are not comparable across countries and are rejected; find the HS6 code with search_items."
+          },
+          "flow": {
+            "type": "string",
+            "enum": [
+              "import",
+              "export"
+            ],
+            "description": "Required. \"import\" (goods entering the reporting country) or \"export\" (goods leaving it); there is no combined view: \"both\" does not exist. For a comparison across countries use compare_countries, for exports minus imports use get_balance."
+          },
+          "reporters": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "JP",
+                "US",
+                "GB"
+              ]
+            },
+            "description": "Optional. The reporting countries to compare, at least two of \"JP\", \"US\" or \"GB\" (e.g. [\"JP\",\"GB\"]); in a query string a comma-separated list (JP,GB). Default: every available reporter."
+          }
+        },
+        "required": [
+          "code",
+          "flow"
+        ]
+      }
+    },
+    {
+      "name": "get_mirror_trade",
+      "description": "Two customs records of trade between two reporting countries: reporter's flow (export or import) with partner as the other side, next to the partner's opposite flow with the reporter as the other side. For example reporter JP, partner GB, flow export, code 8708 (auto parts) shows Japan's exports to the United Kingdom beside the United Kingdom's imports from Japan, for the same 12 months (ending at the latest month both sides have published), in US dollars with the weights. Returns each side's value, kg, basis (exports FOB, imports CIF; the US export value is FAS) and partner definition, the difference (import side minus export side) and the ratio (import side / export side). The import side is normally larger because it includes freight and insurance; differences also come from timing, classification and re-exports, and each country defines its partner differently (the UK counts imports by country of consignment). Works at HS6, HS4 and HS2 only. Use it to check one country's figure against the partner's record, or to see how large the valuation gap is; use compare_countries instead to compare more countries on one flow. Customs trade statistics of several reporting countries (Japan JP, United States US, United Kingdom GB) from their official customs data, monthly, by HS product code and partner country. value fields are in the reporter's currency (currency: JPY, USD, GBP or EUR) and *_usd fields in US dollars; ratios and shares are fractions precomputed from the full dataset; every answer carries reporter, currency, data_through (latest published month), the reporter's attribution, and notes. Maximum 200 rows per answer. Numbers in answers are rounded once, at the end: amounts (value, *_usd, v12 ...) to 2 decimals, quantity and kg to 3, unit prices (unit_price*) to 4 significant digits below 100 and 2 decimals from 100 up (never rounded to 0), and ratios, shares and growth rates (yoy*, mom*, share*, hhi*, chg3y) to 6; whole numbers and null are left as they are. A null quantity, kg or unit price comes with a *_unavailable_reason (mixed_units, weight_only, no_quantity_in_source, no_weight_in_source, source_gap, withheld; get_catalog lists them in null_reasons), and a missing seasonality with seasonality_unavailable_reason. The national level (JP 9-digit, US 10-digit, GB 8-digit codes) differs between reporters and between import and export; EU has no national level (HS6 only); HS6, HS4 and HS2 are shared. Import and export are separate datasets, so reporter and flow are always required for product figures. Rankings (limit) are limited to the top 20 without an API key (more is refused with out_of_scope) and to 100 with a free API key. Start with get_catalog (coverage, your access limits, which tool to use) or, when you already know the code, get_item_summary for a one-call overview of a product.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "reporter": {
+            "type": "string",
+            "enum": [
+              "JP",
+              "US",
+              "GB"
+            ],
+            "description": "Required. The reporting country whose customs statistics are read: \"JP\" (Japan), \"US\" (United States) or \"GB\" (United Kingdom). Partners are the other countries."
+          },
+          "partner": {
+            "type": "string",
+            "enum": [
+              "JP",
+              "US",
+              "GB"
+            ],
+            "description": "Required. The other reporting country, \"JP\", \"US\" or \"GB\" (not the same as reporter). Its opposite flow is read as the mirror, e.g. reporter \"JP\" flow \"export\" with partner \"US\" reads US imports from Japan."
+          },
+          "code": {
+            "type": "string",
+            "description": "HS product code with 2, 4 or 6 digits (e.g. \"72\" iron and steel, \"854231\" processors, \"300490\" medicines in dosage form; dots are ignored). National codes are rejected."
+          },
+          "flow": {
+            "type": "string",
+            "enum": [
+              "import",
+              "export"
+            ],
+            "description": "Required. The direction on the reporter side: \"export\" (exports of the reporter to the partner, mirrored by imports of the partner from the reporter) or \"import\" (imports of the reporter from the partner, mirrored by exports of the partner to the reporter)."
+          }
+        },
+        "required": [
+          "reporter",
+          "partner",
+          "code",
+          "flow"
+        ]
+      }
+    },
+    {
+      "name": "get_item_summary",
+      "description": "One-call overview of a product (HS2/4/6 or national code) of one reporter for the usual questions: a one-line summary (ai_context_summary, in US dollars), latest month, the last 12 months against the previous 12 and 3 years earlier, top 20 partners plus \"other\", the fastest growing and declining partners, calendar-year totals, partner concentration, new markets, the seasonal peak and trough months (or seasonality_unavailable_reason) and an anomaly signal, with notes on gaps and non-comparable periods. Precomputed monthly; use it right after search_items (or first, when you know the code) instead of several separate calls (e.g. semiconductor manufacturing machines 848620 for export, pharmaceuticals chapter 30 for import). get_item_summary is about one product; get_catalog is about the whole service (coverage, latest month, your limits), so call get_catalog for those and this tool for a product. For other months, a single partner country or details use get_series, get_partners, get_ranking, get_new_markets, get_seasonality. value_basis says on which basis the reporter's own values are (for example the US import value is the customs value without freight and insurance); compare_countries restates imports on a CIF basis, so its totals can differ by about 1-2% from this answer. Customs trade statistics of several reporting countries (Japan JP, United States US, United Kingdom GB) from their official customs data, monthly, by HS product code and partner country. value fields are in the reporter's currency (currency: JPY, USD, GBP or EUR) and *_usd fields in US dollars; ratios and shares are fractions precomputed from the full dataset; every answer carries reporter, currency, data_through (latest published month), the reporter's attribution, and notes. Maximum 200 rows per answer. Numbers in answers are rounded once, at the end: amounts (value, *_usd, v12 ...) to 2 decimals, quantity and kg to 3, unit prices (unit_price*) to 4 significant digits below 100 and 2 decimals from 100 up (never rounded to 0), and ratios, shares and growth rates (yoy*, mom*, share*, hhi*, chg3y) to 6; whole numbers and null are left as they are. A null quantity, kg or unit price comes with a *_unavailable_reason (mixed_units, weight_only, no_quantity_in_source, no_weight_in_source, source_gap, withheld; get_catalog lists them in null_reasons), and a missing seasonality with seasonality_unavailable_reason. The national level (JP 9-digit, US 10-digit, GB 8-digit codes) differs between reporters and between import and export; EU has no national level (HS6 only); HS6, HS4 and HS2 are shared. Import and export are separate datasets, so reporter and flow are always required for product figures. Rankings (limit) are limited to the top 20 without an API key (more is refused with out_of_scope) and to 100 with a free API key. Start with get_catalog (coverage, your access limits, which tool to use) or, when you already know the code, get_item_summary for a one-call overview of a product.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "reporter": {
+            "type": "string",
+            "enum": [
+              "JP",
+              "US",
+              "GB"
+            ],
+            "description": "Required. The reporting country whose customs statistics are read: \"JP\" (Japan), \"US\" (United States) or \"GB\" (United Kingdom). Partners are the other countries."
+          },
+          "flow": {
+            "type": "string",
+            "enum": [
+              "import",
+              "export"
+            ],
+            "description": "Required. \"import\" (goods entering the reporting country) or \"export\" (goods leaving it); there is no combined view: \"both\" does not exist. For a comparison across countries use compare_countries, for exports minus imports use get_balance."
+          },
+          "code": {
+            "type": "string",
+            "description": "HS product code with 2, 4 or 6 digits, or the reporter's national code (JP 9 digits, US 10, GB 8; a reporter without a national level, such as EU, has HS6 as its finest level); dots are ignored (e.g. \"85\", \"8507\", \"850760\" or \"8507.60\"). National codes differ between reporters and between import and export; find codes with search_items. On a build that serves HS6 and above a national code without a series answers fine_digits_not_served: retry with its 6-digit parent."
+          }
+        },
+        "required": [
+          "reporter",
+          "flow",
+          "code"
+        ]
+      }
+    },
+    {
+      "name": "get_new_markets",
+      "description": "Partner countries that are new or surging for one product of one reporter, comparing the latest 12 months with the 12 months before. \"new\": the 12-month value is at least min_value (default 1,000,000 US dollars; never below 100,000) and the previous 12 months were lower and under 100,000 US dollars (no trade counts as 0). \"surging\": the 12-month value is at least min_value and grew +100% or more in US dollars (at least doubled), not counting the new ones. Each list is ordered by 12-month value, largest first; limit caps the rows of both lists together (\"new\" is filled first, then \"surging\"). Partners whose previous 12 months are unknown are in neither list. Use it for questions like \"which countries started buying Japanese auto parts (8708)?\" or \"which markets are taking off?\". For the whole partner ranking use get_partners (sort \"growth\"); for a one-call overview of a product use get_item_summary. Customs trade statistics of several reporting countries (Japan JP, United States US, United Kingdom GB) from their official customs data, monthly, by HS product code and partner country. value fields are in the reporter's currency (currency: JPY, USD, GBP or EUR) and *_usd fields in US dollars; ratios and shares are fractions precomputed from the full dataset; every answer carries reporter, currency, data_through (latest published month), the reporter's attribution, and notes. Maximum 200 rows per answer. Numbers in answers are rounded once, at the end: amounts (value, *_usd, v12 ...) to 2 decimals, quantity and kg to 3, unit prices (unit_price*) to 4 significant digits below 100 and 2 decimals from 100 up (never rounded to 0), and ratios, shares and growth rates (yoy*, mom*, share*, hhi*, chg3y) to 6; whole numbers and null are left as they are. A null quantity, kg or unit price comes with a *_unavailable_reason (mixed_units, weight_only, no_quantity_in_source, no_weight_in_source, source_gap, withheld; get_catalog lists them in null_reasons), and a missing seasonality with seasonality_unavailable_reason. The national level (JP 9-digit, US 10-digit, GB 8-digit codes) differs between reporters and between import and export; EU has no national level (HS6 only); HS6, HS4 and HS2 are shared. Import and export are separate datasets, so reporter and flow are always required for product figures. Rankings (limit) are limited to the top 20 without an API key (more is refused with out_of_scope) and to 100 with a free API key. Start with get_catalog (coverage, your access limits, which tool to use) or, when you already know the code, get_item_summary for a one-call overview of a product.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "reporter": {
+            "type": "string",
+            "enum": [
+              "JP",
+              "US",
+              "GB"
+            ],
+            "description": "Required. The reporting country whose customs statistics are read: \"JP\" (Japan), \"US\" (United States) or \"GB\" (United Kingdom). Partners are the other countries."
+          },
+          "flow": {
+            "type": "string",
+            "enum": [
+              "import",
+              "export"
+            ],
+            "description": "Required. \"import\" (goods entering the reporting country) or \"export\" (goods leaving it); there is no combined view: \"both\" does not exist. For a comparison across countries use compare_countries, for exports minus imports use get_balance."
+          },
+          "code": {
+            "type": "string",
+            "description": "HS product code with 2, 4 or 6 digits, or the reporter's national code (JP 9 digits, US 10, GB 8; a reporter without a national level, such as EU, has HS6 as its finest level); dots are ignored (e.g. \"85\", \"8507\", \"850760\" or \"8507.60\"). National codes differ between reporters and between import and export; find codes with search_items. On a build that serves HS6 and above a national code without a series answers fine_digits_not_served: retry with its 6-digit parent."
+          },
+          "level": {
+            "type": "string",
+            "description": "Optional. The level of the code: the reporter's national level (JP hs9, US hs10, GB cn8; EU has none), hs6, hs4 or hs2; it follows from the number of digits, and a value that disagrees is rejected."
+          },
+          "min_value": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Smallest 12-month value in US dollars for a partner to be listed (default 1000000; for \"new\" it is never below 100000)."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "description": "Maximum rows in total across the two lists, filled with \"new\" first, then \"surging\" (default 20). Without an API key the maximum is 20 (more is refused with out_of_scope); with a free API key 100."
+          }
+        },
+        "required": [
+          "reporter",
+          "flow",
+          "code"
+        ]
+      }
+    },
+    {
+      "name": "get_seasonality",
+      "description": "Seasonal pattern of one product of one reporter: for the 3 latest full calendar years before the year of the latest published month (data through 2026-08 gives 2023 to 2025; the years are stated in the answer), each calendar month's share of the 3-year value total and of the 3-year quantity total, the lowest and highest share of that month in any single year, and the peak and trough months (adjacent months merged, e.g. Oct-Nov, with their share of the year). Covers the world total and the 5 largest partners by latest-12-month value, or one partner with country. Not produced where the 3-year annual average is below min_value (default 1,000,000 US dollars) or trade is missing in any of the 3 years; seasonality_unavailable_reason then says not_enough_history, below_threshold, or (no month beyond 0.8x to 1.2x of an even share) no_peak_or_trough. Months are the months goods left (exports) or entered (imports) the reporting country. Use it for \"when is the busy season?\" or \"which months are weak?\" (e.g. knitted sweaters 6110 or frozen shrimp 030617); for month-by-month history use get_series. Customs trade statistics of several reporting countries (Japan JP, United States US, United Kingdom GB) from their official customs data, monthly, by HS product code and partner country. value fields are in the reporter's currency (currency: JPY, USD, GBP or EUR) and *_usd fields in US dollars; ratios and shares are fractions precomputed from the full dataset; every answer carries reporter, currency, data_through (latest published month), the reporter's attribution, and notes. Maximum 200 rows per answer. Numbers in answers are rounded once, at the end: amounts (value, *_usd, v12 ...) to 2 decimals, quantity and kg to 3, unit prices (unit_price*) to 4 significant digits below 100 and 2 decimals from 100 up (never rounded to 0), and ratios, shares and growth rates (yoy*, mom*, share*, hhi*, chg3y) to 6; whole numbers and null are left as they are. A null quantity, kg or unit price comes with a *_unavailable_reason (mixed_units, weight_only, no_quantity_in_source, no_weight_in_source, source_gap, withheld; get_catalog lists them in null_reasons), and a missing seasonality with seasonality_unavailable_reason. The national level (JP 9-digit, US 10-digit, GB 8-digit codes) differs between reporters and between import and export; EU has no national level (HS6 only); HS6, HS4 and HS2 are shared. Import and export are separate datasets, so reporter and flow are always required for product figures. Rankings (limit) are limited to the top 20 without an API key (more is refused with out_of_scope) and to 100 with a free API key. Start with get_catalog (coverage, your access limits, which tool to use) or, when you already know the code, get_item_summary for a one-call overview of a product.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "reporter": {
+            "type": "string",
+            "enum": [
+              "JP",
+              "US",
+              "GB"
+            ],
+            "description": "Required. The reporting country whose customs statistics are read: \"JP\" (Japan), \"US\" (United States) or \"GB\" (United Kingdom). Partners are the other countries."
+          },
+          "flow": {
+            "type": "string",
+            "enum": [
+              "import",
+              "export"
+            ],
+            "description": "Required. \"import\" (goods entering the reporting country) or \"export\" (goods leaving it); there is no combined view: \"both\" does not exist. For a comparison across countries use compare_countries, for exports minus imports use get_balance."
+          },
+          "code": {
+            "type": "string",
+            "description": "HS product code with 2, 4 or 6 digits, or the reporter's national code (JP 9 digits, US 10, GB 8; a reporter without a national level, such as EU, has HS6 as its finest level); dots are ignored (e.g. \"85\", \"8507\", \"850760\" or \"8507.60\"). National codes differ between reporters and between import and export; find codes with search_items. On a build that serves HS6 and above a national code without a series answers fine_digits_not_served: retry with its 6-digit parent."
+          },
+          "level": {
+            "type": "string",
+            "description": "Optional. The level of the code: the reporter's national level (JP hs9, US hs10, GB cn8; EU has none), hs6, hs4 or hs2; it follows from the number of digits, and a value that disagrees is rejected."
+          },
+          "country": {
+            "type": "string",
+            "description": "Partner country: ISO 3166 alpha-2 code (e.g. \"VN\") or the name as published. Omit for the world total plus the 5 largest partners. Only those partners have seasonality; another country is reported as not produced."
+          },
+          "min_value": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Smallest 3-year annual average in US dollars for a partner to be shown (default 1000000; a lower value does not add partners)."
+          }
+        },
+        "required": [
+          "reporter",
+          "flow",
+          "code"
+        ]
+      }
+    },
+    {
+      "name": "get_catalog",
+      "description": "Call this first. Describes what the service holds: the reporters (JP, US, GB) with their currency, national code level, and for import and export the first month and the latest published month; per reporter also source (the agency to name when you cite the data) and latest_month (that reporter's own latest published month; data_through, also given as common_latest_month, is only the latest month published by every reporter for BOTH flows, so a reporter can be ahead); the HS levels, the datasets, how to choose between the tools (get_catalog, then search_items, then get_item_summary, then the specific tools), and the access limits that apply to you (history window, ranking size, whether an API key is in use). Takes no arguments. It also lists null_reasons, the fixed words used in *_unavailable_reason fields. Use it for \"what period does the data cover?\" and \"what is the latest month?\"; it has no product figures, so for a product use get_item_summary. Customs trade statistics of several reporting countries (Japan JP, United States US, United Kingdom GB) from their official customs data, monthly, by HS product code and partner country. value fields are in the reporter's currency (currency: JPY, USD, GBP or EUR) and *_usd fields in US dollars; ratios and shares are fractions precomputed from the full dataset; every answer carries reporter, currency, data_through (latest published month), the reporter's attribution, and notes. Maximum 200 rows per answer. Numbers in answers are rounded once, at the end: amounts (value, *_usd, v12 ...) to 2 decimals, quantity and kg to 3, unit prices (unit_price*) to 4 significant digits below 100 and 2 decimals from 100 up (never rounded to 0), and ratios, shares and growth rates (yoy*, mom*, share*, hhi*, chg3y) to 6; whole numbers and null are left as they are. A null quantity, kg or unit price comes with a *_unavailable_reason (mixed_units, weight_only, no_quantity_in_source, no_weight_in_source, source_gap, withheld; get_catalog lists them in null_reasons), and a missing seasonality with seasonality_unavailable_reason. The national level (JP 9-digit, US 10-digit, GB 8-digit codes) differs between reporters and between import and export; EU has no national level (HS6 only); HS6, HS4 and HS2 are shared. Import and export are separate datasets, so reporter and flow are always required for product figures. Rankings (limit) are limited to the top 20 without an API key (more is refused with out_of_scope) and to 100 with a free API key. Start with get_catalog (coverage, your access limits, which tool to use) or, when you already know the code, get_item_summary for a one-call overview of a product.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    {
+      "name": "report_data_issue",
+      "description": "Report a figure that looks wrong or a data problem you noticed (at most 10 reports per day per caller). Give the tool and arguments of the call in question and describe the problem in message (up to 2,000 characters). Returns a report id; the text is stored for review by the operator and is never shown to other users. Use it only after checking the figure; not for questions or feature requests. Look at get_catalog or the notes of an answer first: gaps and non-comparable periods are often documented there.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string",
+            "maxLength": 2000,
+            "description": "What looks wrong, with the figure, month and what you expected."
+          },
+          "tool": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "Name of the tool whose answer looked wrong, e.g. \"get_series\"."
+          },
+          "args": {
+            "type": "object",
+            "description": "The arguments of that call (at most 4 KB as JSON)."
+          }
+        },
+        "required": [
+          "message"
+        ]
+      }
+    },
+    {
+      "name": "list_indicators",
+      "description": "Call by name, no HS code needed: lists the named indicators this service computes from public customs statistics (for example the quarterly base price of domestic naphtha, naphtha import prices and origins, or Japan passenger car and parts exports by destination). Each entry has its id, aliases in English and Japanese, definition, how often it is published, the keys of its caveats (get_indicator gives their text), the latest month and whether it can be computed in this build (status ok, not_computable with a reason, or not_built). Use it first to find the id or alias to give to get_indicator; narrow the list with reporter or with words in query. The values are our own calculations, not official published figures.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "reporter": {
+            "type": "string",
+            "enum": [
+              "JP",
+              "US",
+              "GB"
+            ],
+            "description": "Optional. List only the indicators of this reporting country: \"JP\", \"US\" or \"GB\". Omit for all deployed reporters."
+          },
+          "query": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "Optional. Words that must all appear in the indicator id, alias (English or Japanese), title or definition, for example \"naphtha\" or \"cars\"."
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "get_indicator",
+      "description": "Call by name, no HS code needed: returns one named indicator as a series (monthly or quarterly, newest first) with its latest value, year-on-year changes, a partner-country breakdown where the indicator has one, the definition, the caveats and a fixed notice that the value is our own calculation and not an official figure. Give an id or an English or Japanese alias (a few distinctive words also work when they match one indicator); list_indicators shows what exists. Use it to read an indicator by name; use get_series instead for one HS code. An indicator that cannot be computed yet is answered with status not_computable or not_built and the reason, never with zeros. Naphtha prices state their quantity basis: kL read directly from the source, or (only as a fallback) an estimate under a stated density assumption.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "indicator": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "Required. The indicator id (for example \"jp.naphtha.domestic_base_price\"), an alias in English or Japanese, or a few distinctive words. See list_indicators."
+          },
+          "from": {
+            "type": "string",
+            "pattern": "^\\d{4}(-(0[1-9]|1[0-2]))?$",
+            "description": "Optional. First month, formatted YYYY-MM, or a year YYYY (the whole year from January)."
+          },
+          "to": {
+            "type": "string",
+            "pattern": "^\\d{4}(-(0[1-9]|1[0-2]))?$",
+            "description": "Optional. Last month, formatted YYYY-MM, or a year YYYY (the whole year to December)."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200,
+            "description": "Optional. Number of newest rows (months, or quarters for a quarterly indicator) to return; default 36, at most 200."
+          },
+          "country": {
+            "type": "string",
+            "maxLength": 100,
+            "description": "Optional, only for indicators with a partner-country breakdown. Partner country as an ISO 3166 alpha-2 code (e.g. \"CN\") or the name as published; the answer then holds the monthly series of that partner."
+          }
+        },
+        "required": [
+          "indicator"
+        ]
+      }
+    },
+    {
+      "name": "decompose_change",
+      "description": "Splits the change in the value of a named indicator or of an HS code into a unit-value (price) effect and a volume effect: the latest window of 1, 3 or 12 months (default 12) is compared with the same months a year earlier, with the log-mean (LMDI) method, so the two effects add up to the change in value exactly (check shows the residual). The answer gives value, quantity and unit value for both windows in the reporter currency and in US dollars. Give either \"indicator\" (an id or alias from list_indicators; only indicators that have a quantity measure can be split, others answer decomposition_not_applicable) or \"reporter\", \"flow\" and \"code\" (HS code of 2, 4 or 6 digits or the national code; \"country\" for one partner). Use it for questions such as how much of a change in imports or exports came from a higher unit value and how much from a larger quantity. The unit value is value divided by quantity, a calculation that also reflects product mix, not a price index; in US dollars the exchange-rate movement is part of the price effect; the split describes the numbers and does not show causes. A window with a missing month, a missing weight or a zero quantity is returned as null with a reason, never as a zero effect. Reference information computed mechanically from public statistics; not investment advice, a credit rating or a trading recommendation.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "indicator": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "The indicator id (for example \"jp.naphtha.import_unit_price\"), an alias in English or Japanese, or a few distinctive words; see list_indicators. Give this or code, not both."
+          },
+          "component": {
+            "type": "string",
+            "maxLength": 100,
+            "description": "Optional, indicators only. The component to split when the indicator has several; the default is the one its definition names."
+          },
+          "reporter": {
+            "type": "string",
+            "enum": [
+              "JP",
+              "US",
+              "GB"
+            ],
+            "description": "The reporting country (JP, US or GB). Required with code; not used with indicator."
+          },
+          "flow": {
+            "type": "string",
+            "enum": [
+              "import",
+              "export"
+            ],
+            "description": "import or export. Required with code; not used with indicator."
+          },
+          "code": {
+            "type": "string",
+            "maxLength": 40,
+            "description": "HS product code of 2, 4 or 6 digits or the national code of the reporter; dots are ignored (for example \"850760\"). Give this (with reporter and flow) or indicator, not both."
+          },
+          "country": {
+            "type": "string",
+            "maxLength": 100,
+            "description": "Optional, codes only. Partner country as an ISO alpha-2 code or a name; omit for the world total."
+          },
+          "window": {
+            "type": "integer",
+            "enum": [
+              1,
+              3,
+              12
+            ],
+            "description": "Months in the window compared with the same months a year earlier: 1, 3 or 12 (default 12)."
+          },
+          "month": {
+            "type": "string",
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+            "description": "Optional. The last month of the window, YYYY-MM; default the latest month. The window and the year-earlier window must lie inside your history."
+          },
+          "quantity": {
+            "type": "string",
+            "enum": [
+              "kg",
+              "qty"
+            ],
+            "description": "The quantity that the unit value divides by: \"kg\" (weight, default) or \"qty\" (the unit of the product, only where it is a single unit; otherwise null with mixed_units). Indicators answer quantity from kg only; \"qty\" applies to an HS code."
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "get_supplier_dependency",
+      "description": "Concentration of the supplying countries behind a named indicator or an HS code over the latest 12 months: the Herfindahl index (hhi, 0 to 1; score_points is the same figure on the 0 to 10,000 scale), the share of the largest supplier and of the top three, the number of supplying countries, how hhi moved against 1 and 3 years earlier (more_diversified, little_change or more_concentrated) and the main suppliers. Give either \"indicator\" (only indicators with a breakdown by partner country, called \"by origin\" or \"by destination\", have one; others answer dependency_not_applicable) or \"reporter\" and \"code\" (flow defaults to import; for exports it measures the concentration of destinations; an HS code answers for the latest month only). Use it for questions about how concentrated the sources of a product are and whether they are concentrating or diversifying. The hhi is a mathematical measure of concentration, not a forecast; the partner country is the country of origin or of consignment depending on the reporter and can include transshipment; the 0.02 change used for the direction labels is our convenience threshold, not a standard. For an HS code, top3_share and top_suppliers are shares of the world 12-month total (partners without a country code included in the total), while hhi uses partners with a country code only. Reference information computed mechanically from public statistics; not investment advice, a credit rating or a trading recommendation.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "indicator": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "The indicator id (for example \"jp.naphtha.import_by_origin\"), an alias in English or Japanese, or a few distinctive words; see list_indicators. Give this or code, not both."
+          },
+          "reporter": {
+            "type": "string",
+            "enum": [
+              "JP",
+              "US",
+              "GB"
+            ],
+            "description": "The reporting country (JP, US or GB). Required with code; not used with indicator."
+          },
+          "code": {
+            "type": "string",
+            "maxLength": 40,
+            "description": "HS product code of 2, 4 or 6 digits or the national code of the reporter; dots are ignored (for example \"850760\"). Give this (with reporter) or indicator, not both."
+          },
+          "flow": {
+            "type": "string",
+            "enum": [
+              "import",
+              "export"
+            ],
+            "description": "Optional, codes only. \"import\" (default: the supplying countries) or \"export\" (the destination countries)."
+          },
+          "month": {
+            "type": "string",
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+            "description": "Optional. The month the 12 months end in, YYYY-MM; default the latest month. An HS code answers for the latest month only."
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "get_mirror_estimate",
+      "description": "Estimate of one country's trade for a product from the records of the reporting countries that trade with it: for a target such as CN (China), flow \"import\" sums the reporters' exports to the target (what the target bought from them) and flow \"export\" sums the reporters' imports from the target, over the same 12 months ending at the latest month every reporter used has published, in US dollars. Use it for a country whose own customs statistics are not available here. Returns the estimate, each reporter's value and share, the previous 12 months and year-over-year change, which reporters were used or had no figure (never counted as 0) and notes. It is an estimate, not a published figure: it covers only the reporting countries listed (the rest of the target's trade is not in it), exports are FOB and imports CIF, goods routed through trading hubs such as Hong Kong are recorded under the hub, and precious metals (HS 71) can differ enormously between the two sides. Available at HS6, HS4 and HS2 only. For the two records of trade between two reporting countries use get_mirror_trade instead.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "target": {
+            "type": "string",
+            "description": "Required. ISO 3166 alpha-2 code of the country whose trade is estimated (e.g. \"CN\", \"VN\", \"IN\"). It may itself be a reporter; it is then left out of its own reporters."
+          },
+          "code": {
+            "type": "string",
+            "description": "HS product code with 2, 4 or 6 digits (e.g. \"85\", \"8708\" or \"850760\"; dots are ignored). National codes are rejected."
+          },
+          "flow": {
+            "type": "string",
+            "enum": [
+              "import",
+              "export"
+            ],
+            "description": "Required. The target's direction: \"import\" (the target's imports, estimated from the reporters' exports to it) or \"export\" (the target's exports, estimated from the reporters' imports from it)."
+          },
+          "reporters": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "JP",
+                "US",
+                "GB"
+              ]
+            },
+            "description": "Optional. Reporting countries to use, one or more of \"JP\", \"US\" or \"GB\" (a comma-separated list in a query string). Default: every available reporter except the target."
+          }
+        },
+        "required": [
+          "target",
+          "code",
+          "flow"
+        ]
+      }
+    },
+    {
+      "name": "get_breadth",
+      "description": "How widespread a rise or fall in one country's trade is: for each month, the share of items (HS2 chapters, HS4 headings or HS6 subheadings, all or under one chapter) whose value in the latest window of 3 or 12 months is higher than in the same months a year earlier. Two shares are given because small items can dominate a count: share_up_by_count counts every item once, share_up_by_value weights each item by its value. share_accelerating is the share of items whose year-on-year growth is higher than the same window's year-on-year growth 3 months earlier (out of n_items; items with no comparable figure 3 months earlier count as not accelerating); total_yoy is the change of the whole level. n_items is the number of items compared and n_excluded the number left out because they cannot be compared fairly (no comparable prior-year value, a missing month in the window, or a change of HS version for HS4 and HS6); they are counted in n_excluded and not guessed, and never counted as zero. A month with no figure is not in the series: notes give the reason (not_computed_yet, or definition_break when the source definition changed). Give \"reporter\" and \"flow\" (one country, one direction); \"level\" (default hs4), \"parent\" (a 2-digit chapter, only with hs4 or hs6), \"window\" (3 or 12, default 12), \"from\", \"to\" and \"limit\" (newest months first, default 36, at most 200). Use it for questions such as whether a rise in imports is broad or driven by a few items. Limits: at the hs2 level the HS revisions can move goods between chapters, so an hs2 change across an HS version change can be distorted; hs4 and hs6 windows that cross an HS version change are not compared. The figures are our own calculation from public customs statistics, not official figures. They show how widespread a movement is, not its causes: exchange rates, stocks, seasons and classification changes cannot be told apart here. Only reporters that are published are answered. Cross-country synchrony: instead of \"reporter\" give \"reporters\" (2 to 4 countries; level hs2 only, all chapters): the answer then holds each country's series over the months common to all of them (newest 24) and a synchrony block with the share of those months in which the countries' total_yoy moved in the same direction and the correlation of total_yoy and of share_up_by_value (null with a reason when there are fewer than 12 common months or no variation). With 3 or 4 countries every pair is listed in synchrony.pairs; the top-level share pools the months of all pairs and the correlations are the simple mean of the pairwise ones. Only per-country totals are compared, never items between countries; the sample is only the countries given, and the correlation is indicative, not a forecast and not a cause. Reference information computed mechanically from public statistics; not investment advice, a credit rating or a trading recommendation.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "reporter": {
+            "type": "string",
+            "enum": [
+              "JP",
+              "US",
+              "GB"
+            ],
+            "description": "The reporting country whose customs statistics are read (JP, US or GB). Give \"reporter\" OR \"reporters\"; flow is required."
+          },
+          "reporters": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 4,
+            "items": {
+              "type": "string",
+              "enum": [
+                "JP",
+                "US",
+                "GB"
+              ]
+            },
+            "description": "Optional, instead of reporter: 2 to 4 countries (\"JP\", \"US\" or \"GB\") whose hs2 breadth is compared (a comma-separated list in a query string). Level must be hs2 or omitted."
+          },
+          "flow": {
+            "type": "string",
+            "enum": [
+              "import",
+              "export"
+            ],
+            "description": "Required. \"import\" (goods entering the reporting country) or \"export\" (goods leaving it); there is no combined view: \"both\" does not exist. For a comparison across countries use compare_countries, for exports minus imports use get_balance."
+          },
+          "level": {
+            "type": "string",
+            "enum": [
+              "hs2",
+              "hs4",
+              "hs6"
+            ],
+            "description": "Optional. The level of the items counted: hs2 (chapters), hs4 (headings, default) or hs6 (subheadings)."
+          },
+          "parent": {
+            "type": "string",
+            "pattern": "^\\d{2}$",
+            "description": "Optional. A 2-digit HS chapter (e.g. \"85\"): only the items under it are counted. Only with level hs4 or hs6. Omit for all items of the level."
+          },
+          "window": {
+            "type": "integer",
+            "enum": [
+              3,
+              12
+            ],
+            "description": "Months in the window compared with the same months a year earlier: 3 or 12 (default 12)."
+          },
+          "from": {
+            "type": "string",
+            "pattern": "^\\d{4}(-(0[1-9]|1[0-2]))?$",
+            "description": "Optional. First month, YYYY-MM, or a year, YYYY (read as YYYY-01)."
+          },
+          "to": {
+            "type": "string",
+            "pattern": "^\\d{4}(-(0[1-9]|1[0-2]))?$",
+            "description": "Optional. Last month, YYYY-MM, or a year, YYYY (read as YYYY-12). Default: the latest month."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200,
+            "description": "Optional. Number of newest months to return (default 36, at most 200)."
+          }
+        },
+        "required": [
+          "flow"
+        ]
+      }
+    },
+    {
+      "name": "get_trade_shift",
+      "description": "Trade around a month you name (a tariff, a quota or another policy date; this service keeps no list of policies): for one HS code of 2, 4 or 6 digits, the months before the event month and the months from it (the event month included) are each compared with the same months a year earlier, so the season is the same on both sides. Returns each month (value in US dollars, weight in kg and their year-on-year changes), pre_yoy and post_yoy of the two windows, a front_loading status, the partners whose value rose most after the event, and with \"country\" a diversion block: the change of that partner, the change of all other partners (the two add up to total_change_usd) and how much of its fall the gains of the others make up (offset_ratio). front_loading is \"consistent\" when pre_yoy is at least +20% and post_yoy at most -10%; diversion is \"consistent\" when the partner fell and the gains of the others make up at least 50% of the fall. Use it for questions such as whether imports or exports of a product rose before a tariff date and fell after it, or whether a fall towards one partner was matched by gains elsewhere. These are our own convenience thresholds, not a standard; the statuses say whether the figures form a pattern consistent with front-loading or with a shift between partners, never that it happened. Front-loading, diversion, exchange rates, stocks, seasonality and classification changes cannot be told apart by these figures. The judgement uses the weight in kg (basis quantity_kg) when every month of the windows has a weight covering all of its value; otherwise it uses US-dollar values (basis value_usd), which include price and exchange-rate effects, and says so. A window that crosses a change in the source definition or the HS classification, or has a missing month, is null with a reason (definition_break, source_gap, withheld for an amount withheld by the publishing authority, or non_positive when the year-earlier total is zero), never zero. A partner month with no row counts as no trade only when the month is published, neither the code nor its HS2 chapter has a source gap that month, and there is no withheld (undisclosed) amount that month for the chapter or with an unknown chapter; otherwise that partner, and any partner with a row without a US-dollar value, is left out of top_gainers (gains_complete false; the gains summed are then only the known ones, a lower bound), and for the partner given in \"country\" the diversion is not_assessed with the reason. \"country\" cannot be the world total. Give \"reporter\", \"flow\", \"code\" and \"event_month\"; \"before\" and \"after\" are 1 to 12 months (default 6 each); \"country\" is the partner to look at (optional). The figures are our own calculation from public customs statistics, not official figures. Reference information computed mechanically from public statistics; not investment advice, a credit rating or a trading recommendation.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "reporter": {
+            "type": "string",
+            "enum": [
+              "JP",
+              "US",
+              "GB"
+            ],
+            "description": "Required. The reporting country whose customs statistics are read: \"JP\" (Japan), \"US\" (United States) or \"GB\" (United Kingdom). Partners are the other countries."
+          },
+          "flow": {
+            "type": "string",
+            "enum": [
+              "import",
+              "export"
+            ],
+            "description": "Required. \"import\" (goods entering the reporting country) or \"export\" (goods leaving it); there is no combined view: \"both\" does not exist. For a comparison across countries use compare_countries, for exports minus imports use get_balance."
+          },
+          "code": {
+            "type": "string",
+            "maxLength": 40,
+            "description": "Required. HS code of 2, 4 or 6 digits; dots are ignored (for example \"8703\"). National codes are not accepted."
+          },
+          "event_month": {
+            "type": "string",
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+            "description": "Required. The month of the policy or event, YYYY-MM. It is the first month of the after-window and must not be after the latest published month."
+          },
+          "before": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 12,
+            "description": "Optional. Months before the event month (1 to 12, default 6)."
+          },
+          "after": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 12,
+            "description": "Optional. Months from the event month on, the event month included (1 to 12, default 6). Shortened to the latest published month."
+          },
+          "country": {
+            "type": "string",
+            "maxLength": 100,
+            "description": "Optional. The partner country to look at for a shift to other partners, as an ISO alpha-2 code or a name (for example \"US\"). Omit it for the partner gains only."
+          }
+        },
+        "required": [
+          "reporter",
+          "flow",
+          "code",
+          "event_month"
+        ]
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "dev.tradestats/tradestats",
+    "version": "1.0.2",
+    "remoteUrl": "https://tradestats.dev/mcp",
+    "publishedAt": "2026-11-27T09:17:43.301474Z",
+    "fetchedAt": "2026-11-27T10:42:49.718Z",
+    "toolsSha256": "fc73acd06b5b7a1b73346d62c85a1dc04605fb0e12b703e08350f1f102b5cce1"
+  }
+}

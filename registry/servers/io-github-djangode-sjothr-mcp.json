@@ -120,7 +120,7 @@
     },
     {
       "name": "sjothr_risk_prepare",
-      "description": "Unsigned transactions for one credit risk action, checked against the contract for this wallet. Guarantor: cover (offer on a tranche at a yearly premium), withdraw_offer, collect (premium and interest), sell, unlist, buy, release (after the end), contest (a signed claim, with its bond). Credit company: publish (from its public anonymous loan file), close_offers, cancel, pay_premium, file_claim (loans in default from the loan file, with the public claim dossier), withdraw_claim, file_report (quarterly report), return_recovery, take_back_premium, replace_firm (when its firm was disowned). Verification firm: sign_engagement (with its EAS business attestation), attest, file_claim (signed at once), sign_claim, refuse_claim, sign_report. Juror: vote (hidden: keep your salt), reveal. Anyone: pay_claim, resolve, end. To be signed and sent in order by the user's or the agent's own wallet; nothing is signed or sent by this server.",
+      "description": "Unsigned transactions for one credit risk action, checked against the contract for this wallet. Guarantor: cover (offer on a tranche at a yearly premium), withdraw_offer, collect (premium and interest), sell, unlist, buy, release (after the end), contest (a signed claim, with its bond). Credit company or firm: verify_entity (LEI and official domain, once a year). Credit company: publish (from its public anonymous loan file; the publication fee to Sjothr is allowed first), close_offers, cancel, pay_premium, file_claim (loans in default from the loan file, with the public claim dossier), withdraw_claim, file_report (quarterly report), return_recovery, take_back_premium, replace_firm (when its firm was disowned). Verification firm: sign_engagement (with its EAS business attestation), attest, file_claim (signed at once), sign_claim, refuse_claim, sign_report. Juror (read sjothr_code first): vote (four findings, hidden: keep your salt and reasons), reveal (the same findings, with the reasons). Anyone: pay_claim, resolve, end. To be signed and sent in order by the user's or the agent's own wallet; nothing is signed or sent by this server.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -145,6 +145,7 @@
               "return_recovery",
               "take_back_premium",
               "replace_firm",
+              "verify_entity",
               "sign_engagement",
               "attest",
               "sign_claim",
@@ -257,9 +258,17 @@
             "maximum": 100,
             "description": "Share of USDC guarantees CantorFi may lend, fixed for life (publish)"
           },
+          "poolDefaultPercent": {
+            "type": "string",
+            "description": "Share of the portfolio's principal in default over the period, in percent, 0 allowed (file_report)"
+          },
+          "bookDefaultPercent": {
+            "type": "string",
+            "description": "Share in default over the same period of all the company's loans of the same kind, in percent (file_report)"
+          },
           "criteriaUri": {
             "type": "string",
-            "description": "Public address of the lending criteria, optional (publish)"
+            "description": "Public address of the fixed criteria that selected the loans, not their quality (publish)"
           },
           "loans": {
             "type": "array",
@@ -295,19 +304,56 @@
           },
           "attestation": {
             "type": "string",
-            "description": "Id of the firm's EAS business attestation, issued to this wallet by a recognized verifier (sign_engagement)"
+            "description": "Id of the EAS entity attestation issued to this wallet by a recognized verifier, obtained with verify_entity (publish, sign_engagement)"
+          },
+          "lei": {
+            "type": "string",
+            "description": "LEI of the company, active in the GLEIF register (verify_entity)"
+          },
+          "domain": {
+            "type": "string",
+            "description": "Official domain of the company, whose certificate names it and which publishes /.well-known/sjothr.json (verify_entity)"
+          },
+          "signature": {
+            "type": "string",
+            "description": "The wallet's signature (personal_sign) of the statement returned by verify_entity without signature (verify_entity)"
           },
           "licence": {
             "type": "string",
             "description": "Regulator and licence number of the credit company (attest)"
           },
-          "companyVerified": {
-            "type": "boolean",
-            "description": "The firm checked the company's identity and registration (attest)"
+          "findings": {
+            "type": "object",
+            "properties": {
+              "default": {
+                "type": "boolean",
+                "description": "Article 10: For every loan, does the dossier show the borrower missed a payment on the stated date and has not cured it since, for at least the portfolio's unpaid days (no restructuring, extension or forgiveness)?"
+              },
+              "eligible": {
+                "type": "boolean",
+                "description": "Article 11: Did every loan meet the published lending criteria when granted, and was it current on the day the portfolio was published?"
+              },
+              "loss": {
+                "type": "boolean",
+                "description": "Article 12: Is each loss the principal outstanding at default minus every repayment, recovery and realised collateral, with no interest, penalty, fee or cost?"
+              },
+              "goodFaith": {
+                "type": "boolean",
+                "description": "Article 13: Did the company neither cause, arrange nor hasten the default (no related or fictitious borrower, no loan made to fail, no default caused by its own failure), hide no recovery, and carry out normal collection?"
+              }
+            },
+            "required": [
+              "default",
+              "eligible",
+              "loss",
+              "goodFaith"
+            ],
+            "additionalProperties": false,
+            "description": "The juror's four findings under Sjothr's code, each true (established by the published record) or false (not established, or in doubt), the same for vote and reveal; the contract computes the verdict: founded only if all four are true (vote, reveal)"
           },
-          "uphold": {
-            "type": "boolean",
-            "description": "true: the claim is founded (vote, reveal)"
+          "reasons": {
+            "type": "string",
+            "description": "Written reasons, 4000 bytes at most: for each finding, true or false, the article of the code and the document that ground it, with the precise fact. Published with the findings at reveal (vote, reveal)"
           },
           "salt": {
             "type": "string",
@@ -323,10 +369,30 @@
     },
     {
       "name": "sjothr_tribunal",
-      "description": "Claims of the verified portfolios that guarantors can still contest (loss, dossier, deadline, bond), disputes open to independent jurors (dossier, loan file, ticket, hidden-vote and open-vote deadlines, votes so far) and the verification firms a credit company can choose.",
+      "description": "Claims of the verified portfolios that guarantors can still contest (loss, dossier, deadline, bond), disputes open to independent jurors (the law that judges it, dossier, loan file, ticket, hidden-vote and open-vote deadlines, verdicts so far) and the verification firms a credit company can choose.",
       "inputSchema": {
         "type": "object",
         "properties": {},
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "sjothr_code",
+      "description": "Full text of Sjothr's credit risk code with its on-chain fingerprint, and how a juror applies it: what the contract already enforced, the four findings with the evidence to check for each, and the form of the reasons. With poolId: the version that judges that portfolio and whether its company is in breach today (premium owed, report overdue: no claim possible).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "poolId": {
+            "type": "string",
+            "pattern": "^0x[0-9a-fA-F]{64}$",
+            "description": "Portfolio id: the version of the code fixed when it was published"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "A version of the code (default: the latest, or the portfolio's)"
+          }
+        },
         "additionalProperties": false
       }
     },
@@ -464,6 +530,222 @@
       }
     },
     {
+      "name": "sjothr_founder",
+      "description": "The raise created by one founder wallet: token supply, each round with its vault (raised, released to the founder, withdrawn, available, voted tranches, release vote in progress), the round proposed to the backers, the writer it invited and the published updates with their author.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "wallet": {
+            "type": "string",
+            "description": "0x address of the founder wallet"
+          }
+        },
+        "required": [
+          "wallet"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "sjothr_founder_prepare",
+      "description": "Unsigned transactions for one founder action, checked against the contract for this wallet (publish_update also for the writer the founder invited, with campaignId): create (the company token and its first round, priced from the goal and the share sold; the creation fee to Sjothr is allowed first; optionally the company's country and registration number), propose_round (the next round, or the listing round that opens the token's market at the round price), open_round (after the backers' vote), finalize_round (close the round on sale), publish_update (progress on the public record: what was really done, with links and fingerprinted files), set_writer (invite the wallet of the founder's AI agent to publish updates, or remove it with writer null), request_release (next tranche of a round's capital, citing published updates), finalize_release (record the backers' vote), withdraw (released capital), cancel (stop the round on sale). Signed and sent by the founder's own wallet.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "create",
+              "propose_round",
+              "open_round",
+              "finalize_round",
+              "publish_update",
+              "set_writer",
+              "request_release",
+              "finalize_release",
+              "withdraw",
+              "cancel"
+            ]
+          },
+          "wallet": {
+            "type": "string",
+            "description": "Address of the founder wallet that will sign and send"
+          },
+          "name": {
+            "type": "string",
+            "description": "Token name (create)"
+          },
+          "symbol": {
+            "type": "string",
+            "description": "Token symbol, uppercase letters and digits (create)"
+          },
+          "maxSupply": {
+            "type": "string",
+            "description": "Maximum supply in whole tokens, never raised (create)"
+          },
+          "founderTokens": {
+            "type": "string",
+            "description": "Founder's tokens in whole tokens, the only ones created with the raise (create)"
+          },
+          "goal": {
+            "type": "string",
+            "description": "Funding goal of the round in USDC (create, propose_round)"
+          },
+          "sharePercent": {
+            "type": "string",
+            "description": "Share of the supply after the round that the round sells, in percent; sets the price (create, propose_round)"
+          },
+          "days": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 730,
+            "description": "Days the round stays on sale, counted after the backers' vote when they vote first (create, propose_round)"
+          },
+          "dossierUri": {
+            "type": "string",
+            "description": "Public HTTPS, IPFS or Arweave address of the round dossier (create, propose_round)"
+          },
+          "dossierHash": {
+            "type": "string",
+            "description": "keccak256 of the dossier's exact bytes (create, propose_round)"
+          },
+          "listing": {
+            "type": "object",
+            "properties": {
+              "poolPercent": {
+                "type": "string"
+              },
+              "buyFeePercent": {
+                "type": "string"
+              },
+              "sellFeePercent": {
+                "type": "string"
+              },
+              "lockMonths": {
+                "type": "integer",
+                "enum": [
+                  6,
+                  12
+                ]
+              }
+            },
+            "required": [
+              "poolPercent",
+              "lockMonths"
+            ],
+            "additionalProperties": false,
+            "description": "Listing round only: share of the round that opens the market (10-50%), creator fees on buys and sells (0-5%), founder lock-up in months (create, propose_round)"
+          },
+          "country": {
+            "type": "string",
+            "description": "Two-letter country code of the company (create, optional)"
+          },
+          "registrationNumber": {
+            "type": "string",
+            "description": "Company registration number (create, optional)"
+          },
+          "campaignId": {
+            "type": "string",
+            "pattern": "^0x[0-9a-fA-F]{64}$",
+            "description": "Only for an invited writer (publish_update): the raise it writes for; the founder wallet's own raise is used otherwise"
+          },
+          "writer": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Wallet of the founder's AI agent, or null to remove it (set_writer)"
+          },
+          "links": {
+            "type": "array",
+            "maxItems": 10,
+            "items": {
+              "type": "object",
+              "properties": {
+                "label": {
+                  "type": "string"
+                },
+                "url": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "label",
+                "url"
+              ],
+              "additionalProperties": false
+            },
+            "description": "Public proofs of the update: commits, articles, demos, on-chain transactions (publish_update)"
+          },
+          "files": {
+            "type": "array",
+            "maxItems": 10,
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "photo",
+                    "video",
+                    "pdf"
+                  ]
+                },
+                "url": {
+                  "type": "string"
+                },
+                "fingerprint": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "name",
+                "kind",
+                "url",
+                "fingerprint"
+              ],
+              "additionalProperties": false
+            },
+            "description": "Public files of the update with the keccak256 of their exact bytes, taken when they were published: photos, videos, PDF (publish_update)"
+          },
+          "round": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Round index (request_release, finalize_release, withdraw)"
+          },
+          "title": {
+            "type": "string",
+            "description": "Update title (publish_update)"
+          },
+          "text": {
+            "type": "string",
+            "description": "Update text (publish_update)"
+          },
+          "updates": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "maxItems": 20,
+            "description": "Numbers of the published updates the request rests on (request_release)"
+          },
+          "amount": {
+            "type": "string",
+            "description": "USDC to withdraw (withdraw)"
+          }
+        },
+        "required": [
+          "action",
+          "wallet"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
       "name": "search",
       "description": "Search Sjothr campaigns, credit risk portfolios and guides (tokenize a company, raise money for a startup, tokenized equity, milestone-based funding, credit risk); returns ids for fetch.",
       "inputSchema": {
@@ -500,10 +782,10 @@
     "type": "registry",
     "registry": "registry.modelcontextprotocol.io",
     "name": "io.github.Djangode/sjothr-mcp",
-    "version": "0.3.2",
+    "version": "0.4.0",
     "remoteUrl": "https://sjothr.xyz/api/mcp",
-    "publishedAt": "2026-11-26T07:42:09.873124Z",
-    "fetchedAt": "2026-11-26T10:40:47.803Z",
-    "toolsSha256": "2747e89d3644f1817a2fb51aeccf47d0415b3111fabc40f5b1f4e1eae17d1fae"
+    "publishedAt": "2026-11-27T03:01:18.442835Z",
+    "fetchedAt": "2026-11-27T10:42:49.718Z",
+    "toolsSha256": "74b98acd06819575b0d90ef9a8a630465945e6fbc130529990e329eed82114b2"
   }
 }

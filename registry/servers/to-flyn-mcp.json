@@ -1,0 +1,502 @@
+{
+  "$schema": "../schema.json",
+  "name": "to.flyn/mcp",
+  "title": "Flyn URL Shortener",
+  "category": "Security & Identity",
+  "description": "URL shortener: create, re-point and track short links; make QR codes. OAuth works on the free plan.",
+  "tools": [
+    {
+      "name": "create_short_link",
+      "description": "Create a new Flyn short link that redirects to a destination URL. Returns the link id, slug, and full short URL. The destination is scanned with Google Safe Browsing before creation. Free accounts can create 25 links per calendar month; click limits, fallback URLs, weighted rotation, and conversion tracking require Flyn Pro. Password protection is set in the Flyn dashboard, not through this tool, so never ask the user for a link password.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "The destination URL to shorten (https:// is assumed if no protocol is given)."
+          },
+          "slug": {
+            "type": "string",
+            "description": "Optional custom slug (letters, numbers, hyphens, underscores; max 100 chars). A random slug is generated when omitted."
+          },
+          "title": {
+            "type": "string",
+            "description": "Optional human-readable title for the link."
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Optional tags for organizing links (Pro plan only)."
+          },
+          "expiresAt": {
+            "type": "string",
+            "description": "Optional ISO 8601 datetime after which the link stops redirecting."
+          },
+          "forwardParams": {
+            "type": "boolean",
+            "description": "Whether query parameters appended to the short link are forwarded to the destination. Defaults to true."
+          },
+          "clickLimit": {
+            "type": "integer",
+            "description": "Optional maximum number of human clicks before the link stops redirecting (Pro plan only).",
+            "minimum": 1
+          },
+          "fallbackUrl": {
+            "type": "string",
+            "description": "Optional URL visitors are sent to after the click limit is reached (Pro plan only)."
+          },
+          "conversionTracking": {
+            "type": "boolean",
+            "description": "Enable per-link conversion tracking (Pro plan only). The redirect then appends an unguessable click id to the destination URL, and the link reports conversions and total conversion value next to its clicks. Nothing is reported until the Flyn tag (or a server-to-server postback) is installed on the destination site, so tell the user that setup step is still theirs."
+          },
+          "domain": {
+            "type": "string",
+            "description": "Optional custom domain to mint the link on (must be a verified domain you own; Pro plan only). Omit to use your account default domain."
+          },
+          "rotation": {
+            "type": "array",
+            "description": "Optional weighted rotation of destinations, one short link splitting traffic between several URLs (Pro plan only). Up to 12 destinations; sending more is rejected rather than truncated, so nothing is dropped without telling you. Each human visitor is sent to one destination drawn at random in proportion to its weight, so the split settles over many clicks rather than following a strict order. Bots and crawlers always get the primary url, which stays required. Each click records the id of the destination that served it, and that id, not the url and not the list position, is what per-destination stats are keyed on. The Flyn dashboard does report them: the link's own analytics page has a \"Destination Performance\" panel listing every destination with its click count, its actual share of clicks, and the share its weight intended, and it keeps showing a destination you later remove from the rotation. No API or MCP call returns that breakdown, or the per-click destination id, so send the user to that page rather than inventing a tool call for it. The panel counts clicks only, across the clicks that carry a destination id: no conversion or revenue split, and no winner declared. Every destination is Safe Browsing scanned before the link is created.",
+            "maxItems": 12,
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "description": "Stable identifier for this destination, recorded as the click variant on each click. Omit it on a brand new destination and Flyn mints one. When editing, send every existing destination back with the id it already has: click history is attributed by id, so a changed id detaches that destination's past clicks and a reused id merges two destinations' stats. Never derive ids from list position."
+                },
+                "url": {
+                  "type": "string",
+                  "description": "Destination URL for this entry. Scanned with Google Safe Browsing like the primary destination."
+                },
+                "weight": {
+                  "type": "number",
+                  "description": "Relative share of traffic, NOT a percentage. Weights are normalised across the list, so [3, 1] sends roughly three quarters of clicks to the first entry and equal weights give an even split. A weight of 0 keeps the destination in the list without ever serving it.",
+                  "minimum": 0
+                },
+                "label": {
+                  "type": "string",
+                  "description": "Optional human-readable name for this destination. Cosmetic, it does not affect routing."
+                }
+              },
+              "required": [
+                "url",
+                "weight"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "list_links",
+      "description": "List the account's short links with pagination, search, and filtering. Returns each link's id, slug, short URL, destination, click count, and settings, plus its conversion counters: conversionTracking (whether the link carries a click id), conversions, and conversionValueCents (total value reported for those conversions, in cents, not currency converted).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "search": {
+            "type": "string",
+            "description": "Optional text search across slug, destination URL, and title."
+          },
+          "tag": {
+            "type": "string",
+            "description": "Optional: only return links carrying this tag."
+          },
+          "status": {
+            "type": "string",
+            "description": "Optional filter: 'active' (not expired, archived or disabled by Flyn), 'expired' (past its expiry date or set to expired, and not archived), or 'archived'.",
+            "enum": [
+              "active",
+              "expired",
+              "archived"
+            ]
+          },
+          "page": {
+            "type": "integer",
+            "description": "Page number, starting at 1.",
+            "minimum": 1,
+            "default": 1
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Results per page (max 100).",
+            "minimum": 1,
+            "maximum": 100,
+            "default": 20
+          },
+          "sort": {
+            "type": "string",
+            "description": "Sort column.",
+            "enum": [
+              "created_at",
+              "clicks",
+              "slug",
+              "title"
+            ],
+            "default": "created_at"
+          },
+          "order": {
+            "type": "string",
+            "description": "Sort direction.",
+            "enum": [
+              "asc",
+              "desc"
+            ],
+            "default": "desc"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_link",
+      "description": "Fetch one short link by its id, including destination, settings, total click count, and its conversion counters (conversionTracking, conversions, conversionValueCents).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The link id (from create_short_link or list_links)."
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "update_link",
+      "description": "Update an existing short link. Can re-point the destination URL without changing the printed/shared short link, plus edit title, slug, tags, expiration, rotation destinations, and Pro settings. Only the provided fields are changed. Link passwords are managed in the Flyn dashboard, not through this tool.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The link id to update."
+          },
+          "url": {
+            "type": "string",
+            "description": "New destination URL."
+          },
+          "title": {
+            "type": "string",
+            "description": "New title."
+          },
+          "slug": {
+            "type": "string",
+            "description": "New slug (changes the short URL; the old slug stops working)."
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Replacement tag list."
+          },
+          "expiresAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "New ISO 8601 expiration, or null to remove."
+          },
+          "status": {
+            "type": "string",
+            "description": "Link status.",
+            "enum": [
+              "active",
+              "archived"
+            ]
+          },
+          "forwardParams": {
+            "type": "boolean",
+            "description": "Forward appended query params to the destination."
+          },
+          "clickLimit": {
+            "type": "integer",
+            "description": "Maximum human clicks before the link stops (Pro plan only).",
+            "minimum": 1
+          },
+          "fallbackUrl": {
+            "type": "string",
+            "description": "URL served after the click limit is reached (Pro plan only)."
+          },
+          "conversionTracking": {
+            "type": "boolean",
+            "description": "Enable or disable per-link conversion tracking (Pro plan only). Enabling only makes the redirect append a click id; conversions arrive from the Flyn tag or the server postback on the destination site."
+          },
+          "rotation": {
+            "type": "array",
+            "description": "Replacement list of weighted rotation destinations (Pro plan only). This REPLACES the whole list, so read the link first and send back every destination you are keeping, each with the id it already has. Pass an empty array to stop rotating and serve the single url again. Up to 12 destinations; sending more is rejected rather than truncated, so nothing is dropped without telling you. Each human visitor is sent to one destination drawn at random in proportion to its weight, so the split settles over many clicks rather than following a strict order. Bots and crawlers always get the primary url, which stays required. Each click records the id of the destination that served it, and that id, not the url and not the list position, is what per-destination stats are keyed on. The Flyn dashboard does report them: the link's own analytics page has a \"Destination Performance\" panel listing every destination with its click count, its actual share of clicks, and the share its weight intended, and it keeps showing a destination you later remove from the rotation. No API or MCP call returns that breakdown, or the per-click destination id, so send the user to that page rather than inventing a tool call for it. The panel counts clicks only, across the clicks that carry a destination id: no conversion or revenue split, and no winner declared.",
+            "maxItems": 12,
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "description": "Stable identifier for this destination, recorded as the click variant on each click. Omit it on a brand new destination and Flyn mints one. When editing, send every existing destination back with the id it already has: click history is attributed by id, so a changed id detaches that destination's past clicks and a reused id merges two destinations' stats. Never derive ids from list position."
+                },
+                "url": {
+                  "type": "string",
+                  "description": "Destination URL for this entry. Scanned with Google Safe Browsing like the primary destination."
+                },
+                "weight": {
+                  "type": "number",
+                  "description": "Relative share of traffic, NOT a percentage. Weights are normalised across the list, so [3, 1] sends roughly three quarters of clicks to the first entry and equal weights give an even split. A weight of 0 keeps the destination in the list without ever serving it.",
+                  "minimum": 0
+                },
+                "label": {
+                  "type": "string",
+                  "description": "Optional human-readable name for this destination. Cosmetic, it does not affect routing."
+                }
+              },
+              "required": [
+                "url",
+                "weight"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "delete_link",
+      "description": "Permanently delete a short link. The short URL immediately stops redirecting and this cannot be undone.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The link id to delete."
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_link_analytics",
+      "description": "Fetch click events for a short link, newest first. Every plan sees timestamps and total counts; country, city, device, OS, browser, and referrer detail requires Flyn Pro (fields are null on the free plan). Free plans see the last 30 days of history. Click events carry no conversion data: for conversions and total conversion value, read the link itself with get_link or list_links.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The link id."
+          },
+          "page": {
+            "type": "integer",
+            "description": "Page number, starting at 1.",
+            "minimum": 1,
+            "default": 1
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Click events per page (max 200 via MCP).",
+            "minimum": 1,
+            "maximum": 200,
+            "default": 50
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_link_qr_code",
+      "description": "Render a scannable QR code for an existing Flyn short link. Because the code encodes the short link rather than the destination, you can repoint the link later and every printed code follows, and each scan is counted as a click. The image is returned as a PNG you can look at. Custom colours and SVG output require Flyn Pro.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The id of the link to render a QR code for."
+          },
+          "format": {
+            "type": "string",
+            "description": "Output format: 'png' (default) or 'svg'. SVG requires Flyn Pro.",
+            "enum": [
+              "png",
+              "svg"
+            ]
+          },
+          "size": {
+            "type": "integer",
+            "description": "Maximum width in pixels, 64 to 2048, default 512. The image is the largest whole-module square that fits, so the real width is usually slightly smaller and is reported back.",
+            "minimum": 64,
+            "maximum": 2048
+          },
+          "margin": {
+            "type": "integer",
+            "description": "Quiet zone in modules. Minimum and default is 4, as required by ISO/IEC 18004; smaller values are raised to 4 because a short quiet zone is the most common cause of a printed code failing to scan.",
+            "minimum": 4,
+            "maximum": 32
+          },
+          "level": {
+            "type": "string",
+            "description": "Error correction level: 'L', 'M' (default), 'Q' or 'H'. Higher levels survive more damage but make the symbol denser.",
+            "enum": [
+              "L",
+              "M",
+              "Q",
+              "H"
+            ]
+          },
+          "fg": {
+            "type": "string",
+            "description": "Foreground colour as 6-digit hex, default Flyn green #14532D. Requires Flyn Pro."
+          },
+          "bg": {
+            "type": "string",
+            "description": "Background colour as 6-digit hex, default #FFFFFF. Requires Flyn Pro."
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "create_qr_code",
+      "description": "Render a QR code for any of six content types: a link, plain text, a v-card contact, a pre-filled email, a phone number, or a pre-filled SMS. The image is returned as a PNG you can look at. Nothing is stored, so this code is STATIC: it encodes the content directly and cannot be changed after it is printed. If the user wants a code they can repoint later, or wants to count scans, create a short link with create_short_link first and then call get_link_qr_code instead. Link and Text work on every plan; V-card, E-mail, Call and SMS require Flyn Pro, as do custom colours and SVG output. WiFi codes contain the network password, so they are made in the Flyn dashboard's QR builder, not through this tool: never ask the user for a WiFi password.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "description": "What to encode. 'url' and 'text' work on any plan. 'vcard', 'email', 'phone' and 'sms' require Flyn Pro.",
+            "enum": [
+              "url",
+              "text",
+              "vcard",
+              "email",
+              "phone",
+              "sms"
+            ]
+          },
+          "url": {
+            "type": "string",
+            "description": "For type 'url': the URL to encode."
+          },
+          "text": {
+            "type": "string",
+            "description": "For type 'text': the plain text to show when scanned."
+          },
+          "vcName": {
+            "type": "string",
+            "description": "For type 'vcard': the person's full name. Required for a v-card."
+          },
+          "vcOrg": {
+            "type": "string",
+            "description": "For type 'vcard': organisation or company."
+          },
+          "vcPhone": {
+            "type": "string",
+            "description": "For type 'vcard': phone number. Include the country code, for example +15551234567."
+          },
+          "vcEmail": {
+            "type": "string",
+            "description": "For type 'vcard': email address."
+          },
+          "vcUrl": {
+            "type": "string",
+            "description": "For type 'vcard': website URL."
+          },
+          "email": {
+            "type": "string",
+            "description": "For type 'email': the recipient address."
+          },
+          "emailSubject": {
+            "type": "string",
+            "description": "For type 'email': pre-filled subject line."
+          },
+          "emailBody": {
+            "type": "string",
+            "description": "For type 'email': pre-filled message body."
+          },
+          "phone": {
+            "type": "string",
+            "description": "For type 'phone': the number to dial. Include the country code, for example +15551234567, or the code only works for people dialling from the same country."
+          },
+          "smsPhone": {
+            "type": "string",
+            "description": "For type 'sms': the number to text. Include the country code."
+          },
+          "smsBody": {
+            "type": "string",
+            "description": "For type 'sms': the pre-filled message. The sender still has to press send."
+          },
+          "format": {
+            "type": "string",
+            "description": "Output format: 'png' (default) or 'svg'. SVG requires Flyn Pro.",
+            "enum": [
+              "png",
+              "svg"
+            ]
+          },
+          "size": {
+            "type": "integer",
+            "description": "Maximum width in pixels, 64 to 2048, default 512. The image is the largest whole-module square that fits, so the real width is usually slightly smaller and is reported back.",
+            "minimum": 64,
+            "maximum": 2048
+          },
+          "margin": {
+            "type": "integer",
+            "description": "Quiet zone in modules. Minimum and default is 4, as required by ISO/IEC 18004; smaller values are raised to 4 because a short quiet zone is the most common cause of a printed code failing to scan.",
+            "minimum": 4,
+            "maximum": 32
+          },
+          "level": {
+            "type": "string",
+            "description": "Error correction level: 'L', 'M' (default), 'Q' or 'H'. Higher levels survive more damage but make the symbol denser.",
+            "enum": [
+              "L",
+              "M",
+              "Q",
+              "H"
+            ]
+          },
+          "fg": {
+            "type": "string",
+            "description": "Foreground colour as 6-digit hex, default Flyn green #14532D. Requires Flyn Pro."
+          },
+          "bg": {
+            "type": "string",
+            "description": "Background colour as 6-digit hex, default #FFFFFF. Requires Flyn Pro."
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "additionalProperties": false
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "to.flyn/mcp",
+    "version": "1.0.1",
+    "remoteUrl": "https://www.flyn.to/mcp",
+    "publishedAt": "2026-11-27T05:19:37.137599Z",
+    "fetchedAt": "2026-11-27T10:42:49.718Z",
+    "toolsSha256": "33e9a0fa18ed8386bb6514fb1014dbec4a3dd09d8d20c14dbeb95875d0669dc1"
+  }
+}

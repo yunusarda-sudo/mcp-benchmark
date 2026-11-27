@@ -1,0 +1,303 @@
+{
+  "$schema": "../schema.json",
+  "name": "wiki.themeparks/mcp",
+  "title": "ThemeParks.wiki",
+  "category": "Productivity & Notes",
+  "description": "Live wait times, ride status, opening hours and wait history for theme parks worldwide.",
+  "tools": [
+    {
+      "name": "search",
+      "description": "Find theme parks, resorts, rides, shows, restaurants and hotels by name, and get their ids, park, resort and location. Call this first: every other tool needs an id from here. Small typos are forgiven. A name such as \"Space Mountain\" can match rides in several parks: each result names its park and resort. Narrow with `types` (e.g. [\"DESTINATION\"] for resorts), or `parkId`/`destinationId`. For \"how far is X\", pass the user's position as `near` and read `distanceKm` (straight-line). If you do not know where the user is, ask.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "query": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 100,
+            "description": "Part of a name, at least 3 letters, e.g. \"epcot\" or \"space mountain\"."
+          },
+          "types": {
+            "description": "Only these kinds of thing.",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "DESTINATION",
+                "PARK",
+                "ATTRACTION",
+                "SHOW",
+                "RESTAURANT",
+                "HOTEL"
+              ]
+            }
+          },
+          "parkId": {
+            "description": "Only things inside this park (its UUID).",
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+          },
+          "destinationId": {
+            "description": "Only things inside this resort (its UUID).",
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+          },
+          "limit": {
+            "description": "How many results, 1 to 25. Default 10.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 25
+          },
+          "near": {
+            "description": "The user's position, to get `distanceKm` on each result.",
+            "type": "object",
+            "properties": {
+              "latitude": {
+                "type": "number",
+                "minimum": -90,
+                "maximum": 90
+              },
+              "longitude": {
+                "type": "number",
+                "minimum": -180,
+                "maximum": 180
+              }
+            },
+            "required": [
+              "latitude",
+              "longitude"
+            ]
+          }
+        },
+        "required": [
+          "query"
+        ]
+      }
+    },
+    {
+      "name": "get_live_data",
+      "description": "What rides, shows and restaurants are doing right now: status (OPERATING, DOWN, CLOSED, REFURBISHMENT), standby and single-rider waits in minutes, return-time and boarding-group windows, paid queue prices, showtimes still running or to come (check `type`: \"Special Ticketed Event\" needs a separate ticket), and restaurant walk-up waits. Pass one id or up to 10: a ride, a park (everything in it) or a resort (every park in it). Several ids come back as ONE list, open first, longest wait first, each item with its parkId. So \"which Space Mountain is shortest\" is `search` then one call with every match, and \"the longest wait at any Disney park\" is `search` with types [\"DESTINATION\"] then one call with those resorts, entityTypes [\"ATTRACTION\"] and a small `limit`. Whether a park itself is open is `get_schedule`, not this.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "ids": {
+            "minItems": 1,
+            "maxItems": 10,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+            },
+            "description": "Entity ids (UUIDs) from `search`, 1 to 10. Each costs one request."
+          },
+          "entityTypes": {
+            "description": "Only these kinds, e.g. [\"ATTRACTION\"] for rides only.",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "ATTRACTION",
+                "SHOW",
+                "RESTAURANT"
+              ]
+            }
+          },
+          "includeClosed": {
+            "description": "Include closed and refurbishing entities. Default true. Counts always cover everything.",
+            "type": "boolean"
+          },
+          "includeForecast": {
+            "description": "Include the hourly wait forecast where one is available. Default false; it is large.",
+            "type": "boolean"
+          },
+          "includeOperatingHours": {
+            "description": "Include each ride's own operating windows (e.g. Early Entry). Default false.",
+            "type": "boolean"
+          },
+          "limit": {
+            "description": "Only the first N items after sorting (open first, longest wait first). Use for \"the busiest\" or \"the top 5\".",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 500
+          }
+        },
+        "required": [
+          "ids"
+        ]
+      }
+    },
+    {
+      "name": "get_schedule",
+      "description": "Opening hours for a park or resort: today and the next 30 days, or one calendar month (past months show what was published then). Use for \"what time does X open/close\", \"is X open today\", \"is X open right now\" (compare with the current time in the park's timezone). Each row is a slot such as OPERATING or a TICKETED_EVENT (early entry, after-hours parties). Times are park-local with their offset. For a resort, each park's hours come back under `parks`. A day missing from the list means the park has not published it.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "description": "An entity id (UUID) from `search`."
+          },
+          "month": {
+            "description": "One month, YYYY-MM. Omit for the next 30 days.",
+            "type": "string",
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$"
+          },
+          "includePurchases": {
+            "description": "Include paid add-ons on sale for each day (e.g. Lightning Lane prices). Default false.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    },
+    {
+      "name": "get_entity",
+      "description": "What something is: its name, type, ride type, timezone, location, which park and resort it belongs to, and attributes such as minimum height where the park publishes them (often it does not; say so rather than guess).",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "description": "An entity id (UUID) from `search`."
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    },
+    {
+      "name": "get_daily_history",
+      "description": "One summary row per day: minutes operating, down and unknown (unconfirmed), first opening and last close (UTC), and standby wait statistics (min, median p50, mean, p90, max, in minutes). For a ride or show, ask a range of days; for a whole park, ask one `date` and get a row per ride. Use for \"how busy was\", \"how long were the waits last week\", \"how often does X break down\". `firstOperatingAt: null` is normal: no change to OPERATING that day, not \"never opened\" (it may have carried over). How far back you can go depends on the caller's plan (7 days without an API key); the error says the earliest day allowed.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "description": "An entity id (UUID) from `search`."
+          },
+          "date": {
+            "description": "One park-local day, YYYY-MM-DD. Use this for a park.",
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          },
+          "from": {
+            "description": "First day, YYYY-MM-DD. With `to`, for a ride or show.",
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          },
+          "to": {
+            "description": "Last day, inclusive, YYYY-MM-DD.",
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    },
+    {
+      "name": "show_wait_board",
+      "description": "Shows a park's live wait times as an interactive board the person can filter and refresh, with each ride's hourly forecast. Prefer this over `get_live_data` whenever the answer would be a list of several rides at one park: an overview, a ranking, a shortlist or a recommendation. It returns the same data as text. Use `get_live_data` when the answer is a single fact or one figure: one ride, a few named rides, several parks at once, or a single record such as a park's top entry (pass `limit`). Takes a park id from `search`.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "parkId": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "description": "The park's id (UUID) from `search`."
+          },
+          "includeClosed": {
+            "description": "Include closed and refurbishing rides. Default true. Counts always cover everything.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "parkId"
+        ]
+      }
+    },
+    {
+      "name": "show_wait_history",
+      "description": "Shows one ride's or show's daily wait history as a chart: median and 90th-percentile standby waits, the longest wait, and time spent down, per day. Prefer this over `get_daily_history` for any request about one ride or show over a range of days, whatever the aspect: the waits, a trend, a pattern by day, or availability. It returns the same daily figures as text. `get_daily_history` is for a single day, or one day of a whole park. Takes a ride or show id from `search` and a range of up to 31 days (7 days without an API key).",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "description": "A ride's or show's id (UUID) from `search`."
+          },
+          "from": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "description": "First day, YYYY-MM-DD."
+          },
+          "to": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "description": "Last day, inclusive, YYYY-MM-DD."
+          }
+        },
+        "required": [
+          "id",
+          "from",
+          "to"
+        ]
+      }
+    },
+    {
+      "name": "refresh_wait_board",
+      "description": "Refreshes the wait board's data. Called by the board itself.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "parkId": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "description": "The park's id (UUID) from `search`."
+          },
+          "includeClosed": {
+            "description": "Include closed and refurbishing rides. Default true. Counts always cover everything.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "parkId"
+        ]
+      }
+    },
+    {
+      "name": "sign_in",
+      "description": "Signs the person in to their free ThemeParks.wiki account, which gives them their own rate limits instead of the limit shared by everyone using this app without an account. Use only when the person asks to sign in to ThemeParks.wiki. Signing in is optional: every other tool works without it.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {}
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "wiki.themeparks/mcp",
+    "version": "1.1.0",
+    "remoteUrl": "https://api.themeparks.wiki/mcp",
+    "publishedAt": "2026-11-26T15:25:22.841873Z",
+    "fetchedAt": "2026-11-27T10:42:49.718Z",
+    "toolsSha256": "297a7b4fee3766a52aea8b30864010c3b01f6d57e4d656d499905187230c0ad9"
+  }
+}

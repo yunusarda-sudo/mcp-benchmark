@@ -1,0 +1,524 @@
+{
+  "$schema": "../schema.json",
+  "name": "io.github.romudille-bit/agentpay",
+  "title": "AgentPay — trust routing + spend caps for x402 agents",
+  "category": "AI, LLMs & Agents",
+  "description": "Buyer-side trust oracle + capped sessions for x402 agents: verified_route, receipts, 17 free tools.",
+  "repository": "https://github.com/romudille-bit/agentpay",
+  "tools": [
+    {
+      "name": "session_create",
+      "description": "Open a budget-capped agent session on AgentPay. Pay $0.01 USDC once — get a session_id, budget config, and gateway URL. Enforces a hard max_spend cap across all subsequent tool calls via the AgentPay SDK. The entry point for agents discovering AgentPay on Base Bazaar.\n\nUse when: You want to start an AgentPay session with a hard spend cap and get a session_id for tracking.\nNot for: you only need a session for free tools — the SDK's quickstart() opens one at no cost; this call settles $0.01 on-chain.\nReturns: session_id, max_spend, agent_address, gateway_url, tools_endpoint, created_at, receipt (tx_hash + network)\nExample response: {\"session_id\":\"f47ac10b-58cc-4372-a567-0e02b2c3d479\",\"max_spend\":\"0.10\",\"agent_address\":\"GBCVQCNFWPM3GDO4GPT4YEQ42ZHPY67QTJA3WN5ERQIKQDXKBX62SLNJ\",\"label\":null,\"gateway_url\":\"https://agentpay.tools\",\"tools_endpoint\":\"https://agentpay.tools/tools\",\"created_at\":\"2026-05-27T12:00:00Z\",\"receipt\":{\"tx_hash\":\"0xabc...def\",\"network\":\"base\",\"amount_usdc\":\"0.01\"},\"sdk_hint\":\"Use `from agentpay import Session` to enforce the max_spend cap client-side.\"}\n\nPrice: $0.01 USDC per call (x402 over MCP: an unpaid call returns PaymentRequired; pay via _meta x402/payment)",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "agent_address": {
+            "type": "string",
+            "description": "Your wallet address (Stellar G... or EVM 0x...)"
+          },
+          "max_spend": {
+            "type": "string",
+            "description": "Hard budget cap in USDC for this session, e.g. '0.10'",
+            "default": "0.10"
+          },
+          "label": {
+            "type": "string",
+            "description": "Optional human-readable label for this session"
+          }
+        },
+        "required": [
+          "max_spend"
+        ]
+      }
+    },
+    {
+      "name": "pre_trade_check",
+      "description": "One-call pre-trade sanity check: 'I want to long $X of SYMBOL — is now sane?' Combines live orderbook slippage at YOUR size, cross-exchange funding (carry cost), open-interest crowding, and contract security (GoPlus) into a single ok/caution/avoid verdict with a per-factor breakdown. Major ERC-20 addresses (LINK, UNI, ARB, OP, AAVE, PEPE, SHIB) resolve automatically; native assets (BTC, ETH, SOL, ...) report security n/a; an unrecognized token without token_address reads 'unknown' and caps the verdict at caution — an unscreened contract can never read 'ok'. Replaces four API integrations and the judgment layer on top of them. Raw component data embedded so you can apply your own thresholds. Stacks tokens (STX, sBTC, USDCx, stSTX, ZEST, LEO, USDh, aeUSDC, stBTC) add the Bitflow DEX venue: price impact at YOUR size from a live route quote, the pools and bins the swap crosses, and their TVL; STX and sBTC keep their CEX perp legs, DEX-only tokens report funding/OI n/a and contract risk unscreened (no GoPlus coverage on Stacks).\n\nUse when: An agent (or human) is about to enter a position and wants one verdict covering liquidity, carry, crowding, and security — instead of four raw feeds plus its own synthesis.\nNot for: you need a single raw factor — funding_rates, open_interest, orderbook_depth or token_security are free; you are not about to size a position. This call settles $0.01 on-chain.\nReturns: verdict (ok/caution/avoid), factors{liquidity,carry,crowding,security} each with level + reason, components{orderbook_depth,funding_rates,open_interest}, symbol, side, size_usd\nExample response: {\"symbol\":\"ETH\",\"side\":\"long\",\"size_usd\":50000,\"venue\":\"cex\",\"verdict\":\"caution\",\"factors\":{\"liquidity\":{\"level\":\"ok\",\"slippage_pct\":0.011,\"bucket_usd\":50000,\"reason\":\"fills within 0.011% of best ask\"},\"carry\":{\"level\":\"caution\",\"median_funding_pct\":0.062,\"annualized_pct\":67.9,\"reason\":\"longs paying elevated funding\"},\"crowding\":{\"level\":\"ok\",\"long_short_ratio\":1.4,\"oi_change_24h_pct\":3.2,\"reason\":\"positioning unremarkable\"},\"security\":{\"level\":\"n/a\",\"reason\":\"ETH is a native chain asset — no token contract to screen\"}},\"not_checked\":[\"security\"]}\n\nPrice: $0.01 USDC per call (x402 over MCP: an unpaid call returns PaymentRequired; pay via _meta x402/payment)",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "symbol": {
+            "type": "string",
+            "description": "Asset to check, e.g. 'ETH', 'BTC', 'SOL'"
+          },
+          "size_usd": {
+            "type": "number",
+            "description": "Intended position size in USD (drives the slippage check)",
+            "default": 10000
+          },
+          "side": {
+            "type": "string",
+            "enum": [
+              "long",
+              "short"
+            ],
+            "description": "Trade direction (funding carry is side-aware)",
+            "default": "long"
+          },
+          "venue": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "cex",
+              "bitflow"
+            ],
+            "description": "Where the trade executes. auto (default): CEX books for majors, Bitflow for Stacks tokens, both for STX/sBTC. bitflow: price the swap on Bitflow only; cex: skip Bitflow",
+            "default": "auto"
+          },
+          "token_address": {
+            "type": "string",
+            "description": "Optional ERC-20 contract address for the GoPlus security scan. Auto-resolved for major tokens; required for a full verdict on tokens the resolver doesn't know (otherwise security reads 'unknown' and caps the verdict at caution)"
+          }
+        },
+        "required": [
+          "symbol"
+        ]
+      }
+    },
+    {
+      "name": "verified_route",
+      "description": "Paid buyer-side trust oracle: 'I need X, budget $Y — which x402 tool is real?' Sweeps the WHOLE x402 marketplace across many queries (a single search shows only a slice), collapses sybil/factory clusters (one wallet stamping many fake-distinct listings → one entry), ranks the genuinely-used survivors by real unique-payer usage, and returns ONE vetted recommendation with a ready-to-pay x402 challenge. The credit-bureau check an agent cannot do itself in one query — pay $0.01 to avoid paying a scam or a dead stub.\n\nUse when: An agent is about to pay an unknown x402 tool and wants the real, used, non-sybil one under budget — not just the cheapest.\nNot for: you already know which AgentPay tool you need — call it directly; you only want a free preview of the marketplace ranking — the MCP's free preview (verified_route_preview on the remote server). This call settles $0.01 on-chain.\nReturns: recommendation (with ready_to_pay), survivors[] (each with typed evidence[]), catalog{scanned, real_providers, sybil_collapsed, biggest_factory}, vetting summary\nExample response: {\"need\":\"dex pair liquidity\",\"chain\":null,\"budget_usd\":\"1\",\"recommendation\":{\"name\":\"Otto AI\",\"url\":\"https://otto.example/dex\",\"price_usd\":\"0.001\",\"network\":\"eip155:8453\",\"pay_to\":\"0x0e84ddedaae6a7\",\"payers30d\":200,\"calls30d\":3246,\"quality\":3851,\"flags\":[],\"evidence\":[{\"type\":\"delivery\",\"source\":\"agentpay-prober\",\"metric\":\"delivery_rate\",\"value\":1,\"n\":12,\"observed_at\":\"2026-09-30T13:05:00Z\",\"ref\":\"/s/otto-example-dex-1a2b3c\"},{\"type\":\"third-party\",\"source\":\"coinbase-bazaar\",\"metric\":\"unique_payers_30d\",\"value\":200,\"observed_at\":\"2026-10-01T12:00:00Z\",\"ref\":null}],\"ready_to_pay\":{\"url\":\"https://otto.example/dex\",\"network\":\"eip155:8453\",\"price_usd\":\"0.001\",\"accepts\":{\"scheme\":\"exact\",\"network\":\"eip155:8453\"}}},\"survivors\":[],\"catalog\":{\"scanned\":117,\"after_vetting\":114,\"real_providers\":41,\"unique_wallets\":38,\"sybil_collapsed\":73,\"biggest_factory\":{\"pay_to\":\"0x2bb72231eed3\",\"listings\":72}},\"vetting\":\"swept 17 queries → 117 listings → collapsed 73 sybil listings → 41 real providers\"}\n\nPrice: $0.01 USDC per call (x402 over MCP: an unpaid call returns PaymentRequired; pay via _meta x402/payment)",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "need": {
+            "type": "string",
+            "description": "What the agent needs, e.g. 'dex pair liquidity', 'crypto prices'"
+          },
+          "budget_usd": {
+            "type": "number",
+            "description": "Max USDC the agent will pay the downstream tool per call",
+            "default": 1
+          },
+          "chain": {
+            "type": "string",
+            "description": "Optional chain filter: 'base', 'arbitrum', 'arbitrum-stack'. Empty = all chains.",
+            "default": ""
+          }
+        },
+        "required": [
+          "need"
+        ]
+      }
+    },
+    {
+      "name": "funding_spread",
+      "description": "Cross-venue perp funding divergence for one asset — the basis/carry read, not the raw rates. Reads Binance, Bybit, OKX, Gate.io, Bitget, Hyperliquid, dYdX, MEXC and KuCoin in parallel, normalises every rate to a per-8h figure (hourly venues scaled), and returns the spread (max minus min, cheapest and dearest venue, deviation from the median), its percentile against the last 7 days of cross-venue spreads, a plain-English read, and — given notional_usd — a carry estimate (per 8h / day / 30d) net of an assumed taker fee with the breakeven holding time. Venues that fail to answer are named in venues_unavailable; the spread is computed over the ones that did.\n\nUse when: An agent wants to know whether funding on one venue is out of line with the others for the same perp — to pick the cheaper venue for a position, or to size a long/short carry across venues.\nNot for: you only need one venue's current funding — funding_rates is free; you want a trade verdict for one venue — pre_trade_check. This call settles $0.01 on-chain.\nReturns: asset, as_of, venues[{venue, rate_8h_pct, rate_annualized_pct, raw_rate_pct, interval_hours, next_funding_time}] sorted cheapest first, spread{pct_8h, bps_8h, annualized_pct, median_8h_pct, max_deviation_from_median_pct, cheapest, dearest}, history{days, buckets, spread_pct_8h_p50/p90/max, current_percentile}, carry_estimate{per_8h_usd, per_day_usd, per_30d_usd, taker_fees_round_trip_usd, breakeven_hours, assumptions} | null, read, venues_unavailable{venue: reason}\nExample response: {\"asset\":\"ETH\",\"as_of\":\"2026-11-05T12:41:00+00:00\",\"venues\":[{\"venue\":\"okx\",\"rate_8h_pct\":0.01,\"rate_annualized_pct\":10.95,\"raw_rate_pct\":0.01,\"interval_hours\":8,\"next_funding_time\":1793923200000},{\"venue\":\"hyperliquid\",\"rate_8h_pct\":0.01,\"rate_annualized_pct\":10.95,\"raw_rate_pct\":0.00125,\"interval_hours\":1,\"next_funding_time\":1793883600000},{\"venue\":\"dydx\",\"rate_8h_pct\":0.039,\"rate_annualized_pct\":42.7,\"raw_rate_pct\":0.004875,\"interval_hours\":1,\"next_funding_time\":1793883600000}],\"spread\":{\"pct_8h\":0.029,\"bps_8h\":2.9,\"annualized_pct\":31.75,\"median_8h_pct\":0.01,\"max_deviation_from_median_pct\":0.029,\"cheapest\":\"okx\",\"dearest\":\"dydx\"},\"history\":{\"days\":7,\"buckets\":22,\"venues_with_history\":[\"dydx\",\"hyperliquid\",\"okx\"],\"spread_pct_8h_p50\":0.0125,\"spread_pct_8h_p90\":0.04242,\"spread_pct_8h_max\":0.05698,\"current_percentile\":77},\"carry_estimate\":{\"notional_usd\":10000,\"long_on\":\"okx\",\"short_on\":\"dydx\",\"per_8h_usd\":2.9,\"per_day_usd\":8.7,\"per_30d_usd\":261,\"taker_fees_round_trip_usd\":20,\"breakeven_hours\":55.2,\"assumptions\":\"taker 0.05% per leg on both venues, open and close; spread held constant; no slippage, no basis move\"},\"read\":\"ETH funding 0.0390%/8h on dydx vs 0.0100% on okx — 2.9 bps/8h, 77th percentile of the last 7 days (7 of 9 venues answered)\",\"venues_unavailable\":{\"binance\":\"geo-blocked (451)\",\"bybit\":\"geo-blocked (403)\"}}\n\nPrice: $0.01 USDC per call (x402 over MCP: an unpaid call returns PaymentRequired; pay via _meta x402/payment)",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "symbol": {
+            "type": "string",
+            "description": "Perp underlying, e.g. 'BTC', 'ETH', 'SOL'"
+          },
+          "notional_usd": {
+            "type": "number",
+            "description": "Optional position size per leg in USD — adds carry_estimate (long the cheapest venue, short the dearest)"
+          }
+        },
+        "required": [
+          "symbol"
+        ]
+      }
+    },
+    {
+      "name": "sbtc_peg",
+      "description": "The sBTC peg as an agent-readable feed — the one dataset only Stacks state can answer. Live sBTC supply (and share of the peg cap), peg-in and peg-out flows for 24h and 7d (sats, counts, unique recipients, net), in-flight bridge requests (pending and accepted deposits with the oldest pending age, pending withdrawals, 24h failures), the last peg events with Bitcoin txids, the signer set and signature threshold, and the rolling withdrawal cap with its current headroom. Read from the sBTC token and registry contracts and the bridge API (Emily); a source that fails degrades to null plus a note. Signer liveness is not public and is reported as null — the pending ages and withdrawal headroom are the proxies.\n\nUse when: An agent wants the state of the sBTC peg before moving BTC onto or off Stacks, sizing against the withdrawal cap, or reading Bitcoin-capital flow into Stacks as a signal.\nNot for: you need the sBTC price or market data — token_price / token_market_data are free; you need a swap quote — pre_trade_check prices Bitflow. This call settles $0.01 on-chain.\nReturns: asset, contract, network, as_of{time, stacks_height, bitcoin_height}, supply{sats, btc, peg_cap_sats, pct_of_cap}, flows{24h, 7d}{peg_in_sats, peg_in_count, peg_in_unique_recipients, peg_out_sats, peg_out_count, net_sats, from_stacks_height, complete}, in_flight{deposits_pending, deposits_accepted, oldest_pending_deposit_age_hours, withdrawals_pending, withdrawals_accepted, deposits_failed_24h, withdrawals_failed_24h}, last_events[{type, sats, stacks_height, bitcoin_txid, recipient|sender}], signers{count, signature_threshold, aggregate_pubkey, limits{peg_cap_sats, per_deposit_minimum_sats, per_withdrawal_cap_sats, rolling_withdrawal_cap_sats, rolling_window_blocks, available_to_withdraw_sats, withdrawal_headroom_pct, throttle_mode}, liveness, note}, read, sources, notes[]\nExample response: {\"asset\":\"sBTC\",\"contract\":\"SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token\",\"network\":\"stacks-mainnet\",\"as_of\":{\"time\":\"2026-11-05T13:16:06+00:00\",\"stacks_height\":9418770,\"bitcoin_height\":974675},\"supply\":{\"sats\":248402294199,\"btc\":2484.02294199,\"peg_cap_sats\":2100000000000000,\"pct_of_cap\":0.0118},\"flows\":{\"24h\":{\"peg_in_sats\":349000521,\"peg_in_count\":870,\"peg_in_unique_recipients\":11,\"peg_out_sats\":172451573,\"peg_out_count\":15,\"net_sats\":176548948,\"from_stacks_height\":9411041,\"complete\":true},\"7d\":{\"peg_in_sats\":1093108934,\"peg_in_count\":5324,\"peg_in_unique_recipients\":39,\"peg_out_sats\":790710098,\"peg_out_count\":110,\"net_sats\":302398836,\"from_stacks_height\":9359229,\"complete\":true}},\"in_flight\":{\"deposits_pending\":10,\"deposits_accepted\":16,\"oldest_pending_deposit_age_hours\":50,\"withdrawals_pending\":0,\"withdrawals_accepted\":3,\"deposits_failed_24h\":0,\"withdrawals_failed_24h\":1},\"last_events\":[{\"type\":\"peg_in\",\"sats\":85000,\"stacks_height\":9418744,\"bitcoin_txid\":\"62acd3f2cee3b1bb0ba547de0d1fc32253bf69e79b63cf19f9e055dc97f741db\",\"recipient\":\"SP000000000000000000002Q6VF78.pox-5\"}],\"signers\":{\"count\":11,\"signature_threshold\":8,\"aggregate_pubkey\":\"0x02d99ad0f0111a7e9aaa2ed22940efec98db0ece9b9475e61e1eec65a6e7f3af69\",\"limits\":{\"peg_cap_sats\":2100000000000000,\"per_deposit_minimum_sats\":10000,\"per_withdrawal_cap_sats\":5100000000,\"rolling_withdrawal_cap_sats\":15100000000,\"rolling_window_blocks\":150,\"available_to_withdraw_sats\":14786411900,\"withdrawal_headroom_pct\":97.9,\"throttle_mode\":null},\"liveness\":null,\"note\":\"signer liveness is not published; the observable proxies are pending/accepted deposit ages and the rolling withdrawal headroom\"},\"read\":\"sBTC supply 2484.02 BTC; 24h net +1.7655 BTC (870 in / 15 out); 7d net +3.0240 BTC (5324 in / 110 out); 10 deposits pending (oldest 50.0h); 8-of-11 signers; withdrawal headroom 97.9%\",\"notes\":[]}\n\nPrice: $0.01 USDC per call (x402 over MCP: an unpaid call returns PaymentRequired; pay via _meta x402/payment)",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    {
+      "name": "token_price",
+      "description": "Get the current USD price of any cryptocurrency token\n\nUse when: You need the current USD price, 24h change, or market cap of any cryptocurrency.\nNot for: you need volume, ATH or a pair quote — token_market_data; a one-call macro + crypto overview — market_snapshot; pool depth or slippage — orderbook_depth.\nReturns: price_usd, change_24h_pct, market_cap_usd, coin_id\nExample response: {\"symbol\":\"ETH\",\"price_usd\":2069.73,\"change_24h_pct\":-4.04,\"market_cap_usd\":250330787714.19,\"source\":\"coingecko\"}\n\nPrice: $0.000 USDC per call",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "symbol": {
+            "type": "string",
+            "description": "Token symbol, e.g. BTC, ETH, SOL"
+          }
+        },
+        "required": [
+          "symbol"
+        ]
+      }
+    },
+    {
+      "name": "gas_tracker",
+      "description": "Get current Ethereum gas prices (slow, standard, fast)\n\nUse when: You need to know current Ethereum gas prices before submitting a transaction or estimating costs.\nNot for: you need gas as part of a broader read — market_snapshot already includes standard gwei; only Ethereum mainnet gas is reported.\nReturns: slow_gwei, standard_gwei, fast_gwei, base_fee_gwei, estimated confirmation times\nExample response: {\"slow_gwei\":1.5,\"standard_gwei\":2,\"fast_gwei\":3,\"base_fee_gwei\":1.2,\"source\":\"etherscan\"}\n\nPrice: $0.000 USDC per call",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "yield_scanner",
+      "description": "Find best DeFi yield opportunities across protocols for a given token\n\nUse when: You need to find the best yield/APY for a token across DeFi protocols.\nNot for: you need a protocol's total TVL rather than pool APYs — defi_tvl; risk_level is a heuristic, run token_security on the pool's token before depositing.\nReturns: list of pools with protocol, apy, tvl_usd, chain, risk_level sorted by APY descending\nExample response: {\"token\":\"USDC\",\"pools\":[{\"protocol\":\"morpho\",\"apy\":8.74,\"tvl_usd\":312000000,\"chain\":\"Ethereum\",\"risk_level\":\"low\"},{\"protocol\":\"aave-v3\",\"apy\":5.21,\"tvl_usd\":1840000000,\"chain\":\"Ethereum\",\"risk_level\":\"low\"},{\"protocol\":\"compound-v3\",\"apy\":4.87,\"tvl_usd\":920000000,\"chain\":\"Ethereum\",\"risk_level\":\"low\"}],\"source\":\"defillama\"}\n\nPrice: $0.000 USDC per call",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string",
+            "description": "Token symbol to find yields for, e.g. 'ETH', 'USDC', 'BTC'"
+          },
+          "chain": {
+            "type": "string",
+            "description": "Filter by chain: 'ethereum', 'base', 'arbitrum', 'polygon'. Leave empty for all chains.",
+            "default": ""
+          },
+          "min_tvl": {
+            "type": "number",
+            "description": "Minimum pool TVL in USD (default 1,000,000)",
+            "default": 1000000
+          }
+        },
+        "required": [
+          "token"
+        ]
+      }
+    },
+    {
+      "name": "open_interest",
+      "description": "Get total open interest in perpetual futures for any asset, with 1h and 24h change rates. Pairs with funding_rates to complete the derivatives picture — rising OI with high funding = overcrowded position.\n\nUse when: You need to know total open interest in perpetual futures and whether it's rising or falling. Combine with funding_rates for a full derivatives picture.\nNot for: you need the funding cost of holding a position — funding_rates; a single trade verdict — pre_trade_check.\nReturns: total_oi_usd (sum of the venues listed in oi_venues), oi_change_1h_pct, oi_change_24h_pct, long_short_ratio (median across venues) with long_short_ratios per venue and long_short_spread, per-exchange breakdown\nExample response: {\"asset\":\"ETH\",\"price_usd\":2069.73,\"total_oi_usd\":8415777792,\"oi_venues\":[\"Binance\"],\"oi_change_1h_pct\":1.2,\"oi_change_24h_pct\":12.4,\"long_short_ratio\":1.08,\"long_short_ratios\":{\"Binance\":1.08,\"OKX\":1.11,\"Gate.io\":1.02},\"long_short_spread\":0.09,\"exchanges\":[{\"exchange\":\"Binance\",\"oi_contracts\":4066123.5,\"oi_usd\":8415777792,\"oi_change_1h_pct\":1.2,\"oi_change_24h_pct\":12.4,\"long_short_ratio\":1.08}],\"source\":\"binance/bybit/okx + gate/bitget (L/S)\",\"primary\":\"binance\"}\n\nPrice: $0.000 USDC per call",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "asset": {
+            "type": "string",
+            "description": "Token symbol, e.g. 'BTC', 'ETH', 'SOL'",
+            "default": "BTC"
+          }
+        }
+      }
+    },
+    {
+      "name": "orderbook_depth",
+      "description": "Get real bid/ask depth and slippage estimates at $10k, $50k, and $250k notional from Binance, Bybit and OKX. Use before sizing a position to know if you can execute without moving the market.\n\nUse when: You need to estimate slippage before executing a large trade. Tells you how much a $10k, $50k, or $250k order will move the market.\nNot for: you need market cap or 24h volume — token_market_data; a full pre-trade verdict at your size — pre_trade_check. Centralised-exchange books (Binance/Bybit/OKX) only, not DEX pools.\nReturns: best_bid, best_ask, spread_pct, depth with slippage_pct at $10k/$50k/$250k notional, per-exchange best prices\nExample response: {\"asset\":\"ETH\",\"pair\":\"ETH/USDT\",\"best_ask\":2071.5,\"best_bid\":2071.2,\"spread_pct\":0.0145,\"depth\":[{\"notional_usd\":10000,\"slippage_pct\":0.002,\"executable\":true},{\"notional_usd\":50000,\"slippage_pct\":0.008,\"executable\":true},{\"notional_usd\":250000,\"slippage_pct\":0.031,\"executable\":true}],\"exchanges\":[{\"exchange\":\"Binance\",\"best_ask\":2071.5,\"best_bid\":2071.2},{\"exchange\":\"Bybit\",\"best_ask\":2071.6,\"best_bid\":2071.1}],\"source\":\"binance/bybit/okx\"}\n\nPrice: $0.000 USDC per call",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "asset": {
+            "type": "string",
+            "description": "Token symbol, e.g. 'BTC', 'ETH', 'SOL'",
+            "default": "ETH"
+          }
+        },
+        "required": [
+          "asset"
+        ]
+      }
+    },
+    {
+      "name": "wallet_balance",
+      "description": "Get the token balances for any Ethereum or Stellar wallet address\n\nUse when: You need to look up the token holdings of an Ethereum or Stellar wallet address.\nNot for: you want a token's price or market data rather than one address's holdings — token_price / token_market_data; large transfers across many wallets — whale_activity. Ethereum addresses are 0x…, Stellar addresses G…; no other chains.\nReturns: list of token balances (symbol, amount) for the given address\nExample response: {\"address\":\"0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045\",\"chain\":\"ethereum\",\"balances\":[{\"token\":\"ETH\",\"amount\":\"1.234\"},{\"token\":\"USDC\",\"contract\":\"0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\",\"amount\":\"500.00\"}]}\n\nPrice: $0.000 USDC per call",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "address": {
+            "type": "string",
+            "description": "Wallet address (Ethereum 0x... or Stellar G...)"
+          },
+          "chain": {
+            "type": "string",
+            "enum": [
+              "ethereum",
+              "stellar"
+            ],
+            "description": "Blockchain to query"
+          }
+        },
+        "required": [
+          "address",
+          "chain"
+        ]
+      }
+    },
+    {
+      "name": "fear_greed_index",
+      "description": "Crypto Fear & Greed Index (0=extreme fear, 100=extreme greed) with optional history\n\nUse when: You need to gauge overall crypto market sentiment or mood — whether the market is fearful or greedy.\nNot for: you want token-specific sentiment — crypto_news (per-token headlines) or funding_rates (leveraged positioning).\nReturns: value (0–100), value_classification (e.g. 'Greed'), optional history[]\nExample response: {\"value\":10,\"value_classification\":\"Extreme Fear\",\"timestamp\":1774137600,\"source\":\"alternative.me\"}\n\nPrice: $0.000 USDC per call",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "description": "Number of days of history to return (default 1, max 30)",
+            "default": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "crypto_news",
+      "description": "Latest crypto news and community sentiment from r/CryptoCurrency for any token\n\nUse when: You need recent news headlines or community sentiment for one or more crypto tokens.\nNot for: you need general web news or documentation — web_search; a specific article's text — url_reader; a numeric sentiment gauge — fear_greed_index.\nReturns: headlines[] with title, url, sentiment (bullish/neutral/bearish), score, published_at\nExample response: {\"currencies\":\"ETH\",\"headlines\":[{\"title\":\"Ethereum devs confirm Pectra upgrade timeline\",\"url\":\"https://reddit.com/r/CryptoCurrency/...\",\"sentiment\":\"bullish\",\"score\":1842,\"published_at\":\"2026-03-22T08:14:00Z\"},{\"title\":\"ETH gas fees drop to yearly lows\",\"url\":\"https://reddit.com/r/CryptoCurrency/...\",\"sentiment\":\"bullish\",\"score\":934,\"published_at\":\"2026-03-22T06:31:00Z\"}],\"source\":\"reddit\"}\n\nPrice: $0.000 USDC per call",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "currencies": {
+            "type": "string",
+            "description": "Comma-separated token symbols, e.g. 'BTC,ETH'",
+            "default": "BTC,ETH"
+          },
+          "filter": {
+            "type": "string",
+            "enum": [
+              "hot",
+              "new",
+              "rising",
+              "top"
+            ],
+            "description": "Feed sort order (default: hot)",
+            "default": "hot"
+          }
+        }
+      }
+    },
+    {
+      "name": "defi_tvl",
+      "description": "DeFi protocol Total Value Locked from DeFiLlama. Returns top 10 or a specific protocol.\n\nUse when: You need the Total Value Locked in a specific DeFi protocol or want to compare the top protocols by TVL.\nNot for: you want the best yield for a token — yield_scanner; protocol revenue or custom metrics — dune_query.\nReturns: tvl, change_1h, change_1d, change_7d, chains[], category for the protocol (or top 10 list)\nExample response: {\"protocol\":\"aave\",\"tvl\":23800000000,\"change_1h\":0.12,\"change_1d\":-1.43,\"change_7d\":3.21,\"chains\":[\"Ethereum\",\"Polygon\",\"Avalanche\",\"Base\"],\"category\":\"Lending\",\"source\":\"defillama\"}\n\nPrice: $0.000 USDC per call",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "protocol": {
+            "type": "string",
+            "description": "Protocol name or slug, e.g. 'uniswap', 'aave', 'lido'. Leave empty for top 10.",
+            "default": ""
+          }
+        }
+      }
+    },
+    {
+      "name": "token_market_data",
+      "description": "Get market cap, 24h volume, ATH, and price change for any token. Note: does NOT return pool depth or slippage — for pre-trade liquidity estimates, use a dedicated orderbook tool.\n\nUse when: You need 24h trading volume, market cap, or all-time high for a token pair on decentralized exchanges.\nNot for: you only need the spot price — token_price is lighter; you need pool depth or slippage — orderbook_depth.\nReturns: volume_24h_usd, market_cap_usd, price_usd, ath_usd, price_change_24h_pct\nExample response: {\"token_a\":\"ETH\",\"token_b\":\"USDC\",\"price_usd\":2071.45,\"volume_24h_usd\":312847293,\"volume_change_24h_pct\":-8.3,\"market_cap_usd\":249800000000,\"ath_usd\":4878.26,\"price_change_24h_pct\":-3.91,\"source\":\"coingecko\"}\n\nPrice: $0.000 USDC per call",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "token_a": {
+            "type": "string",
+            "description": "First token symbol"
+          },
+          "token_b": {
+            "type": "string",
+            "description": "Second token symbol, e.g. USDC"
+          }
+        },
+        "required": [
+          "token_a",
+          "token_b"
+        ]
+      }
+    },
+    {
+      "name": "token_security",
+      "description": "Scan any token contract for honeypot, rug pull, and security risks\n\nUse when: You need to check if a token contract is safe before trading or investing.\nNot for: the asset is a native coin (BTC, ETH, SOL) with no contract — nothing to scan; you want liquidity or price — orderbook_depth / token_price. Ethereum and BSC contracts only.\nReturns: risk_level, is_honeypot, buy_tax, sell_tax, holder_count, owner_address, is_mintable, can_take_back_ownership\nExample response: {\"contract_address\":\"0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2\",\"chain\":\"ethereum\",\"risk_level\":\"low\",\"is_honeypot\":false,\"buy_tax\":0,\"sell_tax\":0,\"holder_count\":842341,\"is_mintable\":false,\"can_take_back_ownership\":false,\"source\":\"goplus\"}\n\nPrice: $0.000 USDC per call",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "contract_address": {
+            "type": "string",
+            "description": "Token contract address (0x...)"
+          },
+          "chain": {
+            "type": "string",
+            "enum": [
+              "ethereum",
+              "bsc"
+            ],
+            "description": "Blockchain to query (default: ethereum)",
+            "default": "ethereum"
+          }
+        },
+        "required": [
+          "contract_address"
+        ]
+      }
+    },
+    {
+      "name": "dune_query",
+      "description": "Run any Dune Analytics query and return live onchain results by query ID. Use fast_only=True for live bots — returns cached result instantly or raises immediately, never blocks.\n\nUse when: You need deep onchain analytics from a specific Dune query — protocol revenue, user counts, custom metrics.\nNot for: you have no Dune query ID — the other tools cover prices, derivatives, TVL and security without one; you need sub-second answers — set fast_only=true or use a cached tool.\nReturns: rows[], columns[], row_count, generated_at from the Dune Analytics query result\nExample response: {\"query_id\":3810512,\"row_count\":2,\"columns\":[\"protocol\",\"revenue_usd\"],\"rows\":[{\"protocol\":\"Uniswap V3\",\"revenue_usd\":1243800},{\"protocol\":\"Aave V3\",\"revenue_usd\":987200}],\"generated_at\":\"2026-03-22T00:00:00Z\",\"source\":\"dune\"}\n\nPrice: $0.000 USDC per call",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query_id": {
+            "type": "integer",
+            "description": "Dune Analytics query ID (visible in the query URL)"
+          },
+          "query_parameters": {
+            "type": "object",
+            "description": "Optional named parameters to pass to the Dune query",
+            "default": {}
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Maximum rows to return (default 25)",
+            "default": 25
+          },
+          "fast_only": {
+            "type": "boolean",
+            "description": "If True, return cached result immediately or raise — never execute a fresh query. Use for live bots where latency matters. Default: False.",
+            "default": false
+          }
+        },
+        "required": [
+          "query_id"
+        ]
+      }
+    },
+    {
+      "name": "url_reader",
+      "description": "Convert any URL to clean, LLM-ready markdown. Strips ads, nav, and boilerplate — returns just the content. No API key needed.\n\nUse when: You need to read the content of a web page or article and get clean, structured text for further processing.\nNot for: you do not have a URL yet — web_search returns pages with content; the page requires a login or renders only in a browser.\nReturns: content (markdown), url, length, truncated flag\nExample response: {\"url\":\"https://example.com\",\"content\":\"# Example Domain\\n\\nThis domain is for use in illustrative examples...\",\"length\":1256,\"truncated\":false,\"source\":\"jina_reader\"}\n\nPrice: $0.000 USDC per call",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "The URL to fetch and convert to markdown"
+          }
+        },
+        "required": [
+          "url"
+        ]
+      }
+    },
+    {
+      "name": "web_search",
+      "description": "Search the web and return the top 5 results with their full content as clean markdown. Better than DIY because zero setup and results include page content, not just links.\n\nUse when: You need to find current information on any topic — news, documentation, prices, events, or anything else on the web.\nNot for: you already have the URL — url_reader; you want crypto headlines with sentiment — crypto_news.\nReturns: results[] with url, title, description, content; query; count\nExample response: {\"query\":\"ETH gas fees today\",\"count\":5,\"results\":[{\"url\":\"https://etherscan.io/gastracker\",\"title\":\"Ethereum Gas Tracker\",\"description\":\"Real-time Ethereum gas price tracker\",\"content\":\"Current gas: 2 Gwei...\"}],\"source\":\"jina_search\"}\n\nPrice: $0.000 USDC per call",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "The search query"
+          }
+        },
+        "required": [
+          "query"
+        ]
+      }
+    },
+    {
+      "name": "funding_rates",
+      "description": "Get perpetual futures funding rates across Binance, Bybit, and OKX\n\nUse when: You need funding rates to gauge leveraged market sentiment or cost of holding a perp position.\nNot for: you need open interest or long/short ratio — open_interest; one verdict combining funding, OI, slippage and security for a trade — pre_trade_check.\nReturns: funding_rate_pct, annualized_rate_pct and a contrarian sentiment per exchange: bearish = longs are paying (crowded longs), bullish = shorts are paying (crowded shorts), neutral = near the 0.01% equilibrium\nExample response: {\"asset\":\"BTC\",\"rates\":[{\"asset\":\"BTC\",\"exchange\":\"Binance\",\"funding_rate_pct\":0.036,\"interval_hours\":8,\"funding_rate_8h_pct\":0.036,\"annualized_rate_pct\":39.42,\"next_funding_time\":1794844800000,\"sentiment\":\"bearish\"},{\"asset\":\"BTC\",\"exchange\":\"Bybit\",\"funding_rate_pct\":0.012,\"interval_hours\":8,\"funding_rate_8h_pct\":0.012,\"annualized_rate_pct\":13.14,\"next_funding_time\":1794844800000,\"sentiment\":\"neutral\"},{\"asset\":\"BTC\",\"exchange\":\"OKX\",\"funding_rate_pct\":-0.012,\"interval_hours\":8,\"funding_rate_8h_pct\":-0.012,\"annualized_rate_pct\":-13.14,\"next_funding_time\":1794844800000,\"sentiment\":\"bullish\"}],\"count\":3,\"sources\":[\"Binance\",\"Bybit\",\"OKX\"]}\n\nPrice: $0.000 USDC per call",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "asset": {
+            "type": "string",
+            "description": "Token symbol, e.g. 'BTC', 'ETH'. Leave empty for all major assets.",
+            "default": ""
+          }
+        }
+      }
+    },
+    {
+      "name": "market_snapshot",
+      "description": "Fed rate, inflation proxy, S&P 500, BTC, ETH, and gas in one call. Replaces three separate API integrations with a single normalized response — the only tool that gives you macro + crypto in one shot.\n\nUse when: You need a combined macro + crypto market overview in one call: S&P 500, Treasury yield, BTC, ETH, and Ethereum gas.\nNot for: you need one asset in depth — token_price, gas_tracker or funding_rates; history or time series — dune_query.\nReturns: sp500_price, sp500_change_pct, treasury_yield_10y, btc_price_usd, eth_price_usd, gas_standard_gwei, timestamp\nExample response: {\"sp500_price\":5234.18,\"sp500_change_pct\":-0.42,\"treasury_yield_10y\":4.31,\"btc_price_usd\":67200,\"eth_price_usd\":3450,\"gas_standard_gwei\":5.2,\"timestamp\":\"2026-05-26T12:00:00Z\",\"source\":\"yahoo_finance+coingecko+etherscan\"}\n\nPrice: $0.000 USDC per call",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "whale_activity",
+      "description": "Detect recent large wallet movements for a token (whale tracking)\n\nUse when: You need to detect large token transfers that may signal institutional moves, accumulation, or sell-offs.\nNot for: you need one address's holdings — wallet_balance; exchange order-book size rather than on-chain transfers — orderbook_depth. Ethereum ERC-20 transfers only.\nReturns: large_transfers[] with from, to (full addresses), amount, usd_value, minutes_ago, tx_hash; total_volume_usd\nExample response: {\"token\":\"USDC\",\"large_transfers\":[{\"from\":\"0xabababababababababababababababababababab\",\"to\":\"0xcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\",\"amount\":5000000,\"usd_value\":5000000,\"minutes_ago\":12,\"tx_hash\":\"0x9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f\"},{\"from\":\"0x1111111111111111111111111111111111111111\",\"to\":\"0x2222222222222222222222222222222222222222\",\"amount\":2500000,\"usd_value\":2500000,\"minutes_ago\":34,\"tx_hash\":\"0x7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a\"}],\"total_volume_usd\":7500000,\"source\":\"etherscan\"}\n\nPrice: $0.000 USDC per call",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string",
+            "description": "Token symbol to track"
+          },
+          "min_usd": {
+            "type": "number",
+            "description": "Minimum transaction size in USD",
+            "default": 100000
+          }
+        },
+        "required": [
+          "token"
+        ]
+      }
+    },
+    {
+      "name": "verified_route_preview",
+      "description": "Buyer-side trust oracle for the x402 marketplace: \"I need X, budget $Y — which tool is real?\" Vets Coinbase Bazaar (discover → drop stubs/factory clones → rank by real unique-payer usage → budget-gate).  This MCP runs the FREE single-query PREVIEW: it returns the vetted pick (name + usage stats + why) and survivor count to PROVE a real provider exists, but WITHHOLDS the provider URL + ready-to-pay x402 challenge. To get those — plus the full multi-query sweep + usage-based sybil-collapse + trust allowlist — call verified_route ($0.01: an unpaid call returns the x402 PaymentRequired, which a wallet-carrying client pays in-band), or use the agentpay-x402 SDK. This preview never charges.  Use when: \"which x402 tool for X\", \"find a real/trustworthy paid API for X\", \"avoid a scam or dead stub\", \"vet this provider before I pay\".",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "need": {
+            "type": "string",
+            "description": "What you need, e.g. \"dex pair liquidity\", \"funding rates\", \"token security\""
+          },
+          "budget_usd": {
+            "type": "number",
+            "description": "Max USDC the agent will pay the downstream tool per call (default 0.01).",
+            "default": 0.01
+          },
+          "chain": {
+            "type": "string",
+            "description": "Optional chain filter: \"base\", \"arbitrum\". Empty = all chains."
+          }
+        },
+        "required": [
+          "need"
+        ]
+      }
+    },
+    {
+      "name": "route",
+      "description": "Legacy alias of the free verified_route preview (kept for back-compat). Vets one Coinbase Bazaar search for a need within a budget: drops stubs, down-ranks factory clones and one-wallet or one-call-per-wallet usage, ranks on distinct payers, and names a pick only above a confidence floor (otherwise verdict no_confident_pick). Returns the pick's name, usage stats and reason; the provider URL and ready-to-pay details are withheld, as in the preview. This is NOT the paid verified_route, which ranks the whole catalog with sybil collapse and delivery evidence. Advise-only — no payment happens here. Prefer verified_route.  Use when: \"which x402 tool for X\", \"find a paid API for X under $Y\".",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "need": {
+            "type": "string",
+            "description": "What capability you need, e.g. \"funding rates\", \"token security\", \"DeFi TVL\""
+          },
+          "budget": {
+            "type": "number",
+            "description": "Maximum USDC per call (default 0.01). Tools priced above this are excluded.",
+            "default": 0.01
+          }
+        },
+        "required": [
+          "need"
+        ]
+      }
+    },
+    {
+      "name": "estimate_plan",
+      "description": "Price a multi-tool plan BEFORE spending anything. Submits the tool calls an agent intends to make to the gateway's free /v1/plan/estimate and returns per-step cost, total, a fits-budget verdict, and a cheaper alternative per paid step. No payment, no wallet needed.  Use when: planning a multi-step task with paid tools, \"what would this cost\", \"does this plan fit my budget\", or before committing a Session cap.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "steps": {
+            "type": "array",
+            "description": "Tool names to price, in order, e.g. [\"token_price\", \"dune_query\", \"session_create\"]",
+            "items": {
+              "type": "string"
+            }
+          },
+          "budget": {
+            "type": "number",
+            "description": "Optional USDC budget for the fits_budget verdict, e.g. 0.05"
+          }
+        },
+        "required": [
+          "steps"
+        ]
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "io.github.romudille-bit/agentpay",
+    "version": "2.9.2",
+    "remoteUrl": "https://agentpay.tools/mcp",
+    "publishedAt": "2026-11-18T14:14:28.323361Z",
+    "fetchedAt": "2026-11-27T10:42:49.718Z",
+    "toolsSha256": "457c458462bc8c4f3c3bb46042b1d899826b1be8f46df5a7efd738de80900b56"
+  }
+}

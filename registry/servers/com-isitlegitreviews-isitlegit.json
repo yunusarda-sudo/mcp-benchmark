@@ -1,0 +1,402 @@
+{
+  "$schema": "../schema.json",
+  "name": "com.isitlegitreviews/isitlegit",
+  "title": "Is it legit? Review trust checker",
+  "category": "AI, LLMs & Agents",
+  "description": "Scores whether a business's Google Maps reviews are genuine. Your agent collects them, we judge.",
+  "tools": [
+    {
+      "name": "describe_review_source",
+      "description": "Read this BEFORE scraping. Returns, per platform, the exact submission format: identity fields for the listing, the per-review fields (required vs optional; everything required is visible on the review card), where each lives on the platform's pages, the sort-by-newest and 500-most-recent rules, an example payload, and how to deliver it. Without a platform it lists the supported platforms. Only Google Maps exists today.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "platform": {
+            "type": "string",
+            "enum": [
+              "google-maps"
+            ],
+            "description": "Platform to describe (default: all)."
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "check_place",
+      "description": "Call first. Resolves a Google Maps link or place_id and reports whether a trust result is cached, how fresh it is, and a recommendation: use the cached result, or collect and submit the reviews (also when a cached single-source result would benefit from your corroboration). Never contacts Google.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "place_id": {
+            "type": "string",
+            "description": "Google's feature id for the place (0x…:0x…, the '!1s' segment of a /maps/place URL)."
+          },
+          "url": {
+            "type": "string",
+            "description": "Alternative to place_id: a Google Maps place link (long /maps/place/… URL or ?cid= link). Share short-links cannot be resolved; open them first."
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "fetch_place_reviews",
+      "description": "Fallback for when you cannot reach a browser tab signed in to Google. Queues a server-side pull of the listing's newest reviews (the same worker as the site's form) and scores it. Ask the user first: it spends one of their server-side fetches for the month (check_place's serverFetch block says how many are left, or that the account has no limit; quote only that, never a plan's allowance from elsewhere). Returns the job's progress; call again with job_id every 10-15 seconds until status is done (the result is then in the response) or failed (nothing is spent). Takes a Maps link, including share short-links, or a place_id. A place that is already scored returns its result without a fetch, unless refetch=true: then it is pulled again, whatever its age, when the user wants it checked again (the same ask-first rule). A refetch that could not update the stored result ends as failed and spends nothing.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "place_id": {
+            "type": "string",
+            "description": "Google's feature id for the place (0x…:0x…, the '!1s' segment of a /maps/place URL)."
+          },
+          "url": {
+            "type": "string",
+            "description": "Alternative to place_id: any Google Maps place link, share short-links included (the server's browser expands them)."
+          },
+          "job_id": {
+            "type": "string",
+            "description": "A job from an earlier call: returns its progress, or the result once done."
+          },
+          "refetch": {
+            "type": "boolean",
+            "description": "Pull the place again even though it is already scored. Only when the user wants it checked again: it spends a server fetch like any other."
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "begin_submission",
+      "description": "Reserves a submission and returns an upload_url. POST the complete JSON payload (format from describe_review_source) to it from your own environment or the user's browser; the HTTP response is the trust report. The URL is a secret that completes the submission under YOUR identity whoever posts to it, so the POST needs no key. Alternatively feed the same submission_id to submit_reviews in inline chunks. Pending submissions expire after 2 hours (or are closed as superseded when you one-shot the same place instead).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "platform": {
+            "type": "string",
+            "enum": [
+              "google-maps"
+            ]
+          },
+          "place_id": {
+            "type": "string",
+            "description": "Google's feature id for the place (0x…:0x…, the '!1s' segment of a /maps/place URL)."
+          },
+          "url": {
+            "type": "string",
+            "description": "Alternative to place_id: a Google Maps place link (long /maps/place/… URL or ?cid= link). Share short-links cannot be resolved; open them first."
+          },
+          "expected_reviews": {
+            "type": "integer",
+            "description": "The review count the listing shows, if known."
+          },
+          "agent": {
+            "type": "string",
+            "description": "Your agent/product name, recorded as the submission's provenance (e.g. 'Muse', 'Claude Code')."
+          }
+        },
+        "required": [
+          "platform"
+        ]
+      }
+    },
+    {
+      "name": "submit_reviews",
+      "description": "Submit the review feed inside the tool call. Without submission_id this is a one-shot submission of the whole payload (fine up to about 150 reviews). For more, call begin_submission, then send chunks of up to 150 reviews each with the same submission_id and final=false; send final=true with the last chunk (the identity fields may arrive with any chunk). Use this only when you cannot POST to the upload_url yourself (no page fetch, no curl): retyping reviews you already hold in a page or script is slow and error-prone. Returns the trust report when finalized.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "submission_id": {
+            "type": "string",
+            "description": "From begin_submission (omit for a one-shot submission)."
+          },
+          "final": {
+            "type": "boolean",
+            "description": "With submission_id: true when this is the last chunk (default true)."
+          },
+          "platform": {
+            "type": "string",
+            "enum": [
+              "google-maps"
+            ],
+            "description": "Which review source the data follows (describe_review_source)."
+          },
+          "placeId": {
+            "type": "string",
+            "description": "Google feature id 0x…:0x…"
+          },
+          "cid": {
+            "type": "string",
+            "description": "Decimal cid from a ?cid= link, when placeId is unknown."
+          },
+          "name": {
+            "type": "string"
+          },
+          "address": {
+            "type": "string"
+          },
+          "lat": {
+            "type": "number"
+          },
+          "lon": {
+            "type": "number"
+          },
+          "listedReviews": {
+            "type": "integer",
+            "description": "The review count Google displays on the listing."
+          },
+          "listedRating": {
+            "type": "number",
+            "description": "The star rating Google displays."
+          },
+          "ratingHistogram": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "minItems": 5,
+            "maxItems": 5,
+            "description": "The five-bar rating histogram next to the star rating, as review counts for 1, 2, 3, 4 and 5 stars IN THAT ORDER (Google draws 5 stars first; reverse what you read). Each bar's accessibility label or tooltip has the exact count. Required with a window or capped feed."
+          },
+          "complete": {
+            "type": "boolean",
+            "description": "True only if the review list reached its end; false for a newest-first window of the 500 most recent reviews (at least 200)."
+          },
+          "capped": {
+            "type": "boolean",
+            "description": "True when deliberately stopped at 5000+ reviews of a much larger listing."
+          },
+          "pulledAt": {
+            "type": "string",
+            "description": "ISO 8601 datetime of collection (relative dates are resolved against it)."
+          },
+          "mapsUrl": {
+            "type": "string"
+          },
+          "sort": {
+            "type": "string",
+            "description": "The order collected in: 'newest' (required for a window) or 'relevant'."
+          },
+          "agent": {
+            "type": "string",
+            "description": "Your agent/product name, recorded as the submission's provenance (e.g. 'Muse', 'Claude Code')."
+          },
+          "takeaways": {
+            "type": "object",
+            "description": "Optional: your summary of the reviews you collected, shown on the place's page (never scored). Three lists of up to 6 short plain-English sentences, drawn from reviews by established accounts: pros (what recent reviewers praise), cons (what they complain about), tips (practical advice: what to order, when to go, what to avoid). Or send it after finalizing with submit_takeaways.",
+            "properties": {
+              "pros": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "cons": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "tips": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "reviews": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "rating": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 5
+                },
+                "author": {
+                  "type": "string",
+                  "description": "Reviewer display name as shown."
+                },
+                "authorReviewCount": {
+                  "type": "integer",
+                  "description": "Lifetime review count shown under the name ('12 reviews')."
+                },
+                "date": {
+                  "type": "string",
+                  "description": "The relative date as displayed, in English ('3 months ago', 'Edited 2 weeks ago'; translate it to that form yourself if your Google is not in English). Required unless timestamp is given."
+                },
+                "isLocalGuide": {
+                  "type": "boolean"
+                },
+                "text": {
+                  "type": "string",
+                  "description": "Original-language text; omit for star-only reviews."
+                },
+                "reviewId": {
+                  "type": "string",
+                  "description": "Optional: Google's review id (data-review-id on the card)."
+                },
+                "timestamp": {
+                  "type": [
+                    "number",
+                    "string"
+                  ],
+                  "description": "Optional: exact posting time, epoch µs/ms/s, when you have it (row[0][1][2])."
+                },
+                "editedTimestamp": {
+                  "type": [
+                    "number",
+                    "string"
+                  ],
+                  "description": "Optional: last-edit time in the same units (row[0][1][3]), when present."
+                },
+                "authorUrl": {
+                  "type": "string",
+                  "description": "Optional: the reviewer's /maps/contrib/<id> link."
+                },
+                "language": {
+                  "type": "string"
+                },
+                "authorPhotoCount": {
+                  "type": "integer"
+                },
+                "photoCount": {
+                  "type": "integer"
+                },
+                "ownerResponse": {
+                  "type": "object",
+                  "properties": {
+                    "date": {
+                      "type": "string"
+                    },
+                    "text": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "source": {
+                  "type": "string",
+                  "description": "Platform the card attributes the review to, on listings that show several (hotels). Send Google reviews only; others are dropped."
+                }
+              },
+              "required": [
+                "rating",
+                "author",
+                "authorReviewCount"
+              ]
+            }
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "finalize_submission",
+      "description": "For a submission fed by inline chunks: validates, scores, stores and returns the report. For one already uploaded to its upload_url: returns the stored report. Pending with nothing uploaded yet: says so.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "submission_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "submission_id"
+        ]
+      }
+    },
+    {
+      "name": "submit_takeaways",
+      "description": "After a submission is finalized: send the summary you give the user of what recent reviewers praise (pros), complain about (cons) and advise (tips), up to 6 short plain-English sentences per list, drawn from reviews by established accounts rather than one-off ones. It is shown on the place's page next to the trust result and never affects the score. The same lists can travel inside the submission payload as `takeaways` instead. Only an accepted or kept submission can carry one; calling again replaces yours.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "submission_id": {
+            "type": "string",
+            "description": "The finalized submission these lists summarize (from begin_submission / submit_reviews)."
+          },
+          "pros": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "What recent reviewers praise."
+          },
+          "cons": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "What they complain about."
+          },
+          "tips": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Practical advice they give."
+          }
+        },
+        "required": [
+          "submission_id"
+        ]
+      }
+    },
+    {
+      "name": "get_place_trust",
+      "description": "The cached fraud analysis for a place: verdict (looks_legit / not_sure / past_manipulation / inflated / manipulated) with its label and a one-sentence summary, letter grade, 0-100 trust score, the adjusted rating credible reviewers actually give (vs the headline average), reviewer-mix tiers, review-injection statistics, cross-business duplicate-review evidence, red flags, and provenance. Cache only: on a miss, collect and submit the reviews (see check_place).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "place_id": {
+            "type": "string",
+            "description": "Google's feature id for the place (0x…:0x…, the '!1s' segment of a /maps/place URL)."
+          },
+          "url": {
+            "type": "string",
+            "description": "Alternative to place_id: a Google Maps place link (long /maps/place/… URL or ?cid= link). Share short-links cannot be resolved; open them first."
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "list_scored_places",
+      "description": "The ranked directory of places already analyzed for review fraud, best adjusted rating first (what the site's home and city pages show). 25 per page. Optional city or curated-list filter; the response lists the available cities/lists and their counts.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "city": {
+            "type": "string",
+            "description": "Limit to one city's places (a slug from the `cities` field of a previous response)."
+          },
+          "list": {
+            "type": "string",
+            "enum": [
+              "hcmc-foodies"
+            ],
+            "description": "Limit to one curated list's places."
+          },
+          "page": {
+            "type": "number",
+            "description": "Page number, 0-based."
+          }
+        },
+        "required": []
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "com.isitlegitreviews/isitlegit",
+    "version": "2.0.1",
+    "remoteUrl": "https://isitlegitreviews.com/mcp",
+    "publishedAt": "2026-11-26T11:59:20.839427Z",
+    "fetchedAt": "2026-11-27T10:42:49.718Z",
+    "toolsSha256": "47a635027ac544a12b113c296113ce958aeb4acbe56da0ffd61adf4cd0a79de4"
+  }
+}

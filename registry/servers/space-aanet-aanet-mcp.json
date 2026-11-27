@@ -1,0 +1,1530 @@
+{
+  "$schema": "../schema.json",
+  "name": "space.aanet/aanet-mcp",
+  "title": "AANet - Task Coordination for AI Agents",
+  "category": "AI, LLMs & Agents",
+  "description": "Task coordination for AI agents. Exclusive locks, shared files, handoffs, per-agent spending limits.",
+  "tools": [
+    {
+      "name": "aanet_create_workspace",
+      "description": "Create a real AANet workspace with a prepaid USDC balance — the entry\n    point for an orchestrator agent starting a new swarm task. Use\n    aanet_create_trial_workspace instead if you want to explore the API\n    before paying anything.\n\n    On success, returns {workspace_id, label, owner_key, created_at}. Store\n    owner_key immediately: it is generated once, never stored in recoverable\n    form, and there is no \"forgot my key\" recovery path — losing it means\n    losing control of the workspace. The workspace starts with a balance of\n    0; fund it with aanet_deposit before any metered operation will succeed.",
+      "inputSchema": {
+        "properties": {
+          "label": {
+            "description": "A display name for your own reference — free text, not required to be unique.",
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label"
+        ],
+        "type": "object",
+        "title": "aanet_create_workspaceArguments"
+      }
+    },
+    {
+      "name": "aanet_create_trial_workspace",
+      "description": "Create a free trial workspace — no payment, no arguments, works\n    immediately. Use this instead of aanet_create_workspace when you want to\n    exercise the API (files, locks, sub-keys, messages) before committing\n    real money.\n\n    Pre-funded with a small fixed balance (currently 1000 units = $0.01 — enough\n    for a realistic multi-agent round, but NOT for a successful write of a\n    file at the 1 MiB cap, which costs 1029 units; that is a known limit of\n    the trial, not a bug. An oversize write is still rejected with 413 for\n    free, so the cap itself is checkable) and\n    expires exactly 24 hours after creation, regardless of remaining\n    balance or activity — it is then deleted permanently along with\n    everything in it. Returns the same shape as aanet_create_workspace plus\n    trial_expires_at. aanet_deposit and aanet_request_refund both reject a\n    trial workspace outright, since no real money ever entered it. If your\n    task won't fit in 24 hours, create a real workspace instead.",
+      "inputSchema": {
+        "properties": {},
+        "type": "object",
+        "title": "aanet_create_trial_workspaceArguments"
+      }
+    },
+    {
+      "name": "aanet_get_remaining_balance",
+      "description": "Free (never charged): how much this key can still spend, so you can\n    stop before a 402 instead of discovering it mid-sequence — the MCP\n    counterpart of the REST X-AANet-Remaining-Balance header. Takes only the\n    key; works for the owner_key or any sub-key, against itself.\n\n    Returns `remaining` (what you can actually spend: the lower of the two\n    limits below), `key_budget_remaining` (this key's budget_cap minus what it\n    has spent; null if the key has no cap), `key_window_remaining` (units left\n    under the key's spend_limit_per_hour/day, whichever is tighter; null if it\n    has neither) and `workspace_balance` (the shared workspace balance), all in\n    raw integer units ($0.00001 each). `remaining` is the lowest of the three.\n    Comparing them tells you which one runs out first.",
+      "inputSchema": {
+        "properties": {
+          "api_key": {
+            "description": "Bearer credential for this workspace: either the owner_key returned once by aanet_create_workspace/aanet_create_trial_workspace, or a sub-key returned by aanet_mint_subkey. Sent under the hood as `Authorization: Bearer <api_key>`. Owner-only tools reject a sub-key with a 403.",
+            "title": "Api Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "api_key"
+        ],
+        "type": "object",
+        "title": "aanet_get_remaining_balanceArguments"
+      }
+    },
+    {
+      "name": "aanet_get_workspace",
+      "description": "Check a workspace's current balance and status — the read-only\n    counterpart to every other workspace tool. Works with the owner_key or\n    any sub-key issued under it (not restricted to the owner).\n\n    Returns deposit_balance and total_spent in raw integer units ($0.00001\n    each), plus is_trial/trial_expires_at (null for a non-trial workspace)\n    and blocked (true if the operator has manually suspended it, in which\n    case every metered call returns 403 until unblocked). Call this before a\n    batch of expensive operations to confirm you won't hit a 402 partway\n    through.",
+      "inputSchema": {
+        "properties": {
+          "api_key": {
+            "description": "Bearer credential for this workspace: either the owner_key returned once by aanet_create_workspace/aanet_create_trial_workspace, or a sub-key returned by aanet_mint_subkey. Sent under the hood as `Authorization: Bearer <api_key>`. Owner-only tools reject a sub-key with a 403.",
+            "title": "Api Key",
+            "type": "string"
+          },
+          "workspace_id": {
+            "description": "The workspace_id from aanet_create_workspace or aanet_create_trial_workspace.",
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "api_key",
+          "workspace_id"
+        ],
+        "type": "object",
+        "title": "aanet_get_workspaceArguments"
+      }
+    },
+    {
+      "name": "aanet_delete_workspace",
+      "description": "Permanently and irreversibly delete a workspace: every sub-key, all\n    files, the activity log, and any registered webhooks are destroyed\n    along with it — there is no undo and no trash/recycle bin. Requires the\n    owner_key; a sub-key gets a 403.\n\n    Call aanet_request_refund first if the workspace still has balance you\n    want back, and wait for aanet_get_refund_status to show \"paid\" before\n    deleting — once the workspace is gone, so is any way to claim what was\n    left. Use this when a task is finished or permanently abandoned, not as\n    a way to \"reset\" a workspace you plan to keep using.",
+      "inputSchema": {
+        "properties": {
+          "api_key": {
+            "description": "Bearer credential for this workspace: either the owner_key returned once by aanet_create_workspace/aanet_create_trial_workspace, or a sub-key returned by aanet_mint_subkey. Sent under the hood as `Authorization: Bearer <api_key>`. Owner-only tools reject a sub-key with a 403.",
+            "title": "Api Key",
+            "type": "string"
+          },
+          "workspace_id": {
+            "description": "The workspace_id from aanet_create_workspace or aanet_create_trial_workspace.",
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "api_key",
+          "workspace_id"
+        ],
+        "type": "object",
+        "title": "aanet_delete_workspaceArguments"
+      }
+    },
+    {
+      "name": "aanet_deposit",
+      "description": "Fund a real workspace via the x402 protocol — a two-step call using\n    the same tool both times. This does not accept trial workspaces (use\n    aanet_create_workspace for a fundable one) and requires the owner_key.\n\n    Step 1 — call with only api_key/workspace_id/amount_usd: returns an x402\n    PaymentRequired challenge offering USDC on Base, Polygon, Arbitrum,\n    Avalanche, and Solana as payment options; nothing is charged yet.\n    Step 2 — sign that challenge\n    with your own wallet/x402 client (this tool cannot sign for you) and\n    call again with the identical amount_usd plus the resulting proof as\n    payment_signature; on success this verifies and settles against the\n    facilitator and returns {workspace_id, deposited_units, tx_hash,\n    network}. A failed or already-used signature raises an error rather than\n    silently no-op'ing.",
+      "inputSchema": {
+        "properties": {
+          "api_key": {
+            "description": "Bearer credential for this workspace: either the owner_key returned once by aanet_create_workspace/aanet_create_trial_workspace, or a sub-key returned by aanet_mint_subkey. Sent under the hood as `Authorization: Bearer <api_key>`. Owner-only tools reject a sub-key with a 403.",
+            "title": "Api Key",
+            "type": "string"
+          },
+          "workspace_id": {
+            "description": "The workspace_id from aanet_create_workspace or aanet_create_trial_workspace.",
+            "title": "Workspace Id",
+            "type": "string"
+          },
+          "amount_usd": {
+            "description": "Deposit amount in US dollars as a decimal string, e.g. \"1.00\". Minimum $0.25.",
+            "title": "Amount Usd",
+            "type": "string"
+          },
+          "payment_signature": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Leave unset on your first call to receive the payment challenge. Set this to the signed proof from your own x402-aware wallet client on the follow-up call with the same amount_usd, to actually settle the payment and credit the balance.",
+            "title": "Payment Signature"
+          }
+        },
+        "required": [
+          "api_key",
+          "workspace_id",
+          "amount_usd"
+        ],
+        "type": "object",
+        "title": "aanet_depositArguments"
+      }
+    },
+    {
+      "name": "aanet_mint_subkey",
+      "description": "Issue a new scoped credential for one sub-agent — the standard way to\n    bring a sub-agent into an existing workspace. Requires the owner_key; a\n    sub-key cannot mint another sub-key.\n\n    Returns {subkey_id, key} where key is shown exactly once, the same as\n    owner_key at workspace creation. Give each sub-agent its own sub-key\n    rather than sharing one across several — that's what makes\n    aanet_get_activity attributable per sub-agent and what lets you revoke\n    exactly one misbehaving sub-agent (aanet_revoke_subkey) without taking\n    down the rest of the swarm.\n\n    budget_cap bounds the key's total spend; the optional spend_limit_per_hour /\n    spend_limit_per_day bound it per rolling window and rate_limit_per_minute\n    bounds how often it may call at all — use them to contain a sub-agent\n    stuck in a loop long before it spends its whole budget_cap.",
+      "inputSchema": {
+        "properties": {
+          "api_key": {
+            "description": "Bearer credential for this workspace: either the owner_key returned once by aanet_create_workspace/aanet_create_trial_workspace, or a sub-key returned by aanet_mint_subkey. Sent under the hood as `Authorization: Bearer <api_key>`. Owner-only tools reject a sub-key with a 403.",
+            "title": "Api Key",
+            "type": "string"
+          },
+          "workspace_id": {
+            "description": "The workspace_id from aanet_create_workspace or aanet_create_trial_workspace.",
+            "title": "Workspace Id",
+            "type": "string"
+          },
+          "label": {
+            "description": "Display name for this sub-key, e.g. the sub-agent's role or id.",
+            "title": "Label",
+            "type": "string"
+          },
+          "path_scope_prefix": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Restrict this sub-key to file paths and lock names under this prefix only (least-privilege). Leave unset for unrestricted access to the whole workspace.",
+            "title": "Path Scope Prefix"
+          },
+          "budget_cap": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Cap this sub-key's own cumulative spend, in the same integer units as the workspace balance ($0.00001 each), even if the workspace has more left. Leave unset for no per-key cap beyond the shared workspace balance.",
+            "title": "Budget Cap"
+          },
+          "spend_limit_per_hour": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Safety limit: most units this key may spend in any rolling hour. Over it, charged calls get 402 INSUFFICIENT_KEY_WINDOW_BUDGET until the window frees up. Unset = no limit.",
+            "title": "Spend Limit Per Hour"
+          },
+          "spend_limit_per_day": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Safety limit: most units this key may spend in any rolling 24 hours (same error as the hourly one). Unset = no limit.",
+            "title": "Spend Limit Per Day"
+          },
+          "rate_limit_per_minute": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Safety limit: most requests (of any kind, free ones included) this key may make per rolling minute; over it, 429 with Retry-After. Unset = no limit.",
+            "title": "Rate Limit Per Minute"
+          }
+        },
+        "required": [
+          "api_key",
+          "workspace_id",
+          "label"
+        ],
+        "type": "object",
+        "title": "aanet_mint_subkeyArguments"
+      }
+    },
+    {
+      "name": "aanet_list_subkeys",
+      "description": "List every sub-key ever issued under a workspace (including revoked\n    ones), with each one's scope, budget_cap, window/rate limits, and spent_so_far — the\n    inventory view that complements aanet_get_activity's per-event log.\n    Owner_key required; raw key values are never included since they're\n    only ever shown once at creation.",
+      "inputSchema": {
+        "properties": {
+          "api_key": {
+            "description": "Bearer credential for this workspace: either the owner_key returned once by aanet_create_workspace/aanet_create_trial_workspace, or a sub-key returned by aanet_mint_subkey. Sent under the hood as `Authorization: Bearer <api_key>`. Owner-only tools reject a sub-key with a 403.",
+            "title": "Api Key",
+            "type": "string"
+          },
+          "workspace_id": {
+            "description": "The workspace_id from aanet_create_workspace or aanet_create_trial_workspace.",
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "api_key",
+          "workspace_id"
+        ],
+        "type": "object",
+        "title": "aanet_list_subkeysArguments"
+      }
+    },
+    {
+      "name": "aanet_update_subkey",
+      "description": "Change a live sub-key's scope and/or budget cap without revoking and\n    reissuing it — use this instead of aanet_revoke_subkey + aanet_mint_subkey\n    when the sub-agent's credentials themselves should keep working (e.g.\n    widening its file scope mid-task, or raising a budget cap it hit).\n    Owner_key required. Fields left unset are unchanged, not cleared (the\n    three window/rate limits are cleared by passing 0).",
+      "inputSchema": {
+        "properties": {
+          "api_key": {
+            "description": "Bearer credential for this workspace: either the owner_key returned once by aanet_create_workspace/aanet_create_trial_workspace, or a sub-key returned by aanet_mint_subkey. Sent under the hood as `Authorization: Bearer <api_key>`. Owner-only tools reject a sub-key with a 403.",
+            "title": "Api Key",
+            "type": "string"
+          },
+          "workspace_id": {
+            "description": "The workspace_id from aanet_create_workspace or aanet_create_trial_workspace.",
+            "title": "Workspace Id",
+            "type": "string"
+          },
+          "subkey_id": {
+            "description": "The subkey_id from aanet_mint_subkey or aanet_list_subkeys.",
+            "title": "Subkey Id",
+            "type": "string"
+          },
+          "path_scope_prefix": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "New path-scope prefix. Leave unset to keep the current value unchanged.",
+            "title": "Path Scope Prefix"
+          },
+          "budget_cap": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "New spending cap. Leave unset to keep the current value unchanged.",
+            "title": "Budget Cap"
+          },
+          "spend_limit_per_hour": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "New hourly spend limit in units; 0 removes it. Leave unset to keep the current value.",
+            "title": "Spend Limit Per Hour"
+          },
+          "spend_limit_per_day": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "New 24-hour spend limit in units; 0 removes it. Leave unset to keep the current value.",
+            "title": "Spend Limit Per Day"
+          },
+          "rate_limit_per_minute": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "New requests-per-minute limit; 0 removes it. Leave unset to keep the current value.",
+            "title": "Rate Limit Per Minute"
+          }
+        },
+        "required": [
+          "api_key",
+          "workspace_id",
+          "subkey_id"
+        ],
+        "type": "object",
+        "title": "aanet_update_subkeyArguments"
+      }
+    },
+    {
+      "name": "aanet_revoke_subkey",
+      "description": "Permanently revoke one sub-agent's credentials — every subsequent call\n    with that key gets a 401. Use this when a sub-agent is compromised,\n    misbehaving, or simply finished, without affecting any other sub-key in\n    the workspace. Owner_key required.\n\n    Immediately releases any lock the revoked sub-key was holding (as if it\n    had called aanet_release_lock itself), so a revoked sub-agent can't\n    accidentally block the rest of the swarm by holding a lock forever.",
+      "inputSchema": {
+        "properties": {
+          "api_key": {
+            "description": "Bearer credential for this workspace: either the owner_key returned once by aanet_create_workspace/aanet_create_trial_workspace, or a sub-key returned by aanet_mint_subkey. Sent under the hood as `Authorization: Bearer <api_key>`. Owner-only tools reject a sub-key with a 403.",
+            "title": "Api Key",
+            "type": "string"
+          },
+          "workspace_id": {
+            "description": "The workspace_id from aanet_create_workspace or aanet_create_trial_workspace.",
+            "title": "Workspace Id",
+            "type": "string"
+          },
+          "subkey_id": {
+            "description": "The subkey_id from aanet_mint_subkey or aanet_list_subkeys.",
+            "title": "Subkey Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "api_key",
+          "workspace_id",
+          "subkey_id"
+        ],
+        "type": "object",
+        "title": "aanet_revoke_subkeyArguments"
+      }
+    },
+    {
+      "name": "aanet_read_file",
+      "description": "Read a file's content, or list a directory's entries if path points\n    to one — the read counterpart to aanet_write_file/aanet_append_file.\n    Costs 1 unit per hit (file or directory); a missing path returns 404 and is free. Returns {path, content,\n    is_dir, entries, etag}; for a directory, content is null and entries\n    lists child names, for a file it's the reverse. Save the returned etag\n    if you plan to write back — pass it as if_match on aanet_write_file to\n    avoid clobbering a newer write from another sub-agent.",
+      "inputSchema": {
+        "properties": {
+          "api_key": {
+            "description": "Bearer credential for this workspace: either the owner_key returned once by aanet_create_workspace/aanet_create_trial_workspace, or a sub-key returned by aanet_mint_subkey. Sent under the hood as `Authorization: Bearer <api_key>`. Owner-only tools reject a sub-key with a 403.",
+            "title": "Api Key",
+            "type": "string"
+          },
+          "workspace_id": {
+            "description": "The workspace_id from aanet_create_workspace or aanet_create_trial_workspace.",
+            "title": "Workspace Id",
+            "type": "string"
+          },
+          "path": {
+            "description": "Virtual file path within the workspace, e.g. \"notes/progress.md\".",
+            "title": "Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "api_key",
+          "workspace_id",
+          "path"
+        ],
+        "type": "object",
+        "title": "aanet_read_fileArguments"
+      }
+    },
+    {
+      "name": "aanet_write_file",
+      "description": "Overwrite a file's entire content, creating it if it doesn't exist —\n    use aanet_append_file instead if you want to add one entry without\n    replacing what's there. Fires a file_write webhook event on success\n    (see aanet_register_webhook).\n\n    Pass if_match with the file's last-known etag to make this a\n    compare-and-swap: if another sub-agent wrote to the same path since you\n    last read it, this raises a 409 instead of silently overwriting their\n    change — re-read, resolve, and retry rather than assume your write won.\n    content over 1 MiB is rejected with 413, before writing or charging —\n    this service is for coordination artifacts, not bulk storage.\n    Pass fence (from aanet_acquire_lock) to guard the write with a lock: a stale holder gets 409\n    STALE_FENCE. Returns {path, created, etag}.",
+      "inputSchema": {
+        "properties": {
+          "api_key": {
+            "description": "Bearer credential for this workspace: either the owner_key returned once by aanet_create_workspace/aanet_create_trial_workspace, or a sub-key returned by aanet_mint_subkey. Sent under the hood as `Authorization: Bearer <api_key>`. Owner-only tools reject a sub-key with a 403.",
+            "title": "Api Key",
+            "type": "string"
+          },
+          "workspace_id": {
+            "description": "The workspace_id from aanet_create_workspace or aanet_create_trial_workspace.",
+            "title": "Workspace Id",
+            "type": "string"
+          },
+          "path": {
+            "description": "Virtual file path within the workspace.",
+            "title": "Path",
+            "type": "string"
+          },
+          "content": {
+            "description": "Full new content of the file — this replaces it entirely.",
+            "title": "Content",
+            "type": "string"
+          },
+          "if_match": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "The file's current etag (from aanet_read_file or a prior write's response), to detect a concurrent write from another sub-agent. Omit to overwrite unconditionally.",
+            "title": "If Match"
+          },
+          "stamp": {
+            "default": false,
+            "description": "If true, appends a trailing `<!-- coordinated-via: aanet.space workspace_id=... -->` comment to the written content. Meant for files that will be handed off or exported outside this workspace, so a downstream reader can see it was produced via AANet. You are billed for the stamp's bytes like any other content.",
+            "title": "Stamp",
+            "type": "boolean"
+          },
+          "fence": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Fencing token returned by aanet_acquire_lock/aanet_renew_lock. If another sub-agent has acquired that lock since, the call is rejected with 409 STALE_FENCE (free) instead of writing as a stale holder. Omit for an unguarded write.",
+            "title": "Fence"
+          },
+          "fence_lock": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Name of the lock the fence belongs to; defaults to the file path itself. Needs fence.",
+            "title": "Fence Lock"
+          }
+        },
+        "required": [
+          "api_key",
+          "workspace_id",
+          "path",
+          "content"
+        ],
+        "type": "object",
+        "title": "aanet_write_fileArguments"
+      }
+    },
+    {
+      "name": "aanet_append_file",
+      "description": "Append one entry to a file without touching what's already there,\n    creating the file if it doesn't exist yet — use aanet_write_file instead\n    when you need to replace the whole file. Typical use: a shared log or\n    running notes file multiple sub-agents contribute to. Fires a\n    file_write webhook event on success. Rejected with 413, before writing\n    or charging, if the resulting file (existing content + this append)\n    would exceed 1 MiB. Accepts the same fence guard as aanet_write_file.\n    Returns {path, appended, etag}.",
+      "inputSchema": {
+        "properties": {
+          "api_key": {
+            "description": "Bearer credential for this workspace: either the owner_key returned once by aanet_create_workspace/aanet_create_trial_workspace, or a sub-key returned by aanet_mint_subkey. Sent under the hood as `Authorization: Bearer <api_key>`. Owner-only tools reject a sub-key with a 403.",
+            "title": "Api Key",
+            "type": "string"
+          },
+          "workspace_id": {
+            "description": "The workspace_id from aanet_create_workspace or aanet_create_trial_workspace.",
+            "title": "Workspace Id",
+            "type": "string"
+          },
+          "path": {
+            "description": "Virtual file path within the workspace.",
+            "title": "Path",
+            "type": "string"
+          },
+          "content": {
+            "description": "Text to append as a new entry — the existing content is kept.",
+            "title": "Content",
+            "type": "string"
+          },
+          "if_match": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "The file's current etag, for the same conflict-detection purpose as on aanet_write_file.",
+            "title": "If Match"
+          },
+          "stamp": {
+            "default": false,
+            "description": "Same attribution-comment option as on aanet_write_file, applied to this appended entry.",
+            "title": "Stamp",
+            "type": "boolean"
+          },
+          "idempotency_key": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Optional retry-safety token (any unique string, e.g. a UUID). If a call times out and you repeat it with the same key and the same arguments, the first successful result is returned again without charging a second time. Keys are remembered for 24 hours, per sub-key. Reusing a key with different arguments is an error (code=IDEMPOTENCY_KEY_REUSED).",
+            "title": "Idempotency Key"
+          },
+          "fence": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Fencing token returned by aanet_acquire_lock/aanet_renew_lock. If another sub-agent has acquired that lock since, the call is rejected with 409 STALE_FENCE (free) instead of writing as a stale holder. Omit for an unguarded write.",
+            "title": "Fence"
+          },
+          "fence_lock": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Name of the lock the fence belongs to; defaults to the file path itself. Needs fence.",
+            "title": "Fence Lock"
+          }
+        },
+        "required": [
+          "api_key",
+          "workspace_id",
+          "path",
+          "content"
+        ],
+        "type": "object",
+        "title": "aanet_append_fileArguments"
+      }
+    },
+    {
+      "name": "aanet_delete_file",
+      "description": "Permanently remove a file — the missing piece of the file lifecycle\n    alongside aanet_read_file/aanet_write_file/aanet_append_file. There is\n    no undo: to recover, a sub-agent would need its own backup of the\n    content. Fires a file_delete webhook event on success (see\n    aanet_register_webhook). Raises a 404 if the path doesn't exist, a 409\n    if it's a directory or if_match doesn't match the current etag. Returns\n    {path, deleted}.",
+      "inputSchema": {
+        "properties": {
+          "api_key": {
+            "description": "Bearer credential for this workspace: either the owner_key returned once by aanet_create_workspace/aanet_create_trial_workspace, or a sub-key returned by aanet_mint_subkey. Sent under the hood as `Authorization: Bearer <api_key>`. Owner-only tools reject a sub-key with a 403.",
+            "title": "Api Key",
+            "type": "string"
+          },
+          "workspace_id": {
+            "description": "The workspace_id from aanet_create_workspace or aanet_create_trial_workspace.",
+            "title": "Workspace Id",
+            "type": "string"
+          },
+          "path": {
+            "description": "Virtual file path within the workspace. Must point to a file, not a directory.",
+            "title": "Path",
+            "type": "string"
+          },
+          "if_match": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "The file's current etag, for the same conflict-detection purpose as on aanet_write_file.",
+            "title": "If Match"
+          },
+          "fence": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Fencing token returned by aanet_acquire_lock/aanet_renew_lock. If another sub-agent has acquired that lock since, the call is rejected with 409 STALE_FENCE (free) instead of writing as a stale holder. Omit for an unguarded write.",
+            "title": "Fence"
+          },
+          "fence_lock": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Name of the lock the fence belongs to; defaults to the file path itself. Needs fence.",
+            "title": "Fence Lock"
+          }
+        },
+        "required": [
+          "api_key",
+          "workspace_id",
+          "path"
+        ],
+        "type": "object",
+        "title": "aanet_delete_fileArguments"
+      }
+    },
+    {
+      "name": "aanet_acquire_lock",
+      "description": "Claim exclusive ownership of a named unit of work so no other\n    sub-agent starts the same thing — call this before starting work, not\n    after. Returns {lease_expires_at, fence} on success, or a 409 if another\n    sub-agent already holds an unexpired lease on the same name (that\n    conflict is free — you are not charged for losing a race).\n\n    You do not hold the lock forever: once lease_seconds elapses, anyone can\n    acquire it out from under you, even if you're still working. Call\n    aanet_renew_lock periodically while still working, and\n    aanet_release_lock the moment you're done so others don't wait out the\n    full lease unnecessarily.\n\n    fence is a monotonically increasing token (it grows with every successful acquire of this\n    name, so a later holder always has a larger one). Pass it to aanet_write_file/\n    aanet_append_file/aanet_delete_file so the server rejects your write once someone else has\n    taken the lock over - protection against a paused agent waking up after its lease expired.",
+      "inputSchema": {
+        "properties": {
+          "api_key": {
+            "description": "Bearer credential for this workspace: either the owner_key returned once by aanet_create_workspace/aanet_create_trial_workspace, or a sub-key returned by aanet_mint_subkey. Sent under the hood as `Authorization: Bearer <api_key>`. Owner-only tools reject a sub-key with a 403.",
+            "title": "Api Key",
+            "type": "string"
+          },
+          "workspace_id": {
+            "description": "The workspace_id from aanet_create_workspace or aanet_create_trial_workspace.",
+            "title": "Workspace Id",
+            "type": "string"
+          },
+          "name": {
+            "description": "Lock name identifying the unit of work, e.g. \"process-batch-3\".",
+            "title": "Name",
+            "type": "string"
+          },
+          "lease_seconds": {
+            "description": "How long you hold the lock before it becomes reclaimable by anyone else, 1-3600 seconds.",
+            "exclusiveMinimum": 0,
+            "maximum": 3600,
+            "title": "Lease Seconds",
+            "type": "integer"
+          },
+          "idempotency_key": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Optional retry-safety token (any unique string, e.g. a UUID). If a call times out and you repeat it with the same key and the same arguments, the first successful result is returned again without charging a second time. Keys are remembered for 24 hours, per sub-key. Reusing a key with different arguments is an error (code=IDEMPOTENCY_KEY_REUSED).",
+            "title": "Idempotency Key"
+          }
+        },
+        "required": [
+          "api_key",
+          "workspace_id",
+          "name",
+          "lease_seconds"
+        ],
+        "type": "object",
+        "title": "aanet_acquire_lockArguments"
+      }
+    },
+    {
+      "name": "aanet_renew_lock",
+      "description": "Extend a lock you currently hold, before its lease runs out — call\n    this instead of aanet_acquire_lock again while work is still in\n    progress. Fails with 404 if nobody holds the lock, or 403 if a\n    different sub-key is the current holder (you can't renew someone\n    else's lease). Returns {lease_expires_at, fence}; fence is unchanged by a renew.",
+      "inputSchema": {
+        "properties": {
+          "api_key": {
+            "description": "Bearer credential for this workspace: either the owner_key returned once by aanet_create_workspace/aanet_create_trial_workspace, or a sub-key returned by aanet_mint_subkey. Sent under the hood as `Authorization: Bearer <api_key>`. Owner-only tools reject a sub-key with a 403.",
+            "title": "Api Key",
+            "type": "string"
+          },
+          "workspace_id": {
+            "description": "The workspace_id from aanet_create_workspace or aanet_create_trial_workspace.",
+            "title": "Workspace Id",
+            "type": "string"
+          },
+          "name": {
+            "description": "Lock name — must match a lock you currently hold.",
+            "title": "Name",
+            "type": "string"
+          },
+          "lease_seconds": {
+            "description": "New lease duration from now, 1-3600 seconds.",
+            "exclusiveMinimum": 0,
+            "maximum": 3600,
+            "title": "Lease Seconds",
+            "type": "integer"
+          },
+          "idempotency_key": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Optional retry-safety token (any unique string, e.g. a UUID). If a call times out and you repeat it with the same key and the same arguments, the first successful result is returned again without charging a second time. Keys are remembered for 24 hours, per sub-key. Reusing a key with different arguments is an error (code=IDEMPOTENCY_KEY_REUSED).",
+            "title": "Idempotency Key"
+          }
+        },
+        "required": [
+          "api_key",
+          "workspace_id",
+          "name",
+          "lease_seconds"
+        ],
+        "type": "object",
+        "title": "aanet_renew_lockArguments"
+      }
+    },
+    {
+      "name": "aanet_release_lock",
+      "description": "Voluntarily give up a lock you hold, immediately, instead of waiting\n    for its lease to expire — always call this as soon as you're done with\n    the unit of work, so a sub-agent waiting on it doesn't idle\n    unnecessarily. Free (no charge), unlike acquire/renew. Fails with 404 if\n    nobody holds it or 403 if you're not the current holder. Fires a\n    lock_available webhook event on success (see aanet_register_webhook) so\n    a waiting sub-agent can react immediately instead of polling\n    aanet_acquire_lock in a loop.",
+      "inputSchema": {
+        "properties": {
+          "api_key": {
+            "description": "Bearer credential for this workspace: either the owner_key returned once by aanet_create_workspace/aanet_create_trial_workspace, or a sub-key returned by aanet_mint_subkey. Sent under the hood as `Authorization: Bearer <api_key>`. Owner-only tools reject a sub-key with a 403.",
+            "title": "Api Key",
+            "type": "string"
+          },
+          "workspace_id": {
+            "description": "The workspace_id from aanet_create_workspace or aanet_create_trial_workspace.",
+            "title": "Workspace Id",
+            "type": "string"
+          },
+          "name": {
+            "description": "Lock name — must match a lock you currently hold.",
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "api_key",
+          "workspace_id",
+          "name"
+        ],
+        "type": "object",
+        "title": "aanet_release_lockArguments"
+      }
+    },
+    {
+      "name": "aanet_get_lock_status",
+      "description": "Check a lock WITHOUT trying to take it, and tell \"nobody ever took it\"\n    apart from \"someone took it and released it\" — a free lock and an\n    already-finished task look identical from aanet_acquire_lock alone. Returns\n    status held | expired (lease ran out, not yet reclaimed) | free (taken before,\n    not held now) | never_held, plus holder_subkey_id/lease_expires_at while held,\n    last_holder_subkey_id, last_acquired_at, last_released_at, acquire_count and\n    release_count. A release is a signal the holder finished with it, not proof\n    the work succeeded — confirm via the result file. 1 unit; a name nobody ever\n    acquired is a free miss.",
+      "inputSchema": {
+        "properties": {
+          "api_key": {
+            "description": "Bearer credential for this workspace: either the owner_key returned once by aanet_create_workspace/aanet_create_trial_workspace, or a sub-key returned by aanet_mint_subkey. Sent under the hood as `Authorization: Bearer <api_key>`. Owner-only tools reject a sub-key with a 403.",
+            "title": "Api Key",
+            "type": "string"
+          },
+          "workspace_id": {
+            "description": "The workspace_id from aanet_create_workspace or aanet_create_trial_workspace.",
+            "title": "Workspace Id",
+            "type": "string"
+          },
+          "name": {
+            "description": "Lock name to inspect, e.g. \"process-batch-3\".",
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "api_key",
+          "workspace_id",
+          "name"
+        ],
+        "type": "object",
+        "title": "aanet_get_lock_statusArguments"
+      }
+    },
+    {
+      "name": "aanet_get_activity",
+      "description": "Read the server-side audit log of every attempt in this workspace,\n    successful or rejected — the authoritative source of what each\n    sub-agent actually did, since sub-agents can't fake or skip this the\n    way they could misreport their own actions. Owner_key required.\n\n    Each entry has subkey_id, operation, path, cost_charged, status (e.g.\n    OK, INSUFFICIENT_BALANCE, SCOPE_DENIED, CONFLICT), and a free-text\n    detail. Use this to reconstruct what happened after the fact, or to\n    check a sub-agent's spend pattern before adjusting its budget_cap via\n    aanet_update_subkey.",
+      "inputSchema": {
+        "properties": {
+          "api_key": {
+            "description": "Bearer credential for this workspace: either the owner_key returned once by aanet_create_workspace/aanet_create_trial_workspace, or a sub-key returned by aanet_mint_subkey. Sent under the hood as `Authorization: Bearer <api_key>`. Owner-only tools reject a sub-key with a 403.",
+            "title": "Api Key",
+            "type": "string"
+          },
+          "workspace_id": {
+            "description": "The workspace_id from aanet_create_workspace or aanet_create_trial_workspace.",
+            "title": "Workspace Id",
+            "type": "string"
+          },
+          "subkey_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Filter to attempts by this sub-key only. Omit for all.",
+            "title": "Subkey Id"
+          },
+          "operation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Filter to one operation type, e.g. \"PUT_FILE\", \"LOCK_ACQUIRE\", \"SEND_MESSAGE\", \"WEBHOOK_DELIVERY\". Omit for all operation types.",
+            "title": "Operation"
+          },
+          "since": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "ISO timestamp — only return entries at or after this time.",
+            "title": "Since"
+          },
+          "since_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Entry id cursor: only entries with id > since_id (strictly exclusive). The recommended way to poll — pass the highest id you've already seen. Results are newest first.",
+            "title": "Since Id"
+          },
+          "limit": {
+            "default": 100,
+            "description": "Maximum entries to return, newest first, up to 500.",
+            "exclusiveMinimum": 0,
+            "maximum": 500,
+            "title": "Limit",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "api_key",
+          "workspace_id"
+        ],
+        "type": "object",
+        "title": "aanet_get_activityArguments"
+      }
+    },
+    {
+      "name": "aanet_get_activity_summary",
+      "description": "Spend totals from the audit log instead of reading every entry: for each\n    group, total_cost (units) and calls. Use it to see which sub-agent is\n    burning budget before adjusting a budget_cap via aanet_update_subkey.\n    Owner_key required. An unknown group_by is an error.",
+      "inputSchema": {
+        "properties": {
+          "api_key": {
+            "description": "Bearer credential for this workspace: either the owner_key returned once by aanet_create_workspace/aanet_create_trial_workspace, or a sub-key returned by aanet_mint_subkey. Sent under the hood as `Authorization: Bearer <api_key>`. Owner-only tools reject a sub-key with a 403.",
+            "title": "Api Key",
+            "type": "string"
+          },
+          "workspace_id": {
+            "description": "The workspace_id from aanet_create_workspace or aanet_create_trial_workspace.",
+            "title": "Workspace Id",
+            "type": "string"
+          },
+          "group_by": {
+            "default": "subkey_operation",
+            "description": "How to group the totals: \"subkey_operation\" (default), \"subkey\" or \"operation\".",
+            "title": "Group By",
+            "type": "string"
+          },
+          "since": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "ISO timestamp — only count entries at or after this time.",
+            "title": "Since"
+          }
+        },
+        "required": [
+          "api_key",
+          "workspace_id"
+        ],
+        "type": "object",
+        "title": "aanet_get_activity_summaryArguments"
+      }
+    },
+    {
+      "name": "aanet_get_activity_head",
+      "description": "Signed tip of the workspace's tamper-evident activity chain: every successful (OK) audit\n    row is hash-linked to the previous one, and this returns {seq, entry_hash, signed_at, key_id,\n    algorithm, signature} - an Ed25519 signature by the service over that tip. Save it OUTSIDE\n    AANet (any key may read it, it reveals no activity): if the operator later rewrote or deleted\n    earlier rows, a fresh export no longer contains your saved entry_hash at that seq. Public key:\n    GET https://aanet.space/.well-known/aanet-signing-key. Free.",
+      "inputSchema": {
+        "properties": {
+          "api_key": {
+            "description": "Bearer credential for this workspace: either the owner_key returned once by aanet_create_workspace/aanet_create_trial_workspace, or a sub-key returned by aanet_mint_subkey. Sent under the hood as `Authorization: Bearer <api_key>`. Owner-only tools reject a sub-key with a 403.",
+            "title": "Api Key",
+            "type": "string"
+          },
+          "workspace_id": {
+            "description": "The workspace_id from aanet_create_workspace or aanet_create_trial_workspace.",
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "api_key",
+          "workspace_id"
+        ],
+        "type": "object",
+        "title": "aanet_get_activity_headArguments"
+      }
+    },
+    {
+      "name": "aanet_export_activity",
+      "description": "Export the hash-chained (OK) audit rows in ascending order with prev_hash/entry_hash, plus the\n    signed head of the whole chain. Page forward with since_seq = the last chain_seq you got.\n    Verify it yourself with the ~25-line verify_chain function in AGENTS.md (recompute each entry_hash\n    from its fields, check the links and the head signature). Owner_key required; free.",
+      "inputSchema": {
+        "properties": {
+          "api_key": {
+            "description": "Bearer credential for this workspace: either the owner_key returned once by aanet_create_workspace/aanet_create_trial_workspace, or a sub-key returned by aanet_mint_subkey. Sent under the hood as `Authorization: Bearer <api_key>`. Owner-only tools reject a sub-key with a 403.",
+            "title": "Api Key",
+            "type": "string"
+          },
+          "workspace_id": {
+            "description": "The workspace_id from aanet_create_workspace or aanet_create_trial_workspace.",
+            "title": "Workspace Id",
+            "type": "string"
+          },
+          "since_seq": {
+            "default": 0,
+            "description": "Return rows with chain_seq greater than this; 0 = from the start.",
+            "minimum": 0,
+            "title": "Since Seq",
+            "type": "integer"
+          },
+          "limit": {
+            "default": 100,
+            "description": "Max rows per page.",
+            "exclusiveMinimum": 0,
+            "maximum": 500,
+            "title": "Limit",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "api_key",
+          "workspace_id"
+        ],
+        "type": "object",
+        "title": "aanet_export_activityArguments"
+      }
+    },
+    {
+      "name": "aanet_get_forecast",
+      "description": "Burn rate and runway: the workspace balance, spend per hour over the\n    last 1h / 24h / 7d (each window shortened to the workspace's age if it is\n    younger) with the hours the balance would last at that pace, and the top\n    spending sub-keys of the last 24h. Each window states the interval it was\n    measured over (measured_since, covered_seconds, shortened) — a young workspace\n    gives a short span and so a large hourly figure. An estimate from the audit\n    log, not a guarantee. Owner_key required; free. Pair it with a balance_low webhook\n    (aanet_register_webhook) to be warned before a 402.",
+      "inputSchema": {
+        "properties": {
+          "api_key": {
+            "description": "Bearer credential for this workspace: either the owner_key returned once by aanet_create_workspace/aanet_create_trial_workspace, or a sub-key returned by aanet_mint_subkey. Sent under the hood as `Authorization: Bearer <api_key>`. Owner-only tools reject a sub-key with a 403.",
+            "title": "Api Key",
+            "type": "string"
+          },
+          "workspace_id": {
+            "description": "The workspace_id from aanet_create_workspace or aanet_create_trial_workspace.",
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "api_key",
+          "workspace_id"
+        ],
+        "type": "object",
+        "title": "aanet_get_forecastArguments"
+      }
+    },
+    {
+      "name": "aanet_submit_feedback",
+      "description": "Report a bug, request a feature, or flag that pricing feels wrong —\n    this is the one feedback channel into how the operator prioritizes what\n    to build next, not a support ticket that gets a reply. Any valid,\n    unrevoked key can call this, owner or sub-key. Returns\n    {feedback_id, status} with status always \"open\" initially; there is no\n    tool to check its status afterward — it either got through (you got a\n    result back) or it didn't (you got an error).",
+      "inputSchema": {
+        "properties": {
+          "api_key": {
+            "description": "Bearer credential for this workspace: either the owner_key returned once by aanet_create_workspace/aanet_create_trial_workspace, or a sub-key returned by aanet_mint_subkey. Sent under the hood as `Authorization: Bearer <api_key>`. Owner-only tools reject a sub-key with a 403.",
+            "title": "Api Key",
+            "type": "string"
+          },
+          "category": {
+            "description": "One of \"bug\", \"feature\", \"pricing\", \"other\".",
+            "title": "Category",
+            "type": "string"
+          },
+          "title": {
+            "description": "Short one-line summary of the issue or request.",
+            "maxLength": 200,
+            "title": "Title",
+            "type": "string"
+          },
+          "description": {
+            "description": "Full detail — what's wrong, or what you'd want and why.",
+            "maxLength": 4000,
+            "title": "Description",
+            "type": "string"
+          },
+          "pledged_budget_usd": {
+            "description": "Decimal-string USD amount you'd actually pay if this were built, e.g. \"5.00\". This is a declaration only — nothing is charged or reserved — but it's the only signal the operator uses to prioritize requests, so a made-up number just adds noise. \"0\" is a valid, honest answer if you have no budget for it but still want to flag something.",
+            "title": "Pledged Budget Usd",
+            "type": "string"
+          }
+        },
+        "required": [
+          "api_key",
+          "category",
+          "title",
+          "description",
+          "pledged_budget_usd"
+        ],
+        "type": "object",
+        "title": "aanet_submit_feedbackArguments"
+      }
+    },
+    {
+      "name": "aanet_submit_signal",
+      "description": "If you looked at this server and decided NOT to use it — this tool is\n    for you. No api_key needed (you never created a workspace, so you have no\n    key); nothing is billed. One honest call tells the operator what stopped\n    you, which is the one signal they cannot otherwise see. Rate-limited per\n    IP; please call once, don't retry-loop it. Returns {signal_id, status}.",
+      "inputSchema": {
+        "properties": {
+          "signal": {
+            "description": "Why you are NOT using this service: one of \"no_use_case\", \"payment_barrier\", \"missing_feature\", \"trust_concern\", \"pricing\", \"docs_unclear\", \"just_looking\", \"other\".",
+            "title": "Signal",
+            "type": "string"
+          },
+          "detail": {
+            "default": "",
+            "description": "Optional free-text detail for the operator.",
+            "maxLength": 2000,
+            "title": "Detail",
+            "type": "string"
+          },
+          "contact": {
+            "default": "",
+            "description": "Optional way to reach you (the operator never replies otherwise).",
+            "maxLength": 200,
+            "title": "Contact",
+            "type": "string"
+          }
+        },
+        "required": [
+          "signal"
+        ],
+        "type": "object",
+        "title": "aanet_submit_signalArguments"
+      }
+    },
+    {
+      "name": "aanet_request_refund",
+      "description": "Ask for a workspace's entire remaining balance back, when its task is\n    done and money is left over — call this before aanet_delete_workspace,\n    not after. Owner_key required; trial workspaces reject this outright\n    (they never held real money).\n\n    This reserves (zeros out) the full balance immediately, so a second call\n    with nothing left to refund fails rather than double-paying out. The\n    real network fee for the payout is deducted from what you receive\n    (net_payout_usd in the response = gross - fee); if the balance doesn't\n    even cover the estimated fee, this call fails instead of reserving\n    anything. Payout is processed manually by the operator, not instantly —\n    poll aanet_get_refund_status for the outcome rather than assuming\n    success once this call returns.",
+      "inputSchema": {
+        "properties": {
+          "api_key": {
+            "description": "Bearer credential for this workspace: either the owner_key returned once by aanet_create_workspace/aanet_create_trial_workspace, or a sub-key returned by aanet_mint_subkey. Sent under the hood as `Authorization: Bearer <api_key>`. Owner-only tools reject a sub-key with a 403.",
+            "title": "Api Key",
+            "type": "string"
+          },
+          "workspace_id": {
+            "description": "The workspace_id from aanet_create_workspace or aanet_create_trial_workspace.",
+            "title": "Workspace Id",
+            "type": "string"
+          },
+          "network": {
+            "description": "Payout network: one of \"base\", \"polygon\", \"arbitrum\", \"avalanche\", \"solana\".",
+            "title": "Network",
+            "type": "string"
+          },
+          "destination_address": {
+            "description": "Your own wallet address on that network to receive the payout.",
+            "title": "Destination Address",
+            "type": "string"
+          }
+        },
+        "required": [
+          "api_key",
+          "workspace_id",
+          "network",
+          "destination_address"
+        ],
+        "type": "object",
+        "title": "aanet_request_refundArguments"
+      }
+    },
+    {
+      "name": "aanet_get_refund_status",
+      "description": "Check the status of every refund request ever made for a workspace —\n    the way to find out whether an aanet_request_refund call actually got\n    paid. Owner_key required. Each entry has status (\"pending\", \"paid\", or\n    \"rejected\"), and tx_hash once paid — verify that transaction on-chain\n    yourself before treating the refund as confirmed and deleting the\n    workspace. A \"rejected\" entry means the reserved amount was credited\n    back to the workspace balance, not lost.",
+      "inputSchema": {
+        "properties": {
+          "api_key": {
+            "description": "Bearer credential for this workspace: either the owner_key returned once by aanet_create_workspace/aanet_create_trial_workspace, or a sub-key returned by aanet_mint_subkey. Sent under the hood as `Authorization: Bearer <api_key>`. Owner-only tools reject a sub-key with a 403.",
+            "title": "Api Key",
+            "type": "string"
+          },
+          "workspace_id": {
+            "description": "The workspace_id from aanet_create_workspace or aanet_create_trial_workspace.",
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "api_key",
+          "workspace_id"
+        ],
+        "type": "object",
+        "title": "aanet_get_refund_statusArguments"
+      }
+    },
+    {
+      "name": "aanet_send_message",
+      "description": "Send a one-shot signal directly to another sub-agent (or to\n    everyone), for things that don't belong in a file — e.g. \"chunk 3\n    done\" or \"aborting, don't wait on me\". Use aanet_write_file /\n    aanet_append_file instead for anything that needs to persist as durable\n    state; messages are meant to be cheap and disposable, not a record of\n    truth.\n\n    Cheaper than a file write on purpose. Fires a message webhook event on\n    success (see aanet_register_webhook) — pair the two instead of having\n    the recipient poll aanet_get_messages in a loop. Returns\n    {message_id, ts}.",
+      "inputSchema": {
+        "properties": {
+          "api_key": {
+            "description": "Bearer credential for this workspace: either the owner_key returned once by aanet_create_workspace/aanet_create_trial_workspace, or a sub-key returned by aanet_mint_subkey. Sent under the hood as `Authorization: Bearer <api_key>`. Owner-only tools reject a sub-key with a 403.",
+            "title": "Api Key",
+            "type": "string"
+          },
+          "workspace_id": {
+            "description": "The workspace_id from aanet_create_workspace or aanet_create_trial_workspace.",
+            "title": "Workspace Id",
+            "type": "string"
+          },
+          "body": {
+            "description": "Message text.",
+            "maxLength": 4000,
+            "title": "Body",
+            "type": "string"
+          },
+          "to_subkey_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "subkey_id of the specific recipient. Leave unset to broadcast to every sub-key in the workspace.",
+            "title": "To Subkey Id"
+          },
+          "topic": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Optional free-text label for filtering later with aanet_get_messages.",
+            "title": "Topic"
+          },
+          "idempotency_key": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Optional retry-safety token (any unique string, e.g. a UUID). If a call times out and you repeat it with the same key and the same arguments, the first successful result is returned again without charging a second time. Keys are remembered for 24 hours, per sub-key. Reusing a key with different arguments is an error (code=IDEMPOTENCY_KEY_REUSED).",
+            "title": "Idempotency Key"
+          }
+        },
+        "required": [
+          "api_key",
+          "workspace_id",
+          "body"
+        ],
+        "type": "object",
+        "title": "aanet_send_messageArguments"
+      }
+    },
+    {
+      "name": "aanet_get_messages",
+      "description": "Fetch messages sent via aanet_send_message — the pull-based fallback\n    for when you haven't registered a webhook on the message event. With\n    `wait` > 0 the call parks until a matching message arrives (or the\n    timeout), so an agent that cannot receive webhooks can listen without a\n    tight polling loop: pass since_id=<last id you saw>. Waiting is free;\n    only a call that returns messages is charged (1 unit), and a\n    timed-out empty one costs nothing. At most 3 waiting calls per key\n    (and 16 service-wide) at once, otherwise 429. A\n    sub-key only sees messages addressed to it plus broadcasts (to_subkey_id\n    was left unset by the sender); the owner_key sees every message in the\n    workspace, for oversight. There's no read/unread tracking server-side —\n    track your own last-seen ts and pass it as `since` on the next call,\n    the same pattern as aanet_get_activity.",
+      "inputSchema": {
+        "properties": {
+          "api_key": {
+            "description": "Bearer credential for this workspace: either the owner_key returned once by aanet_create_workspace/aanet_create_trial_workspace, or a sub-key returned by aanet_mint_subkey. Sent under the hood as `Authorization: Bearer <api_key>`. Owner-only tools reject a sub-key with a 403.",
+            "title": "Api Key",
+            "type": "string"
+          },
+          "workspace_id": {
+            "description": "The workspace_id from aanet_create_workspace or aanet_create_trial_workspace.",
+            "title": "Workspace Id",
+            "type": "string"
+          },
+          "since": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "ISO timestamp — the ts of the last message you already saw. Inclusive (ts >= since): that last message comes back again, so dedupe by id.",
+            "title": "Since"
+          },
+          "since_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Message id cursor: only messages with id > since_id (strictly exclusive, so nothing comes back twice). The recommended polling cursor — pass the id of the last message you saw.",
+            "title": "Since Id"
+          },
+          "topic": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Filter to messages sent with this exact topic. Omit for all topics.",
+            "title": "Topic"
+          },
+          "limit": {
+            "default": 100,
+            "description": "Maximum messages to return, oldest first, up to 500.",
+            "exclusiveMinimum": 0,
+            "maximum": 500,
+            "title": "Limit",
+            "type": "integer"
+          },
+          "wait": {
+            "default": 0,
+            "description": "Long poll: seconds (max 30) to wait for a matching message before returning. 0 = answer at once. Returns as soon as one arrives; an empty answer after the timeout is free.",
+            "maximum": 30,
+            "minimum": 0,
+            "title": "Wait",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "api_key",
+          "workspace_id"
+        ],
+        "type": "object",
+        "title": "aanet_get_messagesArguments"
+      }
+    },
+    {
+      "name": "aanet_register_webhook",
+      "description": "Register a push endpoint so this workspace calls you instead of you\n    calling aanet_get_activity/aanet_get_messages/aanet_acquire_lock in a\n    polling loop — the main alternative to polling anywhere in this API.\n    Owner_key required; up to 5 active webhooks per workspace.\n\n    Returns {webhook_id, secret} with secret shown exactly once — every\n    delivery includes an X-AANet-Signature header (HMAC-SHA256 of the raw\n    body, keyed by that secret); verify it before trusting a payload as\n    genuinely from us. You are billed 2 units for every delivery attempt that\n    is actually made, whether or not your endpoint responds (visible in\n    aanet_get_activity); an attempt the workspace can't afford is not made\n    and not billed — it is listed as skipped, doesn't count as a failure and\n    is retried every 15 minutes for up to 24 hours. A webhook that fails 10\n    delivery attempts in a row is auto-disabled (you get an aanet.system\n    message and aanet_list_webhooks shows disabled_reason) — check\n    aanet_get_webhook_deliveries if events stop arriving. Delivery comes from a durable outbox that survives a service\n    restart and retries failures with exponential backoff (up to 8\n    attempts); it is at-least-once, so dedupe on the X-AANet-Delivery-Id\n    header. Still treat a webhook as a faster way to learn something\n    happened, not your only source of truth — confirm with the matching GET\n    tool if it matters.",
+      "inputSchema": {
+        "properties": {
+          "api_key": {
+            "description": "Bearer credential for this workspace: either the owner_key returned once by aanet_create_workspace/aanet_create_trial_workspace, or a sub-key returned by aanet_mint_subkey. Sent under the hood as `Authorization: Bearer <api_key>`. Owner-only tools reject a sub-key with a 403.",
+            "title": "Api Key",
+            "type": "string"
+          },
+          "workspace_id": {
+            "description": "The workspace_id from aanet_create_workspace or aanet_create_trial_workspace.",
+            "title": "Workspace Id",
+            "type": "string"
+          },
+          "url": {
+            "description": "Must be https:// and resolve to a public (non-private/loopback) address at registration time — checked once here, not re-checked on every delivery.",
+            "title": "Url",
+            "type": "string"
+          },
+          "events": {
+            "description": "Subset of [\"file_write\", \"file_delete\", \"lock_available\", \"message\", \"balance_low\", \"key_anomaly\"] — file_write fires on any successful aanet_write_file/aanet_append_file, file_delete on aanet_delete_file, lock_available on an explicit aanet_release_lock (not on passive lease expiry), message on aanet_send_message, balance_low each time the workspace balance falls from >= a value in balance_thresholds to below it, key_anomaly when one key repeats the same operation on the same path 200 times within a minute (a likely runaway loop; data = subkey_id, operation, path, count, window_seconds; at most one per key per 10 minutes).",
+            "items": {
+              "type": "string"
+            },
+            "title": "Events",
+            "type": "array"
+          },
+          "balance_thresholds": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Required when events includes balance_low, otherwise omit. Up to 5 distinct positive workspace-balance values in units (e.g. [5000, 1000]). Each fires one balance_low delivery (2 units) when the balance falls through it; none fire for values the balance is already below at registration. Pick values with headroom — a threshold under ~10 units leaves almost no time to top up.",
+            "title": "Balance Thresholds"
+          }
+        },
+        "required": [
+          "api_key",
+          "workspace_id",
+          "url",
+          "events"
+        ],
+        "type": "object",
+        "title": "aanet_register_webhookArguments"
+      }
+    },
+    {
+      "name": "aanet_list_webhooks",
+      "description": "List webhooks registered on a workspace — url, subscribed events,\n    consecutive_failures (failed attempts since the last success), and\n    disabled_at/disabled_reason if it was auto-disabled after 10 failed\n    attempts in a row (you also get an aanet.system message when that happens;\n    deliveries skipped for an empty balance don't count). Owner_key required.\n    Secrets are never included (only shown once, at aanet_register_webhook\n    time); use aanet_get_webhook_deliveries for per-attempt delivery history\n    on one of these.",
+      "inputSchema": {
+        "properties": {
+          "api_key": {
+            "description": "Bearer credential for this workspace: either the owner_key returned once by aanet_create_workspace/aanet_create_trial_workspace, or a sub-key returned by aanet_mint_subkey. Sent under the hood as `Authorization: Bearer <api_key>`. Owner-only tools reject a sub-key with a 403.",
+            "title": "Api Key",
+            "type": "string"
+          },
+          "workspace_id": {
+            "description": "The workspace_id from aanet_create_workspace or aanet_create_trial_workspace.",
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "api_key",
+          "workspace_id"
+        ],
+        "type": "object",
+        "title": "aanet_list_webhooksArguments"
+      }
+    },
+    {
+      "name": "aanet_delete_webhook",
+      "description": "Permanently remove a registered webhook — no further events will be\n    delivered to it, active or auto-disabled. Owner_key required. There is\n    no way to temporarily pause one; delete and re-register with\n    aanet_register_webhook if you want it back later (you'll get a new\n    secret).",
+      "inputSchema": {
+        "properties": {
+          "api_key": {
+            "description": "Bearer credential for this workspace: either the owner_key returned once by aanet_create_workspace/aanet_create_trial_workspace, or a sub-key returned by aanet_mint_subkey. Sent under the hood as `Authorization: Bearer <api_key>`. Owner-only tools reject a sub-key with a 403.",
+            "title": "Api Key",
+            "type": "string"
+          },
+          "workspace_id": {
+            "description": "The workspace_id from aanet_create_workspace or aanet_create_trial_workspace.",
+            "title": "Workspace Id",
+            "type": "string"
+          },
+          "webhook_id": {
+            "description": "The webhook_id from aanet_register_webhook or aanet_list_webhooks.",
+            "title": "Webhook Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "api_key",
+          "workspace_id",
+          "webhook_id"
+        ],
+        "type": "object",
+        "title": "aanet_delete_webhookArguments"
+      }
+    },
+    {
+      "name": "aanet_get_pricing",
+      "description": "Free, no key needed: the machine-readable price list — cost in units\n    ($0.00001 each) of every operation (base + per started KB where it applies,\n    and when it is free), the minimum deposit, file-size and webhook limits,\n    trial terms and the idle-storage fee. Same document as GET /pricing. Use it\n    to budget a swarm before creating a workspace (see also\n    aanet_estimate_savings); the prices are exactly what is charged.",
+      "inputSchema": {
+        "properties": {},
+        "type": "object",
+        "title": "aanet_get_pricingArguments"
+      }
+    },
+    {
+      "name": "aanet_estimate_savings",
+      "description": "Estimate the cost of coordinating a swarm on AANet versus relaying the\n    same coordination through your orchestrator's LLM context — before you\n    create a workspace or spend anything. Same formula as the calculator at\n    https://aanet.space/#savings.\n\n    AANet side assumes ~16 units/round (the average measured over an 8-round\n    run: reads, appends, a lock cycle, a message and a poll) at $0.00001/unit. The relay side assumes ~9,600 tokens/round\n    (re-injecting another agent's update into your prompt) at a blended\n    $2-$10 per million token rate. This is a rough estimate, not a quote —\n    real workloads vary; see aanet_get_activity on an actual workspace for\n    your own measured cost once you're running for real.",
+      "inputSchema": {
+        "properties": {
+          "agents": {
+            "description": "Number of agents in the swarm you're planning.",
+            "exclusiveMinimum": 0,
+            "maximum": 1000,
+            "title": "Agents",
+            "type": "integer"
+          },
+          "rounds_per_agent": {
+            "description": "Coordination rounds each agent will need (reads/writes/lock cycles).",
+            "exclusiveMinimum": 0,
+            "maximum": 1000,
+            "title": "Rounds Per Agent",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "agents",
+          "rounds_per_agent"
+        ],
+        "type": "object",
+        "title": "aanet_estimate_savingsArguments"
+      }
+    },
+    {
+      "name": "aanet_get_webhook_deliveries",
+      "description": "Inspect one webhook's delivery history — use this to debug a webhook\n    that seems to have gone quiet (check aanet_list_webhooks first to see\n    if it's been auto-disabled) or to confirm an event actually fired.\n    Owner_key required. Each entry has event_type, status_code (null if the\n    request itself never completed, e.g. timeout or DNS failure), success, and\n    skipped (true = nothing was sent because the workspace couldn't afford the\n    delivery: not billed, not an endpoint failure).",
+      "inputSchema": {
+        "properties": {
+          "api_key": {
+            "description": "Bearer credential for this workspace: either the owner_key returned once by aanet_create_workspace/aanet_create_trial_workspace, or a sub-key returned by aanet_mint_subkey. Sent under the hood as `Authorization: Bearer <api_key>`. Owner-only tools reject a sub-key with a 403.",
+            "title": "Api Key",
+            "type": "string"
+          },
+          "workspace_id": {
+            "description": "The workspace_id from aanet_create_workspace or aanet_create_trial_workspace.",
+            "title": "Workspace Id",
+            "type": "string"
+          },
+          "webhook_id": {
+            "description": "The webhook_id from aanet_register_webhook or aanet_list_webhooks.",
+            "title": "Webhook Id",
+            "type": "string"
+          },
+          "limit": {
+            "default": 50,
+            "description": "Maximum delivery records to return, newest first, up to 200.",
+            "exclusiveMinimum": 0,
+            "maximum": 200,
+            "title": "Limit",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "api_key",
+          "workspace_id",
+          "webhook_id"
+        ],
+        "type": "object",
+        "title": "aanet_get_webhook_deliveriesArguments"
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "space.aanet/aanet-mcp",
+    "version": "1.8.1",
+    "remoteUrl": "https://aanet.space/mcp",
+    "publishedAt": "2026-11-27T09:53:10.116605Z",
+    "fetchedAt": "2026-11-27T10:42:49.718Z",
+    "toolsSha256": "e52ed78159c97bf8785690668db9479b5b7f92bdd06dbe079b357ddc87d434d7"
+  }
+}

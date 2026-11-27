@@ -1,0 +1,199 @@
+{
+  "$schema": "../schema.json",
+  "name": "io.github.fetchsandbox/mcp",
+  "title": "FetchSandbox",
+  "category": "AI, LLMs & Agents",
+  "description": "A deterministic verification engine for agents. Proves a fix: fails on the old code, passes on new.",
+  "repository": "https://github.com/fetchsandbox/mcp",
+  "tools": [
+    {
+      "name": "coach",
+      "description": "Conversational integration coach for FetchSandbox. Server-side orchestrator that walks the user through adding an API integration (payments / email / auth / etc.) — intake the goal, elicit domain-aware discovery questions from the spec's brain.yaml, route to the right workflow, prove the contract via FetchSandbox, surface compliance notes. Call this BEFORE any other FetchSandbox tool when the user has an open-ended 'help me add X', 'integrate X', 'test my X integration' ask. BEHAVIOR — strict, do exactly this each turn: If next_action=act_in_app, carry out next_actions with your platform's code, configuration and test tools, then return the results to the same validation session. Do not ask the human to choose routine fault tests, supply missing fixture data you can generate, or copy tool output. Ask only for genuine access, secret-entry constraints or ambiguous business rules. Never claim unsupported checks passed. (1) Say `message_for_user` to the user (verbatim or lightly paraphrased to fit your voice — but don't add new content). (2) If `next_action=wait_for_user` AND `options` is present + non-empty: USE YOUR CLIENT'S NATIVE QUESTION-PICKER TOOL (in Cursor / Claude Code this is `AskUserQuestion`) to render the lettered picker with the `question` text, the `options[].label` as rows, `default_option` as default, and an 'Other...' freeform row when `allow_freeform=true`. When the user picks or types, call coach again with `{session_id, user_response: <picked value or freeform text>}`. (3) If `next_action=wait_for_user` AND no `options`: just wait for free text. (4) If `next_action=call_tool`: invoke `tool_call.tool` with `tool_call.args`, then call coach again with the result in `context`. (5) If `next_action=done`: end the session. For a hosted app-builder request to build or test an integration, keep the user's simple goal intact and let the server route all named providers into one validation session. When FetchSandbox returns twin bindings, treat those as temporary TEST credentials: configure them server-side in the app-builder project, never ask the user for live Paddle/Resend keys, and never claim they were applied until the builder reports the change and the verifier observes app traffic. Infer app configuration details from the project when available; ask the user only for a fact the builder cannot discover. The deterministic verifier, not this conversation, owns the verdict. The state machine is server-side — DON'T try to predict the next step or skip ahead; let the server drive.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "intent": {
+            "type": "string",
+            "description": "User's free-form integration ask, on the FIRST call only. Pass through verbatim — the server's intent router benefits from the full phrasing."
+          },
+          "session_id": {
+            "type": "string",
+            "description": "Returned by a previous coach call. Required on every call after the first."
+          },
+          "user_response": {
+            "type": "string",
+            "description": "The user's reply to the previous coach turn's question. Required when the previous turn returned `next_action: wait_for_user`."
+          },
+          "context": {
+            "type": "object",
+            "description": "Optional context the LLM brings to the turn — e.g. a summary of the user's repo (if you ran an introspect step), or the result of a previously-instructed `tool_call`."
+          }
+        }
+      }
+    },
+    {
+      "name": "get_job",
+      "description": "Retrieve the SAME running find_bugs, fix_bug, prove_fix, verify_behavior or validate_integration job (including requirements planning). Follow next_tool_call until status is done or error. Never restart the original tool to poll. A proposed plan is not execution proof; a running response is not proof. Only the completed measured verdict and receipt can establish a pass.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "description": "Exact job_id returned by the original call."
+          }
+        },
+        "required": [
+          "job_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "guide",
+      "description": "ROUTE a symptom to the provider behaviour that explains it. Use this when the user names a provider or a domain (payments, email, auth, SMS, subscriptions) and you need to know what that provider ACTUALLY does — not what its docs say, and not what can be inferred from reading the integration code. Reading the code tells you what your app does with a field. It cannot tell you what the field MEANS at the provider — whether a line item is a seat count, whether a 200 body carries ok:false, whether an event can arrive out of order. That is the class of bug this routes. Returns {spec, workflow, scenario, confidence, reasoning} plus `next_actions`: a typed list of what to call next, with arguments pre-filled. Follow it rather than improvising the next step.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "intent": {
+            "type": "string",
+            "description": "The developer's free-form prompt as they typed it. Don't pre-process or shorten — the router benefits from the full phrasing (capture timing, geo cues, failure mode language)."
+          },
+          "hints": {
+            "type": "object",
+            "description": "Optional caller-supplied overrides. Each field short-circuits the corresponding detection step.",
+            "properties": {
+              "spec": {
+                "type": "string",
+                "description": "Force a specific spec slug."
+              },
+              "workflow": {
+                "type": "string",
+                "description": "Force a specific workflow_id."
+              },
+              "scenario": {
+                "type": "string",
+                "description": "Force a specific failure scenario name."
+              }
+            }
+          }
+        },
+        "required": [
+          "intent"
+        ]
+      }
+    },
+    {
+      "name": "quickrun",
+      "description": "Run a curated reference workflow against a KNOWN, bundled spec (stripe, clerk, descope, resend, twilio, and 50+ others) in ONE call — it spins up the sandbox by slug, so you do NOT need import_spec or a sandbox_id first. Use this when exploring the bundled provider contract: call `guide` on their prompt, then call `quickrun` with the returned spec + workflow. To reproduce a failure, pass the `scenario` from guide's matched_bug_pattern.reproduce_with.scenario (e.g. webhook_retries, payment_declined). Returns sandbox_id + flow_run_id — pass BOTH to verify_behavior to inspect the reference behavior — plus a receipt URL. This does not execute or prove the caller's application. For a bug in their project, use find_bugs, fix_bug and prove_fix on that project; do not substitute this reference receipt for an own-code proof. Use run_workflow instead ONLY when you already hold a sandbox_id from import_spec of a custom/private spec.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "spec_slug": {
+            "type": "string",
+            "description": "The bundled spec slug from guide (e.g. 'stripe'). Lowercase."
+          },
+          "workflow_name": {
+            "type": "string",
+            "description": "The workflow id from guide (e.g. 'accept_payment')."
+          },
+          "scenario": {
+            "type": "string",
+            "description": "OPTIONAL failure scenario to reproduce (e.g. webhook_retries, payment_declined). Take it from guide's matched_bug_pattern.reproduce_with.scenario. Omit for the happy path."
+          }
+        },
+        "required": [
+          "spec_slug",
+          "workflow_name"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "list_workflows",
+      "description": "List the named, runnable workflows for a known provider slug or imported spec. Workflows are realistic multi-step API journeys (e.g. 'create customer → attach payment method → create subscription'). Known provider slugs need no import. Use this for exploration (\"what can I do?\", \"show me the flows\") OR before run_all_workflows when the user wants a SCOPED validation: list, filter by user intent (\"checkout\", \"webhooks\"), then pass the matching ids as `workflow_names` to run_all_workflows. Default results are summaries. Pass workflow_name with an exact returned id or name to inspect that workflow's full definition, including request bodies, assertions, outcomes and invariants; this does not execute it. Returns the workflows AND the failure scenarios this spec can simulate — each with a plain description and the exact call to run it. When cross_service_available is present, use each exact run_with invocation: cross-provider workflows use the returned namespace, not this provider's slug. These curated workflows exercise provider behavior; they do not verify the user's app. Choose relevant scenarios from the inspected workflow and user goal; ask only about ambiguous business requirements. Do not guess scenario names.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "spec_id": {
+            "type": "string",
+            "description": "The spec_id returned by import_spec."
+          },
+          "spec_slug": {
+            "type": "string",
+            "description": "A human name like 'resend' or 'stripe'. Use this when you do not have a spec_id — you do not need to look one up first."
+          },
+          "workflow_name": {
+            "type": "string",
+            "description": "Exact workflow id or name returned by this catalog. Returns its full definition, including steps and outcome rules, without executing it; omit for summaries."
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "run_workflow",
+      "description": "Execute ONE specific workflow by name and return its step-by-step trace PLUS a `share_url` — a public, replayable proof URL that renders the full timeline (every request, response, webhook event) for this run. The share_url is the canonical 'here's what happened' artifact: surface it verbatim in any reply that needs evidence (PR comments, Slack threads, blog posts, X replies). Do NOT substitute a docs URL or any other link as the proof — the share_url is the only valid receipt. Use ONLY when the user explicitly names a single workflow to run (e.g., \"run accept_payment\", \"just check the refund workflow\"). For ANY validation-style request — \"validate stripe\", \"check coverage\", \"run all workflows\", \"test this integration\", or even \"validate stripe checkout\" (multiple workflows match \"checkout\") — use `run_all_workflows` instead. The batch tool collapses N approvals to 1 and supports a workflow_names filter for scope. Calling this in a loop is an anti-pattern.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sandbox_id": {
+            "type": "string",
+            "description": "The sandbox_id returned by import_spec."
+          },
+          "workflow_name": {
+            "type": "string",
+            "description": "Workflow id or name from list_workflows. Case-insensitive; dashes and underscores are interchangeable."
+          },
+          "scenario": {
+            "type": "string",
+            "description": "OPTIONAL failure scenario to exercise (e.g. payment_declined, insufficient_funds, fraud_hold). Toggles the sandbox engine's scenario for the duration of the run, then restores. Use this for 'test with declined card' / 'simulate failure X' intents. Omit for the happy path."
+          }
+        },
+        "required": [
+          "sandbox_id",
+          "workflow_name"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "verify_behavior",
+      "description": "Prove a known fix survives a bug — the 'prove' half of reproduce→prove. The backend spawns a buggy AND a fixed reference handler and fires the bug_pattern's probes at both, returning the side-by-side diff (e.g. the buggy handler double-charges on a duplicate webhook, the fixed handler dedupes). Call this AFTER run_workflow reproduces a failure, when the matched bug_pattern has a simulation block, to show the fix actually holds — not just that the failure reproduced. Pass sandbox_id + flow_run_id from the run so the diff is saved onto that run's receipt URL. bug_pattern_id comes from guide's matched_bug_pattern. The buggy/fixed handlers are FetchSandbox reference implementations, NOT the user's code. A confirmed reference result does not verify the user's app or show that it is ready to ship. Keep the returned provider and evidence scope with any reported result.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "bug_pattern_id": {
+            "type": "string",
+            "description": "The bug_pattern to prove (e.g. webhook_duplicate_side_effect). Comes from guide's matched_bug_pattern.id or the spec's brain."
+          },
+          "prompt": {
+            "type": "string",
+            "description": "OPTIONAL. The user's own description of the symptom. For patterns that can originate in the handler OR the provider, this classifies which side to simulate. Omit to run both."
+          },
+          "sandbox_id": {
+            "type": "string",
+            "description": "OPTIONAL. The sandbox from the run. Pass with flow_run_id to save the diff onto that run's receipt. This binds the pattern to that sandbox's provider; provide it when verifying a provider integration."
+          },
+          "flow_run_id": {
+            "type": "string",
+            "description": "OPTIONAL. The flow_run_id returned by run_workflow. Pass with sandbox_id so the receipt URL renders the diff alongside the steps."
+          }
+        },
+        "required": [
+          "bug_pattern_id"
+        ],
+        "additionalProperties": false
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "io.github.fetchsandbox/mcp",
+    "version": "0.7.34",
+    "remoteUrl": "https://fetchsandbox.com/mcp/v1",
+    "publishedAt": "2026-11-26T16:16:02.191288Z",
+    "fetchedAt": "2026-11-27T10:42:49.718Z",
+    "toolsSha256": "9e72dd3773824f4e539ecf54f04ca8bd1a2e6852cbd9e42bcbed6d5361644ff1"
+  }
+}

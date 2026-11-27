@@ -3,11 +3,11 @@
   "name": "works.jobsweep/jobsweep",
   "title": "JobSweep",
   "category": "Jobs, Career & Learning",
-  "description": "Search open jobs from career sites, ATS platforms and job boards. Free tier, no key needed.",
+  "description": "Search 1.9M+ open jobs from 32,000+ company career sites, linked to the original. Free tier.",
   "tools": [
     {
       "name": "search_jobs",
-      "description": "Search open jobs across all indexed career sites (duplicates merged). Use\n        list_filter_values for valid filter values and get_job for a job's full description.\n\n        Returns `jobs` (id, title, company, location, remote, employment_type, salary,\n        posted_at, first_seen_at, url, company_url, apply_url) newest or most relevant first,\n        `next_cursor` and `complete` (false: search in job descriptions ran out of time, results\n        cover title and company matches only). For the next page repeat the call with the same\n        filters and `cursor` set to `next_cursor`; null means the last page.\n        ",
+      "description": "Search open jobs across all indexed career sites (duplicates merged). Use\n        list_filter_values for valid filter values and get_job for a job's full description.\n\n        Returns `jobs` (id, title, company, location, remote, employment_type, salary text and\n        `salary_range` with numeric min, max, currency, period and yearly_min/yearly_max (null\n        without a stated period: such amounts are not comparable), posted_at, first_seen_at, url,\n        company_url, apply_url) newest or most relevant first, `next_cursor` and `complete`\n        (false: the search ran out of time and `jobs` holds only what was found in time, title\n        and company matches or nothing; retry or narrow the filters). For the next page repeat\n        the call with the same filters and `cursor` set to `next_cursor`; null means the last\n        page.\n        ",
       "inputSchema": {
         "properties": {
           "q": {
@@ -21,7 +21,7 @@
               }
             ],
             "default": null,
-            "description": "Full-text query in web search syntax: quoted phrases, OR, -exclude. Omit to list the newest jobs.",
+            "description": "Full-text query in web search syntax: \"quoted phrases\", OR, -exclude and (parentheses). `-word` excludes it from the whole query, or from the parentheses it stands in. Omit to list the newest jobs.",
             "title": "Q"
           },
           "company": {
@@ -55,14 +55,21 @@
           "remote": {
             "anyOf": [
               {
-                "$ref": "#/$defs/Remote"
+                "enum": [
+                  "remote",
+                  "hybrid",
+                  "onsite",
+                  "unknown"
+                ],
+                "type": "string"
               },
               {
                 "type": "null"
               }
             ],
             "default": null,
-            "description": "Work mode; see list_filter_values for counts."
+            "description": "Work mode as stated by the employer, or `unknown` for jobs that state none (about two in three); see list_filter_values for counts.",
+            "title": "Remote"
           },
           "employment_type": {
             "anyOf": [
@@ -89,6 +96,41 @@
             "default": null,
             "description": "ISO 8601 timestamp with timezone; jobs posted or first seen after it.",
             "title": "Posted After"
+          },
+          "has_salary": {
+            "default": false,
+            "description": "Only jobs whose posting states a salary.",
+            "title": "Has Salary",
+            "type": "boolean"
+          },
+          "min_salary": {
+            "anyOf": [
+              {
+                "maximum": 10000000,
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Only jobs whose posted salary range reaches this yearly amount in `salary_currency` (USD unless given), e.g. 180000. Hourly, daily, weekly and monthly pay is converted to a year; a salary without a stated period never matches.",
+            "title": "Min Salary"
+          },
+          "salary_currency": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z]{3}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "ISO 4217 code such as `EUR`; only jobs with a salary in it.",
+            "title": "Salary Currency"
           },
           "limit": {
             "default": 20,
@@ -125,15 +167,6 @@
             ],
             "title": "EmploymentType",
             "type": "string"
-          },
-          "Remote": {
-            "enum": [
-              "onsite",
-              "hybrid",
-              "remote"
-            ],
-            "title": "Remote",
-            "type": "string"
           }
         },
         "title": "search_jobsArguments"
@@ -141,13 +174,20 @@
     },
     {
       "name": "get_job",
-      "description": "Get one job in full: plain-text description (truncated to 8000 characters), salary,\n        every source posting it was merged from and their change history. Call after\n        search_jobs with a job_id.",
+      "description": "Get one job in full: plain-text description (truncated to 8000 characters), salary,\n        `open` and `closed_at`, `last_seen_at` (when a crawl last saw it open), every source\n        posting it was merged from and their change history. Call after search_jobs with a\n        job_id, or with a link. To only check whether a link is still open use\n        check_job_link.",
       "inputSchema": {
         "properties": {
           "job_id": {
-            "description": "Job `id` from search_jobs.",
-            "title": "Job Id",
-            "type": "integer"
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "description": "Job `id` from search_jobs, or a JobSweep job link such as https://jobsweep.works/jobs/145524, or the job's apply or source link.",
+            "title": "Job Id"
           }
         },
         "required": [
@@ -155,6 +195,25 @@
         ],
         "type": "object",
         "title": "get_jobArguments"
+      }
+    },
+    {
+      "name": "check_job_link",
+      "description": "Is this job posting still open? Takes a link (not an id) and answers `open` true or\n        false with `closed_at` and `last_seen_at` (when a crawl last saw it open), how long it\n        was open and whether the same title at the company was posted before. `found` is false\n        when the link is not in the index; then JobSweep cannot say. Use get_job for the\n        description.",
+      "inputSchema": {
+        "properties": {
+          "url": {
+            "description": "Link to a job posting: the employer's apply or source link, or a JobSweep job link.",
+            "maxLength": 2000,
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "type": "object",
+        "title": "check_job_linkArguments"
       }
     },
     {
@@ -242,10 +301,10 @@
     "type": "registry",
     "registry": "registry.modelcontextprotocol.io",
     "name": "works.jobsweep/jobsweep",
-    "version": "1.1.1",
+    "version": "1.1.2",
     "remoteUrl": "https://jobsweep.works/mcp",
-    "publishedAt": "2026-11-25T15:50:08.679098Z",
-    "fetchedAt": "2026-11-26T10:40:47.803Z",
-    "toolsSha256": "4ebefbc211834f30ad982cde184f6c61957df2bb2f7f02edeaea0e53c9744556"
+    "publishedAt": "2026-11-27T09:21:11.823225Z",
+    "fetchedAt": "2026-11-27T10:42:49.718Z",
+    "toolsSha256": "c8c966418348925a6c8fceb65ae8c887942550666d0331b018462b050fcfd0d1"
   }
 }

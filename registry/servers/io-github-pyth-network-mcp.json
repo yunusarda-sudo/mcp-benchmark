@@ -1,0 +1,373 @@
+{
+  "$schema": "../schema.json",
+  "name": "io.github.pyth-network/mcp",
+  "title": "Pyth Pro MCP Server",
+  "category": "Developer Tools & DevOps",
+  "description": "Real-time and historical price feeds for 500+ crypto, equities, FX, and commodities assets.",
+  "tools": [
+    {
+      "name": "get_symbols",
+      "description": "List available Pyth Pro price feeds. Use this FIRST to discover what feeds exist before calling get_latest_price, get_historical_price, get_price_range or get_candlestick_data (those also accept bare pairs like BTC/USD). Filter by asset_type (e.g. crypto, equity, fx, metal, commodity, interest-rate, funding-rate, kalshi) or search by name/symbol. Narrow further with instrument_type (spot, future, ...) or symbol_chain_id (all contracts of one futures chain, e.g. VX). Retired (inactive) feeds are hidden unless include_inactive is true. Returns compact feed metadata: symbol, name, description, pyth_lazer_id, asset_type, instrument_type, state, exponent, min_channel (fastest channel the feed supports), quote_currency, and where set groups (entitlement groups that gate the feed), expiration_time and symbol_chain_id (futures). Pass verbose: true for every catalog field, e.g. market_sessions (trading-hours schedules) and corporate_actions (e.g. stock splits). With an access token, the list also includes feeds visible only to Pro keys, and each feed has `entitled`: true means this key can query the feed right now. When `entitled` is false, `not_entitled_reason` says why: `not_live (...)` means the feed is in beta, not live yet, or retired, so no key can query it (NOT a plan limitation), `requires one of entitlement groups: ...` means the user's plan lacks that entitlement.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "access_token": {
+            "description": "Optional. The user's own Pyth Pro access token; omit it when the user configured one in their MCP client. With a token the list includes feeds visible only to Pro keys, and each feed gets an `entitled` flag.",
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[\\x21-\\x7E]+$"
+          },
+          "asset_type": {
+            "description": "Filter by asset type: crypto, crypto-index, crypto-redemption-rate, fx, equity, metal, rates, interest-rate, nav, commodity, funding-rate, eco, kalshi",
+            "type": "string",
+            "enum": [
+              "crypto",
+              "crypto-index",
+              "crypto-redemption-rate",
+              "fx",
+              "equity",
+              "metal",
+              "rates",
+              "interest-rate",
+              "nav",
+              "commodity",
+              "funding-rate",
+              "eco",
+              "kalshi"
+            ]
+          },
+          "include_inactive": {
+            "default": false,
+            "description": "Include retired feeds (state 'inactive'). Default false: inactive feeds are hidden.",
+            "type": "boolean"
+          },
+          "instrument_type": {
+            "description": "Filter by instrument type: spot, future, perp, rate, index, nav",
+            "type": "string",
+            "enum": [
+              "spot",
+              "future",
+              "perp",
+              "rate",
+              "index",
+              "nav"
+            ]
+          },
+          "limit": {
+            "default": 50,
+            "description": "Results per page (default 50, max 200)",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200
+          },
+          "offset": {
+            "default": 0,
+            "description": "Pagination offset (default 0)",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "query": {
+            "description": "Text filter (e.g. 'BTC', 'gold', 'AAPL')",
+            "type": "string"
+          },
+          "symbol_chain_id": {
+            "description": "Filter futures by chain ID, exact and case-sensitive (e.g. 'VX' for all VIX futures contracts)",
+            "type": "string",
+            "minLength": 1
+          },
+          "verbose": {
+            "default": false,
+            "description": "Return every catalog field (trading schedules, market_sessions, corporate_actions, hermes_id, ...). Default false: compact feeds, about 4x smaller.",
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    {
+      "name": "convert_date_to_timestamp",
+      "description": "Convert a date string to Unix timestamp for use with get_historical_price, get_price_range and get_candlestick_data. Use this tool when you need to compute timestamps — do not calculate Unix timestamps manually. Accepts ISO 8601 dates (e.g. '2026-01-01', '2026-01-01T12:00:00Z'). Returns seconds, microseconds, ISO 8601, and whether the date is within the available data range (April 2025 onward).",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "date_string": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "description": "Date to convert. Must be ISO 8601 / RFC 3339 with timezone (e.g. '2026-01-01T00:00:00Z', '2026-01-01'). Bare dates without timezone are interpreted as UTC."
+          }
+        },
+        "required": [
+          "date_string"
+        ]
+      }
+    },
+    {
+      "name": "get_candlestick_data",
+      "description": "Fetch OHLC candlestick bars for one symbol, for charting, technical analysis or backtesting. OHLC values are already human-readable (no exponent). Requires the user's own Pyth Pro access token. If the user configured it in their MCP client, omit `access_token`; otherwise pass it as `access_token`, and if the tool reports it missing, ask the user for it. Symbols can be full names from get_symbols (e.g. 'Crypto.BTC/USD', 'Equity.US.AAPL/USD') or bare pairs like 'BTC/USD'. A bare pair resolves to the live spot feed when there is one, otherwise to the only remaining live match; `resolved_symbols` in the response shows what each input resolved to, and an ambiguous input returns an error listing the candidates. `from` and `to` are Unix seconds only. Resolutions: 1/5/15/30/60 minutes, 120/240/360/720 (multi-hour), D (daily), W (weekly), M (monthly). At most 500 candles are returned; `truncated: true` means narrow the range or use a larger resolution. Historical data is available from April 2025 onward; do not request times before that. Price tools: get_latest_price for now, get_historical_price for one past instant, get_price_range for every update within up to 60 seconds, get_candlestick_data for OHLC bars over longer periods.\n\nTimestamp reference (Unix seconds):\n  2025-04-01 (earliest available) = 1743465600\n  2026-01-01 = 1767225600\n  2026-06-01 = 1780272000\nAlways double-check your timestamp math (year-boundary errors are common), or use convert_date_to_timestamp.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "access_token": {
+            "description": "The user's own Pyth Pro access token. Omit it when the user configured one in their MCP client; a value here overrides that. Get one at https://docs.pyth.network/price-feeds/pro/acquire-api-key",
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[\\x21-\\x7E]+$"
+          },
+          "channel": {
+            "description": "Override the default channel (update rate): real_time, fixed_rate@50ms, fixed_rate@200ms, fixed_rate@1000ms. Must not be faster than the feed's min_channel.",
+            "type": "string",
+            "enum": [
+              "real_time",
+              "fixed_rate@50ms",
+              "fixed_rate@200ms",
+              "fixed_rate@1000ms"
+            ]
+          },
+          "from": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Start time, Unix seconds only (not milliseconds)"
+          },
+          "resolution": {
+            "type": "string",
+            "enum": [
+              "1",
+              "5",
+              "15",
+              "30",
+              "60",
+              "120",
+              "240",
+              "360",
+              "720",
+              "D",
+              "W",
+              "M"
+            ],
+            "description": "Candle size: 1, 5, 15, 30, 60 (minutes), 120, 240, 360, 720 (hours), D (daily), W (weekly), M (monthly)"
+          },
+          "symbol": {
+            "type": "string",
+            "minLength": 1,
+            "description": "One symbol from get_symbols (e.g. 'Crypto.BTC/USD', 'Equity.US.AAPL/USD') or a bare pair like 'BTC/USD'"
+          },
+          "to": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "End time, Unix seconds only (not milliseconds)"
+          }
+        },
+        "required": [
+          "from",
+          "resolution",
+          "symbol",
+          "to"
+        ]
+      }
+    },
+    {
+      "name": "get_historical_price",
+      "description": "Get the price of one or more feeds at one past instant. Requires the user's own Pyth Pro access token. If the user configured it in their MCP client, omit `access_token`; otherwise pass it as `access_token`, and if the tool reports it missing, ask the user for it. Symbols can be full names from get_symbols (e.g. 'Crypto.BTC/USD', 'Equity.US.AAPL/USD') or bare pairs like 'BTC/USD'. A bare pair resolves to the live spot feed when there is one, otherwise to the only remaining live match; `resolved_symbols` in the response shows what each input resolved to, and an ambiguous input returns an error listing the candidates. If both price_feed_ids and symbols are provided, only price_feed_ids are used. The timestamp accepts Unix seconds, milliseconds or microseconds (auto-detected) and is rounded down to the channel rate (e.g. a multiple of 200 ms for fixed_rate@200ms). Historical data is available from April 2025 onward; do not request times before that. Requested feeds that return no price are listed in `missing_feed_ids` (e.g. beta or coming_soon feeds, or a channel faster than the feed's min_channel). Prices are integers with an exponent field: human-readable price = price * 10^exponent. Pre-computed display_* fields (display_price, display_bid, display_ask, display_confidence, display_ema_price, display_ema_confidence, display_funding_rate) apply the exponent for you. Price tools: get_latest_price for now, get_historical_price for one past instant, get_price_range for every update within up to 60 seconds, get_candlestick_data for OHLC bars over longer periods.\n\nTimestamp reference (Unix seconds):\n  2025-04-01 (earliest available) = 1743465600\n  2026-01-01 = 1767225600\n  2026-06-01 = 1780272000\nAlways double-check your timestamp math (year-boundary errors are common), or use convert_date_to_timestamp.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "access_token": {
+            "description": "The user's own Pyth Pro access token. Omit it when the user configured one in their MCP client; a value here overrides that. Get one at https://docs.pyth.network/price-feeds/pro/acquire-api-key",
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[\\x21-\\x7E]+$"
+          },
+          "channel": {
+            "description": "Override the default channel (update rate): real_time, fixed_rate@50ms, fixed_rate@200ms, fixed_rate@1000ms. Must not be faster than the feed's min_channel.",
+            "type": "string",
+            "enum": [
+              "real_time",
+              "fixed_rate@50ms",
+              "fixed_rate@200ms",
+              "fixed_rate@1000ms"
+            ]
+          },
+          "price_feed_ids": {
+            "description": "Numeric feed IDs (pyth_lazer_id) from get_symbols. Max 50.",
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          "symbols": {
+            "description": "Symbols from get_symbols (e.g. ['Crypto.BTC/USD', 'Equity.US.AAPL/USD']) or bare pairs like 'BTC/USD'. Max 50.",
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "timestamp": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "The instant to look up. Unix seconds, milliseconds or microseconds (auto-detected by magnitude)."
+          }
+        },
+        "required": [
+          "timestamp"
+        ]
+      }
+    },
+    {
+      "name": "get_latest_price",
+      "description": "Get the most recent real-time price for one or more feeds. Requires the user's own Pyth Pro access token. If the user configured it in their MCP client, omit `access_token`; otherwise pass it as `access_token`, and if the tool reports it missing, ask the user for it. Symbols can be full names from get_symbols (e.g. 'Crypto.BTC/USD', 'Equity.US.AAPL/USD') or bare pairs like 'BTC/USD'. A bare pair resolves to the live spot feed when there is one, otherwise to the only remaining live match; `resolved_symbols` in the response shows what each input resolved to, and an ambiguous input returns an error listing the candidates. If both price_feed_ids and symbols are provided, only price_feed_ids are used. Requested feeds that return no price are listed in `missing_feed_ids` (e.g. beta or coming_soon feeds, or a channel faster than the feed's min_channel). Prices are integers with an exponent field: human-readable price = price * 10^exponent. Pre-computed display_* fields (display_price, display_bid, display_ask, display_confidence, display_ema_price, display_ema_confidence, display_funding_rate) apply the exponent for you. Price tools: get_latest_price for now, get_historical_price for one past instant, get_price_range for every update within up to 60 seconds, get_candlestick_data for OHLC bars over longer periods.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "access_token": {
+            "description": "The user's own Pyth Pro access token. Omit it when the user configured one in their MCP client; a value here overrides that. Get one at https://docs.pyth.network/price-feeds/pro/acquire-api-key",
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[\\x21-\\x7E]+$"
+          },
+          "channel": {
+            "description": "Override the default channel (update rate): real_time, fixed_rate@50ms, fixed_rate@200ms, fixed_rate@1000ms. Must not be faster than the feed's min_channel.",
+            "type": "string",
+            "enum": [
+              "real_time",
+              "fixed_rate@50ms",
+              "fixed_rate@200ms",
+              "fixed_rate@1000ms"
+            ]
+          },
+          "price_feed_ids": {
+            "description": "Numeric feed IDs (pyth_lazer_id) from get_symbols. Max 100.",
+            "maxItems": 100,
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          "properties": {
+            "description": "Properties to return: price, bestBidPrice, bestAskPrice, exponent, publisherCount, confidence, fundingRate, fundingTimestamp, fundingRateInterval, marketSession, emaPrice, emaConfidence, feedUpdateTimestamp. Default: price, bestBidPrice, bestAskPrice, exponent, publisherCount, confidence, marketSession, feedUpdateTimestamp. Use fundingRate, fundingTimestamp and fundingRateInterval for funding-rate feeds; emaPrice and emaConfidence for the exponential moving average.",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "price",
+                "bestBidPrice",
+                "bestAskPrice",
+                "exponent",
+                "publisherCount",
+                "confidence",
+                "fundingRate",
+                "fundingTimestamp",
+                "fundingRateInterval",
+                "marketSession",
+                "emaPrice",
+                "emaConfidence",
+                "feedUpdateTimestamp"
+              ]
+            }
+          },
+          "symbols": {
+            "description": "Symbols from get_symbols (e.g. ['Crypto.BTC/USD', 'Equity.US.AAPL/USD']) or bare pairs like 'BTC/USD'. Max 100.",
+            "maxItems": 100,
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "get_price_range",
+      "description": "Get every price update for one or more feeds within a short historical window (at most 60 seconds), e.g. to see exactly how a price moved around an event. Requires the user's own Pyth Pro access token. If the user configured it in their MCP client, omit `access_token`; otherwise pass it as `access_token`, and if the tool reports it missing, ask the user for it. Symbols can be full names from get_symbols (e.g. 'Crypto.BTC/USD', 'Equity.US.AAPL/USD') or bare pairs like 'BTC/USD'. A bare pair resolves to the live spot feed when there is one, otherwise to the only remaining live match; `resolved_symbols` in the response shows what each input resolved to, and an ambiguous input returns an error listing the candidates. If both price_feed_ids and symbols are provided, only price_feed_ids are used. Rows are ordered by time and interleaved across feeds; a fixed_rate@200ms channel yields 5 rows per feed per second. When `has_more` is true, call again with `after` set to `next_cursor` and the same feeds, window and channel. Historical data is available from April 2025 onward; do not request times before that. Prices are integers with an exponent field: human-readable price = price * 10^exponent. Pre-computed display_* fields (display_price, display_bid, display_ask, display_confidence, display_ema_price, display_ema_confidence, display_funding_rate) apply the exponent for you. Price tools: get_latest_price for now, get_historical_price for one past instant, get_price_range for every update within up to 60 seconds, get_candlestick_data for OHLC bars over longer periods.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "access_token": {
+            "description": "The user's own Pyth Pro access token. Omit it when the user configured one in their MCP client; a value here overrides that. Get one at https://docs.pyth.network/price-feeds/pro/acquire-api-key",
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[\\x21-\\x7E]+$"
+          },
+          "after": {
+            "description": "Paging cursor: pass `next_cursor` from the previous response, with the same feeds, window and channel",
+            "type": "string",
+            "minLength": 1
+          },
+          "channel": {
+            "description": "Override the default channel (update rate): real_time, fixed_rate@50ms, fixed_rate@200ms, fixed_rate@1000ms. Must not be faster than the feed's min_channel.",
+            "type": "string",
+            "enum": [
+              "real_time",
+              "fixed_rate@50ms",
+              "fixed_rate@200ms",
+              "fixed_rate@1000ms"
+            ]
+          },
+          "end": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Window end, inclusive. Unix seconds, milliseconds or microseconds (auto-detected by magnitude). At most 60 seconds after `start`; equal to `start` for one instant."
+          },
+          "limit": {
+            "default": 100,
+            "description": "Rows per page (default 100, max 500). Each row is one update for one feed.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 500
+          },
+          "price_feed_ids": {
+            "description": "Numeric feed IDs (pyth_lazer_id) from get_symbols. Max 50.",
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          "start": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Window start, inclusive. Unix seconds, milliseconds or microseconds (auto-detected by magnitude)."
+          },
+          "symbols": {
+            "description": "Symbols from get_symbols (e.g. ['Crypto.BTC/USD', 'Equity.US.AAPL/USD']) or bare pairs like 'BTC/USD'. Max 50.",
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "end",
+          "start"
+        ]
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "io.github.pyth-network/mcp",
+    "version": "0.3.3",
+    "remoteUrl": "https://mcp.pyth.network/mcp",
+    "publishedAt": "2026-11-18T17:18:58.84931Z",
+    "fetchedAt": "2026-11-27T10:42:49.718Z",
+    "toolsSha256": "07239e4fe9d0204984b0411b779d21eb08bb17cd6ec02c520fd7e753d9590433"
+  }
+}

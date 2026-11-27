@@ -1,0 +1,379 @@
+{
+  "$schema": "../schema.json",
+  "name": "com.quantum-expectations/quantum-expectations",
+  "title": "Quantum Expectations",
+  "category": "Other",
+  "description": "Quantum error-correction feasibility: success probability, qubit overhead, records, trends.",
+  "tools": [
+    {
+      "name": "compute_expectation",
+      "description": "Given a quantum circuit (2-qubit error rate p, qubit count n, depth d, optional connectivity class), compute the effective error rate, success probability, and optional surface-code or qLDPC (quantum low-density parity-check) overhead. Without error correction a 2d-lattice connectivity is charged as a routing multiplier on depth (result.routingOverheadFactor); hardwareId supplies the device's class automatically. The response is self-describing (formulas, assumptions, caveats, glossary, state-of-the-art hardware, historic series with source URLs), so one call carries the context to reason from. Answers \"how likely is this circuit to succeed on this device or error rate?\".",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "qubitErrorRate": {
+            "description": "Per-gate 2-qubit error rate p, in (0, 0.1]. Supply exactly one of qubitErrorRate or hardwareId.",
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "maximum": 0.1
+          },
+          "hardwareId": {
+            "description": "Platform alternative to qubitErrorRate, one of trapped-ion, superconducting, neutral-atom: resolves to the 2-qubit error rate and connectivity class of that platform's entry in the current quantum computers table (list_current_quantum_computers). Supply exactly one of qubitErrorRate or hardwareId.",
+            "type": "string",
+            "enum": [
+              "trapped-ion",
+              "superconducting",
+              "neutral-atom"
+            ]
+          },
+          "connectivity": {
+            "description": "Two-qubit connectivity of the device: \"all-to-all\" (ion transport), \"reconfigurable\" (atom shuttling, treated as all-to-all) or \"2d-lattice\" (fixed nearest-neighbour couplers, charged as a routing multiplier on depth when no error correction is applied). Defaults to the hardware entry's class when hardwareId is supplied, else to all-to-all.",
+            "type": "string",
+            "enum": [
+              "all-to-all",
+              "reconfigurable",
+              "2d-lattice"
+            ]
+          },
+          "numQubits": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000000
+          },
+          "compDepth": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10000000000000
+          },
+          "useErrorCorrection": {
+            "default": false,
+            "type": "boolean"
+          },
+          "errorCorrectionCode": {
+            "description": "Either \"surface\" (default when useErrorCorrection=true) or a qLDPC code id from list_qldpc_codes. \"surface-code\" is accepted as an alias for \"surface\".",
+            "type": "string"
+          },
+          "distanceSurfaceCode": {
+            "type": "number",
+            "description": "Surface code distance: odd integer in [3, 31]. Required when useErrorCorrection=true and the surface code is selected; ignored when a qLDPC code is selected."
+          },
+          "verbose": {
+            "default": true,
+            "description": "When false, omits hardwareContext, formulas, assumptions, caveats, glossary, examples, and exampleProblems from the response — leaving only modelVersion, scenario, and result. Suited to parameter sweeps, where that context would repeat unchanged.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "numQubits",
+          "compDepth"
+        ]
+      }
+    },
+    {
+      "name": "compute_required_error_rate",
+      "description": "Inverse of compute_expectation. Given a circuit (numQubits, compDepth) and an acceptable effective error rate, return the required per-gate logical error rate (requiredLogicalErrorRatePerGate: a number, or null only when the target is genuinely unreachable; never 0) and, for every error-correction (EC) option (no-EC, surface-code per distance, every qLDPC code), the required physical error rate plus the subset of current state-of-the-art hardware that already qualifies. An option whose inverse lands above the code threshold is capped at min(0.1, threshold) and carries a `note` (any sub-threshold p satisfies it); `unreachableReason` is reserved for genuinely unreachable options. Answers \"what hardware do I need to run this algorithm?\".",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "numQubits": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000000,
+            "description": "Number of logical qubits n in the circuit."
+          },
+          "compDepth": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10000000000000,
+            "description": "Circuit depth d (sequential 2-qubit gate layers). Accepts values up to 1e13."
+          },
+          "acceptableErrorRatePercent": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "maximum": 100,
+            "description": "Upper bound on the effective error rate, as a percent. Required; the website itself uses 33 (an effective error of at most 33 % counts as acceptable)."
+          }
+        },
+        "required": [
+          "numQubits",
+          "compDepth",
+          "acceptableErrorRatePercent"
+        ]
+      }
+    },
+    {
+      "name": "compute_fault_tolerant_resources",
+      "description": "Given an algorithm stated as (numLogicalQubits, tCount) and a physical error rate (or hardwareId), derive the full surface-code + magic-state-distillation footprint from the general laws of the Litinski lattice-surgery cost model (no per-scenario constants): distillation factory choice, tile layout, required code distance, total physical qubits, and wall-clock time. With errorCorrectionCode set to a qLDPC code that has architecture data (bb-144-12-12, bb-288-12-18; see the architecture field of list_qldpc_codes), the data is held in that code's modules instead (modules, per-instruction error rates and timesteps per T gate) and only the factory is a surface-code block. Results are reported under TWO published logical-error fits (conservative + optimistic) because they disagree by 13-268x (d=7 to d=25); both are returned. Returns an explicit `infeasible` block when no cataloged factory or code distance can satisfy the error budget. Computes resource numbers only: it does not compare against classical alternatives or judge whether a problem should run on a quantum computer.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "numLogicalQubits": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000000,
+            "description": "Number of logical data qubits the algorithm needs."
+          },
+          "tCount": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10000000000000,
+            "description": "Total number of T gates (magic states consumed). The count is in T gates, not Toffolis (1 Toffoli ≈ 4–7 T depending on decomposition)."
+          },
+          "qubitErrorRate": {
+            "description": "Physical 2-qubit error rate p in (0, 0.1]. Supply exactly one of qubitErrorRate or hardwareId.",
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "maximum": 0.1
+          },
+          "hardwareId": {
+            "description": "Platform alternative to qubitErrorRate, one of trapped-ion, superconducting, neutral-atom: resolves to the 2-qubit error rate of that platform's entry in the current quantum computers table (list_current_quantum_computers). It sets the error rate only; cycleTimeSeconds keeps its 1 µs (superconducting) default unless given. Supply exactly one of qubitErrorRate or hardwareId.",
+            "type": "string",
+            "enum": [
+              "trapped-ion",
+              "superconducting",
+              "neutral-atom"
+            ]
+          },
+          "targetSuccessProbability": {
+            "default": 0.98,
+            "description": "Target end-to-end success probability. The failure budget (1 − target) is split evenly between T-state error and logical (memory/surgery) error, matching Litinski §4.",
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "exclusiveMaximum": 1
+          },
+          "dataBlock": {
+            "default": "compact",
+            "description": "Data-block layout (Litinski §2): compact = fewest qubits, fast = shortest time per T gate.",
+            "type": "string",
+            "enum": [
+              "compact",
+              "intermediate",
+              "fast"
+            ]
+          },
+          "cycleTimeSeconds": {
+            "default": 0.000001,
+            "description": "Syndrome-cycle time in seconds (surface-code cycle, or one syndrome cycle of the selected qLDPC code). Default 1 µs (Litinski convention; Google 2024 measured 1.1 µs on superconducting hardware). Trapped-ion/neutral-atom cycles are orders of magnitude slower.",
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "maximum": 1
+          },
+          "errorCorrectionCode": {
+            "default": "surface",
+            "description": "Code that stores and processes the logical data: \"surface\" (default; alias \"surface-code\") for the Litinski lattice-surgery footprint, or a qLDPC id with published instruction-level architecture data (bb-144-12-12, bb-288-12-18) for the Tour de gross bicycle-architecture footprint. The magic-state factory is a surface-code module in both cases.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "numLogicalQubits",
+          "tCount"
+        ]
+      }
+    },
+    {
+      "name": "compare_hardware_scenarios",
+      "description": "Run the same circuit against several current state-of-the-art hardware entries in one call and return one result block per entry, computed at that entry's error rate and connectivity class (the result blocks carry no minimum runtime and take no connectivity override). Defaults to every entry in list_current_quantum_computers when hardwareIds is omitted. Answers \"which platform runs this circuit best?\".",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "numQubits": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000000
+          },
+          "compDepth": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10000000000000
+          },
+          "useErrorCorrection": {
+            "default": false,
+            "type": "boolean"
+          },
+          "errorCorrectionCode": {
+            "description": "Either \"surface\" (default when useErrorCorrection=true) or a qLDPC code id. \"surface-code\" is accepted as an alias for \"surface\".",
+            "type": "string",
+            "enum": [
+              "surface",
+              "bb-144-12-12",
+              "bb-288-12-18",
+              "surface-code"
+            ]
+          },
+          "distanceSurfaceCode": {
+            "type": "number",
+            "description": "Surface code distance: odd integer in [3, 31]. Required when useErrorCorrection=true and the surface code is selected; ignored when a qLDPC code is selected."
+          },
+          "hardwareIds": {
+            "description": "Subset of the ids in list_current_quantum_computers to compare, at most 50; a repeated id is compared once. Omit to compare every entry.",
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "numQubits",
+          "compDepth"
+        ]
+      }
+    },
+    {
+      "name": "list_current_quantum_computers",
+      "description": "Return the representative-entry table of current state-of-the-art quantum computers (id, hardware type, physical qubit count, 2-qubit error rate, connectivity class with a note on the coupling graph, source URL). Each row is one real device per hardware type, with both metrics from that device and its primary source; rows carry no date. The table is curated by hand: when the weekly arXiv scan finds a new record, the record device is checked against its platform's row. Same data that powers the website's \"Current Quantum Computers\" table. The model's capability prediction per entry in QUOPS units is served by compute_expectation (hardwareContext.currentQuantumComputers[].modelCapability); measured scores are in list_quops_scores.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {}
+      }
+    },
+    {
+      "name": "list_quops_scores",
+      "description": "Return the measured QUOPS (quantum universal operation performance system, a cross-platform capability benchmark) scores (arXiv:2609.12146): per device, the largest random universal circuit size executed at polarization >= 1/sqrt(e) inside the cone w^2 <= s <= w^3, with width, QUOPS rate, architecture (physical, physical-postselected, logical), the year of the measurement or the source's submission, and source URL, plus the utility-scale targets in the same unit (RSA-2048 and FeMoco). These are measurements, the yardstick the site's own model is checked against (modelCapability.quopsEquivalent in the compute_expectation hardware context). Vendor and device names appear here because this table is agent-facing only.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {}
+      }
+    },
+    {
+      "name": "list_hardware_timings",
+      "description": "Return per-platform gate-cycle timings (two-qubit (2Q) gate time, readout time, in SI seconds) plus the testbed they were measured on (`representativeDevice`) and the native 2Q gate name, with source URLs. Joins list_current_quantum_computers via `hardwareType`, but the numbers are BEST-CASE DEMONSTRATIONS from small testbeds, not measurements on the joined devices, which run their gates and array readout orders of magnitude slower. As runtime inputs, including to compute_quantum_volume_rate, they give optimistic lower bounds.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {}
+      }
+    },
+    {
+      "name": "compute_quantum_volume_rate",
+      "description": "Compute the Quantum Volume Rate (QVR, in Quantum Volume (QV) per second): QVR = V_Q / (log2(V_Q) * t_2Q + t_meas). First-order estimate of how fast a device prepares one QV-sized square circuit (one native 2Q gate per QV layer + one end-of-circuit measurement). OVERSTATES achievable rate: real compilation inflates the 2Q-gate count per layer; omits reset, state preparation and measurement (SPAM), mid-circuit measurement, and classical-control latency. It is not a production throughput metric such as IBM's CLOPS (circuit layer operations per second, arXiv:2110.14108).",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "quantumVolume": {
+            "type": "integer",
+            "minimum": 2,
+            "maximum": 9007199254740991,
+            "description": "Quantum volume V_Q (integer ≥ 2, e.g. 64 for a depth-log2=6 square circuit)."
+          },
+          "t2QSeconds": {
+            "type": "number",
+            "minimum": 1e-18,
+            "description": "Native 2-qubit gate time in seconds (e.g. 60e-9 for a 60 ns CZ)."
+          },
+          "tMeasurementSeconds": {
+            "type": "number",
+            "minimum": 1e-18,
+            "description": "End-of-circuit measurement/readout time in seconds (e.g. 5e-3 for 5 ms)."
+          }
+        },
+        "required": [
+          "quantumVolume",
+          "t2QSeconds",
+          "tMeasurementSeconds"
+        ]
+      }
+    },
+    {
+      "name": "fit_historic_series",
+      "description": "Fit a log-linear trend (ln(value) = slope * year + intercept) to one historic series — fidelity or qubit-count — for one hardware type. The fitted points are the dated, sourced record series that get_historic_series returns; a weekly scan of new arXiv papers looks for new records. An atomic primitive for \"when might hardware reach X?\" questions; with targetValue it returns the year the fit reaches that value. residualStdDev is the BIASED (maximum-likelihood) root-mean-square (RMS) — divides by n, not (n - 2); on small series (n ≈ 3–5) the unbiased value is larger by √(n / (n - 2)).",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "seriesType": {
+            "type": "string",
+            "enum": [
+              "fidelity",
+              "qubit-count"
+            ],
+            "description": "Which historic series to fit: \"fidelity\" (2-qubit gate error rate) or \"qubit-count\" (physical qubits)."
+          },
+          "hardwareType": {
+            "type": "string",
+            "enum": [
+              "Neutral Atom",
+              "Superconducting",
+              "Trapped-Ion"
+            ],
+            "description": "Hardware platform as used by get_historic_series."
+          },
+          "targetValue": {
+            "description": "Optional. When supplied, the response includes yearAtTargetValue — the extrapolated year the fit crosses this value (error rate for fidelity series, qubit count for qubit-count series). Null if slope is flat.",
+            "type": "number",
+            "exclusiveMinimum": 0
+          }
+        },
+        "required": [
+          "seriesType",
+          "hardwareType"
+        ]
+      }
+    },
+    {
+      "name": "list_example_algorithms",
+      "description": "Return the curated list of example quantum algorithms with published resource estimates (qubit count, depth/gate count, source paper URL). Useful for comparing what algorithms need vs. what hardware can deliver. Each entry carries a `provenance` field: 'published-circuit' means the figure is reproducible from the source, 'attested-estimate' means the source withholds the circuit and the figure rests on the authors' attestation, with a `provenanceNote` giving the specifics, so an attested figure is not sourced as firmly as a published circuit. Rows carry no date; the table is curated by hand under a dated review, and a row may change when a paper presents a new end-to-end circuit for the same problem.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {}
+      }
+    },
+    {
+      "name": "list_qldpc_codes",
+      "description": "Return the catalog of supported qLDPC (quantum low-density parity-check) error-correction codes (id, label, family, n, k, d, circuitLevelDistance, ancilla counts, roundsPerLogicalOp, threshold, fitCoefficients {c0, c1, c2}, logicalErrorExponent [alpha = d_circ/2], source URLs, provenance, caveats, and `architecture`: the instruction-level data of a published architecture that makes the code computable, or null). The per-block, per-syndrome-cycle logical error rate is p^alpha * exp(c0 + c1*p + c2*p^2) for p <= threshold (the source paper's own fitting form; c1 = c2 = 0 means a plain power law). `provenance` names the table or section each constant was read from. `caveats` is an array of source-level qualifications on the entry's constants (loose distance bounds, values a source marks as assumed, numbers that differ between sources); empty when the sources carry none. A code's `id` is the value `compute_expectation` accepts as `errorCorrectionCode`. Entries carry no date; a weekly scan of new arXiv papers looks for new codes and new results on listed ones.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {}
+      }
+    },
+    {
+      "name": "get_historic_series",
+      "description": "Return the full historic time series — either two-qubit gate error rates (\"fidelity\") or physical qubit counts (\"qubit-count\") — broken down by hardware type. Each datapoint is a record for its platform, strictly better than the one before, and carries its year and a source URL (paper, vendor announcement or press release); a series may carry a `note` on what its record measures. A weekly scan of new arXiv papers looks for new records. It is the raw data behind trend questions such as \"when might hardware reach X?\"; fit_historic_series fits a log-linear trend to one hardware type's series.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "seriesType": {
+            "type": "string",
+            "enum": [
+              "fidelity",
+              "qubit-count"
+            ],
+            "description": "\"fidelity\" → 2-qubit gate error rates; \"qubit-count\" → physical qubit counts."
+          }
+        },
+        "required": [
+          "seriesType"
+        ]
+      }
+    },
+    {
+      "name": "get_agent_brief",
+      "description": "Return the plain-text site brief describing scope, assumptions, the honesty clause, and the API contract. Mirrors the /agent.txt document served by the website.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {}
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "com.quantum-expectations/quantum-expectations",
+    "version": "0.11.0",
+    "remoteUrl": "https://www.quantum-expectations.com/api/mcp",
+    "publishedAt": "2026-11-26T16:26:16.817672Z",
+    "fetchedAt": "2026-11-27T10:42:49.718Z",
+    "toolsSha256": "d02705d307cc9f4a3a0dbd81312873544126e5bbe55894384c388fb80ef51225"
+  }
+}

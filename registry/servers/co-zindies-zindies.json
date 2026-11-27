@@ -1,0 +1,607 @@
+{
+  "$schema": "../schema.json",
+  "name": "co.zindies/zindies",
+  "title": "Zindies",
+  "category": "E-Commerce & Retail",
+  "description": "Search independent ZINEs, creators, shops and ZINE events in Japan. No sign-in needed to read.",
+  "tools": [
+    {
+      "name": "search",
+      "description": "Search across Zindies creators, creations (zines), places (shops/venues),\nand events by keyword. Use `query` for the keyword and optional `type`\nto restrict to one resource. The response is always an object keyed by\nresource (`creators` / `creations` / `places` / `events`); with a single\n`type`, only that key is present. `limit_per_type` caps each list.\n\nPlaces and events carry `area` (the JP region slug, null when unknown) and\nevents `kind`. To go from one hit to the wider list, pass them to\nlist_events (`area`, `kind`); get_event / get_place return the event\nlists a hit appears in (`zones`), and list_followable_zones every list.\n",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "query": {
+            "type": "string",
+            "minLength": 2,
+            "description": "Keyword(s), at least 2 characters, e.g. \"リソグラフ\" or \"risograph tokyo\". Full-text match against names, titles and descriptions in every language (the original and its translations). Partial names work, and upper / lower case, full / half width and hiragana / katakana are treated as the same. Several words separated by spaces must all match (AND); there are no operators, quoting or wildcards. Prefer one or two distinctive words: a long phrase rarely matches."
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "all",
+              "creator",
+              "creation",
+              "place",
+              "event"
+            ],
+            "default": "all",
+            "description": "Which resource to search: `creator` (authors / artists), `creation` (ZINEs and other works), `place` (shops / venues), `event`, or `all` (default) for the four at once. Use a single type when you know what the user is looking for: it allows more results per call."
+          },
+          "limit_per_type": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50,
+            "description": "Max items per resource type. Default 6 (max 24) when type=all; default 20 (max 50) for a single type."
+          },
+          "locale": {
+            "type": "string",
+            "enum": [
+              "ja",
+              "en",
+              "ko",
+              "zh-TW"
+            ],
+            "description": "Response language for translatable text fields (names, titles, descriptions): ja = Japanese, en = English, ko = Korean, zh-TW = Traditional Chinese. Pass the language the user is conversing in when it is one of these; otherwise omit it. Fields without a translation fall back to their source language (usually Japanese), so one response can mix languages. Tokens, ids, dates and URLs are the same in every locale. Default: ja."
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "get_creator",
+      "description": "Get the profile of one Zindies creator (author / artist / ZINE maker) by\npublic token: `name`, `title` (their own one-line byline), `bio`, the\npublic page `url`, and `creations`, their public works.\n\nWhen to use which tool:\n- You only have a name or a keyword, not a token: call search first\n  (type: \"creator\") and pass a hit's `token` here.\n- Details of one work (description, price, co-creators, shops that carry\n  it, online shop links, testimonials): pass a `creations[].token` to\n  get_creation. This tool returns only `id`, `token`, `title`,\n  `released_year` and `url` per work.\n- Events the creator hosts or takes part in, or a calendar feed of them:\n  list_events_by_creator with the same token. This tool returns no events.\n\n`creations` holds at most the 24 most recently added public works,\nnewest first, and is not paginated; a creator with more shows all of\nthem on the `url` page. It is an empty array when the creator has no\npublic work yet.\n\nAn unknown token, a private creator, or a person who is only named on\nan event or a co-authored work and has no Zindies page of their own (such\nentries carry `name` but no `token`) returns an error result\n(`isError: true`) with `error: \"not_found\"`.\n",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "token": {
+            "type": "string",
+            "description": "Public token of the creator: a short lowercase string such as \"fqpi\", taken as-is from the `token` field of a creator in search, get_creation (`creators[].token`), get_event (`creators`, `booths[].participant`) or a previous get_creator result. Not the numeric `id`, the display name, or the @handle shown in a page URL. Exact match, case-sensitive."
+          },
+          "locale": {
+            "type": "string",
+            "enum": [
+              "ja",
+              "en",
+              "ko",
+              "zh-TW"
+            ],
+            "description": "Response language for translatable text fields (names, titles, descriptions): ja = Japanese, en = English, ko = Korean, zh-TW = Traditional Chinese. Pass the language the user is conversing in when it is one of these; otherwise omit it. Fields without a translation fall back to their source language (usually Japanese), so one response can mix languages. Tokens, ids, dates and URLs are the same in every locale. Default: ja."
+          }
+        },
+        "required": [
+          "token"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "get_creation",
+      "description": "Get a single Zindies creation (zine/publication) by token, with its full creator list, the shops that carry it (places, with address and geo coordinates) and its online shop links (online_links). Use it to answer \"where can I buy this zine?\". Each entry of places has carried_since: when that shop added the zine to its shelf on Zindies (ISO 8601 with UTC offset, e.g. \"2026-10-03T14:30:00+09:00\"). It answers \"since when does this shop carry it?\"; it is not the zine's release date (released_at). Each entry also has stock_status, the shop's stock state for the zine (the same badge as on the web page, never a count): \"in_stock\", \"low_stock\" (only a few left), \"out_of_stock\", \"new_release\" (in stock and released within the last 7 days), \"upcoming\" (the release date is still ahead) or \"untracked\" (the shop carries it but does not publish its stock; do not read it as out of stock). It reflects what the shop last entered, not a live inventory, so suggest confirming with the shop before a long trip. Also returns signed testimonials written by recommenders; when quoting one, always include its attribution_text, keep the wording unchanged, and link to its url (the creation page; its share preview shows the testimonial).",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "token": {
+            "type": "string",
+            "description": "Public token of the creation: a short lowercase string such as \"k3wd\", taken as-is from the `token` field of a creation in search, get_creator (`creations[].token`) or get_place (`creations[].token`). Not the numeric `id` or the title. Exact match; an unknown or non-public token returns an error result with `error: \"not_found\"`."
+          },
+          "locale": {
+            "type": "string",
+            "enum": [
+              "ja",
+              "en",
+              "ko",
+              "zh-TW"
+            ],
+            "description": "Response language for translatable text fields (names, titles, descriptions): ja = Japanese, en = English, ko = Korean, zh-TW = Traditional Chinese. Pass the language the user is conversing in when it is one of these; otherwise omit it. Fields without a translation fall back to their source language (usually Japanese), so one response can mix languages. Tokens, ids, dates and URLs are the same in every locale. Default: ja."
+          }
+        },
+        "required": [
+          "token"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "get_place",
+      "description": "Get a single Zindies place (shop/venue) by token, with address, geo\ncoordinates, place type, zines available there, and business hours.\n`creations` lists up to 24 zines the place carries. Each has\n`carried_since`: when the place added that zine to its shelf on Zindies\n(ISO 8601 with UTC offset, e.g. \"2026-10-03T14:30:00+09:00\"). Use it to\nanswer \"since when does this shop carry it?\" or \"what did this shop\nstart carrying recently?\"; it is not the zine's release date (see\nget_creation `released_at`).\n`stock_status` is the shop's stock state for that zine, the same badge as on the\nweb page, never a count: \"in_stock\", \"low_stock\" (only a few left), \"out_of_stock\",\n\"new_release\" (in stock and released within the last 7 days), \"upcoming\" (the\nzine's release date is still ahead) or \"untracked\" (the shop carries it but does\nnot publish its stock; do not read it as out of stock). It reflects what the shop\nlast entered, not a live inventory, so suggest confirming with the shop before a\nlong trip.\n`area` is the JP region slug of the place (null when unknown) and `zones`\nthe event lists for that region and nationwide (empty when the region is\nunknown): where to look for ZINE events around this shop.\n`business_hours` (null when the place has published nothing about its\nhours) carries `status_now` (open / closed / unknown, same judgement as\nthe web page badge), `regular` (free-text hours / holidays / special\nnotes as written by the place) and `calendar` (the place's day-by-day\ncalendar for this month and next: `days` lists only dates the place has\nset, each with state open / open2 / closed, a `symbol` (○ / ◎ / ✕),\nopening times and `is_open`; `months[].legend` explains the symbols,\n`months[].note` carries the month's remark and `ics_url` is an iCal\nfeed of the same calendar for subscribing). A date missing from\n`calendar.days` has no day-specific setting: fall back to `regular`,\ndo not treat it as closed. Use this to answer \"is this shop open on\n(date)?\" without fetching the web page.\n\n`events` points at the place's events: `url` (the upcoming-events page)\nand `calendar`, a subscribable iCal feed of upcoming events (`ics_url`,\n`webcal_url` for Apple Calendar / Outlook, `google_calendar_url` to add\nit to Google Calendar). The place thus has two distinct feeds: opening\ndays (`business_hours.calendar.ics_url`) and events\n(`events.calendar.ics_url`). When the user asks to import or subscribe\nto a shop's events in their calendar, give them `events.calendar`; for\nthe event list itself use list_events_by_place.\n\n`event_proposals` is non-null only when the place has said it is open\nto people proposing an event to hold there: `terms` (what the place\nwrote about its space and conditions; may be null) and `contact_url`\n(the page where a creator or another shop starts that conversation).\nnull means the place has not said so on Zindies — it is not a refusal;\ndo not tell the user the place rejects events.\nEach entry in `zones` is an event list on Zindies (`name`, `url`) that you can point the user to for more events like these. Lists can be followed: pass `type` and `slug` to toggle_favorite (target_type = type, token = slug) and new events in the list are delivered to the user. Mention a list once if it helps; follow only when the user asks. list_followable_zones lists every list and whether the user already follows it.",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "token": {
+            "type": "string",
+            "description": "Public token of the place: a short lowercase string such as \"fqpi\", taken as-is from the `token` field of a place in search, find_places_nearby, get_creation (`places[].token`) or an event's `place.token`. Not the numeric `id`, the shop name, or the @handle shown in a page URL. Exact match; an unknown or non-public token returns an error result with `error: \"not_found\"`."
+          },
+          "locale": {
+            "type": "string",
+            "enum": [
+              "ja",
+              "en",
+              "ko",
+              "zh-TW"
+            ],
+            "description": "Response language for translatable text fields (names, titles, descriptions): ja = Japanese, en = English, ko = Korean, zh-TW = Traditional Chinese. Pass the language the user is conversing in when it is one of these; otherwise omit it. Fields without a translation fall back to their source language (usually Japanese), so one response can mix languages. Tokens, ids, dates and URLs are the same in every locale. Default: ja."
+          }
+        },
+        "required": [
+          "token"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "get_event",
+      "description": "Get a single Zindies event by id, with its host (`place`, `organizer_creator`, or `organizer` = an organizing body such as a festival committee), registered creators, reserved booths, programs (workshops, talks and other sessions held within the event), and `source_posts` (the organizer's own Instagram or note posts introducing exhibitors who are not in `booths`; these people have no Zindies page, so link to `url` for details). `facility` is set instead of `place` when the venue is not a shop on Zindies but a facility such as a public hall or rental space: its name, address and `url` (a page listing the events held there; Zindies holds no opening hours or contact for facilities). When both are null the venue is the free text in `location`. `zones` lists the event lists this event appears in, narrowest first (kind in its region, its region, its kind nationwide, nationwide); it is empty when the event is not on the public lists. Each entry in `zones` is an event list on Zindies (`name`, `url`) that you can point the user to for more events like these. Lists can be followed: pass `type` and `slug` to toggle_favorite (target_type = type, token = slug) and new events in the list are delivered to the user. Mention a list once if it helps; follow only when the user asks. list_followable_zones lists every list and whether the user already follows it.",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "Numeric id of the event, e.g. 1234: the `id` field of an event in list_events, list_events_by_place, list_events_by_creator or search, or the number at the end of an event page URL (zindies.co/events/1234). Events have no token. An unknown id, or an event whose announcement date has not come yet, returns an error result with `error: \"not_found\"`."
+          },
+          "locale": {
+            "type": "string",
+            "enum": [
+              "ja",
+              "en",
+              "ko",
+              "zh-TW"
+            ],
+            "description": "Response language for translatable text fields (names, titles, descriptions): ja = Japanese, en = English, ko = Korean, zh-TW = Traditional Chinese. Pass the language the user is conversing in when it is one of these; otherwise omit it. Fields without a translation fall back to their source language (usually Japanese), so one response can mix languages. Tokens, ids, dates and URLs are the same in every locale. Default: ja."
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "list_events",
+      "description": "List upcoming and ongoing Zindies events (festivals, fairs, exhibitions).\nDayEvent (single-day) and PeriodEvent (multi-day) are unified, distinguished\nby event_type. Default range: today through 60 days ahead. All filters\nare optional and combine by AND; with none, events nationwide are returned.\n\nThe response carries `zone`: the event list on Zindies that matches the\n`area` / `kind` filters used (`type`, `slug`, `name`, `url`), where the\nuser can find more events like these. It reflects those two filters\nonly, not the date range.\nLists can be followed: pass `type` and `slug` to toggle_favorite (target_type = type, token = slug) and new events in the list are delivered to the user. Mention a list once if it helps; follow only when the user asks. list_followable_zones lists every list and whether the user already follows it.",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "from": {
+            "type": "string",
+            "format": "date",
+            "description": "First day of the range, as an ISO 8601 calendar date in Japan time (YYYY-MM-DD, e.g. \"2026-12-05\"; no time or timezone part). Default: today. A multi-day event already under way on this day is included. A past date returns past events. An unparseable value falls back to the default."
+          },
+          "to": {
+            "type": "string",
+            "format": "date",
+            "description": "Last day of the range, inclusive (YYYY-MM-DD, e.g. \"2026-12-31\"). Default: `from` + 60 days. For one specific day pass the same date as `from`. A value earlier than `from` returns no events."
+          },
+          "area": {
+            "type": "string",
+            "enum": [
+              "chubu",
+              "chugoku",
+              "hokkaido",
+              "hokuriku",
+              "kansai",
+              "kanto",
+              "koshinetsu",
+              "kyushu",
+              "okinawa",
+              "shikoku",
+              "tohoku"
+            ],
+            "description": "Return only events held in this region of Japan (lowercase slug, e.g. \"kanto\" covers Tokyo, \"kansai\" Osaka / Kyoto). There is no prefecture or city filter: pick the region containing the place the user named, then narrow by each event's `location`. Omit for nationwide. Events with no known region (e.g. online-only) appear only when `area` is omitted."
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "non_genre",
+              "zine_making",
+              "author",
+              "festival_style",
+              "zine_cafe",
+              "book_club",
+              "utakai",
+              "period_event"
+            ],
+            "description": "Return only events of this kind (non_genre = general ZINE event, zine_making = ZINE-making workshop, author = author event (talk, signing), festival_style = fair / market with many booths, zine_cafe = ZINE cafe, book_club = book club, utakai = tanka poetry gathering). `period_event` means multi-day exhibitions / fairs: the same as event_type: \"period\", and the value search returns as `kind` for them. Omit for every kind. Combined with `event_type` by AND, so kind: \"period_event\" with event_type: \"day\" returns nothing."
+          },
+          "event_type": {
+            "type": "string",
+            "enum": [
+              "day",
+              "period",
+              "all"
+            ],
+            "default": "all",
+            "description": "`day` = single-day events (they have `started_at` / `ended_at`), `period` = multi-day exhibitions and fairs (`start_date` / `end_date`), `all` = both (default). Combined with the other filters by AND."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50,
+            "default": 20,
+            "description": "Maximum number of events to return, soonest first. Default 20, max 50. There is no cursor: when `count` equals `limit` there may be more, so call again with `from` set to the start date of the last event returned."
+          },
+          "locale": {
+            "type": "string",
+            "enum": [
+              "ja",
+              "en",
+              "ko",
+              "zh-TW"
+            ],
+            "description": "Response language for translatable text fields (names, titles, descriptions): ja = Japanese, en = English, ko = Korean, zh-TW = Traditional Chinese. Pass the language the user is conversing in when it is one of these; otherwise omit it. Fields without a translation fall back to their source language (usually Japanese), so one response can mix languages. Tokens, ids, dates and URLs are the same in every locale. Default: ja."
+          }
+        },
+        "type": "object"
+      }
+    },
+    {
+      "name": "list_events_by_place",
+      "description": "List upcoming and ongoing Zindies events held at a specific place\n(shop/venue), identified by its public token. Same semantics and\nresponse shape as list_events, but scoped to one place. Default range:\ntoday through 60 days ahead.\n\nThe response also carries `calendar`: a subscribable iCal feed of this\nplace's upcoming events (`ics_url`, plus `webcal_url` for Apple\nCalendar / Outlook and `google_calendar_url` to add it to Google\nCalendar). When the user wants to import, subscribe to, or sync a\nplace's events into their calendar app, hand them these URLs instead\nof copying events one by one — the feed stays up to date as the place\nadds events. Note this is distinct from the place's opening-days\ncalendar (`business_hours.calendar.ics_url` on get_place).\n",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "place_token": {
+            "type": "string",
+            "description": "Public token of the place: a short lowercase string such as \"fqpi\", the `token` field of a place from search, find_places_nearby, get_place or an event's `place.token`. Not the numeric `id` or the shop name. An unknown or non-public token returns an error result with `error: \"not_found\"` (a place with no matching events returns `events: []`, not an error)."
+          },
+          "from": {
+            "type": "string",
+            "format": "date",
+            "description": "First day of the range, as an ISO 8601 calendar date in Japan time (YYYY-MM-DD, e.g. \"2026-12-05\"; no time or timezone part). Default: today. A multi-day event already under way on this day is included. A past date returns past events. An unparseable value falls back to the default."
+          },
+          "to": {
+            "type": "string",
+            "format": "date",
+            "description": "Last day of the range, inclusive (YYYY-MM-DD, e.g. \"2026-12-31\"). Default: `from` + 60 days. For one specific day pass the same date as `from`. A value earlier than `from` returns no events."
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "non_genre",
+              "zine_making",
+              "author",
+              "festival_style",
+              "zine_cafe",
+              "book_club",
+              "utakai"
+            ],
+            "description": "Return only events of this kind (non_genre = general ZINE event, zine_making = ZINE-making workshop, author = author event (talk, signing), festival_style = fair / market with many booths, zine_cafe = ZINE cafe, book_club = book club, utakai = tanka poetry gathering). Omit for every kind. Combined with `event_type` and the date range by AND."
+          },
+          "event_type": {
+            "type": "string",
+            "enum": [
+              "day",
+              "period",
+              "all"
+            ],
+            "default": "all",
+            "description": "`day` = single-day events (they have `started_at` / `ended_at`), `period` = multi-day exhibitions and fairs (`start_date` / `end_date`), `all` = both (default). Combined with the other filters by AND."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50,
+            "default": 20,
+            "description": "Maximum number of events to return, soonest first. Default 20, max 50. There is no cursor: when `count` equals `limit` there may be more, so call again with `from` set to the start date of the last event returned."
+          },
+          "locale": {
+            "type": "string",
+            "enum": [
+              "ja",
+              "en",
+              "ko",
+              "zh-TW"
+            ],
+            "description": "Response language for translatable text fields (names, titles, descriptions): ja = Japanese, en = English, ko = Korean, zh-TW = Traditional Chinese. Pass the language the user is conversing in when it is one of these; otherwise omit it. Fields without a translation fall back to their source language (usually Japanese), so one response can mix languages. Tokens, ids, dates and URLs are the same in every locale. Default: ja."
+          }
+        },
+        "required": [
+          "place_token"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "list_events_by_creator",
+      "description": "List upcoming and ongoing Zindies events a creator (author/artist) is\ninvolved in, identified by the creator's public token. A creator relates\nto an event in two ways: as the host (events the creator itself hosts;\nrelation \"organized\") or as a participant (a reserved booth, being listed\nas a participating creator, or hosting/speaking in one of the event's\nprograms such as a workshop or talk). Use `relation` to choose which to\ninclude. Each event carries a `relations` array describing how this\ncreator relates to it. Note that the `organizer` field is a different\nthing: it is the organizing body (a festival committee or group) that\nhosts some events, not this creator. Same response shape as list_events\notherwise. Default range: today through 60 days ahead.\n\nThe response also carries `calendar`: a subscribable iCal feed of the\ncreator's upcoming events (`ics_url`, `webcal_url`, `google_calendar_url`\n— same shape as list_events_by_place). Hand these to the user when they\nwant to follow a creator's events in their calendar app.\n",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "creator_token": {
+            "type": "string",
+            "description": "Public token of the creator: a short lowercase string such as \"fqpi\", the `token` field of a creator from search, get_creator, get_creation or get_event. Not the numeric `id` or the name. An unknown or non-public token returns an error result with `error: \"not_found\"` (a creator with no matching events returns `events: []`, not an error)."
+          },
+          "relation": {
+            "type": "string",
+            "enum": [
+              "organized",
+              "participating",
+              "all"
+            ],
+            "default": "all",
+            "description": "Which events to include: `organized` = events the creator itself hosts, `participating` = events they join through a reserved booth, a listing as participating creator, or a program (workshop / talk), `all` = both (default). An event matching both ways is returned once, with both values in its `relations`. Use `participating` for \"where can I meet this creator?\"."
+          },
+          "from": {
+            "type": "string",
+            "format": "date",
+            "description": "First day of the range, as an ISO 8601 calendar date in Japan time (YYYY-MM-DD, e.g. \"2026-12-05\"; no time or timezone part). Default: today. A multi-day event already under way on this day is included. A past date returns past events. An unparseable value falls back to the default."
+          },
+          "to": {
+            "type": "string",
+            "format": "date",
+            "description": "Last day of the range, inclusive (YYYY-MM-DD, e.g. \"2026-12-31\"). Default: `from` + 60 days. For one specific day pass the same date as `from`. A value earlier than `from` returns no events."
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "non_genre",
+              "zine_making",
+              "author",
+              "festival_style",
+              "zine_cafe",
+              "book_club",
+              "utakai"
+            ],
+            "description": "Return only events of this kind (non_genre = general ZINE event, zine_making = ZINE-making workshop, author = author event (talk, signing), festival_style = fair / market with many booths, zine_cafe = ZINE cafe, book_club = book club, utakai = tanka poetry gathering). Omit for every kind. Combined with `event_type` and the date range by AND."
+          },
+          "event_type": {
+            "type": "string",
+            "enum": [
+              "day",
+              "period",
+              "all"
+            ],
+            "default": "all",
+            "description": "`day` = single-day events (they have `started_at` / `ended_at`), `period` = multi-day exhibitions and fairs (`start_date` / `end_date`), `all` = both (default). Combined with the other filters by AND."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50,
+            "default": 20,
+            "description": "Maximum number of events to return, soonest first. Default 20, max 50. There is no cursor: when `count` equals `limit` there may be more, so call again with `from` set to the start date of the last event returned."
+          },
+          "locale": {
+            "type": "string",
+            "enum": [
+              "ja",
+              "en",
+              "ko",
+              "zh-TW"
+            ],
+            "description": "Response language for translatable text fields (names, titles, descriptions): ja = Japanese, en = English, ko = Korean, zh-TW = Traditional Chinese. Pass the language the user is conversing in when it is one of these; otherwise omit it. Fields without a translation fall back to their source language (usually Japanese), so one response can mix languages. Tokens, ids, dates and URLs are the same in every locale. Default: ja."
+          }
+        },
+        "required": [
+          "creator_token"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "find_places_nearby",
+      "description": "Find Zindies places (bookshops, galleries, cafes and other venues that\ncarry ZINEs or host events) around a point, nearest first. Use it for\n\"shops near me / near this station\"; to find a shop by name use search\n(type: \"place\") instead. This tool takes coordinates only, so turn an\naddress or station name into latitude / longitude yourself first.\n\n`radius_km` is a hard cutoff on straight-line distance: a place farther\naway is never returned, however few results there are. When nothing is\nin range the result is `places: []` with `count: 0` (not an error);\nretry with a larger radius. At most `limit` places are returned (the\nnearest ones), with no pagination; `count` is the number returned, not\nthe total in range. Places without known coordinates are never returned.\n\nEach place carries `token` (pass it to get_place for address, opening\nhours and stocked ZINEs, or to list_events_by_place), `name`,\n`description`, `latitude`, `longitude`, `country`, `distance_km`\n(rounded to metres) and `url`. `near` echoes the centre and the radius\nactually applied.\n",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "latitude": {
+            "type": "number",
+            "minimum": -90,
+            "maximum": 90,
+            "description": "Latitude of the search centre in decimal degrees (WGS 84), north positive, e.g. 35.6812 for Tokyo Station. Not degrees-minutes-seconds."
+          },
+          "longitude": {
+            "type": "number",
+            "minimum": -180,
+            "maximum": 180,
+            "description": "Longitude of the search centre in decimal degrees (WGS 84), east positive, e.g. 139.7671 for Tokyo Station."
+          },
+          "radius_km": {
+            "type": "number",
+            "minimum": 0.1,
+            "maximum": 500,
+            "default": 5,
+            "description": "Search radius in kilometres, straight-line from the centre; a strict upper bound. Default 5 (walking / one train stop); try 20-50 for a whole city, 100+ for a rural area. Min 0.1, max 500."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50,
+            "default": 20,
+            "description": "Maximum number of places to return, nearest first. Default 20, max 50. To see beyond the nearest 50, search around another centre."
+          },
+          "locale": {
+            "type": "string",
+            "enum": [
+              "ja",
+              "en",
+              "ko",
+              "zh-TW"
+            ],
+            "description": "Response language for translatable text fields (names, titles, descriptions): ja = Japanese, en = English, ko = Korean, zh-TW = Traditional Chinese. Pass the language the user is conversing in when it is one of these; otherwise omit it. Fields without a translation fall back to their source language (usually Japanese), so one response can mix languages. Tokens, ids, dates and URLs are the same in every locale. Default: ja."
+          }
+        },
+        "required": [
+          "latitude",
+          "longitude"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "list_apps",
+      "description": "List the free, no-sign-up tools Zindies offers under zindies.co/apps/\n(not data Zindies holds about creators / shops / events). Use this when\nthe user wants to make a small ZINE by hand (a printable fold-up\ntemplate) or wants an image of a shop's monthly opening days for\nInstagram.\n\n- `orizine`: a printable template that turns one A4 sheet, cut and\n  folded, into an 8-page A7 mini book. `files` lists every public PDF\n  (pattern / page numbers / binding) with a direct `pdf_url`, and\n  `netprint` when a Japanese convenience-store \"Network Print\" code is\n  available for it (`user_code`, `expires_at`, `qr_url`; null when\n  there is none right now). Codes are shared by everyone and are\n  renewed before they expire, so always read them from this tool rather\n  than reusing an old one. Print single-sided at 100% scale. The\n  template is CC BY 4.0: credit Zindies; printing, handing out, adapting\n  and selling the ZINEs made with it are free.\n- `calendar`: a web page that draws a month of opening days / closed\n  days as a 1080x1350 PNG in the browser. It cannot be run through MCP:\n  give the user `url`. If the shop is already registered on Zindies,\n  its opening days are public data — use get_place (`business_hours`)\n  instead of asking the user to re-enter them.\n\nEach app carries `next_step`: how its output connects to Zindies\n(the signature printed on the output, registering as a creator /\nshop). Mention it once, quietly; do not push it.\n",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "app": {
+            "type": "string",
+            "enum": [
+              "orizine",
+              "calendar"
+            ],
+            "description": "Return only this tool: `orizine` (fold-up mini ZINE template PDFs and convenience-store print codes) or `calendar` (opening-days image maker). Omit to get both."
+          },
+          "locale": {
+            "type": "string",
+            "enum": [
+              "ja",
+              "en",
+              "ko",
+              "zh-TW"
+            ],
+            "description": "Response language for translatable text fields (names, titles, descriptions): ja = Japanese, en = English, ko = Korean, zh-TW = Traditional Chinese. Pass the language the user is conversing in when it is one of these; otherwise omit it. Fields without a translation fall back to their source language (usually Japanese), so one response can mix languages. Tokens, ids, dates and URLs are the same in every locale. Default: ja."
+          }
+        },
+        "type": "object"
+      }
+    },
+    {
+      "name": "list_followable_zones",
+      "description": "List the event lists (nationwide / each region / each kind) and the\nnew-arrivals list that a user can follow. Following a list delivers\nnotifications of new events in it. Pass an entry's `type` and `slug`\nto toggle_favorite (target_type = type, token = slug) to follow or\nunfollow it.\n\nCoverage: a wider list includes narrower ones. Following nationwide\n(`all/all`) already covers every region and kind, so do not also\nfollow a region on top of it. `all/<area>` covers every kind in that\nregion, `<kind>/all` covers that kind in every region.\n\nBy default only single-axis lists are returned. Pass `kind` and/or\n`area` to also get the combinations for them (e.g. kind=book_club\nreturns book clubs nationwide and in each region, plus the wider lists\nthat cover them), or `combinations: true` for every combination.\n\nFiltering by kind or area leaves out the new-arrivals (creation_zone)\nentry.\n\nWith a Bearer token that has favorites:read, each entry also carries\n`following` (true/false) and `covered_by` (the slug of a wider list the\nuser already follows that includes it, or null). `covered_by` is set\neven when `following` is true, which means the follow is redundant.\n",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "non_genre",
+              "zine_making",
+              "author",
+              "festival_style",
+              "book_club",
+              "utakai",
+              "period_event"
+            ],
+            "description": "Return the lists for this event kind: that kind nationwide and in each region, plus the wider lists covering them (non_genre = general ZINE event, zine_making = ZINE-making workshop, author = author event (talk, signing), festival_style = fair / market with many booths, zine_cafe = ZINE cafe, book_club = book club, utakai = tanka poetry gathering, period_event = multi-day exhibitions / fairs). Omit for every kind. An unknown value returns an error result with `error: \"invalid_argument\"`."
+          },
+          "area": {
+            "type": "string",
+            "enum": [
+              "hokkaido",
+              "tohoku",
+              "kanto",
+              "koshinetsu",
+              "hokuriku",
+              "chubu",
+              "kansai",
+              "chugoku",
+              "shikoku",
+              "kyushu",
+              "okinawa"
+            ],
+            "description": "Return the lists for this region of Japan (lowercase slug, e.g. \"kanto\", \"kansai\"): every kind in that region plus the wider lists covering it. Combine with `kind` to narrow further. Omit for every region."
+          },
+          "combinations": {
+            "type": "boolean",
+            "description": "true = also return every kind x region combination (about a hundred entries); false (default) = only the single-axis lists: nationwide, each region, each kind. Prefer `kind` / `area` to get just the combinations you need."
+          },
+          "locale": {
+            "type": "string",
+            "enum": [
+              "ja",
+              "en",
+              "ko",
+              "zh-TW"
+            ],
+            "description": "Response language for translatable text fields (names, titles, descriptions): ja = Japanese, en = English, ko = Korean, zh-TW = Traditional Chinese. Pass the language the user is conversing in when it is one of these; otherwise omit it. Fields without a translation fall back to their source language (usually Japanese), so one response can mix languages. Tokens, ids, dates and URLs are the same in every locale. Default: ja."
+          }
+        },
+        "type": "object"
+      }
+    },
+    {
+      "name": "toggle_favorite",
+      "description": "Toggle the authenticated user's favorite (shown to them as \"follow\") on\na creator, creation, place, or event, or on an event list (event_zone) /\nthe new-arrivals list of creations (creation_zone). Requires a Bearer\ntoken (a User API token, or an OAuth token with the favorites:write\nscope). Act only when the user asked to.\n\nIt flips the current state: not favorited becomes favorited, favorited\nbecomes not favorited. There is no separate add / remove, so do not\ncall it twice to \"make sure\" — the second call undoes the first. Read\nthe result to learn the state you ended in; for lists you can check\nbeforehand with list_followable_zones (`following`).\n\nEffects: favoriting a creator, creation, place or event adds it to what\nthe user follows on Zindies. Following a list also subscribes the user\nto notifications of new entries in it. To attend an event use\nrsvp_event, which favorites the event by itself.\n\nReturns `favorited` (true / false: the state after this call) and\n`target`, the record acted on: `type`, `id`, `token` (null for events)\nand `name` for a creator / creation / place / event; `type`, `id`,\n`slug`, `name`, `kind`, `area` and `url` for a list.\n\nErrors come back as an error result (`isError: true`) with `error`:\n\"unauthorized\" (no or invalid token), \"insufficient_scope\", or\n\"not_found\" — an unknown or non-public token, an event not yet\nannounced, or a list slug that is malformed or names an unknown kind /\narea. Nothing changes on error.\n",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "target_type": {
+            "type": "string",
+            "enum": [
+              "creator",
+              "creation",
+              "place",
+              "event",
+              "event_zone",
+              "creation_zone"
+            ],
+            "description": "What `token` refers to: `creator`, `creation`, `place` or `event` for a single record; `event_zone` for an event list (the page /events/<kind>/<area>); `creation_zone` for the new-arrivals list (/creations). Use the `type` value from a `zone` / `zones` entry or list_followable_zones as-is."
+          },
+          "token": {
+            "type": "string",
+            "description": "Identifier of the target; its form depends on `target_type`. creator / creation / place: the public `token` (short lowercase string, e.g. \"fqpi\"). event: the numeric event id as a string (e.g. \"1234\"). event_zone: the slug \"<kind>/<area>\", where kind is \"all\", an event kind (e.g. \"book_club\") or \"period_event\", and area is \"all\" (nationwide) or a region slug — e.g. \"all/all\" = every event nationwide, \"all/kanto\" = every event in Kanto, \"book_club/all\" = book clubs nationwide. A wider list covers narrower ones, so do not follow a region on top of \"all/all\". creation_zone: always \"all/all\". Take slugs from the `slug` field of list_followable_zones or of a `zone` / `zones` entry rather than composing them."
+          },
+          "locale": {
+            "type": "string",
+            "enum": [
+              "ja",
+              "en",
+              "ko",
+              "zh-TW"
+            ],
+            "description": "Response language for translatable text fields (names, titles, descriptions): ja = Japanese, en = English, ko = Korean, zh-TW = Traditional Chinese. Pass the language the user is conversing in when it is one of these; otherwise omit it. Fields without a translation fall back to their source language (usually Japanese), so one response can mix languages. Tokens, ids, dates and URLs are the same in every locale. Default: ja."
+          }
+        },
+        "required": [
+          "target_type",
+          "token"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "rsvp_event",
+      "description": "Register (\"join\") or withdraw (\"cancel\") the authenticated user's\nintention to attend a Zindies event. This is a free RSVP shown on the\nevent page; it is not a ticket purchase or a paid booking. Requires a\nBearer token (a User API token, or an OAuth token with the\nparticipations:write scope). Act only when the user asked to; to just\nbookmark an event without attending, use toggle_favorite instead.\n\nUnlike toggle_favorite this is not a toggle: `action` states the\noutcome you want, and repeating a call is safe.\n- join: adds the user to the event's participants (the public\n  participant count goes up by one and, when the event has a capacity,\n  one place is taken) and also favorites the event. Joining again when\n  already joined creates no duplicate: it succeeds and only replaces\n  the comment if `comment` is given. A new join is refused with\n  `error: \"full\"` when the capacity is reached and `error: \"cancelled\"`\n  when the event has been called off.\n- cancel: removes the participation and deletes its comment for good\n  (the place is freed at once and the count goes down), and also\n  removes the user's favorite on the event, even one made before\n  joining. Cancelling when not joined succeeds and changes nothing\n  else. Joining again later is allowed while places remain.\n\nThe comment is public: it appears with the participation on the event\npage. Returns `joined` (the state after the call), `comment` (the\nstored comment, null when none or after cancel) and `event` (`id`,\n`title`, `url`). Errors come back as an error result with `error`:\n\"unauthorized\", \"insufficient_scope\", \"not_found\" (unknown or not yet\nannounced event), \"full\", \"cancelled\" or \"unprocessable_entity\".\n",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "event_id": {
+            "type": "integer",
+            "description": "Numeric id of the event, e.g. 1234: the `id` field of an event from list_events, list_events_by_place, list_events_by_creator, search or get_event."
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "join",
+              "cancel"
+            ],
+            "description": "`join` (default) = make the user a participant; `cancel` = withdraw. It names the resulting state, not a toggle: `join` on an already joined event keeps the participation, `cancel` on a not-joined event is a no-op.",
+            "default": "join"
+          },
+          "comment": {
+            "type": "string",
+            "description": "Optional short message from the user shown publicly with their participation on the event page, e.g. \"午後から伺います\". Plain text in the user's own words; do not invent one. Only used with `join`: omitted on a first join stores no comment, omitted when already joined keeps the existing one, and an empty string clears it. Ignored for `cancel`."
+          },
+          "locale": {
+            "type": "string",
+            "enum": [
+              "ja",
+              "en",
+              "ko",
+              "zh-TW"
+            ],
+            "description": "Response language for translatable text fields (names, titles, descriptions): ja = Japanese, en = English, ko = Korean, zh-TW = Traditional Chinese. Pass the language the user is conversing in when it is one of these; otherwise omit it. Fields without a translation fall back to their source language (usually Japanese), so one response can mix languages. Tokens, ids, dates and URLs are the same in every locale. Default: ja."
+          }
+        },
+        "required": [
+          "event_id"
+        ],
+        "type": "object"
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "co.zindies/zindies",
+    "version": "1.0.4",
+    "remoteUrl": "https://mcp.zindies.co/",
+    "publishedAt": "2026-11-27T07:59:58.235237Z",
+    "fetchedAt": "2026-11-27T10:42:49.718Z",
+    "toolsSha256": "ba7cef07fcae08cc716db3b7d4154b8e74bc0f0c802b2d92e33a172b99ee96af"
+  }
+}
