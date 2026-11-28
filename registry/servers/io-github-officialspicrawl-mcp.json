@@ -8,7 +8,7 @@
   "tools": [
     {
       "name": "spicrawl_scrape",
-      "description": "Retrieve a web page and return its content as markdown (default), text, HTML, a JSON envelope, or a printed PDF. Handles the fetch vs. browser decision, charset decoding, and PDF-to-text for you. Optionally extract structured data with CSS selectors (`extract`) or `autoparse`, return discovered `links`, take a `screenshot`, or scope the DOM with `include_tags`/`exclude_tags`. Each successful call is billed in credits (a failure costs 0). Results are cached by default, and a cache hit is billed like the fetch that stored it (the cache saves time, not credits); set `cache=false` for time-sensitive pages. With the defaults it only reads the page. A `method` other than GET, HEAD or OPTIONS, and the `actions` that click, fill or run scripts on the page, can change state on the target site: set them only when the user asks for that. For markdown, text and HTML it returns `{ content }`. With `format: \"json\"`, or when `extract`, `autoparse`, `links`, `screenshot` or `network_capture` is set, it returns the JSON envelope: `content`, the site's `status`, `credits`, `engine` (the rendering tier: `fetch`, `js` or `browser`), `warnings` and `data` for extraction. Screenshots come back as image content blocks; each `screenshots` entry in the JSON keeps its metadata and says which block holds it. A PDF comes back as a resource content block, with its size, the rendering tier and the credits in the JSON.",
+      "description": "Retrieve a web page and return its content as markdown (default), text, HTML, a JSON envelope, or a printed PDF. Handles the fetch vs. browser decision, charset decoding, and PDF-to-text for you. Optionally extract structured data with CSS selectors (`extract`) or `autoparse`, return discovered `links`, take a `screenshot`, or scope the DOM with `include_tags`/`exclude_tags`. Each successful call is billed in credits (a failure costs 0). Results are cached by default, and a cache hit is billed like the fetch that stored it (the cache saves time, not credits); set `cache=false` for time-sensitive pages. With the defaults it only reads the page. A `method` other than GET, HEAD or OPTIONS, and the `actions` that click, fill or run scripts on the page, can change state on the target site: set them only when the user asks for that. `body` sends a request body with POST, PUT, PATCH or DELETE over a plain fetch; the workspace must have it enabled. For markdown, text and HTML it returns `{ content }`. With `format: \"json\"`, or when `extract`, `autoparse`, `links`, `screenshot` or `network_capture` is set, it returns the JSON envelope: `content`, the site's `status`, `credits`, `engine` (the rendering tier: `fetch`, `js` or `browser`), `warnings` and `data` for extraction. Screenshots come back as image content blocks; each `screenshots` entry in the JSON keeps its metadata and says which block holds it. A PDF comes back as a resource content block, with its size, the rendering tier and the credits in the JSON.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -31,8 +31,7 @@
               "json",
               "pdf"
             ],
-            "default": "markdown",
-            "description": "Output format. 'markdown' (default) is best for feeding to an LLM; 'html' returns the raw document; 'json' returns the main content as markdown in `content` plus `sections` ([{level, heading, text}], split on headings); 'pdf' prints the page in a full browser (routed there for you) and returns the file as a resource content block."
+            "description": "Output format. 'markdown' (default for a page) is best for feeding to an LLM; with a `body` the default is 'html', the raw response, because API answers are usually JSON. 'html' returns the raw document; 'json' returns the main content as markdown in `content` plus `sections` ([{level, heading, text}], split on headings); 'pdf' prints the page in a full browser (routed there for you) and returns the file as a resource content block."
           },
           "main_content_only": {
             "type": "boolean",
@@ -104,14 +103,29 @@
           },
           "method": {
             "type": "string",
-            "description": "HTTP method sent to the target (default GET; no request body can be sent). Anything but GET, HEAD or OPTIONS can change state on the target site: use it only when the user asks."
+            "description": "HTTP method sent to the target: GET (default), HEAD, OPTIONS, or POST, PUT, PATCH, DELETE with `body`. Anything but GET, HEAD or OPTIONS can change state on the target site: use it only when the user asks."
           },
           "custom_headers": {
             "type": "object",
             "additionalProperties": {
               "type": "string"
             },
-            "description": "Extra request headers sent to the target, e.g. {\"Accept-Language\":\"de\"}."
+            "description": "Extra request headers sent to the target, e.g. {\"Accept-Language\":\"de\"}. With a string `body`, set Content-Type here."
+          },
+          "body": {
+            "anyOf": [
+              {
+                "type": "object",
+                "additionalProperties": {}
+              },
+              {
+                "type": "array"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "description": "Request body for a POST, PUT, PATCH or DELETE `method`, over a plain fetch (no render, actions or screenshots). Use it to call a site's JSON or GraphQL API, submit a POST search form, or reach a JSON-RPC/MCP endpoint. An object or array is sent as JSON; a string is sent as-is. Up to 64 KB. The workspace must have it enabled. With a `body` and no `format`, the response comes back raw (format html), since API answers are usually JSON."
           },
           "session_id": {
             "type": "string",
@@ -1465,16 +1479,74 @@
         "additionalProperties": false,
         "$schema": "http://json-schema.org/draft-07/schema#"
       }
+    },
+    {
+      "name": "spicrawl_feedback",
+      "description": "Report to Spicrawl a request that failed in a way you could not fix, or that returned wrong or missing content. Call it once per problem per task, with the request_id of the failed call (from the error text, or the X-Request-Id header) and intent: what you were trying to get. Rate it down (the default) for a problem, up if the result was right. The report is free. A thumbs-down on a charged request refunds its credits, up to a daily cap per account. Never include secrets, API keys or cookies, and keep page content out: a short description is enough.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "request_id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The request id of the call being reported: from the error text, or the X-Request-Id header."
+          },
+          "rating": {
+            "type": "string",
+            "enum": [
+              "up",
+              "down"
+            ],
+            "default": "down",
+            "description": "down for a problem (the default); up when the result was right."
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "broken",
+              "wrong_result",
+              "missing",
+              "confusing",
+              "other"
+            ],
+            "description": "broken: an error or crash; wrong_result: the content was wrong; missing: content was absent; confusing: unclear output; other."
+          },
+          "impact": {
+            "type": "string",
+            "enum": [
+              "blocked",
+              "worked_around",
+              "friction"
+            ],
+            "description": "blocked: you could not finish the task; worked_around: you found another way; friction: it cost time but did not block."
+          },
+          "intent": {
+            "type": "string",
+            "maxLength": 300,
+            "description": "What you were trying to get, in a few words, e.g. 'the prices on the category page'. No secrets."
+          },
+          "comment": {
+            "type": "string",
+            "maxLength": 4000,
+            "description": "What you saw and what you expected, briefly. No secrets; no page content beyond a short description."
+          }
+        },
+        "required": [
+          "request_id"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
     }
   ],
   "source": {
     "type": "registry",
     "registry": "registry.modelcontextprotocol.io",
     "name": "io.github.OfficialSpicrawl/mcp",
-    "version": "0.3.1",
+    "version": "0.4.2",
     "remoteUrl": "https://mcp.spicrawl.com/mcp",
-    "publishedAt": "2026-11-25T10:46:50.398198Z",
-    "fetchedAt": "2026-11-25T11:03:46.215Z",
-    "toolsSha256": "b53302a3e791eb9fa9d3baf053834ba00ae50492e0138bd545cd843a89c52e17"
+    "publishedAt": "2026-11-28T09:37:26.350193Z",
+    "fetchedAt": "2026-11-28T10:03:29.931Z",
+    "toolsSha256": "d2c728be579c624f048ea394d311ae225d30040efd573241366377bfd5c3c893"
   }
 }

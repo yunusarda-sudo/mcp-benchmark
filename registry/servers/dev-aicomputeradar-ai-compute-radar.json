@@ -27,14 +27,40 @@
     },
     {
       "name": "find_fit",
-      "description": "Which tracked models run on a given GPU or Mac: measured GGUF weights + computed context cache + runtime overhead versus usable memory. Returns the best recommendation and every verdict (EXCELLENT/GOOD/TIGHT/OFFLOAD_REQUIRED/NOT_RECOMMENDED/UNKNOWN) with plain-language reasons, plus summary counts over all tracked models. For a short answer pass show \"fits\" (only models that run fully on the machine), a limit, or compact true (one row per model: name, quantization, verdict, total GB). Hardware ids are the ones list_hardware returns.",
+      "description": "Which tracked models run on a given GPU or Mac: measured GGUF weights + computed context cache + runtime overhead versus usable memory. Returns the best recommendation and every verdict (EXCELLENT/GOOD/TIGHT/OFFLOAD_REQUIRED/NOT_RECOMMENDED/UNKNOWN) with plain-language reasons, plus summary counts over all tracked models. For a short answer pass show \"fits\" (only models that run fully on the machine), a limit, or compact true (one row per model: name, quantization, verdict, total GB). The machine is a hardware id from list_hardware, several identical cards (count), or, for a machine that is not listed, a free memory figure (memory_gb, with type \"mac\" for unified memory); what a machine off the list assumes is said in hardware.assumptions.",
       "inputSchema": {
         "type": "object",
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "properties": {
           "hardware": {
+            "description": "Hardware id or page slug, e.g. rtx-4090, mac-studio-m3-ultra-96gb. Leave it out when you pass memory_gb.",
+            "type": "string"
+          },
+          "count": {
+            "description": "How many identical graphics cards (default 1). Their memory adds up; the answer says what that assumes.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 8
+          },
+          "memory_gb": {
+            "description": "For a machine that is not on the list, instead of hardware: the memory of one graphics card, or of the Mac, in GB.",
+            "type": "number",
+            "minimum": 2,
+            "maximum": 2048
+          },
+          "type": {
+            "description": "What memory_gb describes: \"gpu\" (default, a plug-in card) or \"mac\" (unified memory).",
             "type": "string",
-            "description": "Hardware id or page slug, e.g. rtx-4090, mac-studio-m3-ultra-96gb."
+            "enum": [
+              "gpu",
+              "mac"
+            ]
+          },
+          "ram_gb": {
+            "description": "System RAM behind the card(s), for what spills over (default 32).",
+            "type": "number",
+            "minimum": 8,
+            "maximum": 2048
           },
           "model": {
             "description": "Restrict to one model slug.",
@@ -74,9 +100,122 @@
             "description": "One short row per model instead of the full arithmetic and reasons.",
             "type": "boolean"
           }
+        }
+      }
+    },
+    {
+      "name": "best_quant",
+      "description": "Which file of a model to download for a machine. Every GGUF quantization the repo publishes is read from its file listing (sizes measured, split files summed), the memory each needs at your context length is computed, and the answer names the largest file that runs on the machine with room (pick), a larger one that only barely fits (stretch), when nothing runs at that context the file that runs at the longest shorter one (atShorterContext), and for every file its verdict, its bits per weight and the longest context it still runs at. Works for a tracked model (model, a slug) and for any public Hugging Face repo (repo). The machine is a hardware id, several identical cards (count), or a free memory figure (memory_gb). Files are ranked by size only: a larger file keeps more bits per weight; there is no quality rating and no speed figure. When the model's shape cannot be read every verdict is UNKNOWN and only the sizes are given. Limits as for measure_model: 20 calls per hour per caller; a reading is reused for 24 hours.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "model": {
+            "description": "A tracked model by slug, e.g. qwen3-8b. Slugs come from trending_models. Pass this or repo, not both.",
+            "type": "string"
+          },
+          "repo": {
+            "description": "Any public Hugging Face repo as \"owner/name\" (a GGUF repo, or an original whose most downloaded GGUF build is then used), or its huggingface.co link.",
+            "type": "string"
+          },
+          "hardware": {
+            "description": "Hardware id, e.g. rtx-3060-12gb. Ids come from list_hardware. Leave it out when you pass memory_gb.",
+            "type": "string"
+          },
+          "count": {
+            "description": "How many identical graphics cards (default 1). Their memory adds up; the answer says what that assumes.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 8
+          },
+          "memory_gb": {
+            "description": "For a machine that is not on the list, instead of hardware: the memory of one graphics card, or of the Mac, in GB.",
+            "type": "number",
+            "minimum": 2,
+            "maximum": 2048
+          },
+          "type": {
+            "description": "What memory_gb describes: \"gpu\" (default, a plug-in card) or \"mac\" (unified memory).",
+            "type": "string",
+            "enum": [
+              "gpu",
+              "mac"
+            ]
+          },
+          "ram_gb": {
+            "description": "System RAM behind the card(s), for what spills over (default 32).",
+            "type": "number",
+            "minimum": 8,
+            "maximum": 2048
+          },
+          "context": {
+            "description": "Context length in tokens (default 8192); capped at the model's own window.",
+            "type": "integer",
+            "minimum": 512,
+            "maximum": 1048576
+          },
+          "kv": {
+            "description": "KV-cache quantization (default f16).",
+            "type": "string",
+            "enum": [
+              "f16",
+              "q8_0",
+              "q4_0"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "measure_model",
+      "description": "Beta, for models that are not on the tracked list. Give any public Hugging Face repo: the 4-bit GGUF file is read from its file listing (or from its most downloaded GGUF build), and the answer gives the memory the model needs and the fit verdict per machine. File size is measured, the context cache is computed from the config of the repo or of the model it was made from, the runtime share is an assumption. When the shape cannot be read the verdict is UNKNOWN and only the file size is given. No speed figures. Limits: 20 calls per hour per caller, 40 new repos per hour in all; a reading is reused for 24 hours. For tracked models find_fit has no such limit.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "repo": {
+            "type": "string",
+            "description": "The repo as \"owner/name\", e.g. TheDrummer/Cydonia-24B-v4.1, or its huggingface.co link."
+          },
+          "hardware": {
+            "description": "One hardware id, e.g. rtx-3060-12gb. Without it (and without memory_gb) the verdict is given for every machine on the list.",
+            "type": "string"
+          },
+          "count": {
+            "description": "How many identical graphics cards (default 1). Their memory adds up; the answer says what that assumes.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 8
+          },
+          "memory_gb": {
+            "description": "For a machine that is not on the list, instead of hardware: the memory of one graphics card, or of the Mac, in GB.",
+            "type": "number",
+            "minimum": 2,
+            "maximum": 2048
+          },
+          "type": {
+            "description": "What memory_gb describes: \"gpu\" (default, a plug-in card) or \"mac\" (unified memory).",
+            "type": "string",
+            "enum": [
+              "gpu",
+              "mac"
+            ]
+          },
+          "ram_gb": {
+            "description": "System RAM behind the card(s), for what spills over (default 32).",
+            "type": "number",
+            "minimum": 8,
+            "maximum": 2048
+          },
+          "context": {
+            "description": "Context length in tokens (default 8192); capped at the model's own window.",
+            "type": "integer",
+            "minimum": 512,
+            "maximum": 1048576
+          }
         },
         "required": [
-          "hardware"
+          "repo"
         ]
       }
     },
@@ -95,11 +234,59 @@
             "description": "Hardware id, e.g. rtx-3060-12gb: adds the fit verdict per version. Ids come from list_hardware.",
             "type": "string"
           },
+          "count": {
+            "description": "How many identical graphics cards (default 1). Their memory adds up; the answer says what that assumes.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 8
+          },
+          "memory_gb": {
+            "description": "For a machine that is not on the list, instead of hardware: the memory of one graphics card, or of the Mac, in GB.",
+            "type": "number",
+            "minimum": 2,
+            "maximum": 2048
+          },
+          "type": {
+            "description": "What memory_gb describes: \"gpu\" (default, a plug-in card) or \"mac\" (unified memory).",
+            "type": "string",
+            "enum": [
+              "gpu",
+              "mac"
+            ]
+          },
+          "ram_gb": {
+            "description": "System RAM behind the card(s), for what spills over (default 32).",
+            "type": "number",
+            "minimum": 8,
+            "maximum": 2048
+          },
           "limit": {
             "description": "How many versions to return (default 20).",
             "type": "integer",
             "minimum": 1,
             "maximum": 100
+          }
+        }
+      }
+    },
+    {
+      "name": "media_models",
+      "description": "Tracked open image and video generation models with their measured files. Each model comes in loadouts (for example a 4-bit and a full-precision set of transformer, text encoder and VAE); every loadout gives the sum of its files and its largest single file in GB, measured from the Hugging Face file listing. With a hardware id every model carries a fit verdict for that machine, judged on the largest file held at once against usable memory, for the largest loadout that runs. No runtime peak is computed and there are no speed figures.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "family": {
+            "description": "Only image or only video models. Both without it.",
+            "type": "string",
+            "enum": [
+              "image",
+              "video"
+            ]
+          },
+          "hardware": {
+            "description": "Hardware id, e.g. rtx-3060-12gb: adds the fit verdict per model. Ids come from list_hardware.",
+            "type": "string"
           }
         }
       }
@@ -182,10 +369,10 @@
     "type": "registry",
     "registry": "registry.modelcontextprotocol.io",
     "name": "dev.aicomputeradar/ai-compute-radar",
-    "version": "1.4.0",
+    "version": "1.7.0",
     "remoteUrl": "https://aicomputeradar.dev/api/mcp",
-    "publishedAt": "2026-11-26T16:13:44.79997Z",
-    "fetchedAt": "2026-11-27T10:42:49.718Z",
-    "toolsSha256": "02973ac0af6f9d0a6e26ddbbe5552ecf78582749e75260ed47bb2fcf69dfefcb"
+    "publishedAt": "2026-11-27T21:07:06.198338Z",
+    "fetchedAt": "2026-11-28T10:03:29.931Z",
+    "toolsSha256": "ebf48eb4400820b89b5da169d528aa1083046848699478647ba125b4eae15074"
   }
 }

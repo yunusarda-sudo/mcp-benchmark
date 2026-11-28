@@ -1,0 +1,593 @@
+{
+  "$schema": "../schema.json",
+  "name": "com.tickerdb/mcp-server",
+  "title": "TickerDB",
+  "category": "AI, LLMs & Agents",
+  "description": "Point-in-time market data for AI agents: stocks, ETFs and crypto as named bands plus raw values.",
+  "repository": "https://github.com/tickerdb/tickerdb-mcp",
+  "tools": [
+    {
+      "name": "get_schema",
+      "description": "Look up field names, descriptions, units and band values. Search rather than pulling everything (~400 KB): search=\"bull flag\", category=patterns, level=market. Names are <group>_<name>[_<unit>]; bands end in a category word (_zone, _state, _trend), raw numbers in a unit (_pct, _ratio, _usd). SEC statement ratios: category=fundamentals. Every band (tracked: true) also has _prev, _periods, _flips_recent_count, _flips_lookback and _stability, usable as fields and filters; lookups omit those rows unless markers=true. Over 25 matches lists names only: search again by exact name for a description.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "search": {
+            "type": "string",
+            "description": "Words that must all appear in name, category or description."
+          },
+          "category": {
+            "type": "string",
+            "description": "Comma-separated, e.g. patterns,volume."
+          },
+          "level": {
+            "type": "string",
+            "enum": [
+              "ticker",
+              "market",
+              "model",
+              "statement"
+            ],
+            "description": "ticker = per-asset fields; market = market_*/macro_*; model = model_* (TickerDB's trading models); statement = financial-statement lines (get_statements)."
+          },
+          "compact": {
+            "type": "boolean",
+            "description": "Name, type, values and description only."
+          },
+          "markers": {
+            "type": "boolean",
+            "description": "Include change-marker fields."
+          },
+          "store_as": {
+            "type": "string",
+            "description": "Table name: store rows in SQLite, return only a summary. Read with query_data."
+          },
+          "append": {
+            "type": "boolean",
+            "description": "Add rows to an existing store_as table instead of replacing it."
+          }
+        },
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "query",
+      "description": "Any cross-section or history (one ticker's full snapshot: get_summary). Give fields and filters (names from get_schema, e.g. fundamentals_returns_zone in [high, very_high]), then EITHER date (default latest) OR start+end. One date with filters, tickers, sort_by or limit: a ranked screen. One date with only fields: every asset. A range: every row in it, weekly by default past ~6 months; market_/macro_ filters keep only dates in that regime, other filters apply after the rows are fetched, so narrow with tickers, member_of or asset_class. Big pulls: store_as + fetch_all, then query_data.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Columns, e.g. [\"market_cap_usd\",\"momentum_rsi_zone\"]. Max 30. On a daily range, statement lines too as statement.<line> (e.g. statement.revenue; get_schema level=statement)."
+          },
+          "filters": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "field": {
+                  "type": "string"
+                },
+                "op": {
+                  "type": "string",
+                  "enum": [
+                    "eq",
+                    "neq",
+                    "in",
+                    "gt",
+                    "gte",
+                    "lt",
+                    "lte"
+                  ]
+                },
+                "value": {}
+              },
+              "required": [
+                "field",
+                "op"
+              ],
+              "additionalProperties": false
+            },
+            "description": "Up to 10; a row must match all of them. A null value matches none, but eq/neq null finds missing/present values. E.g. [{\"field\":\"momentum_rsi_zone\",\"op\":\"in\",\"value\":[\"oversold\"]}]. As-filed fundamentals only: fundamentals_statement_source eq \"sec\"."
+          },
+          "tickers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Only these tickers."
+          },
+          "date": {
+            "type": "string",
+            "description": "One date; default latest (YYYY-MM-DD)."
+          },
+          "start": {
+            "type": "string",
+            "description": "Range start, with end (YYYY-MM-DD)."
+          },
+          "end": {
+            "type": "string",
+            "description": "Range end (YYYY-MM-DD)."
+          },
+          "timeframe": {
+            "type": "string",
+            "enum": [
+              "daily",
+              "weekly"
+            ],
+            "description": "Default: weekly for ranges over ~6 months, else daily."
+          },
+          "asset_class": {
+            "type": "string",
+            "enum": [
+              "stock",
+              "etf",
+              "crypto"
+            ],
+            "description": "Only this asset class (etf includes ETNs)."
+          },
+          "member_of": {
+            "type": "string",
+            "description": "Only members of this index on the row's date, e.g. sp500. Ids: get_indexes."
+          },
+          "held_by": {
+            "type": "string",
+            "description": "Only assets this fund held on the row's date: fund ticker (IVV) or SEC series id."
+          },
+          "sort_by": {
+            "type": "string",
+            "description": "Ticker field to rank by (one date)."
+          },
+          "sort_direction": {
+            "type": "string",
+            "enum": [
+              "asc",
+              "desc"
+            ],
+            "description": "Default desc."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Rows on one date (default 20, max 250); rows per page on a range."
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "One date: skip this many ranked rows."
+          },
+          "page_token": {
+            "type": "string",
+            "description": "Range: a token from page_tokens or next_page_token (same params)."
+          },
+          "dry_run": {
+            "type": "boolean",
+            "description": "Range without a market_/macro_ filter: returns what it would cost in credits. No data, no charge."
+          },
+          "ohlcv": {
+            "type": "boolean",
+            "description": "Range only: add ohlcv_open/high/low/close/volume."
+          },
+          "adjustment": {
+            "type": "string",
+            "enum": [
+              "split",
+              "split_dividend",
+              "raw"
+            ],
+            "description": "With ohlcv: split (default), split_dividend (total return) or raw (as traded)."
+          },
+          "store_as": {
+            "type": "string",
+            "description": "Table name: store rows in SQLite, return only a summary. Read with query_data."
+          },
+          "append": {
+            "type": "boolean",
+            "description": "Add rows to an existing store_as table instead of replacing it."
+          },
+          "fetch_all": {
+            "type": "boolean",
+            "description": "Follow every page into store_as in this one call."
+          }
+        },
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "get_summary",
+      "description": "One ticker's state: latest snapshot, one date, a start/end series (up to 50 rows; for a longer range add sample=even or use query), or band events. For events give field and optionally band: each says when the band was entered, what it left and how long that had lasted; stats=true returns how often each band was entered. fields trims to sections, paths or field names, e.g. trend, momentum.rsi_zone, fundamentals_pe_ratio. Field names are the get_schema names everywhere (no aliases). Market regimes are in get_market.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "ticker": {
+            "type": "string",
+            "description": "e.g. AAPL, BTCUSD, SPY"
+          },
+          "timeframe": {
+            "type": "string",
+            "enum": [
+              "daily",
+              "weekly"
+            ],
+            "description": "Default daily."
+          },
+          "date": {
+            "type": "string",
+            "description": "Snapshot date (YYYY-MM-DD)."
+          },
+          "start": {
+            "type": "string",
+            "description": "Series start (YYYY-MM-DD)."
+          },
+          "end": {
+            "type": "string",
+            "description": "Series end (YYYY-MM-DD)."
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Sections, dotted paths, or get_schema field names."
+          },
+          "meta": {
+            "type": "boolean",
+            "description": "Add stability metadata (_meta) to every band."
+          },
+          "field": {
+            "type": "string",
+            "description": "Band field for events, e.g. momentum_rsi_zone."
+          },
+          "band": {
+            "type": "string",
+            "description": "Only changes into this value, e.g. oversold."
+          },
+          "sample": {
+            "type": "string",
+            "enum": [
+              "even"
+            ],
+            "description": "Up to 50 rows spread evenly across start/end."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50,
+            "description": "Events (default 10), or sampled rows (default 50)."
+          },
+          "before": {
+            "type": "string",
+            "description": "Only events before (YYYY-MM-DD)."
+          },
+          "after": {
+            "type": "string",
+            "description": "Only events after (YYYY-MM-DD)."
+          },
+          "stats": {
+            "type": "boolean",
+            "description": "How often each band was entered, instead of the event list."
+          },
+          "context_ticker": {
+            "type": "string",
+            "description": "Keep only events when this second asset was in context_band, e.g. SPY. Needs context_field and context_band."
+          },
+          "context_field": {
+            "type": "string",
+            "description": "Band field on context_ticker."
+          },
+          "context_band": {
+            "type": "string",
+            "description": "Band value on context_ticker."
+          },
+          "adjustment": {
+            "type": "string",
+            "enum": [
+              "split",
+              "split_dividend",
+              "raw"
+            ],
+            "description": "Price basis: split (default), split_dividend (total return) or raw (as traded)."
+          },
+          "store_as": {
+            "type": "string",
+            "description": "Table name: store rows in SQLite, return only a summary. Read with query_data."
+          },
+          "append": {
+            "type": "boolean",
+            "description": "Add rows to an existing store_as table instead of replacing it."
+          }
+        },
+        "required": [
+          "ticker"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "get_market",
+      "description": "Market-level rows, one per date, point in time: US equity market regime (market_*) and economy (macro_*) bands and values, e.g. market_regime_zone, macro_yield_curve_zone. changes=true returns only dates where a band changed. Field list: get_schema level=market. To find tickers under a regime, put market_/macro_ filters into query.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "fields": {
+            "type": "string",
+            "description": "JSON array of market fields; [\"*\"] adds change markers."
+          },
+          "filters": {
+            "type": "string",
+            "description": "JSON array of {field, op, value} on market fields."
+          },
+          "changes": {
+            "type": "string",
+            "description": "true: only dates where any band changed. Or a JSON array of the bands to watch."
+          },
+          "timeframe": {
+            "type": "string",
+            "enum": [
+              "daily",
+              "weekly"
+            ],
+            "description": "Default daily."
+          },
+          "date": {
+            "type": "string",
+            "description": "One date (YYYY-MM-DD)."
+          },
+          "start": {
+            "type": "string",
+            "description": "Range start (YYYY-MM-DD)."
+          },
+          "end": {
+            "type": "string",
+            "description": "Range end (YYYY-MM-DD)."
+          },
+          "order": {
+            "type": "string",
+            "enum": [
+              "asc",
+              "desc"
+            ],
+            "description": "Default desc."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2000,
+            "description": "Range rows; default 100."
+          },
+          "store_as": {
+            "type": "string",
+            "description": "Table name: store rows in SQLite, return only a summary. Read with query_data."
+          },
+          "append": {
+            "type": "boolean",
+            "description": "Add rows to an existing store_as table instead of replacing it."
+          },
+          "fetch_all": {
+            "type": "boolean",
+            "description": "Follow every page into store_as in this one call."
+          }
+        },
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "get_ohlcv",
+      "description": "End-of-day OHLCV candles for one ticker, daily or weekly (weeks dated by Sunday). Paged: pass next_cursor back as cursor, or use store_as with fetch_all for the whole range in one call.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "ticker": {
+            "type": "string",
+            "description": "e.g. AAPL"
+          },
+          "timeframe": {
+            "type": "string",
+            "enum": [
+              "daily",
+              "weekly"
+            ],
+            "description": "Default daily."
+          },
+          "start": {
+            "type": "string",
+            "description": "Start, inclusive (YYYY-MM-DD)."
+          },
+          "end": {
+            "type": "string",
+            "description": "End, inclusive (YYYY-MM-DD)."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000,
+            "description": "Default 100."
+          },
+          "order": {
+            "type": "string",
+            "enum": [
+              "asc",
+              "desc"
+            ],
+            "description": "Default desc."
+          },
+          "cursor": {
+            "type": "string",
+            "description": "next_cursor from the previous page."
+          },
+          "adjustment": {
+            "type": "string",
+            "enum": [
+              "split",
+              "split_dividend",
+              "raw"
+            ],
+            "description": "split (default), split_dividend (total return) or raw (as traded)."
+          },
+          "store_as": {
+            "type": "string",
+            "description": "Table name: store rows in SQLite, return only a summary. Read with query_data."
+          },
+          "append": {
+            "type": "boolean",
+            "description": "Add rows to an existing store_as table instead of replacing it."
+          },
+          "fetch_all": {
+            "type": "boolean",
+            "description": "Follow every page into store_as in this one call."
+          }
+        },
+        "required": [
+          "ticker"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "add_watchlist_tickers",
+      "description": "Add tickers to the user's TickerDB watchlist (one per account, shared with the website's Track buttons and Claude/ChatGPT watchlist links). Idempotent: already-present tickers come back in already; unknown ones in unknown. No ticker limit; free. Then get_watchlist_diff (call_tool) reports what changed for them since the last check: score, upside and downside potential, earnings, big price moves, trend changes, RSI oversold, volume spikes, insider trades, analyst changes, serious 8-K filings and dividend cuts.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "tickers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "maxItems": 50,
+            "description": "Ticker symbols, e.g. [\"NVDA\", \"AMD\"]. Up to 50."
+          }
+        },
+        "required": [
+          "tickers"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "remove_watchlist_tickers",
+      "description": "Remove tickers from the user's TickerDB watchlist. Idempotent: tickers not on it come back in missing. Free.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "tickers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "maxItems": 50,
+            "description": "Ticker symbols, e.g. [\"NVDA\", \"AMD\"]. Up to 50."
+          }
+        },
+        "required": [
+          "tickers"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "search_tools",
+      "description": "Find the other TickerDB endpoints: diff (what changed for your tickers), the watchlist and what changed for it, financial statements (income, balance sheet, cash flow; point in time), insiders, insider trades and holdings, funds, fund holdings and holders, indexes, index members, TickerDB's trading models (list, detail, history, holdings, trades; Pro and Commercial plans, except a model's newest holdings, on every plan), status, account, and the raw search and universe routes. Returns each match's name, purpose and params (* = required). Empty query lists all. Run one with call_tool.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Words, e.g. insider trades."
+          }
+        },
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "call_tool",
+      "description": "Run an endpoint found with search_tools: its name plus a params object. store_as, append and fetch_all work as on the other data tools.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "e.g. get_insider_trades"
+          },
+          "params": {
+            "type": "object",
+            "additionalProperties": {},
+            "description": "Endpoint params."
+          },
+          "store_as": {
+            "type": "string",
+            "description": "Table name: store rows in SQLite, return only a summary. Read with query_data."
+          },
+          "append": {
+            "type": "boolean",
+            "description": "Add rows to an existing store_as table instead of replacing it."
+          },
+          "fetch_all": {
+            "type": "boolean",
+            "description": "Follow every page into store_as in this one call."
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "query_data",
+      "description": "Read-only SQL (SQLite) over tables saved with store_as: SELECT or WITH, plus SHOW TABLES and DESCRIBE <table>. Returns at most 200 rows. Nested fields are flattened with _ (trend.direction -> trend_direction); booleans are 1/0. Tables are kept per API key and deleted 24 h after last use; format=csv returns CSV text.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sql": {
+            "type": "string",
+            "description": "One statement."
+          },
+          "max_rows": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200,
+            "description": "Default 200."
+          },
+          "format": {
+            "type": "string",
+            "enum": [
+              "json",
+              "csv"
+            ],
+            "description": "csv: rows as CSV text. Default json."
+          }
+        },
+        "required": [
+          "sql"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "com.tickerdb/mcp-server",
+    "version": "3.0.0",
+    "remoteUrl": "https://mcp.tickerdb.com/mcp",
+    "publishedAt": "2026-11-18T02:31:23.212939Z",
+    "fetchedAt": "2026-11-28T10:03:29.931Z",
+    "toolsSha256": "0a7ab7a3a74bc786836c914a4e286445a713d5225ae621af544bac6179d90ca6"
+  }
+}

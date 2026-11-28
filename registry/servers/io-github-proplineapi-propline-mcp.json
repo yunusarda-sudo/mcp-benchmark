@@ -1,0 +1,1687 @@
+{
+  "$schema": "../schema.json",
+  "name": "io.github.proplineapi/propline-mcp",
+  "title": "PropLine — Sports Betting Odds & Prop Resolution",
+  "category": "Developer Tools & DevOps",
+  "description": "Live odds, cross-book +EV and graded player-prop results across 37 books. Hosted endpoint included.",
+  "repository": "https://github.com/proplineapi/propline-mcp",
+  "tools": [
+    {
+      "name": "propline_list_sports",
+      "description": "List all sports PropLine currently polls. Returns sport keys (e.g. baseball_mlb, basketball_nba, soccer_epl) along with human titles and active status. Use this first to discover what sport_key values are valid for the other tools.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "propline_list_events",
+      "description": "List upcoming events for a sport. Returns each event's id, home_team, away_team, commence_time. Use the returned event_id to drill into per-event odds, props, +EV, or results.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sport_key": {
+            "type": "string",
+            "description": "Sport key from propline_list_sports — e.g. baseball_mlb, basketball_nba"
+          },
+          "live": {
+            "type": "boolean",
+            "description": "If true, only return in-progress (live) events. Defaults to false."
+          }
+        },
+        "required": [
+          "sport_key"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "propline_list_event_markets",
+      "description": "List the market types available for a specific event (e.g. h2h, spreads, totals, player_points, pitcher_strikeouts). Useful when you don't know which prop markets a given event carries.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sport_key": {
+            "type": "string"
+          },
+          "event_id": {
+            "type": [
+              "string",
+              "number"
+            ]
+          }
+        },
+        "required": [
+          "sport_key",
+          "event_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "propline_get_odds",
+      "description": "Get live odds. If event_id is supplied, returns full per-event props for that event; otherwise returns bulk game-line odds for the whole sport. Pass markets as a comma-separated list (e.g. 'h2h,spreads,totals' or 'player_points,player_rebounds'). Response includes a bookmakers[] array across every book that carries the requested markets (currently up to 37 — sportsbooks: Bovada, DraftKings, FanDuel, Pinnacle, BetMGM, BetRivers, Unibet, Betway, Hard Rock Bet, Fanatics, BetUS, BetOnline.ag, LowVig.ag, 1xBet, TAB AU, ReBet, Fliff, Courtside, Sportzino, Heritage Sports, Jazz Sports, YouWager, Thrillzz; DFS: PrizePicks, Underdog, Sleeper, Dabble, ParlayPlay, DraftKings Pick6; exchanges and prediction markets: Kalshi, Polymarket, Polymarket US, Matchbook, Smarkets, Novig, ProphetX, SX Bet — coverage varies by sport). Every market carries line_type: 'main', 'alternate' or 'milestone' (an N+ rung such as '3+ Strikeouts'); filter to line_type == 'main' for each book's primary line. Kalshi and Polymarket US rows also set line_type on each outcome. Underdog Fantasy outcomes carry a payout_multiplier on EVERY outcome (1.0 = standard pick, e.g. 1.5 = boost, 0.75 = discount; null means the book is not Underdog) — keep only payout_multiplier == 1.0 when comparing DFS lines to sportsbook consensus, since filtering on non-null would drop every Underdog line. Each market carries suspended_at: null while on the board, set when that book pulled the market pregame (late scratch, dropped market type) — its outcomes are then the last quoted legs, not a live price. Treat a suspended market as unbettable and, if several books show it for one player, as a probable scratch. Each BOOKMAKER carries pregame_only: true when the event is live and that book does not price it in play, so its prices are the last pregame quote and will never move again this game. suspended_at cannot show this — a book with no in-play feed is never polled once the game starts, so nothing goes missing to flag. Exclude pregame_only books when reasoning about a live game; they are still returned because on DFS books that frozen line is what the bet settles against. Each market also carries team: the canonical event team name when the market is scoped to ONE team (a TEAM total), and null for the game total. Both ride the totals key, so NEVER compare totals on (market key, point) alone — a team total at 0.5 is not a game total at 0.5. Filter team == null for the game total; team matches home_team/away_team exactly. Always null outside totals. Each outcome carries side ('home'/'away'/'draw', null for Over/Under/Yes/No/player legs) so you can pair legs without matching team spellings. Each event carries is_outright (true for a tournament listing with no away side) and, on tennis, tournament + tour (ATP/WTA/Challenger/ITF/…).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sport_key": {
+            "type": "string"
+          },
+          "event_id": {
+            "type": [
+              "string",
+              "number"
+            ],
+            "description": "Optional. If set, returns props for this event."
+          },
+          "markets": {
+            "type": "string",
+            "description": "Comma-separated market keys. Defaults to h2h on bulk; h2h,spreads,totals on event. Pass an explicit list to fetch player props (sport-specific — e.g. player_points,player_rebounds for NBA; pitcher_strikeouts,batter_home_runs for MLB)."
+          },
+          "bookmakers": {
+            "type": "string",
+            "description": "Comma-separated subset of book keys (bovada, draftkings, fanduel, pinnacle, betmgm, betrivers, unibet, betway, hardrock, fanatics, betus, betonlineag, lowvig, onexbet, tab_au, rebet, fliff, courtside, sportzino, heritage, jazzsports, youwager, thrillzz, prizepicks, underdog, sleeper, dabble, parlayplay, pick6, kalshi, polymarket, polymarket_us, matchbook, smarkets, novig, prophetx, sxbet). Default returns all available."
+          },
+          "period": {
+            "type": "string",
+            "description": "Game-period filter. Omitted = full-game markets only. Canonical codes: q1..q4 (quarters), h1/h2 (halves), p1..p3 (hockey periods), i1..i9 (innings), f3/f5/f7 (first N innings). Comma-separated for multiple. 'all' = include every period alongside full-game."
+          },
+          "include_links": {
+            "type": "boolean",
+            "description": "When true, each bookmaker block carries a link — that book's public event-page URL for click-out (Bovada/DraftKings/FanDuel/BetMGM/Kalshi/Polymarket/Smarkets; others null). Plain navigation, no affiliate tagging. Also adds app_link — a mobile app-open deep link that opens the book's native app on the fixture (ProphetX only today, null elsewhere)."
+          },
+          "include_book_ids": {
+            "type": "boolean",
+            "description": "When true, each bookmaker block carries book_event_id and each outcome carries book_outcome_id — that book's OWN ids for the event and the priced selection, for joining onto a book's native feed by id instead of matching team/player names and lines. Kalshi ships both (event ticker + per-contract market ticker, e.g. KXMLBGAME-26AUG08NYYBOS-NYY); most other books ship an event id; books without a stable id return null. NB a two-sided market can share ONE book_outcome_id across both legs — a Kalshi contract is binary, so Over/Under are its YES/NO sides; the outcome's name says which side."
+          },
+          "include_depth": {
+            "type": "boolean",
+            "description": "When true, every outcome carries depth: up to three order-book levels beyond the served price, each {price (American), size (dollars)}. [] for books whose depth PropLine does not read (sportsbooks)."
+          }
+        },
+        "required": [
+          "sport_key"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "propline_get_odds_history",
+      "description": "Hobby+ endpoint. Returns the historical line-movement snapshot series for an event (every recorded price/point change per outcome over the event's lifetime). Free tier returns market structure with redacted snapshots and an upgrade pointer. Supports period-historical filters: from/to (absolute ISO), relative_from/relative_to (offsets to commence_time like '-3h' or '0'), interval downsample ('30s'/'1m'/'5m'/'15m'/'30m'/'1h'), and changes_only=true to drop unchanged adjacent snapshots.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sport_key": {
+            "type": "string"
+          },
+          "event_id": {
+            "type": [
+              "string",
+              "number"
+            ]
+          },
+          "markets": {
+            "type": "string"
+          },
+          "bookmakers": {
+            "type": "string",
+            "description": "Comma-separated subset of book keys (bovada, draftkings, fanduel, pinnacle, betmgm, betrivers, unibet, betway, hardrock, fanatics, betus, betonlineag, lowvig, onexbet, tab_au, rebet, fliff, courtside, sportzino, heritage, jazzsports, youwager, thrillzz, prizepicks, underdog, sleeper, dabble, parlayplay, pick6, kalshi, polymarket, polymarket_us, matchbook, smarkets, novig, prophetx, sxbet). Default returns all available."
+          },
+          "from": {
+            "type": "string",
+            "description": "ISO timestamp; only include snapshots at or after. Mutually exclusive with relative_from."
+          },
+          "to": {
+            "type": "string",
+            "description": "ISO timestamp; only include snapshots at or before. Mutually exclusive with relative_to."
+          },
+          "relative_from": {
+            "type": "string",
+            "description": "Offset to commence_time, e.g. '-3h', '-30m', '-90s'. Mutually exclusive with from."
+          },
+          "relative_to": {
+            "type": "string",
+            "description": "Offset to commence_time, e.g. '-1m' or '0'. Mutually exclusive with to."
+          },
+          "interval": {
+            "type": "string",
+            "enum": [
+              "30s",
+              "1m",
+              "5m",
+              "15m",
+              "30m",
+              "1h"
+            ],
+            "description": "Downsample bucket. Latest snapshot per bucket wins."
+          },
+          "changes_only": {
+            "type": "boolean",
+            "description": "When true, drop snapshots whose (price, point) match the previous one."
+          },
+          "period": {
+            "type": "string",
+            "description": "Game-period filter. Omitted = full-game markets only. Canonical codes (q1..q4, h1/h2, p1..p3, i1..i9, f3/f5/f7), comma-separated, or 'all'."
+          }
+        },
+        "required": [
+          "sport_key",
+          "event_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "propline_get_depth_history",
+      "description": "Hobby+ endpoint. Order-book depth history for one event on the exchanges (kalshi, polymarket, polymarket_us, prophetx): every recorded change of an outcome's best price, takeable size (liquidity, dollars) and the levels beyond it (depth: [{price, size}], best first). Use it to backtest with the size that was really there. Recorded from 2026-11-10. Paged: when next_from is set, call again with from=next_from. Free tier returns redacted structure.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sport_key": {
+            "type": "string"
+          },
+          "event_id": {
+            "type": [
+              "string",
+              "number"
+            ]
+          },
+          "markets": {
+            "type": "string",
+            "description": "Comma-separated market keys (default h2h,spreads,totals)."
+          },
+          "bookmakers": {
+            "type": "string",
+            "description": "Comma-separated subset of kalshi, polymarket, polymarket_us, prophetx. Default all four."
+          },
+          "from": {
+            "type": "string",
+            "description": "ISO timestamp; states at or after. Pass next_from here to page."
+          },
+          "to": {
+            "type": "string",
+            "description": "ISO timestamp; states at or before."
+          },
+          "interval": {
+            "type": "string",
+            "enum": [
+              "30s",
+              "1m",
+              "5m",
+              "15m",
+              "30m",
+              "1h"
+            ],
+            "description": "Keep the last state per outcome per bucket."
+          },
+          "period": {
+            "type": "string",
+            "description": "Game-period filter; omitted = full game, 'all' = every period."
+          },
+          "limit": {
+            "type": "number",
+            "description": "States per page (default 5000, max 20000)."
+          }
+        },
+        "required": [
+          "sport_key",
+          "event_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "propline_get_odds_closing",
+      "description": "Hobby+ endpoint. Returns the OPENING and CLOSING line per (book, market, outcome) for an event. Closing = the last snapshot at or before commence_time (price/point/closing_at); opening = the first snapshot PropLine holds for the outcome, however far before kickoff the book posted it (opening_price/opening_point/opening_at); pass opening_window to limit that lookback. Canonical CLV-tracking helper; one call returns both data points your bet should be measured against, instead of fetching full history and post-processing. Compare the POINTS as well as the prices — on spreads and totals the number moves as much as the price, so a price-only comparison mis-measures those markets. opening_age_seconds says how long before kickoff the opener was recorded: the archive starts 2026-04, so a small value means PropLine started polling late and this is not the book's true open. Free tier returns redacted structure with upgrade pointer.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sport_key": {
+            "type": "string"
+          },
+          "event_id": {
+            "type": [
+              "string",
+              "number"
+            ]
+          },
+          "markets": {
+            "type": "string"
+          },
+          "bookmakers": {
+            "type": "string",
+            "description": "Comma-separated subset of book keys (bovada, draftkings, fanduel, pinnacle, betmgm, betrivers, unibet, betway, hardrock, fanatics, betus, betonlineag, lowvig, onexbet, tab_au, rebet, fliff, courtside, sportzino, heritage, jazzsports, youwager, thrillzz, prizepicks, underdog, sleeper, dabble, parlayplay, pick6, kalshi, polymarket, polymarket_us, matchbook, smarkets, novig, prophetx, sxbet). Default returns all available."
+          },
+          "period": {
+            "type": "string",
+            "description": "Game-period filter. Omitted = full-game markets only. Canonical codes (q1..q4, h1/h2, p1..p3, i1..i9, f3/f5/f7), comma-separated, or 'all'."
+          },
+          "opening_window": {
+            "type": [
+              "string",
+              "number"
+            ],
+            "description": "Limit the opening lookback to this many days before kickoff (1-3650), or 'all' (default: the first snapshot held). 14 matches the resolved-props export's opening columns."
+          }
+        },
+        "required": [
+          "sport_key",
+          "event_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "propline_grade_clv",
+      "description": "Hobby+ endpoint. Grades PLACED bets against their closing lines. Closing line value is the only durable proxy for whether a bettor has edge: did the price they took beat the number the market settled on? Send the bets and each comes back with its closing price, the de-vigged closing fair probability, CLV, and — once the game settles — the graded resolution and actual stat value, plus a portfolio summary. Stateless: nothing is stored. TWO CLV numbers are returned deliberately. clv_pct is price-vs-price: familiar and quotable, but VIG-BLIND, so it flatters a bet taken on the juicy side of a wide market. ev_vs_close_pct scores the price against the DE-VIGGED close and is the honest one — report that one when the user asks whether they got value. The de-vig anchors to the SHARPEST book quoting that line at close (fair_source), not the book they bet at, because de-vigging their own book always returns a negative number (they paid its hold). Bets whose event has not started carry closing_is_final=false, are counted in summary.pending, and are EXCLUDED from the summary averages: before kickoff the 'closing' price is just the latest price, so CLV is ~0 by construction — do not present those as results. Matching is fail-closed: a bet that cannot be pinned to exactly one stored outcome returns matched=false with an unmatched_reason instead of a wrong match, so surface those rows rather than silently dropping them. Max 500 bets per request. Free tier returns structure with every number nulled.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "bets": {
+            "type": "array",
+            "maxItems": 500,
+            "description": "Placed bets to grade. selection is the subject: player name for a prop, team name for a game line.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "ref": {
+                  "type": "string",
+                  "description": "Echoed back untouched, so rows can be aligned without relying on order."
+                },
+                "sport_key": {
+                  "type": "string"
+                },
+                "event_id": {
+                  "type": [
+                    "string",
+                    "number"
+                  ]
+                },
+                "market": {
+                  "type": "string"
+                },
+                "bookmaker": {
+                  "type": "string"
+                },
+                "selection": {
+                  "type": "string"
+                },
+                "side": {
+                  "type": "string",
+                  "description": "'Over' or 'Under' for two-way markets. Omit for YES-only props where the player IS the outcome."
+                },
+                "point": {
+                  "type": "number"
+                },
+                "period": {
+                  "type": "string",
+                  "description": "Canonical period code (q1, h1, p1, f5). Omit for full-game markets."
+                },
+                "price": {
+                  "type": "number",
+                  "description": "American odds actually taken, e.g. -110 or 145."
+                },
+                "stake": {
+                  "type": "number",
+                  "description": "Defaults to 1 unit when computing profit_units."
+                }
+              },
+              "required": [
+                "sport_key",
+                "event_id",
+                "market",
+                "bookmaker",
+                "selection",
+                "price"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "devig": {
+            "type": "string",
+            "enum": [
+              "multiplicative",
+              "shin"
+            ],
+            "description": "How the closing anchor's vig is removed before closing_fair_prob / ev_vs_close_pct. 'multiplicative' (default) or 'shin' (loads the overround onto the longshot). Same vocabulary as propline_get_event_ev; echoed as devig_method."
+          }
+        },
+        "required": [
+          "bets"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "propline_settle_bets",
+      "description": "Hobby+ endpoint. Settles PLACED bets, singles or parlays, against final results: each comes back won, lost, push, void, half_won or half_lost, with actual_value (the stat or score it settled on), payout (stake included) and profit, plus a summary. The book and the line are free: a bet at a book PropLine does not carry, or at a line nobody posted, is graded by running PropLine's grader at that line (source='computed'); a named bookmaker whose outcome was stored at that exact line uses its own grade (source='stored'). Asian quarter lines (2.75, -0.25) settle as two half-stakes. result 'pending' means the game is not graded yet — say so, do not guess. 'unmatched' carries a reason (event_not_found, no_market_for_key, no_outcome_for_selection, ambiguous_selection, cannot_compute_at_line, invalid_bet): surface those rows. For a parlay pass legs (each with its own price); any lost leg loses it and pushed/voided legs drop out. Use propline_list_events or propline_get_scores to find event_id. Max 200 bets. Stateless. Free tier returns results as 'redacted'.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "bets": {
+            "type": "array",
+            "maxItems": 200,
+            "description": "Bets to settle. A single bet uses the leg fields directly; a parlay sets legs.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "ref": {
+                  "type": "string",
+                  "description": "Echoed back."
+                },
+                "stake": {
+                  "type": "number",
+                  "description": "Defaults to 1."
+                },
+                "sport_key": {
+                  "type": "string"
+                },
+                "event_id": {
+                  "type": [
+                    "string",
+                    "number"
+                  ]
+                },
+                "market": {
+                  "type": "string"
+                },
+                "selection": {
+                  "type": "string",
+                  "description": "Player for a prop, team for a game line, 'Over'/'Under' for a game total."
+                },
+                "side": {
+                  "type": "string",
+                  "description": "Over/Under/Yes/No for two-way markets."
+                },
+                "point": {
+                  "type": "number",
+                  "description": "The bettor's line."
+                },
+                "period": {
+                  "type": "string",
+                  "description": "Canonical period code (q1, h1, f5). Omit for full game."
+                },
+                "team": {
+                  "type": "string",
+                  "description": "Scope a totals bet to one team's total."
+                },
+                "bookmaker": {
+                  "type": "string",
+                  "description": "Optional book the bet was placed at."
+                },
+                "price": {
+                  "type": "number",
+                  "description": "American odds taken. Needed for payout."
+                },
+                "legs": {
+                  "type": "array",
+                  "maxItems": 20,
+                  "description": "Parlay legs; each has the single-bet fields above.",
+                  "items": {
+                    "type": "object"
+                  }
+                }
+              },
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "bets"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "propline_track_bets",
+      "description": "Hobby+ endpoint. Registers PLACED bets (singles or parlays) so PropLine holds them and settles each when its games are graded. Same bet fields as propline_settle_bets. Use this instead of propline_settle_bets when the game has NOT been played yet and the user wants the result later; read it back with propline_list_tracked_bets. Give each bet a ref: sending the same ref again returns the bet already held, so a retry never duplicates. Each bet comes back with bet_id and status: 'open' (held), 'settled' (the game was already graded) or 'rejected' with a reason (not stored: surface it). Streaming Lite and above also get a bet_settled webhook, and bet_regraded if an official stat correction changes the result. The response carries open_bets and open_bet_limit (Hobby/Pro 500). This stores data on the user's account: only call it when the user asked to track or save a bet.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "bets": {
+            "type": "array",
+            "maxItems": 200,
+            "description": "Bets to track. A single bet uses the leg fields directly; a parlay sets legs.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "ref": {
+                  "type": "string",
+                  "description": "Your id for the bet; makes retries safe."
+                },
+                "stake": {
+                  "type": "number",
+                  "description": "Defaults to 1."
+                },
+                "sport_key": {
+                  "type": "string"
+                },
+                "event_id": {
+                  "type": [
+                    "string",
+                    "number"
+                  ]
+                },
+                "market": {
+                  "type": "string"
+                },
+                "selection": {
+                  "type": "string",
+                  "description": "Player for a prop, team for a game line, 'Over'/'Under' for a game total."
+                },
+                "side": {
+                  "type": "string",
+                  "description": "Over/Under/Yes/No for two-way markets."
+                },
+                "point": {
+                  "type": "number",
+                  "description": "The bettor's line."
+                },
+                "period": {
+                  "type": "string",
+                  "description": "Canonical period code (q1, h1, f5). Omit for full game."
+                },
+                "team": {
+                  "type": "string",
+                  "description": "Scope a totals bet to one team's total."
+                },
+                "bookmaker": {
+                  "type": "string",
+                  "description": "Optional book the bet was placed at."
+                },
+                "price": {
+                  "type": "number",
+                  "description": "American odds taken. Needed for payout."
+                },
+                "legs": {
+                  "type": "array",
+                  "maxItems": 20,
+                  "description": "Parlay legs; each has the single-bet fields above.",
+                  "items": {
+                    "type": "object"
+                  }
+                }
+              },
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "bets"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "propline_list_tracked_bets",
+      "description": "Hobby+ endpoint. Lists the bets registered with propline_track_bets, newest first, each with status (open / settled / expired), result, payout, profit and legs. Pass bet_id for one bet. status filters; since (ISO timestamp) returns only bets settled or regraded at or after it. 'open' means the game is not graded yet: say so, do not guess. 'expired' means the game was never graded within 14 days. regraded_at is set when an official stat correction changed a result.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "bet_id": {
+            "type": "number",
+            "description": "Return just this bet."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "open",
+              "settled",
+              "expired"
+            ]
+          },
+          "since": {
+            "type": "string",
+            "description": "ISO timestamp."
+          },
+          "limit": {
+            "type": "number",
+            "description": "1-500, default 100."
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "propline_get_verified_record",
+      "description": "Public, works on any plan. Returns a tipster's verified record by handle (the name in prop-line.com/record/{handle}): all_time and last_30_days with picks, won, lost, push_or_void, win_pct, units_staked, units_profit and roi_pct, plus each graded pick. Every pick was logged with PropLine before its game started, at a price no better than the best price a tracked sportsbook was showing, cannot be edited or deleted, and was graded against official stats. pending = picks awaiting a result; not_yet_started = picks hidden until their game starts. Use it to check a tipster's claimed record. Report the numbers as they are: a small sample (under ~100 picks) says little, and a past record does not predict future results. A 404 means no such record.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "handle": {
+            "type": "string",
+            "description": "The record's handle."
+          },
+          "limit": {
+            "type": "number",
+            "description": "Picks to return, 1-200 (default 100)."
+          }
+        },
+        "required": [
+          "handle"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "propline_price_parlay",
+      "description": "Hobby+ endpoint. Fair price of a parlay across games (2-15 legs), from the same no-vig fair lines as propline_get_event_ev. Returns fair_price for the parlay, each leg's fair_price and best price + book, best_legs_price, books (every book that prices all the legs: the product of its leg prices, with ev_pct), and offered_ev_pct when price is given. The fair price ASSUMES INDEPENDENT LEGS: legs on the same event are flagged same_game — say so, and use propline_price_sgp for same-game parlays. A leg that matches no fair line returns a reason and the parlay is not priced. Never present the EV as a profit guarantee.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "legs": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 15,
+            "items": {
+              "type": "object",
+              "properties": {
+                "sport_key": {
+                  "type": "string"
+                },
+                "event_id": {
+                  "type": [
+                    "string",
+                    "number"
+                  ]
+                },
+                "market": {
+                  "type": "string"
+                },
+                "selection": {
+                  "type": "string",
+                  "description": "Team, player, or Over/Under for a game total."
+                },
+                "side": {
+                  "type": "string"
+                },
+                "point": {
+                  "type": "number"
+                },
+                "team": {
+                  "type": "string",
+                  "description": "For a team total."
+                },
+                "price": {
+                  "type": "number",
+                  "description": "Offered price for this leg."
+                }
+              },
+              "required": [
+                "sport_key",
+                "event_id",
+                "market",
+                "selection"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "price": {
+            "type": "number",
+            "description": "Parlay price offered (American)."
+          },
+          "devig": {
+            "type": "string",
+            "enum": [
+              "multiplicative",
+              "shin"
+            ]
+          }
+        },
+        "required": [
+          "legs"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "propline_price_sgp",
+      "description": "Hobby+ endpoint. Prices a same-game parlay at the BOOK'S OWN correlated odds — the price a FanDuel customer would be offered for that exact slip right now, not a model of it. bookmaker is fanduel (default, its own pricer), draftkings (its SGP widget's pricer), betonlineag / lowvig (the Sportcast engine both share, same builder price), or 'all' to quote every book on the same legs in one call — then the response is {quotes, errors, best_bookmaker}, and best_bookmaker is the book charging the smallest correlation reduction (use 'all' whenever the user asks which book to bet an SGP at). Send 2-10 legs from ONE event, each named exactly as propline_get_odds names an outcome: market key, name (team / Over / Under / player for YES-only props), description (the player on a two-way prop, '' for game lines), point (omit for h2h and YES-only props), period (omit for full game) and team for a TEAM total (omit for the game total; a totals leg with no team matches the game total only) — or book_outcome_id from includeBookIds (on betonlineag / lowvig that is Sportcast's settlement id, e.g. MatchWinner_Home). The response carries sgp_price (the book's parlay price), independent_price (the product of the live single-leg prices) and correlation_factor = their ratio: below 1 the book is charging for correlation, above 1 it is paying for anti-correlation — say which when presenting it. Matching is fail-closed: a leg that does not pin to exactly one stored outcome is a 422 leg_unmatched naming the leg (an Over with no point on an event with two total lines is refused, not guessed) — fix the leg, do not retry blindly. quoted=false means the book will not offer that combination as an SGP; refused legs carry the book's own failure_code. Free tier returns the matched legs with every price nulled.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sport_key": {
+            "type": "string",
+            "description": "e.g. baseball_mlb"
+          },
+          "event_id": {
+            "type": [
+              "string",
+              "number"
+            ]
+          },
+          "bookmaker": {
+            "type": "string",
+            "description": "fanduel (default), draftkings, betonlineag, lowvig, or all (every book side by side)."
+          },
+          "legs": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 10,
+            "description": "Legs named exactly as /odds names an outcome.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "market": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "description": {
+                  "type": "string"
+                },
+                "point": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "period": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "team": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "For a TEAM total: the team as /odds serves it in the market's team field. Omit for the game total."
+                },
+                "book_outcome_id": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "sport_key",
+          "event_id",
+          "legs"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "propline_export_odds_history",
+      "description": "Backfill-pass / Enterprise only. Bulk line-movement tick history as CSV — every recorded odds snapshot (price + line, per book, including period markets) across a whole sport, one row per (outcome, snapshot). This is the raw firehose no subscription tier can bulk-pull (Pro/Streaming use propline_get_odds_history per event instead). REQUIRES a since/until window to keep the pull bounded — the full archive runs to gigabytes per sport. The result is capped to the first 200 rows for context safety; for the full dataset use the /v1/exports/odds-history endpoint directly with curl/SDK and stream to disk. Non-entitled keys get a 403 with an upgrade pointer.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sport_key": {
+            "type": "string",
+            "description": "Sport key, e.g. baseball_mlb"
+          },
+          "since": {
+            "type": "string",
+            "description": "ISO datetime lower bound on recorded_at (required, e.g. 2026-04-01T00:00:00Z). Keep the window narrow."
+          },
+          "until": {
+            "type": "string",
+            "description": "ISO datetime upper bound on recorded_at (required, e.g. 2026-05-01T00:00:00Z)."
+          },
+          "market": {
+            "type": "string",
+            "description": "Optional market key filter"
+          },
+          "bookmaker": {
+            "type": "string",
+            "description": "Optional bookmaker filter"
+          }
+        },
+        "required": [
+          "sport_key",
+          "since",
+          "until"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "propline_get_futures",
+      "description": "Free-tier endpoint. Returns season-long futures (outright) markets for a sport — championship/Super Bowl/division/conference winners, MVP and award winners, season win totals — aggregated across Bovada, FanDuel, DraftKings, Pinnacle, and Kalshi. One row per (futures event, book, market) with each team/player outcome and its price. Marquee markets (Super Bowl winner, MVP, division/conference) are quoted by multiple books for comparison; exotic markets are often single-book. Useful for: 'who are the Super Bowl favorites across books', 'NFL MVP odds', 'NBA championship futures'. Futures are unresolved (no settlement grade).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sport_key": {
+            "type": "string",
+            "description": "Sport key — e.g. football_nfl, basketball_nba, baseball_mlb."
+          }
+        },
+        "required": [
+          "sport_key"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "propline_get_scores",
+      "description": "Free-tier endpoint. Returns recent and live game scores plus status (scheduled, live, final) for a sport. Useful for: 'is this game over yet, what was the final score'.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sport_key": {
+            "type": "string"
+          },
+          "days_from": {
+            "type": "number",
+            "description": "How many past days of completed games to include. Defaults to 1."
+          }
+        },
+        "required": [
+          "sport_key"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "propline_get_dfs_payouts",
+      "description": "Free-tier reference math. Returns the PrizePicks Power Play (all legs must hit) and Flex Play (partial payouts) entry payout schedule for 2-6 legs, plus the per-leg breakeven win probability for each play. Pass leg_win_prob (e.g. 0.58) to also get expected_return (per $1) and is_plus_ev per play — the slip-level breakeven. Useful for: 'what hit rate do I need to beat a 4-pick PrizePicks Power play', 'is a 3-leg flex +EV at 60% per leg'. NOTE: standard published payouts only — demon/goblin per-pick modifiers aren't in PrizePicks's feed (see the disclaimer field); breakeven assumes independent legs.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "leg_win_prob": {
+            "type": "number",
+            "description": "Optional assumed per-leg win probability in [0,1]. Adds expected_return + is_plus_ev to each play."
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "propline_get_mlb_grand_salami",
+      "description": "Free-tier endpoint. Returns the synthetic daily MLB Grand Salami for a given UTC date — total runs scored across every MLB game on the slate plus each book's implied Grand Salami line (median of per-game primary totals across our MLB books incl. Pinnacle, Polymarket, Matchbook, Smarkets). No retail sportsbook quotes this as a single market. Useful for: 'what's the total run line for tonight's full MLB slate', 'did the Grand Salami go over yesterday', 'historical Grand Salami results for backtesting'.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "date": {
+            "type": "string",
+            "description": "YYYY-MM-DD UTC date. Defaults to today (UTC) when omitted."
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "propline_get_nhl_daily_goals_total",
+      "description": "Free-tier endpoint. Returns the synthetic daily NHL goals total (hockey's equivalent of the MLB Grand Salami) for a given US Eastern date — total goals scored across every NHL game on the slate (including OT/SO) plus each book's implied Daily Goals Total line (median of per-game primary totals across our NHL books). No retail sportsbook quotes this as a single market. Useful for: 'what's the total goal line for tonight's full NHL slate', 'did the Daily Goals Total go over yesterday', 'historical NHL daily-goals results for backtesting'.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "date": {
+            "type": "string",
+            "description": "YYYY-MM-DD UTC date. Defaults to today (UTC) when omitted."
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "propline_get_resolution_summary",
+      "description": "Free-tier endpoint. Returns the factual volume of player props PropLine has graded against real box scores over the last N days (aggregated counts only): total graded/settled, games, sports covered, plus per-sport and top-market breakdowns. Useful for: 'how much graded prop data does PropLine have, what's the coverage'. A coverage proof, never a profitability claim.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "days": {
+            "type": "number",
+            "description": "Look-back window, 1-90. Defaults to 30."
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "propline_get_event_ids",
+      "description": "Free-tier endpoint. Id crosswalk for one sport: one object per event from 3 days ago to 30 days ahead with PropLine's event id, commence_time, teams (+ team keys/ids), espn_event_id, mlb_game_pk, merged_from_event_ids, and each sportsbook's own event id + link under books. Useful for: 'join PropLine events onto ESPN / the MLB Stats API / a sportsbook's own feed', 'what is DraftKings' id for this game'.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sport_key": {
+            "type": "string",
+            "description": "Sport key, e.g. baseball_mlb."
+          }
+        },
+        "required": [
+          "sport_key"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "propline_lookup_event_ids",
+      "description": "Free-tier endpoint. Reverse id lookup: give a sportsbook's own event id (book + book_event_id, e.g. book='pinnacle'), an ESPN event id or an MLB gamePk and get PropLine's event back with its full id crosswalk, status, completed flag and final score. Any date. Up to 50 comma-separated ids; misses come back in not_found. Useful for: 'what was the result of Pinnacle event 1612345678', 'which PropLine event is this ESPN game'.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "book": {
+            "type": "string",
+            "description": "Book key, e.g. pinnacle, draftkings, kalshi."
+          },
+          "book_event_id": {
+            "type": "string",
+            "description": "That book's event id(s), comma-separated."
+          },
+          "espn_event_id": {
+            "type": "string"
+          },
+          "mlb_game_pk": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "propline_get_book_accuracy",
+      "description": "Free-tier endpoint. How well each sportsbook prices player props: each book's closing prop prices are de-vigged and scored (Brier) against the real result and against the other books on the same line. Per book: props scored, brier, consensus_brier, skill_bp (> 0 = closer to the result than the market average) with a 95% interval, verdict (beats_market / trails_market / in_line) and margin_pct (average overround), plus by_sport and by_market breakdowns. Useful for: 'which book prices props most accurately', 'which book has the lowest margin'. A pricing report, never a profit claim or betting edge.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "days": {
+            "type": "number",
+            "description": "Look-back window, 7-120. Defaults to 30."
+          },
+          "sport": {
+            "type": "string",
+            "description": "Optional sport key, e.g. baseball_mlb."
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "propline_get_golf_rounds",
+      "description": "Free-tier endpoint. A golfer's completed rounds, newest first, with strokes, score to par and hole counts (eagles, birdies, pars, bogeys, doubles), plus last-5/10/20 averages. Every player in the field, back to 2024; a round in progress is never included. Filter by tour (pga, dp_world, liv, lpga, korn_ferry, champions). Hole counts are null on DP World, LPGA and some LIV rounds. Useful for: 'Scheffler's last 10 rounds', 'how has Bryson scored on LIV lately'.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "player": {
+            "type": "string",
+            "description": "Player name (case/accents ignored) or ESPN athlete id."
+          },
+          "tour": {
+            "type": "string",
+            "description": "Optional comma-separated tours: pga, dp_world, liv, lpga, korn_ferry, champions. Omit for all."
+          },
+          "limit": {
+            "type": "number",
+            "description": "Rounds to return, 1-200. Defaults to 20."
+          },
+          "since": {
+            "type": "string",
+            "description": "Optional YYYY-MM-DD lower bound."
+          }
+        },
+        "required": [
+          "player"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "propline_get_golf_tournaments",
+      "description": "Free-tier endpoint. Golf tournaments we hold round data for, newest first, with player and round counts. Filter by tour (pga, dp_world, liv, lpga, korn_ferry, champions) and season.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "tour": {
+            "type": "string",
+            "description": "Optional comma-separated tours."
+          },
+          "season": {
+            "type": "number",
+            "description": "Optional season year."
+          },
+          "limit": {
+            "type": "number",
+            "description": "1-500. Defaults to 50."
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "propline_get_injuries",
+      "description": "Free-tier endpoint. The current injury report for NFL, NCAAF, NBA, WNBA, NHL or MLB: each listed player with status (Out, Questionable, Day-To-Day, 15-Day-IL...), status_code, injury, expected return and status_since (when the current status began). Source: ESPN, every 10 minutes. NBA rows also carry the NBA's own official injury report (official_status Out/Doubtful/Questionable/Probable/Available, official_reason, official_report_at, official_game_at); fantasy_status is ESPN's OUT/GTD/OFS. Useful for: 'who is out for the Chiefs', 'which NBA players are questionable tonight' — check it before trusting a player prop.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sport_key": {
+            "type": "string",
+            "description": "football_nfl, football_ncaaf, basketball_nba, basketball_wnba, hockey_nhl or baseball_mlb."
+          },
+          "team": {
+            "type": "string",
+            "description": "Optional team name or abbreviation, e.g. KC."
+          },
+          "status": {
+            "type": "string",
+            "description": "Optional comma-separated status codes: out, doubtful, questionable, probable, day_to_day, injured_list, suspended, other."
+          }
+        },
+        "required": [
+          "sport_key"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "propline_get_injury_history",
+      "description": "Free-tier endpoint. Every injury status change in a sport over the last 1-90 days, newest first: old_status -> new_status with the time we saw it (new_status null = came off the report). change_type is espn or official (an NBA official report change). History starts 2026-10-18. Pair with odds history to see how lines moved on a ruling.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sport_key": {
+            "type": "string",
+            "description": "football_nfl, football_ncaaf, basketball_nba, basketball_wnba, hockey_nhl or baseball_mlb."
+          },
+          "days": {
+            "type": "number",
+            "description": "1-90. Defaults to 7."
+          },
+          "player": {
+            "type": "string",
+            "description": "Optional player name (substring match)."
+          }
+        },
+        "required": [
+          "sport_key"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "propline_get_lineups",
+      "description": "Free-tier endpoint. Lineups for NBA, NFL and NHL games, per game and team: each player's role (starter, bench, active, inactive), status (expected or confirmed) and since (when we first saw it). NBA: five expected starters, then the confirmed lineup. NFL: starters, bench and inactives from six hours before kickoff, confirmed from 90 minutes before. NHL: scratches, dressed roster and starting goalie once filed (no projections). Useful for: 'who is starting for the Celtics tonight', 'who is inactive for the Chargers' — check it before trusting a player prop.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sport_key": {
+            "type": "string",
+            "description": "basketball_nba, football_nfl or hockey_nhl."
+          },
+          "team": {
+            "type": "string",
+            "description": "Optional team name or abbreviation, e.g. BOS."
+          },
+          "event_id": {
+            "type": "number",
+            "description": "Optional PropLine event id."
+          }
+        },
+        "required": [
+          "sport_key"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "propline_get_lineup_history",
+      "description": "Free-tier endpoint. Every NBA, NFL or NHL lineup change over the last 1-90 days, newest first: old_role -> new_role and old_status -> new_status with the time we saw it (old_role null = first listed, new_role null = dropped from the lineup). History starts 2026-11-22. Pair with odds history to see how lines moved on a lineup change.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sport_key": {
+            "type": "string",
+            "description": "basketball_nba, football_nfl or hockey_nhl."
+          },
+          "days": {
+            "type": "number",
+            "description": "1-90. Defaults to 7."
+          },
+          "player": {
+            "type": "string",
+            "description": "Optional player name (substring match)."
+          },
+          "event_id": {
+            "type": "number",
+            "description": "Optional PropLine event id."
+          }
+        },
+        "required": [
+          "sport_key"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "propline_get_splits",
+      "description": "Free-tier endpoint. DraftKings betting splits on the main game lines (moneyline, spread, total): for each side, handle_pct (share of DraftKings Sportsbook's own customers' money) and bets_pct (share of their bet count), with the current point and American price. These are DraftKings customers only, not the whole betting market. Useful for: 'where is the money on DraftKings for the Chiefs game'.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sport_key": {
+            "type": "string",
+            "description": "football_nfl, basketball_nba, hockey_nhl, baseball_mlb, basketball_wnba, mma_ufc, football_ncaaf, basketball_ncaab, basketball_ncaaw, soccer_epl, soccer_uefa_champions_league, soccer_uefa_europa_league or soccer_mls."
+          },
+          "event_id": {
+            "type": "number",
+            "description": "Optional PropLine event id."
+          },
+          "market": {
+            "type": "string",
+            "enum": [
+              "moneyline",
+              "spread",
+              "total"
+            ],
+            "description": "Optional market."
+          }
+        },
+        "required": [
+          "sport_key"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "propline_get_split_history",
+      "description": "Free-tier endpoint. Every recorded change in DraftKings customers' handle_pct and bets_pct for one game, oldest first, with the point and price at each change. Pass event_id or dk_event_id (one is required).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sport_key": {
+            "type": "string",
+            "description": "football_nfl, basketball_nba, hockey_nhl, baseball_mlb, basketball_wnba, mma_ufc, football_ncaaf, basketball_ncaab, basketball_ncaaw, soccer_epl, soccer_uefa_champions_league, soccer_uefa_europa_league or soccer_mls."
+          },
+          "event_id": {
+            "type": "number",
+            "description": "PropLine event id."
+          },
+          "dk_event_id": {
+            "type": "string",
+            "description": "DraftKings event id."
+          }
+        },
+        "required": [
+          "sport_key"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "propline_get_referees",
+      "description": "Free-tier endpoint. Card stats per referee: graded matches, yellow and red cards, cards per match, last match and next appointment. 32 soccer leagues (Premier League, La Liga, Serie A, Bundesliga, Ligue 1, MLS, Championship, Eredivisie, Liga MX, Brasileirao, UEFA cups, Libertadores, Sudamericana and others); other sports 404 with available_sports. Useful for: 'which EPL referee gives the most cards', 'who is refereeing Arsenal next' — check it before a cards prop.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sport_key": {
+            "type": "string",
+            "description": "A soccer league key, e.g. soccer_epl, soccer_la_liga, soccer_mls."
+          },
+          "search": {
+            "type": "string",
+            "description": "Optional referee name (substring match)."
+          },
+          "since": {
+            "type": "string",
+            "description": "Optional start date, YYYY-MM-DD."
+          },
+          "until": {
+            "type": "string",
+            "description": "Optional end date, YYYY-MM-DD."
+          }
+        },
+        "required": [
+          "sport_key"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "propline_get_referee_matches",
+      "description": "Free-tier endpoint. One referee's summary plus their matches, newest first, with each team's yellow and red cards (null until graded) and upcoming appointments. Same 32 soccer leagues as propline_get_referees. Get exact names from propline_get_referees.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sport_key": {
+            "type": "string",
+            "description": "A soccer league key, e.g. soccer_epl, soccer_la_liga, soccer_mls."
+          },
+          "name": {
+            "type": "string",
+            "description": "Referee name, e.g. Michael Oliver."
+          },
+          "since": {
+            "type": "string",
+            "description": "Optional start date, YYYY-MM-DD."
+          },
+          "until": {
+            "type": "string",
+            "description": "Optional end date, YYYY-MM-DD."
+          },
+          "limit": {
+            "type": "number",
+            "description": "1-500. Defaults to 100."
+          }
+        },
+        "required": [
+          "sport_key",
+          "name"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "propline_get_market_coverage",
+      "description": "Free-tier endpoint. Every market each book is pricing on a sport's games in the next N days, and on how many of those games. Returns the game count and, per book, game_lines and props entries {market, period, events, markets, last_update}. Useful for: 'which books have NFL player props posted', 'does FanDuel price this market yet'. Books post props at different times, so a low events count means not posted on every game yet.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sport_key": {
+            "type": "string",
+            "description": "e.g. football_nfl, baseball_mlb."
+          },
+          "days": {
+            "type": "number",
+            "description": "Games starting in the next N days, 1-7. Defaults to 3."
+          },
+          "periods": {
+            "type": "boolean",
+            "description": "Include quarter / half / inning markets. Defaults to false."
+          }
+        },
+        "required": [
+          "sport_key"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "propline_get_history_coverage",
+      "description": "Free-tier endpoint. When each book's odds history starts for a sport: history_start, game_lines_start, props_start, latest_event, event count, and whether the book is retired. Useful for: 'how far back do we have Fanatics MLB props'.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sport_key": {
+            "type": "string",
+            "description": "e.g. baseball_mlb."
+          }
+        },
+        "required": [
+          "sport_key"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "propline_get_event_stats",
+      "description": "Book-agnostic raw box-score stats for an event. Returns per-player stats (e.g. strikeouts, hits, points, rebounds, shots-on-goal) decoupled from any sportsbook's lines. LIVE during games for major US sports (MLB + WNBA now; NFL, NCAAF, NBA, NHL at season start): while the event's status is in_progress, stats refresh ~every 90 seconds with cumulative in-game values — use this to answer 'how is this prop tracking right now'. Treat in-progress numbers as partial; at status=final they are the official box score. Other sports populate stats at game completion. Free tier.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sport_key": {
+            "type": "string"
+          },
+          "event_id": {
+            "type": [
+              "string",
+              "number"
+            ]
+          }
+        },
+        "required": [
+          "sport_key",
+          "event_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "propline_get_event_results",
+      "description": "Pro-tier endpoint. Returns graded prop outcomes for a completed event — every Over/Under marked won, lost, push, or void with the actual stat value next to the line. The single most distinctive feature vs the-odds-api: they don't grade props at any tier. Free tier returns the same structure with resolution and actual_value redacted plus an upgrade pointer.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sport_key": {
+            "type": "string"
+          },
+          "event_id": {
+            "type": [
+              "string",
+              "number"
+            ]
+          },
+          "markets": {
+            "type": "string",
+            "description": "Comma-separated market keys to restrict to (e.g. pitcher_strikeouts,batter_hits)."
+          },
+          "bookmakers": {
+            "type": "string",
+            "description": "Comma-separated book keys to restrict to (e.g. bovada). Default returns all books; an unfiltered MLB game can run several MB, so pass one book when that is enough."
+          }
+        },
+        "required": [
+          "sport_key",
+          "event_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "propline_get_event_context",
+      "description": "Game context for an event — the conditions a prop settles under. MLB: probable starting pitchers and their throwing hand (L/R/S — platoon-split context for every batter prop), a confirmed-lineup flag, the home-plate umpire, and first-pitch weather (temperature, wind, precipitation) at outdoor / open-roof venues (indoor venues return weather=null). NFL & NCAAF: the venue and kickoff weather. The same block is embedded in get_event_results, so every graded prop carries its conditions — unique to PropLine. Free tier. 404 when no context is on file for the event yet.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sport_key": {
+            "type": "string"
+          },
+          "event_id": {
+            "type": [
+              "string",
+              "number"
+            ]
+          }
+        },
+        "required": [
+          "sport_key",
+          "event_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "propline_get_event_movement",
+      "description": "Line movement + steam detection from the snapshot tick history. Per (book, market, outcome): opening line, latest line, signed implied-probability shift, point shift, direction. The steam[] array flags outcomes that multiple books moved the same direction — the classic sharp-money signal, computed across all 37 books PropLine polls. When a book moves the line itself, that outcome's prob_shift is null and direction is 'line_moved' (excluded from the steam signal). No pull-only odds API can produce this. Each outcome carries outcome_id (the id /odds and webhooks use); steam rows carry team (team totals) plus open_point/latest_point. Hobby+ full; free tier redacted.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sport_key": {
+            "type": "string"
+          },
+          "event_id": {
+            "type": [
+              "string",
+              "number"
+            ]
+          },
+          "markets": {
+            "type": "string",
+            "description": "Comma-separated market keys. Defaults to h2h,spreads,totals."
+          },
+          "bookmakers": {
+            "type": "string",
+            "description": "Comma-separated subset of book keys (bovada, draftkings, fanduel, pinnacle, betmgm, betrivers, unibet, betway, hardrock, fanatics, betus, betonlineag, lowvig, onexbet, tab_au, rebet, fliff, courtside, sportzino, heritage, jazzsports, youwager, thrillzz, prizepicks, underdog, sleeper, dabble, parlayplay, pick6, kalshi, polymarket, polymarket_us, matchbook, smarkets, novig, prophetx, sxbet). Default returns all available."
+          },
+          "period": {
+            "type": "string",
+            "description": "Game-period filter (q1..q4, h1/h2, p1..p3, i1..i9, f3/f5/f7; comma-separated, or 'all'). Omit for full-game."
+          },
+          "since": {
+            "type": "string",
+            "description": "Measure movement from this moment instead of each line's first quote: ISO-8601 timestamp or a negative offset from now ('-6h', '-30m', '-2d'). Steam then covers only moves inside the window."
+          },
+          "include_book_ids": {
+            "type": "boolean",
+            "description": "When true, each outcome also carries book_outcome_id — the book's own selection id."
+          }
+        },
+        "required": [
+          "sport_key",
+          "event_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "propline_search_players",
+      "description": "Find a player by name fragment and get their stable player_id (e.g. 'mlb:677951') plus every spelling the books use (known_names). Free tier. Pass the player_id as player_name to propline_get_player_history / propline_get_player_trends to avoid name-spelling ambiguity.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sport_key": {
+            "type": "string"
+          },
+          "search": {
+            "type": "string",
+            "description": "Name fragment to match, e.g. 'judge'"
+          },
+          "limit": {
+            "type": "number",
+            "description": "Max players to return, 1-100. Default 25."
+          }
+        },
+        "required": [
+          "sport_key",
+          "search"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "propline_get_player_history",
+      "description": "Player prop history across recent games for one market. Returns each prior prop this player took with line, prices, resolution, actual value, is_main_line (the book's main line vs an alt-ladder rung) and line_moved_in_play. Pass main_line_only=true to drop alt rungs. Pro tier returns full data; free tier returns redacted resolution/actual_value with an upgrade pointer.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sport_key": {
+            "type": "string"
+          },
+          "player_name": {
+            "type": "string",
+            "description": "Player name as it appears in box scores — e.g. 'Aaron Judge', 'Nikola Jokic' — or a player_id from propline_search_players, e.g. 'mlb:592450'"
+          },
+          "market": {
+            "type": "string",
+            "description": "Market key, e.g. 'pitcher_strikeouts' or 'player_points'"
+          },
+          "markets": {
+            "type": "string",
+            "description": "Deprecated alias: the first market of a comma-separated list is used when `market` is omitted"
+          },
+          "limit": {
+            "type": "number",
+            "description": "Max number of past games (default 20, max 100)"
+          },
+          "main_line_only": {
+            "type": "boolean",
+            "description": "Only each book's main line (drops alt-ladder rungs). Omit for every line."
+          }
+        },
+        "required": [
+          "sport_key",
+          "player_name"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "propline_get_player_games",
+      "description": "A player's recent games with every raw box-score stat per game — one call instead of one request per event. Use this to answer 'how has X actually performed lately?' and to build L5/L10/L20, season splits and head-to-head yourself. Pass `opponent` for H2H (accepts a full name, nickname or abbreviation — 'Boston Red Sox', 'Red Sox', 'BOS'); the limit applies AFTER that filter, so opponent + limit=10 means the last 10 MEETINGS, not the Boston games among the last 10 games. H2H is not capped to the current season. IMPORTANT: this is the raw box-score archive, NOT graded-prop history — it covers every game with a box score on file, including games no sportsbook priced, so a 'last 10 games' window here really is the last 10 games (one built from propline_get_player_trends silently skips unpriced games). It carries no line, price or grade; use propline_get_player_trends for hit rates against a posted line. `player_team`/`opponent`/`is_home` are null when the player's side can't be identified, and always for individual sports (tennis, golf, UFC) — report them as unknown rather than guessing. Accepts a player_id in place of the name; the response carries player_id (null when the player has none yet).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sport_key": {
+            "type": "string"
+          },
+          "player_name": {
+            "type": "string",
+            "description": "Player name as it appears in box scores — e.g. 'Aaron Judge', 'Nikola Jokic' — or a player_id from propline_search_players, e.g. 'mlb:592450'"
+          },
+          "limit": {
+            "type": "number",
+            "description": "Games to return, 1-100. Default 20."
+          },
+          "opponent": {
+            "type": "string",
+            "description": "Optional head-to-head filter — team name, nickname or abbreviation."
+          },
+          "stat_type": {
+            "type": "string",
+            "description": "Optional comma-separated stat names to return; omit for all. Vocabulary is per-sport."
+          }
+        },
+        "required": [
+          "sport_key",
+          "player_name"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "propline_get_player_trends",
+      "description": "Hit-rate trends / last-N-games over rate for a player — unique to PropLine's prop-resolution data. For each market the player has graded history in, returns over/under/push splits across the last 5/10/20/50 graded games, current streak, average actual stat, and the recent line. This is the 'did X go over in N of his last M games?' surface. Omit `market` for all markets, or pass one to scope (e.g. 'player_points', 'batter_hits').",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sport_key": {
+            "type": "string"
+          },
+          "player_name": {
+            "type": "string",
+            "description": "Player name as it appears in box scores — e.g. 'Aaron Judge', 'Nikola Jokic' — or a player_id from propline_search_players, e.g. 'mlb:592450'"
+          },
+          "market": {
+            "type": "string",
+            "description": "Optional single market to scope trends to (e.g. 'player_points'). Omit for all markets."
+          },
+          "dfs_odds_type": {
+            "type": "string",
+            "enum": [
+              "standard",
+              "goblin",
+              "demon"
+            ],
+            "description": "Optional PrizePicks pick-em flavor. When set, the trend is computed against that flavor's PrizePicks line only (e.g. compare a player's goblin-line hit-rate vs his standard-line trend). Omit for the default cross-book behavior."
+          }
+        },
+        "required": [
+          "sport_key",
+          "player_name"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "propline_get_event_ev",
+      "description": "Pro-tier endpoint. Returns cross-book +EV per outcome for an event. We anchor on a sharp book, remove vig, derive a no-vig fair line, and compute EV% per book at the same line. Outcomes are sorted with +EV plays floated to the top of each line group. PrizePicks is excluded from EV math (DFS payouts aren't comparable to per-book prices). The anchor is chosen PER LINE in the order pinnacle → polymarket → kalshi → bovada → smarkets, and each line's fair_source names the one used — report the anchor from fair_source per line, never assume Pinnacle anchored all of them. Optional bookmakers filter prices to the books the user holds accounts at; it never changes the anchor, so filtering to DraftKings still measures DraftKings against Pinnacle.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sport_key": {
+            "type": "string"
+          },
+          "event_id": {
+            "type": [
+              "string",
+              "number"
+            ]
+          },
+          "markets": {
+            "type": "string"
+          },
+          "bookmakers": {
+            "type": "string",
+            "description": "Comma-separated book keys (e.g. 'draftkings,fanduel') to price only the user's books. Narrows prices, not the anchor."
+          },
+          "min_ev_pct": {
+            "type": "number",
+            "description": "Filter to outcomes with EV ≥ this percent (e.g. 2.0)."
+          },
+          "devig": {
+            "type": "string",
+            "enum": [
+              "multiplicative",
+              "shin"
+            ],
+            "description": "How the anchor's vig is removed. 'multiplicative' (default) divides each implied probability by the booksum; 'shin' solves Shin's insider-trading model, which loads the overround onto the longshot and corrects the favourite-longshot bias — use it when the user asks about longshot props (anytime TD, first scorer). The response echoes devig_method; say which method the numbers came from."
+          },
+          "fair_source": {
+            "type": "string",
+            "description": "Optional anchor override: one book or a comma-separated list tried IN ORDER per line, from pinnacle, polymarket, kalshi, bovada, smarkets (anything else is a 400). Lines none of them anchor are dropped. Omit for the default order. The single value 'consensus' (not combinable with book names) uses the median no-vig probability across every book quoting a clean, fresh two-sided market (3+ books); each line then lists the books used in fair_books. It is opt-in and NOT a proven better anchor — never describe it as more profitable."
+          },
+          "max_age": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Optional, seconds. Drops quoted prices the book has not delivered within that many seconds (each outcome carries last_update). The fair line is unaffected."
+          }
+        },
+        "required": [
+          "sport_key",
+          "event_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "propline_get_event_projections",
+      "description": "Market-implied consensus projection per (market, player) for an event: the line where the no-vig P(over) crosses 50%, median across contributing sportsbooks. Use it to validate statistical or fantasy projections against the live market. These are MARKET-IMPLIED values derived purely from sportsbook prices — never a forecast, and no accuracy claim is made; present them as 'the market implies X', not 'PropLine projects X'. DFS pick'em pricing is excluded; each row carries books_contributing and a stable player_id (null until the player has graded). Hobby+ for values; free tier gets the structure redacted.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sport_key": {
+            "type": "string"
+          },
+          "event_id": {
+            "type": [
+              "string",
+              "number"
+            ]
+          },
+          "markets": {
+            "type": "string",
+            "description": "Comma-separated market keys, e.g. 'player_pass_yds,player_receptions'."
+          }
+        },
+        "required": [
+          "sport_key",
+          "event_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "propline_get_best_line",
+      "description": "Cross-book line shopping (Hobby+ for prices; free tier gets the full structure with book identities + best-first ranking but prices nulled and redacted:true). For every (market, player, line) tuple on an event, returns the single best American price across all comparable books, plus an all_prices array sorted best-first (one row per book, each with last_update). Companion to propline_get_event_ev: /ev says whether a price beats the no-vig fair line; best-line says which book pays the most. DFS pick'em books (PrizePicks, Sleeper, Dabble, ParlayPlay, DraftKings Pick6) are excluded; Underdog only at clean two-way lines. Optional bookmakers filter to shop only the books the user holds accounts at.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sport_key": {
+            "type": "string"
+          },
+          "event_id": {
+            "type": [
+              "string",
+              "number"
+            ]
+          },
+          "markets": {
+            "type": "string",
+            "description": "Comma-separated market keys (e.g. 'pitcher_strikeouts,h2h')."
+          },
+          "bookmakers": {
+            "type": "string",
+            "description": "Comma-separated book keys (e.g. 'draftkings,fanduel') to shop only those books."
+          },
+          "include_links": {
+            "type": "boolean",
+            "description": "When true, every price row carries a link — that book's public event-page URL, the click-out for 'go bet this'. Books without a verified URL template return null. Also adds app_link — a mobile app-open deep link (ProphetX only today, null elsewhere)."
+          }
+        },
+        "required": [
+          "sport_key",
+          "event_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "propline_get_parlay_link",
+      "description": "One link that opens a sportsbook with several legs on the bet slip. Pass PropLine outcome ids (the outcome_id on propline_get_best_line price rows with include_links=true), 1-12, all at one book: DraftKings, FanDuel or Fanatics. Returns bet_link plus each leg's book ids. The link only LOADS the legs; the book may still refuse to combine them (some same-game parlays), so tell the user to check the slip. No prices; every tier.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "outcome_ids": {
+            "type": "string",
+            "description": "Comma-separated PropLine outcome ids, e.g. '16263784960,16263949931'."
+          }
+        },
+        "required": [
+          "outcome_ids"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "propline_list_webhooks",
+      "description": "List the API key's webhook subscriptions (Streaming Lite tier and up; other tiers get a 403 with an upgrade URL). Read-only: signing secrets are always masked, and this server deliberately has no create/update/delete tools — manage subscriptions via the REST API or SDKs. Each row shows url, subscribed events (line_movement, resolution, steam, market_suspended, ev), filters (incl. min_ev_pct / max_ev_pct / ev_fair_source for ev events) and active status. Use this first to find the webhook id for propline_get_webhook_deliveries.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "propline_get_webhook_deliveries",
+      "description": "Recent delivery attempts for one webhook (Streaming Lite tier and up), newest first — the debugging surface for 'why isn't my webhook firing'. Each row: status (pending/success/failed), HTTP response_code, attempts, delivered_at and the payload that was sent. A pending row with attempts > 0 is mid-retry-backoff; status 'failed' with response_code null means the endpoint was unreachable or timed out (8s). Page backwards through a deep queue with before_id = the smallest id on the previous page; a page shorter than limit is the last one.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "webhook_id": {
+            "type": "number",
+            "description": "Webhook id (from propline_list_webhooks)."
+          },
+          "limit": {
+            "type": "number",
+            "description": "Rows per page, 1-200. Default 50."
+          },
+          "before_id": {
+            "type": "number",
+            "description": "Cursor: smallest delivery id from the previous page."
+          }
+        },
+        "required": [
+          "webhook_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "propline_replay_webhook_events",
+      "description": "Re-read a webhook subscription's events in order from a cursor — answers 'my endpoint was down, what did I miss?'. Every delivery carries an X-PropLine-Sequence header, a counter monotonic WITHIN one subscription; pass the highest one the user processed as since_seq. Do NOT use the delivery id as the cursor: that id is global across all subscriptions, so gaps in it are other customers' traffic and mean nothing. Events come back OLDEST FIRST (the opposite of propline_get_webhook_deliveries, which is a newest-first debugging log). Page by passing next_seq back as since_seq while has_more is true. ALWAYS check `truncated`: true means events after the cursor already aged out of retention (2 days, max 5,000 deliveries per subscription) and are unrecoverable — tell the user to resync from the REST endpoints rather than reporting them caught up. latest_seq is not subject to retention, so latest_seq - next_seq is an honest 'how far behind' even when the rows are gone. Sequence numbers always increase and never repeat but are NOT guaranteed to be dense — a skipped number is normal and is not evidence of loss.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "webhook_id": {
+            "type": "number",
+            "description": "Webhook id (from propline_list_webhooks)."
+          },
+          "since_seq": {
+            "type": "number",
+            "description": "Read events after this sequence. Default 0 = from the oldest retained event (which on an established subscription will correctly report truncated: true)."
+          },
+          "limit": {
+            "type": "number",
+            "description": "Events per page, 1-500. Default 100."
+          }
+        },
+        "required": [
+          "webhook_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "propline_create_free_api_key",
+      "description": "Create a free personal PropLine API key for the user and EMAIL it to them. Use this when the user wants their own key — e.g. they hit a shared-demo-key rate limit, a paid field came back redacted, or they ask how to get a key. Only call it with an email address the user explicitly gave you for this purpose in this conversation; never guess, reuse one from elsewhere, or sign up a third party. The key is never returned here — it goes to that inbox, with instructions to reconnect this assistant using it. Free tier: 1,000 requests/day, no card. If the address already has a key, the key is re-sent (at most once a day).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "description": "The user's own email address, as they gave it."
+          }
+        },
+        "required": [
+          "email"
+        ],
+        "additionalProperties": false
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "io.github.proplineapi/propline-mcp",
+    "version": "0.62.0",
+    "remoteUrl": "https://mcp.prop-line.com/mcp",
+    "publishedAt": "2026-11-27T21:05:02.090579Z",
+    "fetchedAt": "2026-11-28T10:03:29.931Z",
+    "toolsSha256": "7798c0174775d02de4b00a76c9c2cb55eda8f3267fd502d260553f7b4e03749e"
+  }
+}

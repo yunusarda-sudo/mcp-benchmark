@@ -1,0 +1,902 @@
+{
+  "$schema": "../schema.json",
+  "name": "io.github.GeminiGeorge22/fmf-proof",
+  "title": "FMF Proof",
+  "category": "AI, LLMs & Agents",
+  "description": "Pay-per-call proof reads & payment checks. $0.001-0.02/call, no API key.",
+  "tools": [
+    {
+      "name": "paid_path",
+      "description": "Probes the same method, URL and body the paid call uses, without paying. Reports payTo byte-identity against the listing with byte counts, listed vs 402 price as integer atoms, whether every offer on the response agrees, and whether the seller asks for payment before validating input. The receipt carries valid_until.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "The exact URL the paid call will use. Also accepted as: link, uri, href, page, website, site, address.",
+            "x-aliases": [
+              "link",
+              "uri",
+              "href",
+              "page",
+              "website",
+              "site",
+              "address"
+            ]
+          },
+          "method": {
+            "type": "string",
+            "description": "GET or POST: the same method the paid call uses (default POST)."
+          },
+          "body": {
+            "type": "object",
+            "description": "The JSON body the paid call will send (POST). No credentials."
+          },
+          "listing": {
+            "type": "object",
+            "description": "What the listing claims: { pay_to, price_atoms or price_usd, decimals (default 6), network, asset }. Each field given is compared."
+          },
+          "validation_probe": {
+            "type": "boolean",
+            "description": "Also send one invalid request to see whether the seller answers 4xx before 402 (default true for POST)."
+          },
+          "invalid_body": {
+            "type": "object",
+            "description": "Optional: your own invalid body for the validation probe (default is malformed JSON)."
+          },
+          "invalid_url": {
+            "type": "string",
+            "description": "Optional: a URL with invalid query parameters, for a GET validation probe."
+          },
+          "ttl_seconds": {
+            "type": "number",
+            "description": "How long this receipt should count (60 to 86400, default 900)."
+          }
+        }
+      }
+    },
+    {
+      "name": "price_parity",
+      "description": "Reads a seller's HTTP 402 and its MCP tools/list in one window and runs three screens: charged vs declared as integer atoms with the mod-1000 tails printed, payTo byte-identity across every offer with byte counts, and MCP price vs HTTP price with both read stamps. Says when the MCP price exists only as free text.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "http_url": {
+            "type": "string",
+            "description": "The paid HTTP route."
+          },
+          "method": {
+            "type": "string",
+            "description": "GET or POST (default POST)."
+          },
+          "body": {
+            "type": "object",
+            "description": "Optional JSON body for the HTTP probe."
+          },
+          "mcp_url": {
+            "type": "string",
+            "description": "The seller MCP endpoint (Streamable HTTP)."
+          },
+          "mcp_tool": {
+            "type": "string",
+            "description": "Tool name, when the MCP server lists more than one."
+          },
+          "network": {
+            "type": "string",
+            "description": "Compare only offers on this network, e.g. base."
+          },
+          "decimals": {
+            "type": "number",
+            "description": "Asset decimals (default 6)."
+          },
+          "listed_pay_to": {
+            "type": "string",
+            "description": "Optional payTo from the listing, compared byte for byte."
+          }
+        }
+      }
+    },
+    {
+      "name": "access_preflight",
+      "description": "Before you pay for a fetch: reads robots.txt, then makes one plain GET from this vantage and returns open, blocked, js_wall, rate_limited, soft_empty, not_found or blocked_by_robots, with the reasons, a body sha256, checked_at, a vantage (Cloudflare edge colo and country), and valid_until. Never sends credentials, never solves a challenge, never fetches a page robots.txt disallows.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "Public page or API URL you are about to fetch. Also accepted as: link, uri, href, page, website, site, address.",
+            "x-aliases": [
+              "link",
+              "uri",
+              "href",
+              "page",
+              "website",
+              "site",
+              "address"
+            ]
+          },
+          "agent": {
+            "type": "string",
+            "description": "User-agent token to read robots.txt as (default fmf-read)."
+          }
+        }
+      }
+    },
+    {
+      "name": "bill_reconcile",
+      "description": "Send your own usage rows and the prices the relay posts; no relay key is needed. Recomputes every row in integers, flags rows charged above the posted price, and names the cause where the arithmetic can: cache reads billed as full input, a whole-number multiplier, or billing from the official price times a hidden multiplier. Up to 10,000 rows per call.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "rows": {
+            "type": "array",
+            "description": "Your usage rows, up to 10000: { id?, model, input_tokens, output_tokens, cache_read_tokens?, cache_write_tokens?, charged }. charged is a decimal string in the relay's billing currency."
+          },
+          "posted_prices": {
+            "type": "object",
+            "description": "Prices the relay posts, per 1M tokens, as decimal strings: { \"<model>\": { input, output, cache_read?, cache_write? } }."
+          },
+          "posted_multiplier": {
+            "type": "string",
+            "description": "The group multiplier the relay posts, e.g. \"0.5\" (default 1)."
+          },
+          "input_includes_cache": {
+            "type": "boolean",
+            "description": "Required when rows have cache tokens: true if input_tokens already counts cached tokens (OpenAI-style), false if not (Anthropic-style)."
+          },
+          "reference_prices": {
+            "type": "object",
+            "description": "Optional official prices in the same shape; lets an overcharge be explained as \"official price x N\"."
+          },
+          "tolerance_pct": {
+            "type": "number",
+            "description": "Rows charged more than this percent above expected are flagged (default 2)."
+          },
+          "include_all_rows": {
+            "type": "boolean",
+            "description": "Also return rows that passed."
+          }
+        }
+      }
+    },
+    {
+      "name": "throttle_clear",
+      "description": "Send the 429s you have seen (time, status, headers) and when you need the answer. Returns when the throttle is expected to clear, whether that comes from a reset header or is only an estimate (a result without a reset header is an estimate, never a prediction: confidence low), and a pay-or-wait hint. Computed only from what you send; no network.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "observations": {
+            "type": "array",
+            "description": "Your own responses from the throttled path, oldest to newest: [{ at, status, headers? }]. Up to 500."
+          },
+          "need_by": {
+            "type": "string",
+            "description": "When you must have the answer (ISO time). Needed for the pay-or-wait hint."
+          },
+          "now": {
+            "type": "string",
+            "description": "Optional: the time to reason from (default: server time)."
+          }
+        }
+      }
+    },
+    {
+      "name": "soft_empty",
+      "description": "Is this empty 200 really \"no data\", or a failed read that came back as a 200? Send the response you received. Returns suspect_empty with the signal named (rate-limit headers, an error field, a count that says non-zero, a truncated body), or real_empty with the evidence. With no evidence either way it refuses to guess and is not charged.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "response": {
+            "type": "object",
+            "description": "The response as you received it: { status, headers?, body }."
+          },
+          "url": {
+            "type": "string",
+            "description": "Optional: the URL it came from."
+          },
+          "second_look": {
+            "type": "boolean",
+            "description": "With url: also read the URL once from our vantage (obeys robots.txt) and compare."
+          }
+        }
+      }
+    },
+    {
+      "name": "idempotency_check",
+      "description": "Send your first request and your retry, each with the venue's response. Says whether the idempotency key did its job: replay_ok, refused_ok, or the unsafe cases by name (double_created, second_object_created, overwrote_first, and silent_replay_of_first, where a changed body got a 2xx but the first values came back). If the first attempt timed out and the two alone cannot settle it, it says so and is not charged.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "first": {
+            "type": "object",
+            "description": "The first attempt: { key, body, response: { status, body } }. response may be null if it timed out."
+          },
+          "retry": {
+            "type": "object",
+            "description": "The retry: { key, body, response: { status, body } }."
+          },
+          "id_path": {
+            "type": "string",
+            "description": "Where the object id sits in the response, e.g. \"data.id\" (auto-detected for common shapes)."
+          }
+        }
+      }
+    },
+    {
+      "name": "create_then_find",
+      "description": "Before you retry a create that timed out: we search the venue by your natural key with one public GET and return found_by_venue with the venue's id, duplicates_found, or not_found. \"Not found\" is only returned on a complete list; a paginated list, a 404, a throttle or an unreachable venue is never reported as not found.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "search_url": {
+            "type": "string",
+            "description": "A public GET at the venue that lists or searches records. No credentials."
+          },
+          "match": {
+            "type": "object",
+            "description": "Natural-key fields that identify your record; all must equal."
+          },
+          "items_path": {
+            "type": "string",
+            "description": "Where the list sits in the response (auto-detected for common shapes)."
+          },
+          "id_path": {
+            "type": "string",
+            "description": "Where a record's id sits (default \"id\")."
+          }
+        }
+      }
+    },
+    {
+      "name": "freshness_proof",
+      "description": "We read the URL now (robots.txt obeyed) and return FRESH, STALE_CACHE or CACHE_AGE_UNKNOWN from the Age and cache headers, whether the body changed since the pin you hold (body sha256 first, then ETag, then Last-Modified), and a new pin with valid_until.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "Public URL to read. Also accepted as: link, uri, href, page, website, site, address.",
+            "x-aliases": [
+              "link",
+              "uri",
+              "href",
+              "page",
+              "website",
+              "site",
+              "address"
+            ]
+          },
+          "prior": {
+            "type": "object",
+            "description": "The pin you already hold: { sha256?, etag?, last_modified? }."
+          },
+          "max_cache_age_s": {
+            "type": "number",
+            "description": "Oldest cached copy you accept, in seconds (default 300)."
+          }
+        }
+      }
+    },
+    {
+      "name": "schema_drift",
+      "description": "Does the live response still have the shape the docs promise? Give a JSON Schema, an example, an OpenAPI response or an MCP outputSchema, plus the response you received or a URL to read. Returns missing, extra and type-changed fields at their paths, whether the drift is breaking, and a sha256 of both sides.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "schema": {
+            "type": "object",
+            "description": "Documented shape as a JSON Schema."
+          },
+          "example": {
+            "type": "object",
+            "description": "Or: a documented example response."
+          },
+          "openapi_url": {
+            "type": "string",
+            "description": "Or: an OpenAPI JSON document (with path, and optionally method and status)."
+          },
+          "path": {
+            "type": "string",
+            "description": "With openapi_url: the path exactly as written in the document."
+          },
+          "method": {
+            "type": "string",
+            "description": "With openapi_url: the HTTP method."
+          },
+          "status": {
+            "type": "string",
+            "description": "With openapi_url: the response status (default 200)."
+          },
+          "mcp_url": {
+            "type": "string",
+            "description": "Or: an MCP endpoint; the tool's outputSchema is the documented shape."
+          },
+          "mcp_tool": {
+            "type": "string",
+            "description": "With mcp_url: the tool name."
+          },
+          "response": {
+            "type": "object",
+            "description": "The JSON body you received."
+          },
+          "url": {
+            "type": "string",
+            "description": "Or: a public URL for us to read once (robots.txt obeyed)."
+          }
+        }
+      }
+    },
+    {
+      "name": "abuse_sentinel",
+      "description": "For sellers whose payment account gets frozen when the processor spots abuse first. Send your own signup and checkout events (up to 20,000; a card fingerprint or last4 and brand, never a card number). Flags one card or one device across several accounts, and bursts of failed payments across several cards; a top-tier first purchase or a fast credit burn raises the severity. Tells you which accounts to pause and refund before a chargeback does it for you.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "events": {
+            "type": "array",
+            "description": "Your own events, up to 20000: { at, account_id, type (signup, checkout, payment_failed, credit_spend), card_fingerprint or card_last4 + card_brand, device_id?, tier?, credits? }. Never a full card number."
+          },
+          "max_tier": {
+            "type": "string",
+            "description": "The name of your most expensive tier, if you have tiers."
+          },
+          "rules": {
+            "type": "object",
+            "description": "Optional thresholds: accounts_per_card (3), accounts_per_device (3), window_hours (48), failed_payments (5), failed_cards (3), failed_window_minutes (60), first_purchase_minutes (10), burst_spend_pct (80), burst_spend_minutes (30)."
+          }
+        }
+      }
+    },
+    {
+      "name": "diff_receipt",
+      "description": "Two JSON documents in; out come a sha256 of each in canonical form, an RFC 6902 patch between them, and a sha256 of the patch. The same two documents always give the same three hashes, so a diff can be quoted and rechecked. Or send a document and a patch to get the result pinned.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "before": {
+            "type": "object",
+            "description": "The first JSON document."
+          },
+          "after": {
+            "type": "object",
+            "description": "The second JSON document (to make a patch)."
+          },
+          "patch": {
+            "type": "array",
+            "description": "Or: an RFC 6902 patch to apply to before (add, remove, replace)."
+          },
+          "expected_patch_sha256": {
+            "type": "string",
+            "description": "Optional: a patch hash someone quoted to you, to compare."
+          }
+        }
+      }
+    },
+    {
+      "name": "run_receipt",
+      "description": "Pins one tool run as (tool, version, seed, input hash) -> output hash. Make a receipt, verify one against a rerun, or compare several: reproducible, not_reproducible, or not_the_same_run. The route never runs your tool or sees more than you send.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "run": {
+            "type": "object",
+            "description": "{ tool, version, seed, input, output }: makes a receipt; with receipt, verifies it."
+          },
+          "receipt": {
+            "type": "object",
+            "description": "A receipt to verify against run."
+          },
+          "receipts": {
+            "type": "array",
+            "description": "Or: 2 to 50 receipts to compare."
+          }
+        }
+      }
+    },
+    {
+      "name": "notary_commit",
+      "description": "Send only a hash, sha256(salt + newline + value). Proves the commitment was recorded here at first_seen_at, before any reveal; a first record is never overwritten, and the public drand round of that moment is shown beside it. This is the service's own record, not a blockchain timestamp. For sealed bids, picks and predictions.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "commitment": {
+            "type": "string",
+            "description": "sha256(salt + \"\\n\" + value) as 64 hex characters. Never the value."
+          },
+          "context": {
+            "type": "string",
+            "description": "Optional label, e.g. a game or round id."
+          }
+        }
+      }
+    },
+    {
+      "name": "relay_risk_check",
+      "description": "Reads what a model relay publishes to anyone: its new-api price table (per-model ratios, per-group multipliers) and its status endpoint. Pins the table and names every increase since the pin you pass back, flags cache billed at the full input price, and gives the 429 share of your own request log. No key or login is used. A watch is calling this on a schedule.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "relay_url": {
+            "type": "string",
+            "description": "The relay's address (its panel, where /api/pricing is served)."
+          },
+          "prior": {
+            "type": "object",
+            "description": "Optional: keep_this_as_prior from your last call; every increase since then is named."
+          },
+          "logs": {
+            "type": "array",
+            "description": "Optional: your own requests to this relay, [{ at, status }], up to 5,000."
+          }
+        }
+      }
+    },
+    {
+      "name": "im_tenant",
+      "description": "Registers a Feishu, DingTalk or WeCom bot app with the gateway for 30 days: the app secret is checked with the platform, then kept encrypted and never returned. Sends through the gateway reuse the cached token, merge consecutive messages to the same chat, count every platform call against your monthly quota, and post one alert to your alert chat at 80%.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "platform": {
+            "type": "string",
+            "description": "feishu, dingtalk or wecom."
+          },
+          "app_id": {
+            "type": "string",
+            "description": "App id (DingTalk: appKey; WeCom: corp id)."
+          },
+          "app_secret": {
+            "type": "string",
+            "description": "App secret; kept encrypted and never returned."
+          },
+          "robot_code": {
+            "type": "string",
+            "description": "DingTalk only, if it differs from the appKey."
+          },
+          "quota_monthly": {
+            "type": "number",
+            "description": "Platform calls a month (Feishu free tier: 10,000)."
+          },
+          "alert_chat_id": {
+            "type": "string",
+            "description": "Optional chat for the one 80% alert a month."
+          },
+          "tenant_key": {
+            "type": "string",
+            "description": "To renew: the key registration returned."
+          }
+        }
+      }
+    },
+    {
+      "name": "relay_canary",
+      "description": "Mints a 7-day canary: a unique URL, plus a fake API base URL and key, to plant in prompts you send through a relay. Anyone who later fetches the URL or tries the key fires it, and the hit is recorded (time, IP, network, user agent, whether the planted key was used). Read the hits free with the read key.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string",
+            "description": "Optional: your own note for this canary (60 characters)."
+          }
+        }
+      }
+    },
+    {
+      "name": "notary_reveal",
+      "description": "Send the value and salt. Returns whether they hash to a commitment recorded here and when it was first seen, plus any later drand round you name as shared public randomness.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "value": {
+            "type": "string",
+            "description": "The committed value, byte for byte."
+          },
+          "salt": {
+            "type": "string",
+            "description": "The salt used (16 characters or more)."
+          },
+          "drand_round": {
+            "type": "number",
+            "description": "Optional: a later drand round to return as shared randomness."
+          }
+        }
+      }
+    },
+    {
+      "name": "session_snapshot",
+      "description": "Carry an agent session between tools without hedges turning into facts. Send constraints, hedges, facts and trace hashes: get a Merkle root and the message for the owner wallet to sign. Send it back signed (optionally with the previous snapshot) to verify the owner, and to be told if a hedge came back as a fact or a constraint went missing. Holds no key, stores nothing.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "snapshot": {
+            "type": "object",
+            "description": "{ session_id, created_at (unix seconds), owner, constraints[], hedges[], facts[], traces[] }."
+          },
+          "signature": {
+            "type": "string",
+            "description": "The owner's EIP-712 signature over Snapshot{sessionId,root,itemCount,createdAt}. Omit to get the message to sign."
+          },
+          "previous": {
+            "type": "object",
+            "description": "Optional previous snapshot, to get an import diff."
+          }
+        }
+      }
+    },
+    {
+      "name": "handoff_verify",
+      "description": "A handoff the sender signed and an acknowledgement the receiver signed, checked together: same handoff, same state pin, right receiver, right order in time. Returns SENT_ONLY, APPLIED, VERIFIED or INVALID with each problem named. Holds no key, stores nothing.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "handoff": {
+            "type": "object",
+            "description": "{ handoff_id, state_pin (sha256 of the canonical state), sender, receiver, created_at, signature } signed by the sender."
+          },
+          "ack": {
+            "type": "object",
+            "description": "Optional: { handoff_id, state_pin, status (APPLIED or VERIFIED), receiver, acked_at, signature } signed by the receiver."
+          },
+          "state": {
+            "type": "object",
+            "description": "Optional: the state itself, to check it against the pin."
+          }
+        }
+      }
+    },
+    {
+      "name": "multi_source",
+      "description": "Read one value from 2 to 7 public JSON sources (a URL and a path each) and get what more than half of them say, the sources that disagree with what they said, and a sha256 pin per source. Numbers can agree within a tolerance you set. No majority is a free 422, not a guess. Reference mode: name one official source and check the others against it, including a value a paid mirror gave you. robots.txt is obeyed for every source.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sources": {
+            "type": "array",
+            "description": "2 to 7 entries: { url, path } where path names one value, e.g. data.items[0].price."
+          },
+          "tolerance_pct": {
+            "type": "number",
+            "description": "For numbers: how close counts as agreeing, in percent (default 0 = exact)."
+          }
+        }
+      }
+    },
+    {
+      "name": "pagination_crawl",
+      "description": "Follow a paged public API from its first page (cursor, next link, Link header or page number; up to 10 pages) and learn whether the pages add up: complete, truncated (stops before its own total), overlap (a record on two pages), repeats, or cap_reached. A pin per page. A throttled page is a 503, never \"complete\".",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "start_url": {
+            "type": "string",
+            "description": "First page of a public, paged JSON API."
+          },
+          "max_pages": {
+            "type": "number",
+            "description": "2 to 10 (default 5)."
+          },
+          "items_path": {
+            "type": "string",
+            "description": "Where the list sits (auto-detected for common shapes)."
+          },
+          "id_path": {
+            "type": "string",
+            "description": "Where a record id sits (default id)."
+          },
+          "cursor_path": {
+            "type": "string",
+            "description": "Where the next cursor sits, if not a common name."
+          },
+          "cursor_param": {
+            "type": "string",
+            "description": "Query parameter that takes the cursor (default cursor)."
+          },
+          "page_param": {
+            "type": "string",
+            "description": "For page-number APIs: the page parameter name."
+          }
+        }
+      }
+    },
+    {
+      "name": "post_landed",
+      "description": "Your post timed out. We read the public thread or list ourselves and compare the text: landed (once, unaltered, with the venue id), duplicated, landed_altered, or missing. \"Missing\" is refused on a paginated list or a throttled read, so you do not repost on a guess.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "Public thread, post or list URL (JSON or HTML). Also accepted as: link, uri, href, page, website, site, address.",
+            "x-aliases": [
+              "link",
+              "uri",
+              "href",
+              "page",
+              "website",
+              "site",
+              "address"
+            ]
+          },
+          "text": {
+            "type": "string",
+            "description": "The post exactly as it was sent. Also accepted as: input, content, body, prompt, message.",
+            "x-aliases": [
+              "input",
+              "content",
+              "body",
+              "prompt",
+              "message"
+            ]
+          },
+          "items_path": {
+            "type": "string",
+            "description": "JSON only: where the list sits."
+          },
+          "text_path": {
+            "type": "string",
+            "description": "JSON only: where a record's text sits."
+          },
+          "id_path": {
+            "type": "string",
+            "description": "JSON only: where a record's id sits (default id)."
+          }
+        }
+      }
+    },
+    {
+      "name": "delivery_dedupe",
+      "description": "Apply each webhook once. Steps: received, begin, applied. \"begin\" grants one worker a lease; a repeat while it runs or after \"applied\" comes back should_apply:false; a lease that expires without \"applied\" can be taken over. Acknowledged and applied are kept apart. Your namespace is opened by a secret key you choose; ids expire after 7 days by default.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "namespace_key": {
+            "type": "string",
+            "description": "Your secret namespace key (32 to 200 characters). Choose it once and keep it; it opens your ledger."
+          },
+          "delivery_id": {
+            "type": "string",
+            "description": "The sender's delivery id (the one it repeats on a retry)."
+          },
+          "step": {
+            "type": "string",
+            "description": "received, begin or applied."
+          },
+          "lease_s": {
+            "type": "number",
+            "description": "How long \"begin\" holds the delivery for one worker (5 to 3600, default 60)."
+          },
+          "ttl_days": {
+            "type": "number",
+            "description": "How long the id is remembered (1 to 30, default 7)."
+          }
+        }
+      }
+    },
+    {
+      "name": "outbox_intent",
+      "description": "Record what you are about to send (its sha256) before you send it. The same intent with a different body is refused with 422.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "namespace_key": {
+            "type": "string",
+            "description": "Your secret namespace key (32 to 200 characters). Choose it once and keep it; it opens your ledger."
+          },
+          "intent_id": {
+            "type": "string",
+            "description": "Your id for this side effect."
+          },
+          "body_sha256": {
+            "type": "string",
+            "description": "sha256 of exactly what you will send."
+          },
+          "venue": {
+            "type": "string",
+            "description": "Optional label for where it goes."
+          }
+        }
+      }
+    },
+    {
+      "name": "outbox_next",
+      "description": "Returns send, read_back or skip. After a send whose reply was lost it says read_back, not send. It marks an intent delivered only when you report that a read at the venue found it, with the id the venue minted; never from your own send log.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "namespace_key": {
+            "type": "string",
+            "description": "Your secret namespace key (32 to 200 characters). Choose it once and keep it; it opens your ledger."
+          },
+          "intent_id": {
+            "type": "string",
+            "description": "The intent to ask about."
+          },
+          "venue_seen": {
+            "type": "boolean",
+            "description": "What a read at the venue found: true (send venue_id too), false, or omit if you have not read the venue."
+          },
+          "venue_id": {
+            "type": "string",
+            "description": "With venue_seen true: the id the venue minted."
+          }
+        }
+      }
+    },
+    {
+      "name": "price_change",
+      "description": "Has this paid route changed what it asks for? The first call returns a pin of its payTo, price, asset and network. Later calls take that pin back and name each change with before and after: payTo changed (or changed in letter case only), price raised or lowered, the offer gone, or no longer a 402. One check per call; run it on your own schedule.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "The paid route. Also accepted as: link, uri, href, page, website, site, address.",
+            "x-aliases": [
+              "link",
+              "uri",
+              "href",
+              "page",
+              "website",
+              "site",
+              "address"
+            ]
+          },
+          "method": {
+            "type": "string",
+            "description": "GET or POST (default POST)."
+          },
+          "body": {
+            "type": "object",
+            "description": "Optional JSON body for the probe."
+          },
+          "network": {
+            "type": "string",
+            "description": "Which network's offer to pin on the first call, e.g. base."
+          },
+          "prior": {
+            "type": "object",
+            "description": "The keep_this_as_prior object a previous call returned. Omit on the first call."
+          }
+        }
+      }
+    },
+    {
+      "name": "facilitator_health",
+      "description": "Which public x402 facilitators answer right now, how fast, and for which networks (from the /supported list each one publishes). Tells you which are usable for your network. It makes no verify or settle call, so it shows the door is open, not that a payment will settle.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "facilitators": {
+            "type": "array",
+            "description": "Optional: 1 to 6 facilitator base URLs. Default: the public ones this route knows."
+          },
+          "network": {
+            "type": "string",
+            "description": "Optional: the network you will pay on, e.g. base or eip155:8453."
+          }
+        }
+      }
+    },
+    {
+      "name": "unfurl_check",
+      "description": "Will your link preview image actually show on X, Facebook, LinkedIn, Slack and Discord? Reads the page's og: and twitter: tags, fetches the image, and reads its real format and pixel size from the file. SVG cards, oversized files, tiny images, a broken image URL and a content-type that lies are each named per platform.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "The page whose share card you want checked. Also accepted as: link, uri, href, page, website, site, address.",
+            "x-aliases": [
+              "link",
+              "uri",
+              "href",
+              "page",
+              "website",
+              "site",
+              "address"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "seller_precheck",
+      "description": "One call before you pay a seller: the paid-path check (payTo byte-identity, price as integer atoms, validate-before-pay), MCP-vs-HTTP price parity if you give the MCP URL, and the health of any facilitator the 402 names, in one issues list. The seller's wallet history is not part of it and the output says so.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "The paid route. Also accepted as: link, uri, href, page, website, site, address.",
+            "x-aliases": [
+              "link",
+              "uri",
+              "href",
+              "page",
+              "website",
+              "site",
+              "address"
+            ]
+          },
+          "method": {
+            "type": "string",
+            "description": "GET or POST (default POST)."
+          },
+          "body": {
+            "type": "object",
+            "description": "The JSON body the paid call will send."
+          },
+          "listing": {
+            "type": "object",
+            "description": "What the listing claims: { pay_to, price_usd or price_atoms, decimals, network, asset }."
+          },
+          "mcp_url": {
+            "type": "string",
+            "description": "Optional: the seller's MCP endpoint, for price parity."
+          },
+          "mcp_tool": {
+            "type": "string",
+            "description": "Optional: the tool name, if the MCP server lists several."
+          }
+        }
+      }
+    },
+    {
+      "name": "npm_file",
+      "description": "One file from a published npm package version, for when GitHub's unauthenticated rate limit blocks you. Read from the registry tarball after the tarball is checked against the hash npm published for it; a tarball that does not match is never served. Text or base64, with a sha256 of the file.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "package": {
+            "type": "string",
+            "description": "npm package name, e.g. ms or @scope/name."
+          },
+          "version": {
+            "type": "string",
+            "description": "Exact version (1.2.3) or latest."
+          },
+          "path": {
+            "type": "string",
+            "description": "File inside the package, e.g. package.json."
+          },
+          "max_bytes": {
+            "type": "number",
+            "description": "Largest file to return (default 200,000; up to 1,048,576)."
+          }
+        }
+      }
+    },
+    {
+      "name": "site_readiness",
+      "description": "Before a payment processor reviews your site: does it show your business and what you sell, contact details, a refund policy, a privacy policy, terms, and prices with their currency? Each check names the published processor requirement it comes from. Presence only: it does not judge whether your business type is allowed or predict a decision.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "Your site's home page. Also accepted as: link, uri, href, page, website, site, address.",
+            "x-aliases": [
+              "link",
+              "uri",
+              "href",
+              "page",
+              "website",
+              "site",
+              "address"
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "io.github.GeminiGeorge22/fmf-proof",
+    "version": "1.0.0",
+    "remoteUrl": "https://fmf-proof.fmf-x402.workers.dev/mcp",
+    "publishedAt": "2026-11-27T20:44:04.882063Z",
+    "fetchedAt": "2026-11-28T10:03:29.931Z",
+    "toolsSha256": "274830c0f554daa2deb02f677cc1a5353e598954ac5446b95012c2ae0fe474c3"
+  }
+}

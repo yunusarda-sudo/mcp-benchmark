@@ -1,0 +1,272 @@
+{
+  "$schema": "../schema.json",
+  "name": "com.hemmabo/hemmabo-mcp-server",
+  "title": "HemmaBo Host Booking Engine",
+  "category": "Travel, Maps & Navigation",
+  "description": "6 runtime tools: 2 HemmaBo tools, 2 host onboarding tools, and 2 VRP verification tools. Not an OTA.",
+  "repository": "https://github.com/HemmaBo-se/hemmabo-mcp-server",
+  "tools": [
+    {
+      "name": "hemmabo_search_properties",
+      "description": "Search available vacation rental properties by location and travel dates. Use when the user wants to find or browse places to stay. Discovery only, and price-free: call vrp_get_verified_stay_offer with the host domain and same dates before the final answer so the client can render the verified stay offer widget; the price and the signed booking link come only from that offer. Do NOT use when the user already has a propertyId or host domain. Returns propertyId, host domain, the host's booking_url, live availability and capacity. Parameters combine as one filter with guests and the checkIn/checkOut range (checkIn strictly before checkOut): region matches broadly against region, city, and country names, while country matches the country field alone — omit both and the search spans every published property. Required amenities (amenities) are a match condition decided by the host's own declaration: only a declared yes matches, and each result then carries amenityFacts for exactly those amenities. Capacity misses are excluded; date-unavailable matches return separately in unavailableMatches with up to three alternative windows. Booking and payment happen only on the host's own domain, at the signed direct_booking_url. The agent never books, pays, cancels or changes a booking.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "region": {
+            "type": "string",
+            "description": "Region, area, or destination to search within (e.g. 'Skåne', 'Kävlinge', 'Toscana', 'Bavaria'). Partial case-insensitive match against region, city, and country. Optional — omit both region and country and the search spans every published property."
+          },
+          "country": {
+            "type": "string",
+            "description": "Country name to filter by (e.g. 'Sweden', 'Italy', 'Morocco'). Partial case-insensitive match against the country field. Optional — omit both region and country and the search spans every published property."
+          },
+          "guests": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Total guest count as a positive integer (e.g. 2, 4, 6). Used for capacity filtering and staircase pricing tiers. Properties with maxGuests below this value are excluded from search results."
+          },
+          "checkIn": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "description": "Arrival date in ISO 8601 calendar format YYYY-MM-DD (e.g. '2026-07-15'). Must be today or later in the property's timezone. Must be strictly before checkOut; together they define the stay length used for pricing and availability."
+          },
+          "checkOut": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "description": "Departure date in ISO 8601 calendar format YYYY-MM-DD (e.g. '2026-07-22'). Must be strictly after checkIn on the same calendar. The guest does not stay the departure night."
+          },
+          "amenities": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Optional. Amenities the guest REQUIRES, as canonical names, e.g. ['hot_tub'] for 'with a hot tub' / 'med spabad', ['sauna'], ['pool'], ['wifi'], ['fireplace'], ['ev_charging']. A property matches only when its host has declared every one of them (affirmed); a host's no or an unanswered amenity is not a match. Put an amenity here only when the guest wants it — 'without a hot tub' / 'utan spabad' is NOT a hot-tub requirement (see excludedAmenities), and 'sauna or pool' is not a requirement for both: ask which. Omit for no amenity requirement."
+          },
+          "excludedAmenities": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Optional. Amenities the stay MUST BE WITHOUT, as canonical names, e.g. ['hot_tub'] for 'it must not have a hot tub'. A property matches only when its host has declared the amenity absent (negated); an unanswered amenity is not a match, because no answer does not prove absence. Use only when the guest requires the absence. 'A hot tub is not needed' / 'spabad är inget krav' is NO condition at all: leave the amenity out of both lists. If the guest's wording is ambiguous, ask before filtering."
+          }
+        },
+        "required": [
+          "guests",
+          "checkIn",
+          "checkOut"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "hemmabo_check_availability",
+      "description": "Use this tool to answer \"is it free these dates?\" for one known propertyId — a yes/no with conflict details, no signed price. For the final quoted price and booking link, use vrp_get_verified_stay_offer with the host domain instead. Never present this tool's numbers as the final price. Check whether a specific property is available for the requested dates. Use this tool after the user has selected a property from hemmabo_search_properties and wants to confirm availability before getting a quote. Do NOT use for general browsing — use hemmabo_search_properties instead. Read-only, open to anonymous callers (no Bearer token), and rate-limited: checking availability never places a hold or reserves dates. Returns available=true/false with conflict details and, when unavailable, the host node's own next available window (alternativeDates, at most one entry — the same window the node's /api/availability reports, never a platform-invented date); a stale inbound calendar sync blocks an available answer (fails closed with calendar_freshness) instead of guessing. Omit guests to check dates only; pass it to price the alternative windows and to gate capacity — counts above the property's maximum return available=false (guests_exceed_max) with no alternatives. Stays shorter than the host's effective minimum nights return available=false with reasonCode min_nights_violation — extend the stay rather than shifting dates. The verdict always matches the host node's own availability API. Booking and payment happen only on the host's own domain, at the signed direct_booking_url. The agent never books, pays, cancels or changes a booking.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "propertyId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Stable property UUID from hemmabo_search_properties (e.g. '550e8400-e29b-41d4-a716-446655440000'). Pass the exact UUID string — never a property name, host domain, or booking URL."
+          },
+          "checkIn": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "description": "Arrival date in ISO 8601 calendar format YYYY-MM-DD (e.g. '2026-07-15'). Must be today or later in the property's timezone. Must be strictly before checkOut; together they define the stay length used for pricing and availability."
+          },
+          "checkOut": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "description": "Departure date in ISO 8601 calendar format YYYY-MM-DD (e.g. '2026-07-22'). Must be strictly after checkIn on the same calendar. The guest does not stay the departure night."
+          },
+          "guests": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Optional guest count (e.g. 4). Omit when only checking date availability without pricing. When provided, alternative date windows in the response include live host-source totals for that guest count."
+          }
+        },
+        "required": [
+          "propertyId",
+          "checkIn",
+          "checkOut"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "hemmabo_check_host_readiness",
+      "description": "Use this tool when a host is still EVALUATING whether HemmaBo fits; use hemmabo_get_host_onboarding_link only when the host has decided and wants to start. Never call both in the same turn — this tool's next_step already contains the same onboarding URL. Read-only fit check for a vacation-rental host evaluating HemmaBo for their own booking website or booking engine. Use when the user is a host or property owner, not a guest booking a stay; guests should use hemmabo_search_properties instead. Returns a fit verdict, what the host gets, the setup inputs to prepare, and a safe onboarding next step. Does not create an account, buy a domain, configure Stripe, store host data, or provision a website. When the host is ready to start, follow up with hemmabo_get_host_onboarding_link. Only five inputs sharpen the fit verdict: a domain (hasOwnDomain or domain), currentChannels, one location signal (city/region/country), and the wants* booleans, which count unless explicitly false — omitting them never lowers the verdict; propertyName and preferredLanguage only prefill the onboarding URL, and with no inputs the summary is generic. Booking and payment happen only on the host's own domain, at the signed direct_booking_url. The agent never books, pays, cancels or changes a booking.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "propertyName": {
+            "type": "string",
+            "description": "Property or business display name (e.g. 'Villa Åkerlyckan'). Optional; carried into onboarding URL when provided."
+          },
+          "propertyType": {
+            "type": "string",
+            "enum": [
+              "villa",
+              "apartment",
+              "cabin",
+              "cottage",
+              "holiday_home",
+              "bnb",
+              "hotel",
+              "other"
+            ],
+            "description": "Property category enum. Optional; omit when unknown. 'villa'/'holiday_home' fit best; 'hotel' may indicate a poor HemmaBo fit for large chains."
+          },
+          "country": {
+            "type": "string",
+            "description": "Country where the property operates (e.g. 'Sweden', 'Italy', 'Morocco'). Optional; improves onboarding URL locale and fit assessment."
+          },
+          "region": {
+            "type": "string",
+            "description": "Region or area (e.g. 'Skåne', 'Toscana', 'Marrakech-Safi'). Optional; narrows onboarding handoff and proof examples."
+          },
+          "city": {
+            "type": "string",
+            "description": "City or municipality (e.g. 'Kävlinge', 'Florence'). Optional; used in onboarding URL prefill when provided."
+          },
+          "domain": {
+            "type": "string",
+            "pattern": "^(?!-)(?:[a-zA-Z0-9-]{1,63}\\.)+[a-zA-Z]{2,63}$",
+            "description": "Host-owned domain without protocol or path (e.g. 'villaakerlyckan.se', 'myvilla.it'). Optional; omit when the host has not chosen a domain yet. Invalid: 'https://...', paths, ports, or booking URLs."
+          },
+          "currentChannels": {
+            "type": "array",
+            "maxItems": 8,
+            "items": {
+              "type": "string",
+              "description": "Single distribution channel name (e.g. 'Airbnb', 'Booking.com', 'Vrbo', 'own website'). Up to 8 entries."
+            },
+            "description": "Optional list of channels the host uses today. Omit when unknown. Helps assess migration fit from OTAs to their own booking website."
+          },
+          "hasOwnDomain": {
+            "type": "boolean",
+            "description": "True if the host already owns a domain or explicitly wants one (e.g. true for 'I have villaakerlyckan.se'). False or omit when still undecided."
+          },
+          "wantsDirectPayments": {
+            "type": "boolean",
+            "description": "True if the host wants Stripe Connect payouts direct to their account. False or omit when they expect HemmaBo to be merchant of record (not supported)."
+          },
+          "wantsAiAgentBooking": {
+            "type": "boolean",
+            "description": "True if the host wants AI agents (ChatGPT, Claude, Cursor) to discover and book via their own official website. False or omit when they only want a guest website."
+          },
+          "preferredLanguage": {
+            "type": "string",
+            "description": "ISO 639-1 language hint for onboarding copy (e.g. 'sv', 'en', 'de', 'fr'). Optional; omit to default to English."
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "hemmabo_get_host_onboarding_link",
+      "description": "Use this tool only when the host has already decided to start; if the host is still evaluating, use hemmabo_check_host_readiness instead — it returns the same onboarding URL in next_step. Never call both in the same turn. Return a safe HemmaBo onboarding handoff URL for a vacation-rental host who wants their own booking website or booking engine. Not for guests — guests should use hemmabo_search_properties instead. Use after explaining the fit or when the host asks to start; if the host is still evaluating whether HemmaBo fits, run hemmabo_check_host_readiness first — it already returns the same prefilled URL in its next_step. This tool is read-only and does not create a HemmaBo account, buy a domain, configure Stripe, write to Supabase, or provision a booking site. It returns the URL, the category sentence, the host's price atom, the agent's role, and what the host should prepare. All parameters are optional prefill: they never change where the host lands — the URL always opens the same onboarding page with the passed details filled in; blank values are simply left out, and nothing is stored server-side. Booking and payment happen only on the host's own domain, at the signed direct_booking_url. The agent never books, pays, cancels or changes a booking.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "propertyName": {
+            "type": "string",
+            "description": "Property or business display name (e.g. 'Villa Åkerlyckan'). Optional; carried into onboarding URL when provided."
+          },
+          "country": {
+            "type": "string",
+            "description": "Country where the property operates (e.g. 'Sweden', 'Italy', 'Morocco'). Optional; improves onboarding URL locale and fit assessment."
+          },
+          "region": {
+            "type": "string",
+            "description": "Region or area (e.g. 'Skåne', 'Toscana', 'Marrakech-Safi'). Optional; narrows onboarding handoff and proof examples."
+          },
+          "city": {
+            "type": "string",
+            "description": "City or municipality (e.g. 'Kävlinge', 'Florence'). Optional; used in onboarding URL prefill when provided."
+          },
+          "domain": {
+            "type": "string",
+            "pattern": "^(?!-)(?:[a-zA-Z0-9-]{1,63}\\.)+[a-zA-Z]{2,63}$",
+            "description": "Host-owned domain without protocol or path (e.g. 'villaakerlyckan.se', 'myvilla.it'). Optional; omit when the host has not chosen a domain yet. Invalid: 'https://...', paths, ports, or booking URLs."
+          },
+          "language": {
+            "type": "string",
+            "description": "ISO 639-1 language hint for onboarding copy (e.g. 'sv', 'en', 'de', 'fr'). Optional; omit to default to English."
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "vrp_verify_node",
+      "description": "Verify that a vacation-rental host domain is a valid Vacation Rental Protocol (VRP) node before trusting it. Reads the domain's .well-known/vacation-rental.json and JWKS. Read-only trust check: no availability, pricing, booking, or payment — do NOT use it to answer those questions. Use when a host domain arrives from outside search (user-typed or third-party); domains returned by hemmabo_search_properties can go straight to vrp_get_verified_stay_offer. On success, call vrp_get_verified_stay_offer with the same domain and stay dates. The single input is the host domain as a bare hostname (no scheme or path); public domains only — IPs, ports, and local/private hostnames are refused. Pass the node's canonical domain exactly — www and apex are distinct identities, and verification fails when the domain's declared canonical_domain differs from the one you passed. Verification reads that domain's own .well-known and JWKS, so the result is only as trustworthy as the exact domain you pass. Booking and payment happen only on the host's own domain, at the signed direct_booking_url. The agent never books, pays, cancels or changes a booking.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "domain": {
+            "type": "string",
+            "pattern": "^(?!-)(?:[a-zA-Z0-9-]{1,63}\\.)+[a-zA-Z]{2,63}$",
+            "description": "Host-owned domain without protocol or path (e.g. 'villaakerlyckan.se', 'myvilla.it'). Invalid: 'https://...', paths, ports, or booking URLs."
+          }
+        },
+        "required": [
+          "domain"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "vrp_get_verified_stay_offer",
+      "description": "Use this tool for the final, host-signed price and booking link for exact dates — the only numbers an agent may quote. For a bare availability yes/no on a propertyId, hemmabo_check_availability is lighter and sufficient. Fetch, verify, and render a live host-domain signed VRP stay offer for exact dates and guest count. Verifies Ed25519 JWS against domain JWKS. Call after hemmabo_search_properties returns a host domain, or after vrp_verify_node confirms a domain from outside search, always before quoting final price or a booking link. Read-only: must not lock a quote, create a booking or collect guest details. Route booking only to the signed direct_booking_url. The parameters work as a set: pass the same domain, checkIn, checkOut and guests the guest used at search; checkIn must be strictly before checkOut, and the resulting night count — not the dates themselves — drives the signed price and the host capacity check, so changing either date re-prices the offer. Always pass language as the guest's actual conversation language so the rendered widget matches the guest; it never affects the signed price or availability, only formatting. Booking and payment happen only on the host's own domain, at the signed direct_booking_url. The agent never books, pays, cancels or changes a booking.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "domain": {
+            "type": "string",
+            "pattern": "^(?!-)(?:[a-zA-Z0-9-]{1,63}\\.)+[a-zA-Z]{2,63}$",
+            "description": "Host-owned domain without protocol or path (e.g. 'villaakerlyckan.se', 'myvilla.it'). Invalid: 'https://...', paths, ports, or booking URLs."
+          },
+          "checkIn": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "description": "Requested arrival date in YYYY-MM-DD format (e.g. '2026-11-14'). Must be strictly before checkOut. Use the same dates the guest requested in search."
+          },
+          "checkOut": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "description": "Requested departure date in YYYY-MM-DD format (e.g. '2026-11-17'). Must be strictly after checkIn. Guest does not stay the departure night."
+          },
+          "guests": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Total guest count as positive integer (e.g. 2, 4). Used by the host node for capacity validation and guest-tier pricing on the signed offer."
+          },
+          "language": {
+            "type": "string",
+            "description": "The guest's conversation language, as a BCP-47 tag (e.g. 'en', 'sv', 'de', 'sv-SE') — ALWAYS pass this, matching the language the guest is chatting in, so the rendered widget's labels, dates and currency formatting match the guest instead of falling back to the rendering client's own locale (which can silently disagree with the conversation). Never changes the signed price value or availability — only how it is displayed."
+          }
+        },
+        "required": [
+          "domain",
+          "checkIn",
+          "checkOut",
+          "guests"
+        ],
+        "additionalProperties": false
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "com.hemmabo/hemmabo-mcp-server",
+    "version": "7.1.6",
+    "remoteUrl": "https://www.hemmabo.com/mcp",
+    "publishedAt": "2026-11-28T05:09:02.596979Z",
+    "fetchedAt": "2026-11-28T10:03:29.931Z",
+    "toolsSha256": "1276b2ba58364c54a84acc47d8d916fd2368d7766f93d38e36c94da4e623cf1c"
+  }
+}

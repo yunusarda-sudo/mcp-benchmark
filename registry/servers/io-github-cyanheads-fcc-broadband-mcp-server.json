@@ -1,0 +1,718 @@
+{
+  "$schema": "../schema.json",
+  "name": "io.github.cyanheads/fcc-broadband-mcp-server",
+  "category": "Vector DBs & AI Search",
+  "description": "FCC broadband availability, coverage analysis, and digital divide data for US geographies.",
+  "repository": "https://github.com/cyanheads/fcc-broadband-mcp-server",
+  "tools": [
+    {
+      "name": "fcc_geocode_block",
+      "description": "Converts a latitude/longitude coordinate to a 15-digit census block FIPS code, plus county FIPS, county name, state FIPS, state code, and state name. This is the required prerequisite for fcc_search_availability since the broadband dataset is indexed by census block, not address. The block is resolved against 2010 census boundaries, the vintage the Form 477 deployment dataset is keyed by, so the returned blockFips can be passed straight to fcc_search_availability; a 2020-vintage block ID from another source will not match. Uses the FCC public Geo API — no authentication required.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "latitude": {
+            "type": "number",
+            "minimum": -90,
+            "maximum": 90,
+            "description": "Latitude of the location in decimal degrees (e.g., 47.6062 for Seattle, WA). Must be within the continental US, Alaska, Hawaii, or US territories."
+          },
+          "longitude": {
+            "type": "number",
+            "minimum": -180,
+            "maximum": 180,
+            "description": "Longitude of the location in decimal degrees (e.g., -122.3321 for Seattle, WA). Negative for western hemisphere."
+          }
+        },
+        "required": [
+          "latitude",
+          "longitude"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "fcc_search_availability",
+      "description": "Queries broadband providers and advertised consumer speeds at a census block from FCC Form 477 data (as of June 2021). Business-only filings report availability without business bandwidth. Answers \"which ISPs serve this location and what speeds do they offer?\" — the core tool for address-level broadband lookup. Requires a 15-digit census block FIPS code; use fcc_geocode_block to convert coordinates first. Data reflects ISP-reported availability at the block level, which may overstate actual coverage for some addresses.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "block_fips": {
+            "type": "string",
+            "pattern": "^\\d{15}$",
+            "description": "15-digit census block FIPS code on 2010 census boundaries, the vintage this Form 477 dataset is keyed by (e.g., \"530330081002024\"). Obtain from fcc_geocode_block using address coordinates — a 2020-vintage block ID matches no deployment row."
+          },
+          "tech_filter": {
+            "description": "Technology codes to filter, from the complete Form 477 taxonomy: 0=All other, 10=Asymmetric xDSL, 11=ADSL2, 12=VDSL, 20=Symmetric xDSL, 30=Other copper wireline, 40=Cable modem, 41=Cable modem DOCSIS 1/1.1/2.0, 42=Cable modem DOCSIS 3.0, 43=Cable modem DOCSIS 3.1, 50=Fiber to the end user, 60=Satellite, 70=Terrestrial fixed wireless, 90=Electric power line. Omit to return all technologies.",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "0",
+                "10",
+                "11",
+                "12",
+                "20",
+                "30",
+                "40",
+                "41",
+                "42",
+                "43",
+                "50",
+                "60",
+                "70",
+                "90"
+              ]
+            }
+          },
+          "min_speed_down": {
+            "description": "Minimum advertised consumer download speed in Mbps. Business-only filings have no reported consumer bandwidth. Omit to return all providers regardless of speed.",
+            "type": "number",
+            "minimum": 0
+          },
+          "consumer": {
+            "description": "Filter to consumer service (true) or business service (false). Omit to return both consumer and business offerings.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "block_fips"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "fcc_search_geographies",
+      "description": "Find states, counties, congressional districts (cd), census places, CBSAs (metro areas), and tribal areas by case-insensitive literal name substring in the 2021 FCC geography lookup. Keep ambiguous matches distinct and choose the geography_type and geography_id to pass to fcc_get_coverage_summary. Include a location qualifier in name to narrow results; names do not establish exhaustive state membership. Always queries live FCC Open Data, even with the Form 477 mirror enabled, and needs no BDC credentials. Follow nextOffset until absent; no total match count is computed.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Nonblank literal name fragment, such as \"Casper, WY\". Apostrophes, percent signs and underscores are literal characters."
+          },
+          "geography_type": {
+            "description": "Limit to state, county, cd, place, cbsa, or tribal; omit or leave blank to search all six.",
+            "anyOf": [
+              {
+                "type": "string",
+                "const": ""
+              },
+              {
+                "type": "string",
+                "enum": [
+                  "state",
+                  "county",
+                  "cd",
+                  "place",
+                  "cbsa",
+                  "tribal"
+                ],
+                "description": "Geography type to discover."
+              }
+            ]
+          },
+          "limit": {
+            "default": 20,
+            "description": "Requested results per page, default 20. Requests above 12500 are served at 12500.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "offset": {
+            "default": 0,
+            "description": "Zero-based match offset; start at 0, then use nextOffset.",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "fcc_get_coverage_summary",
+      "description": "Returns a broadband coverage summary for a geography — population with zero, one, two, or three-plus providers at a given speed threshold, split by urban/rural and tribal/non-tribal segments. The primary tool for digital divide and equity analysis. Supports state, county, congressional district, census place, CBSA (metro area), tribal area, and national level. Historical FCC Form 477 filings support population screening; they cannot establish current BEAD eligibility or address service.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "as_of_date": {
+            "default": "2021-06-30",
+            "description": "Form 477 filing date in YYYY-MM-DD format. Defaults to June 2021. See fcc_list_filing_periods for supported dates.",
+            "type": "string",
+            "enum": [
+              "2021-06-30",
+              "2020-12-31",
+              "2020-06-30",
+              "2019-12-31",
+              "2019-06-30",
+              "2018-12-31",
+              "2018-06-30",
+              "2017-12-31",
+              "2017-06-30",
+              "2016-12-31"
+            ]
+          },
+          "geography_type": {
+            "type": "string",
+            "enum": [
+              "nation",
+              "state",
+              "county",
+              "cd",
+              "place",
+              "cbsa",
+              "tribal"
+            ],
+            "description": "Geographic aggregation level. \"nation\" = US-wide totals (geography_id not needed). \"cd\" = congressional district. \"place\" = census-designated place. \"cbsa\" = core-based statistical area (metro area). \"tribal\" = tribal land area."
+          },
+          "geography_id": {
+            "description": "GEOID for the geography. State: 2 digits. County and CBSA: 5 digits. Congressional district: 4 digits. Place: 7 digits. Tribal: four digits followed by uppercase R or T (e.g., \"2430R\"). Find IDs by name with fcc_search_geographies. Omit for nation-level queries.",
+            "type": "string"
+          },
+          "tech_filter": {
+            "default": "acfow",
+            "description": "Any nonempty alphabetical combination of a=ADSL/DSL, c=cable, f=fiber, o=other (symmetric DSL, other copper, power line), s=satellite, w=fixed wireless. Default acfow excludes satellite; explicit acfosw includes every technology. acfow includes all fixed wireless and is not an exact program-technology eligibility filter.",
+            "type": "string",
+            "enum": [
+              "a",
+              "ac",
+              "acf",
+              "acfo",
+              "acfos",
+              "acfosw",
+              "acfow",
+              "acfs",
+              "acfsw",
+              "acfw",
+              "aco",
+              "acos",
+              "acosw",
+              "acow",
+              "acs",
+              "acsw",
+              "acw",
+              "af",
+              "afo",
+              "afos",
+              "afosw",
+              "afow",
+              "afs",
+              "afsw",
+              "afw",
+              "ao",
+              "aos",
+              "aosw",
+              "aow",
+              "as",
+              "asw",
+              "aw",
+              "c",
+              "cf",
+              "cfo",
+              "cfos",
+              "cfosw",
+              "cfow",
+              "cfs",
+              "cfsw",
+              "cfw",
+              "co",
+              "cos",
+              "cosw",
+              "cow",
+              "cs",
+              "csw",
+              "cw",
+              "f",
+              "fo",
+              "fos",
+              "fosw",
+              "fow",
+              "fs",
+              "fsw",
+              "fw",
+              "o",
+              "os",
+              "osw",
+              "ow",
+              "s",
+              "sw",
+              "w"
+            ]
+          },
+          "speed_down": {
+            "default": "25",
+            "description": "Download key for a download/upload threshold pair in Mbps: 0.2=0.2/0.2, 4=4/1, 10=10/1, 25=25/3, 100=100/10, 250=250/25, 1000=1000/100. These historical population aggregates cannot establish current BEAD eligibility or address service; 100/10 does not establish 100/20 availability.",
+            "type": "string",
+            "enum": [
+              "4",
+              "10",
+              "25",
+              "100",
+              "250",
+              "1000",
+              "0.2"
+            ]
+          },
+          "urban_rural_filter": {
+            "default": "all",
+            "description": "Filter to urban (\"U\") or rural (\"R\") areas only, or \"all\" for both combined. An empty segment in a confirmed geography returns zero population with a notice.",
+            "type": "string",
+            "enum": [
+              "all",
+              "R",
+              "U"
+            ]
+          },
+          "tribal_filter": {
+            "default": "all",
+            "description": "Filter to tribal (\"T\") or non-tribal (\"N\") areas. Use \"T\" to assess Native American connectivity gaps.",
+            "type": "string",
+            "enum": [
+              "all",
+              "T",
+              "N"
+            ]
+          }
+        },
+        "required": [
+          "geography_type"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "fcc_search_providers",
+      "description": "Searches for ISPs by holding company name, state, county, technology and consumer or business market. Returns a deduplicated list of matching providers with hoconum identifiers for follow-up calls to fcc_get_provider. Answers \"which ISPs serve Washington with fiber?\" and \"find all Comcast entities.\" A county match means the provider filed at least one matching block in the county. Against the live FCC API the search reads a bounded window of deployment rows to find which holding companies match, so when scanTruncated comes back true the providers are a sample of the matches rather than every one of them and no true match count is available; a narrower filter raises the share of matches the sample surfaces but cannot make it complete, and only a deployment running the local Form 477 mirror returns every match. The sample is of which companies come back — every company that does carries its complete national footprint, since statesServed and techCodes are resolved per company rather than read off the window, at the cost of one lookup per provider returned. Data is from FCC Form 477 (as of June 2021). Follow nextOffset with the same filters until it is absent.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "name_search": {
+            "description": "Case-insensitive literal fragment of a filed holding company name (e.g., \"mcast\", \"AT&T\", or \"_\"). Blank or omitted searches every name.",
+            "type": "string"
+          },
+          "state": {
+            "description": "2-letter state abbreviation (e.g., \"WA\") to limit results to providers serving that state. Matches individual deployment filings, so every filter given must hold on one filing together — a provider is returned for state=\"WA\" with tech_filter=[\"50\"] only if it filed fiber in Washington, not if it filed fiber elsewhere and something else in Washington.",
+            "type": "string",
+            "pattern": "^[A-Z]{2}$"
+          },
+          "county_fips": {
+            "description": "Five-digit county FIPS GEOID from fcc_search_geographies, including leading zeros. When state is also set, its code must match the county prefix.",
+            "type": "string",
+            "pattern": "^\\d{5}$"
+          },
+          "market": {
+            "description": "Require a filing offering consumer or business service. Omit to include both markets.",
+            "type": "string",
+            "enum": [
+              "consumer",
+              "business"
+            ]
+          },
+          "tech_filter": {
+            "description": "Technology codes to filter, from the complete Form 477 taxonomy: 0=All other, 10=Asymmetric xDSL, 11=ADSL2, 12=VDSL, 20=Symmetric xDSL, 30=Other copper wireline, 40=Cable modem, 41=Cable modem DOCSIS 1/1.1/2.0, 42=Cable modem DOCSIS 3.0, 43=Cable modem DOCSIS 3.1, 50=Fiber to the end user, 60=Satellite, 70=Terrestrial fixed wireless, 90=Electric power line. Omit for all technologies. Matches individual deployment filings like state does, so pairing this with name_search narrows to filings made under the matched name — a holding company that files some technologies under an acquired brand name can come back empty here while its techCodes list the technology. To ask what one company deploys, search the name alone and read techCodes off the result.",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "0",
+                "10",
+                "11",
+                "12",
+                "20",
+                "30",
+                "40",
+                "41",
+                "42",
+                "43",
+                "50",
+                "60",
+                "70",
+                "90"
+              ]
+            }
+          },
+          "offset": {
+            "default": 0,
+            "description": "Number of sorted distinct providers to skip. Live continuation covers the sampled set only; samples may differ between calls.",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "limit": {
+            "default": 50,
+            "description": "Requested results per page, default 50. Requests above 200 are served at 200.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "fcc_get_provider",
+      "description": "Returns a national-level coverage profile for a specific holding company (by hoconum): technologies deployed and the population covered at each download and upload speed tier. Population figures come from the FCC provider summary table and count each person once, regardless of how many technologies the provider uses to reach them. Download and upload are separate marginal counts. Joint coverage at a paired speed cannot be inferred. Use fcc_search_providers to find valid hoconum values. Data is from FCC Form 477 (as of June 2021).",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "hoconum": {
+            "type": "string",
+            "pattern": "^\\d+$",
+            "description": "Holding company number from fcc_search_providers — digits only, e.g. \"130317\" for Comcast Corporation."
+          }
+        },
+        "required": [
+          "hoconum"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "fcc_compare_areas",
+      "description": "Compares broadband coverage metrics across multiple geographies of the same type and returns a ranked table sorted by unserved or underserved population. Compares historical population coverage gaps; it cannot establish current BEAD eligibility or address service. Compares the first 300 distinct geography IDs and discloses duplicates, unmatched IDs and excluded IDs, or set compare_all_states=true for all 50 states + DC. Uses historical FCC Form 477 filings (June 2021 by default).",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "as_of_date": {
+            "default": "2021-06-30",
+            "description": "Form 477 filing date in YYYY-MM-DD format. Defaults to June 2021. See fcc_list_filing_periods for supported dates.",
+            "type": "string",
+            "enum": [
+              "2021-06-30",
+              "2020-12-31",
+              "2020-06-30",
+              "2019-12-31",
+              "2019-06-30",
+              "2018-12-31",
+              "2018-06-30",
+              "2017-12-31",
+              "2017-06-30",
+              "2016-12-31"
+            ]
+          },
+          "geography_type": {
+            "type": "string",
+            "enum": [
+              "state",
+              "county",
+              "cd",
+              "place",
+              "cbsa",
+              "tribal"
+            ],
+            "description": "Geographic level to compare. Must be uniform across all geographies in the comparison."
+          },
+          "geography_ids": {
+            "description": "GEOIDs to compare. Tribal GEOIDs are four digits followed by uppercase R or T. Malformed tribal IDs are reported alongside valid matches. Find IDs by name with fcc_search_geographies. The first 300 distinct IDs are retained; remaining distinct IDs are disclosed as excluded. For all 50 states, omit and set compare_all_states=true.",
+            "minItems": 2,
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "compare_all_states": {
+            "default": false,
+            "description": "When true, compares all 50 states + DC. Overrides geography_ids. Requires geography_type=\"state\".",
+            "type": "boolean"
+          },
+          "tech_filter": {
+            "default": "acfow",
+            "description": "Any nonempty alphabetical combination of a=ADSL/DSL, c=cable, f=fiber, o=other (symmetric DSL, other copper, power line), s=satellite, w=fixed wireless. Default acfow excludes satellite; explicit acfosw includes every technology. acfow includes all fixed wireless and is not an exact program-technology eligibility filter.",
+            "type": "string",
+            "enum": [
+              "a",
+              "ac",
+              "acf",
+              "acfo",
+              "acfos",
+              "acfosw",
+              "acfow",
+              "acfs",
+              "acfsw",
+              "acfw",
+              "aco",
+              "acos",
+              "acosw",
+              "acow",
+              "acs",
+              "acsw",
+              "acw",
+              "af",
+              "afo",
+              "afos",
+              "afosw",
+              "afow",
+              "afs",
+              "afsw",
+              "afw",
+              "ao",
+              "aos",
+              "aosw",
+              "aow",
+              "as",
+              "asw",
+              "aw",
+              "c",
+              "cf",
+              "cfo",
+              "cfos",
+              "cfosw",
+              "cfow",
+              "cfs",
+              "cfsw",
+              "cfw",
+              "co",
+              "cos",
+              "cosw",
+              "cow",
+              "cs",
+              "csw",
+              "cw",
+              "f",
+              "fo",
+              "fos",
+              "fosw",
+              "fow",
+              "fs",
+              "fsw",
+              "fw",
+              "o",
+              "os",
+              "osw",
+              "ow",
+              "s",
+              "sw",
+              "w"
+            ]
+          },
+          "speed_down": {
+            "default": "25",
+            "description": "Download key for a download/upload threshold pair in Mbps: 0.2=0.2/0.2, 4=4/1, 10=10/1, 25=25/3, 100=100/10, 250=250/25, 1000=1000/100. These historical population aggregates cannot establish current BEAD eligibility or address service; 100/10 does not establish 100/20 availability.",
+            "type": "string",
+            "enum": [
+              "4",
+              "10",
+              "25",
+              "100",
+              "250",
+              "1000",
+              "0.2"
+            ]
+          },
+          "sort_by": {
+            "default": "unserved_pct",
+            "description": "\"unserved_pct\" = share of population with no broadband (default). \"unserved_pop\" = raw headcount. \"coverage_pct\" = share with any coverage. \"competitive_pct\" = share with 2+ providers. Every option ranks worst-first, so rank 1 is the highest unserved share or headcount, or the lowest coverage or competitive share.",
+            "type": "string",
+            "enum": [
+              "unserved_pct",
+              "unserved_pop",
+              "coverage_pct",
+              "competitive_pct"
+            ]
+          }
+        },
+        "required": [
+          "geography_type"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "fcc_find_underserved",
+      "description": "Finds geographic areas with limited or no broadband coverage at a given speed threshold, ranked by unserved population. Supports historical population screening and broadband equity research; it cannot establish current BEAD eligibility or address service. Accepts a state abbreviation to narrow scope or runs nationwide. Defaults to rural areas where underservice is most concentrated. Uses historical FCC Form 477 filings (June 2021 by default). Follow nextOffset with the same filters until it is absent.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "as_of_date": {
+            "default": "2021-06-30",
+            "description": "Form 477 filing date in YYYY-MM-DD format. Defaults to June 2021. See fcc_list_filing_periods for supported dates.",
+            "type": "string",
+            "enum": [
+              "2021-06-30",
+              "2020-12-31",
+              "2020-06-30",
+              "2019-12-31",
+              "2019-06-30",
+              "2018-12-31",
+              "2018-06-30",
+              "2017-12-31",
+              "2017-06-30",
+              "2016-12-31"
+            ]
+          },
+          "state": {
+            "description": "2-letter USPS state or territory code (e.g., \"WY\", \"MS\", \"PR\") to limit scope. For CBSA, matches any state named in the filing-year title and uses figures for the whole CBSA. An unrecognized code is rejected. Omit for nationwide search.",
+            "type": "string",
+            "pattern": "^[A-Z]{2}$"
+          },
+          "geography_type": {
+            "default": "county",
+            "description": "Geographic granularity for historical population screening. \"county\" = county. \"cd\" = congressional district. \"place\" = census-designated place. \"cbsa\" = metro area.",
+            "type": "string",
+            "enum": [
+              "county",
+              "cd",
+              "place",
+              "cbsa"
+            ]
+          },
+          "speed_down": {
+            "default": "25",
+            "description": "Download key for a download/upload threshold pair in Mbps: 0.2=0.2/0.2, 4=4/1, 10=10/1, 25=25/3, 100=100/10, 250=250/25, 1000=1000/100. These historical population aggregates cannot establish current BEAD eligibility or address service; 100/10 does not establish 100/20 availability.",
+            "type": "string",
+            "enum": [
+              "4",
+              "10",
+              "25",
+              "100",
+              "250",
+              "1000",
+              "0.2"
+            ]
+          },
+          "tech_filter": {
+            "default": "acfow",
+            "description": "Any nonempty alphabetical combination of a=ADSL/DSL, c=cable, f=fiber, o=other (symmetric DSL, other copper, power line), s=satellite, w=fixed wireless. Default acfow excludes satellite; explicit acfosw includes every technology. acfow includes all fixed wireless and is not an exact program-technology eligibility filter.",
+            "type": "string",
+            "enum": [
+              "a",
+              "ac",
+              "acf",
+              "acfo",
+              "acfos",
+              "acfosw",
+              "acfow",
+              "acfs",
+              "acfsw",
+              "acfw",
+              "aco",
+              "acos",
+              "acosw",
+              "acow",
+              "acs",
+              "acsw",
+              "acw",
+              "af",
+              "afo",
+              "afos",
+              "afosw",
+              "afow",
+              "afs",
+              "afsw",
+              "afw",
+              "ao",
+              "aos",
+              "aosw",
+              "aow",
+              "as",
+              "asw",
+              "aw",
+              "c",
+              "cf",
+              "cfo",
+              "cfos",
+              "cfosw",
+              "cfow",
+              "cfs",
+              "cfsw",
+              "cfw",
+              "co",
+              "cos",
+              "cosw",
+              "cow",
+              "cs",
+              "csw",
+              "cw",
+              "f",
+              "fo",
+              "fos",
+              "fosw",
+              "fow",
+              "fs",
+              "fsw",
+              "fw",
+              "o",
+              "os",
+              "osw",
+              "ow",
+              "s",
+              "sw",
+              "w"
+            ]
+          },
+          "min_unserved_pop": {
+            "default": 1,
+            "description": "Minimum population with no coverage to include. Defaults to 1, which keeps fully covered areas out of a ranking of underserved ones. Set to 0 to rank every area regardless of unserved population, or higher to drop small gaps (e.g., 500 keeps only areas with at least 500 unserved residents).",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "urban_rural_filter": {
+            "default": "R",
+            "description": "Defaults to rural (\"R\") — where underservice is most concentrated. Use \"U\" to find underserved urban areas (digital redlining research). Set to \"all\" for both.",
+            "type": "string",
+            "enum": [
+              "all",
+              "R",
+              "U"
+            ]
+          },
+          "offset": {
+            "default": 0,
+            "description": "Number of globally ranked matching areas to skip.",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "limit": {
+            "default": 20,
+            "description": "Requested results per page, default 20. Requests above 1000 are served at 1000.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "fcc_list_filing_periods",
+      "description": "Lists Form 477 filing periods (June 2015 to June 2021) with Area Table availability and BDC as-of dates from the authenticated API (June 2022 onward, requires credentials). When hasBdcCredentials is true, call this before fcc_list_downloads to find valid as_of_date and data_type pairs. June 2021 is the latest Form 477 snapshot served here. FCC collected later Form 477 filings, including June 2022.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "include_bdc": {
+            "default": false,
+            "description": "When true, also fetches BDC as-of dates from the authenticated API (requires FCC_BDC_USERNAME and FCC_BDC_HASH_VALUE). When false (default), returns only hardcoded Form 477 periods.",
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "io.github.cyanheads/fcc-broadband-mcp-server",
+    "version": "0.5.1",
+    "remoteUrl": "https://fcc-broadband.caseyjhand.com/mcp",
+    "publishedAt": "2026-11-28T08:48:40.942535Z",
+    "fetchedAt": "2026-11-28T10:03:29.931Z",
+    "toolsSha256": "4549bb1b7ee27db9f578ab07f1f00988408de94e81b90fa9b0a32698a1d1478d"
+  }
+}

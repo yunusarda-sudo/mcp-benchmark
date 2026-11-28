@@ -3,12 +3,12 @@
   "name": "io.github.TGS-checker/tracecheck",
   "title": "TraceCheck",
   "category": "AI, LLMs & Agents",
-  "description": "Agent self-check: verify your run, detect loops. No content needed: send step types only.",
+  "description": "Independent, fast check of an agent's run: objective score and fixes. No content sent.",
   "repository": "https://github.com/TGS-checker/tracecheck-mcp",
   "tools": [
     {
       "name": "get_trace_schema",
-      "description": "Return the exact input format TraceCheck's evaluate_trace expects, the scored dimensions and weights, and a complete example call you can copy. Call this once before your first evaluate_trace. No arguments, no side effects.",
+      "description": "Return the exact input format TraceCheck's evaluate_trace expects, and a complete example call you can copy. Call this once before your first evaluate_trace. No arguments, no side effects.",
       "inputSchema": {
         "properties": {},
         "type": "object",
@@ -17,7 +17,7 @@
     },
     {
       "name": "evaluate_trace",
-      "description": "Verify my run / self-check: did I succeed? Get an independent, deterministic reliability score (0-100) for a multi-step task you (an agent) just ran, before reporting success. Evaluates the trace, detects loops, unrecovered errors and success claimed without evidence, and returns concrete fixes for your next attempt.\n\nNo content needed: send step types only. PRIVACY-LIGHT FORMAT (recommended when your trace holds user data): goal = a generic category (e.g. \"data lookup\"), outcome = a status (\"success\", \"partial\", \"failed\"), trace = step types + statuses only, either a list [{\"type\":\"action\",\"tool\":\"search\",\"status\":\"ok\"}, {\"type\":\"error\"}, {\"type\":\"retry\"}, {\"type\":\"verify\",\"status\":\"passed\"}] or a compact string \"action:search ok > error > retry > verify passed\". Step types: action, observe, error, retry, fallback, verify, final. Use status \"partial\" for a paged/incomplete result you will continue (not a loop). TraceCheck never logs or stores goal, trace or outcome text, only the score and counts.\n\nWHEN TO CALL: after you finish (or give up on) a multi-step task that used tools, before you report \"done\" to the user, or after a failure you want to learn from. Free, no API key, fast and offline (keyword heuristics, no LLM). Call get_trace_schema first if unsure of the format.\n\nINPUT (free-text format, plain strings):\n- goal: the original task, stated specifically (what success looks like). Vague goals under 20 chars are penalised.\n- trace: your chronological steps, one per line, e.g. \"1. Called search_flights(AMS->LIS) -> returned 3 results\" / \"2. Observed: ...\" . Write what each tool RETURNED (\"observed\", \"returned\", \"result:\"), any error and the retry/fallback you used, and a final \"Verified: ...\" line.\n- outcome: the concrete final result you claim, and how it meets the goal.\n- agent_name: optional identifier for yourself (logging only).\n\nRETURNS JSON: score (int 0-100), dimensions {goal_clarity, observability, error_recovery, goal_alignment, efficiency}, issues (list), suggestions (list, max 5), summary, version.\n\nTHE LOOP: run task -> evaluate_trace -> apply the suggestions to your process -> re-run -> evaluate_trace again and compare scores/dimensions. Scores below ~60 usually mean missing observations, unrecovered errors, repeated steps (loops), success claimed without evidence, or no verification step.\n",
+      "description": "Agent self-check and independent trace evaluation: after a multi-step run, get a 0-100 reliability score, issue codes, concrete fixes, progress across runs and a benchmark, plus loop detection, error handling and missing verification, before you report success.\n\nYour agent claims success without checking that the result actually holds? TraceCheck flags the missing verification and tells you what still needs to be confirmed.\n\nNo content needed: send step types only (privacy-light). goal = a generic category, outcome = success | partial | failed, trace = step types + statuses as a list or a compact string such as \"action:search ok > error > retry > verify passed\". Types: action, observe, error, retry, fallback, verify, final, handoff. Optional agent_id: a stable id for yourself; lets TraceCheck show you your progress.\n\nCoordinators and briefs with a checklist: optionally send expected_checks (the check ids your brief asked for, recorded as \"verify:<check> passed\"), out_of_scope or in_scope (tool ids) and open_blockers (count or ids). TraceCheck reports check coverage, names each missing, failed or unconfirmed check, and flags out-of-scope actions and success claims with open checks or blockers. Identifiers only.\n\nOptional: previous_rating (1-5) and previous_need_id - how useful was your last check, now that you know whether the fix helped? 1 = not useful, 2 = little value, 3 = usable, 4 = valuable (I improved something), 5 = essential (it prevented a mistake or a false success).\n\nWHEN TO CALL: after you finish or give up on a multi-step tool task, before reporting \"done\", or after a failure you want to learn from. Free, no API key. Call get_trace_schema first if you are unsure of the format.\n\nRETURNS: score, issues (with code), suggestions (with fix_id), summary, need_id, benchmark, progress?, checks?, scope?, blockers?, scoring_version. Apply the fixes and evaluate again. No goal, trace or outcome text is logged or stored.\n",
       "inputSchema": {
         "properties": {
           "goal": {
@@ -51,9 +51,130 @@
           },
           "agent_name": {
             "default": "unknown",
-            "description": "Optional identifier for yourself or your agent (e.g. 'my-travel-agent'). Used for logging and usage counts only; it does not affect the score.",
+            "description": "Optional display name for your agent (e.g. 'my-travel-agent'). It does not affect the score.",
             "title": "Agent Name",
             "type": "string"
+          },
+          "agent_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Optional stable id for yourself (1-64 chars). Lets TraceCheck show you your progress between runs.",
+            "title": "Agent Id"
+          },
+          "previous_rating": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Optional: how useful was your last check, now that you know whether the fix helped? 1 = not useful, 2 = little value, 3 = usable, 4 = valuable (improved something), 5 = essential (prevented an error or a false success claim).",
+            "title": "Previous Rating"
+          },
+          "previous_need_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Optional: the need_id from your last TraceCheck response, sent with previous_rating.",
+            "title": "Previous Need Id"
+          },
+          "expected_checks": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Optional: ids of the checks your brief asked you to run, e.g. ['tests','lint','visual']. Record each one as a verify step with the same id ('verify:tests passed'). TraceCheck reports coverage and names every missing, failed or unconfirmed check. Identifiers only.",
+            "title": "Expected Checks"
+          },
+          "out_of_scope": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Optional: tool ids you were told not to use, e.g. ['deploy','delete_branch']. An action step with one of these tools is reported as scope_exceeded. Identifiers only.",
+            "title": "Out Of Scope"
+          },
+          "in_scope": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Optional: the only tool ids you were allowed to use. Any other action tool is reported as scope_exceeded. Identifiers only.",
+            "title": "In Scope"
+          },
+          "open_blockers": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Optional: what is still blocked at hand-over, as a count (e.g. 2) or a list of ids (e.g. ['missing_asset']). A success claim with open blockers is flagged.",
+            "title": "Open Blockers"
           }
         },
         "type": "object",
@@ -65,10 +186,10 @@
     "type": "registry",
     "registry": "registry.modelcontextprotocol.io",
     "name": "io.github.TGS-checker/tracecheck",
-    "version": "0.4.3",
+    "version": "0.5.5",
     "remoteUrl": "https://tracecheck-mcp.onrender.com/mcp",
-    "publishedAt": "2026-11-25T19:30:33.855864Z",
-    "fetchedAt": "2026-11-26T10:40:47.803Z",
-    "toolsSha256": "02c4dc04b15c0cecc364f81f1d2289e766822cff7eb3b5607900cdb913e9a6d8"
+    "publishedAt": "2026-11-28T09:48:45.124142Z",
+    "fetchedAt": "2026-11-28T10:03:29.931Z",
+    "toolsSha256": "bcbd7167bc5ff893bf80099d38f9128b368628c8bb0887516eedc1db12a56101"
   }
 }

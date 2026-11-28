@@ -1,0 +1,990 @@
+{
+  "$schema": "../schema.json",
+  "name": "ai.felpra/felpra-trading-mcp",
+  "title": "FELPRA Trading Intelligence",
+  "category": "AI, LLMs & Agents",
+  "description": "Verifiable crypto/KR/US market intelligence for AI agents: signals, hash-chained ledger. Not advice.",
+  "repository": "https://github.com/felpra-ai/felpra-trading-mcp",
+  "tools": [
+    {
+      "name": "get_system_card",
+      "description": "Purpose: Start here. One-page card for an agent meeting FELPRA for the first time: what it is (public\n    beta, operated by an individual, SLA: none), coverage (markets, bar intervals, universe sizes), data\n    freshness (ok / degraded per pipeline component), and the measured track record with weak spots.\nWhen to call: first, before any other FELPRA tool, or when asked how reliable FELPRA is.\nNext steps: get_daily_brief, get_market_context, get_symbol_context, get_signal_calibration,\n    get_prediction_accuracy.\nCaveats: on the free plan the card also lists what the Pro plan adds (no tool names). Every number is read from the judgment ledgers at request time (cached 15 minutes). Cells below\n    their minimum sample (track_record.*.min_n) show n and days but no rates. Calibration is ECE with a\n    bucket-midpoint approximation; Brier is not computed. Profit metrics are not in this card.\nOutput nature: Service status, coverage and past measured hit rates against baselines, judged after the\n    fact. Past hit rates do not guarantee future outcomes.",
+      "inputSchema": {
+        "properties": {},
+        "type": "object",
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_daily_brief",
+      "description": "Purpose: Single-call market overview — engine macro regime + score-ranked example signals + score-sign breadth +\n    yesterday's paper-trading outcomes + active forecast count + narrative.\n    Use this as the first call when answering \"how is the market today?\".\nTriggers (call this even for casual questions): \"how's the market?\",\n    \"오늘 장 어때?\", \"what's the market mood / outlook?\", \"how's Bitcoin / crypto /\n    US stocks / 비트코인 / 코인장 doing lately?\", \"anything happening today?\",\n    \"give me a briefing\".\nWhen to call: morning briefings, \"today/yesterday how was the market?\" queries,\n    and any open-ended question about how a live market is doing right now.\nPrerequisites: none.\nNext steps: follow `_next_actions` to deep-dive — explain_decision (top-ranked signals),\n    get_trade_history(outcome=\"loss\") (loss review), get_active_predictions (forecast tracking).\nCaveats: top_ranked_signals are EXAMPLES ranked by |signal_score| per market (up to 2 per market for\n    \"all\", 5 for one market; never re-ranked across markets) — in most score buckets the measured 24h\n    hit rate is close to the market average (meta.signal_edge_evidence), so they are not 'strong'; each carries\n    score_bucket_hit_rate_24h. They come from each market's latest 2 signal cycles and only\n    signals younger than meta.windows.top_ranked_signals_live_max_age_minutes; a\n    market that is not trading now appears in last_session_signals instead.\n    macro_regime.regime is the engine's global regime (risk_on/neutral/risk_off) that feeds its\n    macro score; regime_score is a 0.5-1 strength, not a probability; null when stale (>6h).\n    macro_regime.categories hold data-coverage counts, not regime labels. Trade outcomes\n    cover each market's last completed session (kr/us local day; crypto last 24h).\n    Paper-trading data only (NOT real money).\nOutput: full_data { narrative, market, brief_mode, next_session_open_at{market: ISO UTC},\n    macro_regime{regime,regime_score,regime_signed,as_of,stale,unavailable_reason,\n        categories[{category,sample_count}],total,basis},\n    top_ranked_signals[{...,score_bucket_hit_rate_24h}], last_session_signals[],\n    market_breadth{market:{symbols,by_bias{positive,neutral,negative}}},\n    yesterday_trades{total,winning,losing,by_market},\n    active_predictions_count, primary_market, meta }.\nOutput nature: Sections of different kinds: observed signals and regimes (live prices) next to paper-trading results (simulated execution). See meta.data_type_sections.",
+      "inputSchema": {
+        "properties": {
+          "market": {
+            "default": "all",
+            "description": "\"all\" (default, blends 3 markets), \"crypto\", \"kr_stock\", or \"us_stock\". Aliases coin/kr/us and any letter case are accepted.",
+            "enum": [
+              "all",
+              "crypto",
+              "kr_stock",
+              "us_stock"
+            ],
+            "type": "string"
+          }
+        },
+        "type": "object",
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "search",
+      "description": "Purpose: ChatGPT-connector-standard discovery search over FELPRA's live surface —\n    tools, resources, and the latest score-ranked combined signals across crypto /\n    kr_stock / us_stock. Returns result ids consumable by the `fetch` tool.\nTriggers: ChatGPT connectors and Deep Research call this automatically for any\n    user query routed to FELPRA (\"bitcoin signal\", \"prediction accuracy\",\n    \"korean stocks today\", ...). Other AI clients may use it as a keyword\n    starting point when unsure which tool/resource to call.\nWhen to call: first step of connector-style discovery. MCP-native clients can\n    instead browse tools/list + resources/list directly.\nPrerequisites: none.\nNext steps: pass any result id to `fetch` for the full document.\nCaveats: corpus is rebuilt at most every 10 minutes (tool/resource catalog +\n    top-20 signals by |score| per market). Ticker / company-name queries (BTC, NVDA,\n    삼성전자) resolve to `signal:{market}:{symbol}` first; market words (S&P, KOSPI,\n    crypto) surface that market's resources. Every result id is fetchable. Empty\n    results come with a `note` explaining coverage.\nOutput: {results: [{id, title, url}], disclaimer, is_investment_advice,\n    data_classification} — flat envelope, OpenAI fixed shape.\nOutput nature: Observed signal state computed from live market prices each cycle. signal_score is an internal ranking score, not a probability; bias is its sign. Context for the user's question, not investment advice.",
+      "inputSchema": {
+        "properties": {
+          "query": {
+            "description": "free-text search string (English/Korean, symbols like BTC/AAPL)",
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "type": "object",
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "fetch",
+      "description": "Purpose: ChatGPT-connector-standard document fetch by id from `search` results.\n    Namespaces: `tool:{name}` returns the tool's full documentation and how to\n    call it; `resource:{uri}` returns the resource's live data (core resources\n    resolved server-side — also the bridge for clients without MCP resource\n    support, e.g. Gemini); `signal:{market}:{symbol}` returns the symbol's\n    latest combined signal.\nTriggers: ChatGPT connectors / Deep Research call this after `search`. Clients\n    without MCP resource support can call it directly with a known resource id,\n    e.g. fetch(\"resource:market://global/summary\").\nWhen to call: whenever the full content behind a search result id is needed.\nPrerequisites: a valid id — from `search` results or a known namespace id.\nNext steps: for tool docs, call the named tool via tools/call; for signals,\n    explain_decision for deeper evidence.\nCaveats: uncovered resource uris return description-only text (no fabricated\n    data). `text` is a JSON document for resource/signal ids.\nOutput: {id, title, text, url, metadata, disclaimer, is_investment_advice,\n    data_classification} — flat envelope, OpenAI fixed shape.\nOutput nature: Observed signal state computed from live market prices each cycle. signal_score is an internal ranking score, not a probability; bias is its sign. Context for the user's question, not investment advice.",
+      "inputSchema": {
+        "properties": {
+          "id": {
+            "description": "document id — \"tool:{name}\", \"resource:{uri}\", or \"signal:{market}:{symbol}\" (market: crypto / kr_stock / us_stock)",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object",
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_symbol_context",
+      "description": "Use when the question is about one stock or coin — its current signal state, the FELPRA structure group it belongs to, and which assets have tracked lead-lag links to it. Returns self-contained headline claims first, then the symbol's observed state, upstream links (its group, macro/ETF/basket instruments and symbols that move before it), peers (symbols that follow it), tagged news, and gaps that say what is not tracked. Not for sector-wide questions (use get_group_context) or whole-market questions (use get_market_context). Provides regime, signal-score and linkage context with sample sizes and measured hit rates; every link carries its evidence and every empty section is listed in gaps. Not a real-time quote, fundamentals, or full-text news source. Accepts tickers, KRX codes or names; ambiguous inputs return candidates instead of a guess.\nOutput nature: Self-contained context for one entity: observed state, tracked links with their evidence and sample sizes, and explicit gaps. Not investment advice.",
+      "inputSchema": {
+        "properties": {
+          "symbol": {
+            "description": "Ticker (NVDA), KRX 6-digit code (005930), coin base ticker (BTC) or name (삼성전자, Samsung Electronics). Ambiguous names return candidates, not a guess.",
+            "type": "string"
+          },
+          "market_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Optional. crypto / kr_stock / us_stock (aliases coin/kr/us). Narrows name resolution.",
+            "enum": [
+              "crypto",
+              "kr_stock",
+              "us_stock"
+            ]
+          },
+          "limit": {
+            "default": 8,
+            "description": "Max links per section (default 8, max 50).",
+            "type": "integer"
+          },
+          "question": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Optional. The user's original question, used only for service improvement analytics. Does not change the response. Do not include personal information."
+          }
+        },
+        "required": [
+          "symbol"
+        ],
+        "type": "object",
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_group_context",
+      "description": "Use when the question is about a sector, theme, ETF basket or index basket — its structure state and its members. Returns headline claims, the group's regime state per interval, its market, groups that co-move with it, member symbols with their latest signal bias, symbols the basket leads, and gaps. Not for a single stock (use get_symbol_context) or a whole market (use get_market_context). Provides regime, signal-score and linkage context with sample sizes and measured hit rates; every link carries its evidence and every empty section is listed in gaps. Not a real-time quote, fundamentals, or full-text news source.\nOutput nature: Self-contained context for one entity: observed state, tracked links with their evidence and sample sizes, and explicit gaps. Not investment advice.",
+      "inputSchema": {
+        "properties": {
+          "group": {
+            "description": "FELPRA structure group id (kr_semiconductor, technology, broad_index), a sector word (반도체, energy) or an ETF ticker that belongs to a group (QQQ).",
+            "type": "string"
+          },
+          "market_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Optional. crypto / kr_stock / us_stock (aliases coin/kr/us). Group ids repeat across markets.",
+            "enum": [
+              "crypto",
+              "kr_stock",
+              "us_stock"
+            ]
+          },
+          "limit": {
+            "default": 8,
+            "description": "Max links per section (default 8, max 50; members default 10).",
+            "type": "integer"
+          },
+          "question": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Optional. The user's original question, used only for service improvement analytics. Does not change the response. Do not include personal information."
+          }
+        },
+        "required": [
+          "group"
+        ],
+        "type": "object",
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_market_context",
+      "description": "Use when the question is about a whole market (KR, US, CRYPTO) — its structure regime and how its groups are positioned. Returns headline claims, the market's structure and global macro regime, the macro categories assumed to affect it (with tuned lags), its groups ordered by distance from the middle regime stage, market-tagged news, and gaps. Not for one sector or stock (use get_group_context or get_symbol_context). Provides regime, signal-score and linkage context with sample sizes and measured hit rates; every link carries its evidence and every empty section is listed in gaps. Not a real-time quote, fundamentals, or full-text news source.\nOutput nature: Self-contained context for one entity: observed state, tracked links with their evidence and sample sizes, and explicit gaps. Not investment advice.",
+      "inputSchema": {
+        "properties": {
+          "market": {
+            "description": "crypto / kr_stock / us_stock, or a market word (KR, 국장, 코스피, US, 미장, 나스닥, 코인).",
+            "type": "string"
+          },
+          "limit": {
+            "default": 8,
+            "description": "Max links per section (default 8, max 50).",
+            "type": "integer"
+          },
+          "question": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Optional. The user's original question, used only for service improvement analytics. Does not change the response. Do not include personal information."
+          }
+        },
+        "required": [
+          "market"
+        ],
+        "type": "object",
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_macro_context",
+      "description": "Use when the question is about a macro factor — rates and bonds, the dollar and FX, VIX, credit, liquidity, inflation, commodities or energy — and which markets or stocks it is linked to. Returns headline claims, the macro category's regime state per interval and its instruments, macro categories with tracked lead-lag links to it, the markets the engine assumes it affects (tuned priors), symbols its instruments lead, topic-tagged news, and gaps. Not for one stock (use get_symbol_context) or a whole market (use get_market_context). Provides regime, signal-score and linkage context with sample sizes and measured hit rates; every link carries its evidence and every empty section is listed in gaps. Not a real-time quote, fundamentals, or full-text news source.\nOutput nature: Self-contained context for one entity: observed state, tracked links with their evidence and sample sizes, and explicit gaps. Not investment advice.",
+      "inputSchema": {
+        "properties": {
+          "macro": {
+            "description": "Macro category id (bonds, commodities, credit, energy, forex, inflation, liquidity, vix), a macro word (금리, 달러, 유가, 변동성, high yield) or an instrument (^VIX, HYG, DX-Y.NYB).",
+            "type": "string"
+          },
+          "limit": {
+            "default": 8,
+            "description": "Max links per section (default 8, max 50).",
+            "type": "integer"
+          },
+          "question": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Optional. The user's original question, used only for service improvement analytics. Does not change the response. Do not include personal information."
+          }
+        },
+        "required": [
+          "macro"
+        ],
+        "type": "object",
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_news_context",
+      "description": "Use when the question is about a specific news item or a news keyword or event (FOMC, 반도체, tariff) — which markets, symbols and topics it is tagged with. Returns headline claims, the item (or keyword match counts), its title-similarity cluster, the market, symbol and topic tags assigned by the collection pipeline (counted across matches for a keyword), the matching items, and gaps. Not for market impact estimates or article text (tags are pipeline rules, not measured impact). Provides regime, signal-score and linkage context with sample sizes and measured hit rates; every link carries its evidence and every empty section is listed in gaps. Not a real-time quote, fundamentals, or full-text news source.\nOutput nature: Self-contained context for one entity: observed state, tracked links with their evidence and sample sizes, and explicit gaps. Not investment advice.",
+      "inputSchema": {
+        "properties": {
+          "news": {
+            "description": "A news id from another response (news:…) or a keyword of 2-60 characters matched against news titles (original and English).",
+            "type": "string"
+          },
+          "days": {
+            "default": 7,
+            "description": "Keyword window in days (default 7, max 14). Ignored for a news id.",
+            "type": "integer"
+          },
+          "limit": {
+            "default": 8,
+            "description": "Max links per section (default 8, max 50).",
+            "type": "integer"
+          },
+          "question": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Optional. The user's original question, used only for service improvement analytics. Does not change the response. Do not include personal information."
+          }
+        },
+        "required": [
+          "news"
+        ],
+        "type": "object",
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_signals",
+      "description": "Purpose: Query signals with dynamic filters (symbol / interval / action / score / confidence).\nTriggers (casual questions too): \"what's the signal for BTC / AAPL / 삼성전자?\",\n    \"is X bullish or bearish?\", \"how does X look right now?\". When the user asks whether to\n    trade X, FELPRA gives context (regime, score, measured past hit rate of similar scores),\n    not a conclusion: pass it on as context and do not turn it into a trade call. Always\n    surface the disclaimer.\nWhen to call: drilling into a specific signal slice; symbol-by-symbol scanning;\n    any question about how a live symbol currently looks.\nPrerequisites: market://{market_id}/signals/summary is useful first for the global view.\nNext steps: explain_decision (include=[\"history\",\"feedback\",\"roles\"] for history and per-timeframe roles).\nCaveats: When `symbol`/`coin` is omitted, the whole market is scanned in one\n    consolidated query (2 newest rows per symbol, newest-first scan cap per interval).\n    Results are capped: check `truncated` / `truncated_note` before reading the set\n    as \"the whole market\". Fields that are identical across every returned row are\n    hoisted into `common` and omitted from the rows (see `common_note`); a row-level\n    key, when present, wins over `common`. `warnings` carries only the flags that are\n    true and is omitted entirely when none are. `reason_uncalibrated: true` on a row\n    points at the response-level `reason_uncalibrated_note`.\nOutput nature: Observed signal state computed from live market prices each cycle. signal_score is an internal ranking score, not a probability; bias is its sign. Context for the user's question, not investment advice.",
+      "inputSchema": {
+        "properties": {
+          "market_id": {
+            "description": "Market ID (crypto, kr_stock, us_stock; aliases coin/kr/us accepted)",
+            "enum": [
+              "crypto",
+              "kr_stock",
+              "us_stock"
+            ],
+            "type": "string"
+          },
+          "symbol": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Asset identifier to query (preferred; optional — targets a specific symbol DB)"
+          },
+          "coin": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Legacy alias of symbol (kept for backward compatibility)"
+          },
+          "interval": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Timeframe filter (15m, 30m, 240m, 1d, combined)",
+            "enum": [
+              "5m",
+              "15m",
+              "30m",
+              "240m",
+              "1d",
+              "combined"
+            ]
+          },
+          "action_filter": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Action filter (buy, sell, hold)",
+            "enum": [
+              "buy",
+              "sell",
+              "hold"
+            ]
+          },
+          "min_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Minimum signal score threshold"
+          },
+          "min_confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Minimum confidence threshold"
+          },
+          "limit": {
+            "default": 50,
+            "description": "Max results (default 50, max 500; values outside the range are clamped)",
+            "type": "integer"
+          },
+          "hours_back": {
+            "default": 24,
+            "description": "Only signals within last N hours (default 24)",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "market_id"
+        ],
+        "type": "object",
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "explain_decision",
+      "description": "Call this when the user asks why a symbol's signal reads the way it does — a structured, multi-layer\n    \"why\" for one symbol; include=[\"history\",\"feedback\",\"roles\"] adds signal history, pattern feedback and\n    the per-timeframe role view.\nPurpose: Combines (1) technical score_trace from the signals store, (2) Thompson + regime\n    scores from the virtual decision log (Thompson = Bayesian bandit sampling used for\n    strategy selection), (3) news causality context.\nTriggers (casual questions too): \"why is BTC bullish?\", \"이 종목 신호 근거가 뭐야?\",\n    \"explain that signal\", \"판단 근거 설명해줘\", \"walk me through the reasoning\",\n    \"is BTC bullish across timeframes?\", \"시간대별 신호가 일치해?\", \"signal history for AAPL?\".\nWhen to call: when the user asks \"why is this signal bullish/bearish?\".\nPrerequisites: identify the symbol via get_signals first.\nNext steps: none (this completes the explanation chain).\nCaveats: `symbol` must match the per-symbol signal store filename (lowercase).\n    Output is a structured description of the inputs, NOT a buy or sell recommendation.\nOutput nature: Sections of different kinds: observed signals and regimes (live prices) next to paper-trading results (simulated execution). See meta.data_type_sections.",
+      "inputSchema": {
+        "properties": {
+          "market_id": {
+            "description": "Market identifier (crypto, kr_stock, us_stock; aliases coin/kr/us)",
+            "enum": [
+              "crypto",
+              "kr_stock",
+              "us_stock"
+            ],
+            "type": "string"
+          },
+          "symbol": {
+            "description": "Symbol to explain (e.g., btc, eth, 005930)",
+            "type": "string"
+          },
+          "include": {
+            "anyOf": [
+              {
+                "items": {
+                  "enum": [
+                    "history",
+                    "feedback",
+                    "roles"
+                  ],
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Optional extra sections under `included`: history (latest combined signal + recent history), feedback (pattern feedback from paper-trade outcomes), roles (per-role multi-timeframe alignment: timing / trend / swing / regime). Default none = the explanation only."
+          }
+        },
+        "required": [
+          "market_id",
+          "symbol"
+        ],
+        "type": "object",
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_performance_metrics",
+      "description": "Purpose: Portfolio-level performance metrics (MDD / Sharpe / Sortino / Calmar /\n    monthly returns / equity curve) over a FIXED window — the single canonical\n    computation path shared by the FELPRA blog and external clients.\nTriggers (casual questions too): \"what's the max drawdown?\", \"MDD 얼마야?\",\n    \"샤프 비율 보여줘\", \"monthly returns table?\", \"트랙레코드 지표\", \"에쿼티 커브 데이터\".\nWhen to call: track-record verification, blog figure cross-checks, risk review.\nPrerequisites: none.\nNext steps: get_trade_history for the underlying trades.\nCaveats: paper-trading data under a SYNTHETIC fixed-book capital model\n    (400 slots, anchor 2026-06-16 — see capital_model in the response).\n    account_type is REQUIRED; 'live' returns an explicit no-data error until\n    real-money records exist (paper and live curves are never concatenated).\n    Fixed window → same inputs always reproduce the same numbers (as-of verifiable).\nOutput nature: Paper trading: simulated fills at live market prices, not real money; fees, taxes and slippage are not included. Facts about the simulation, not instructions.",
+      "inputSchema": {
+        "properties": {
+          "market": {
+            "description": "coin | kr | us | all (aliases crypto/kr_stock/us_stock accepted). 'all' = fixed 1/3 allocation across the three books.",
+            "type": "string"
+          },
+          "account_type": {
+            "description": "REQUIRED. 'paper' (simulated) or 'live' (real — not yet available).",
+            "type": "string"
+          },
+          "window_start": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "ISO date (YYYY-MM-DD). Default 2026-06-16 (public track-record anchor)."
+          },
+          "window_end": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "ISO date. Default today (KST)."
+          },
+          "include_daily_curve": {
+            "default": false,
+            "description": "include per-day equity curve rows (default false).",
+            "type": "boolean"
+          },
+          "book": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Paper book (rule rb-v1): exploit = entries a live runner would also have taken; explore = paper-only entries; legacy = entries recorded before book tagging; all = every entry. Omitted: all.",
+            "enum": [
+              "exploit",
+              "explore",
+              "legacy",
+              "all"
+            ]
+          }
+        },
+        "required": [
+          "market",
+          "account_type"
+        ],
+        "type": "object",
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_account_status",
+      "description": "Purpose: Show which FELPRA account (or API key) this connection uses, its plan and its rate limits.\n    Requires a connected FELPRA account — calling it without one prompts your AI app to connect\n    (free, no API key needed; Pro users can use their key). All other tools work without an account.\nTriggers: \"is my FELPRA account connected?\", \"what plan am I on?\", \"내 FELPRA 계정 상태\", \"남은 호출 한도\".\nWhen to call: only when the user asks about their own account or limits.\nOutput: full_data { principal (oauth|api_key), plan, usage {daily_limit, daily_used, minute_limit, ...},\n    account_id & connected_app (oauth only) }.\nOutput nature: Service status and catalog information.",
+      "inputSchema": {
+        "properties": {},
+        "type": "object",
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_prediction_accuracy",
+      "description": "Call this first when judging how FELPRA's macro calls have held up — per-cell hit rates with honest\n    baselines; granularity=\"monthly\" for the month-by-month trend.\nPurpose: Per-cell (category, target_market, lag_bucket) hit rates WITH the honest\n    baselines (schema 1.1): persistence_accuracy (the null model — regimes are\n    sticky, so raw accuracy mostly measures regime persistence, not alpha),\n    skill_score with autocorrelation-corrected skill_ci_95, n_effective vs\n    n_nominal, and accuracy_v2_only (post 2026-07-08 methodology cutover).\n    edge_cells/anti_predictive_cells are judged on persistence-skill (criteria v2),\n    forecast cells only.\nTriggers (casual questions too): \"how accurate are your predictions?\",\n    \"예측 잘 맞아?\", \"track record 있어?\", \"can I trust these forecasts?\",\n    \"적중률 보여줘\", \"does macro actually predict these markets?\".\nWhen to call: first, when an AI agent evaluates how FELPRA calls have held up.\nPrerequisites: none.\nNext steps: get_ledger_integrity (tamper-evidence for these numbers),\n    granularity=\"monthly\" (time series), get_signal_calibration (Level-1 signal confidence reliability).\nCaveats: raw accuracy without skill_score is misleading for sticky regimes —\n    a 99% cell can be pure persistence (measured 2026-07: +0.05pp over null).\n    Judge by skill_ci_95, filter horizon_type='forecast', and treat n_nominal\n    as correlated trials (use n_effective). Monthly accuracy trends largely\n    track market stickiness, not model improvement.\nOutput nature: Past calls and their realized outcomes, judged after the fact, with sample sizes and baselines. Past hit rates describe the past, not future outcomes.",
+      "inputSchema": {
+        "properties": {
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Optional macro category filter (bonds, forex, vix, commodities, credit, liquidity, inflation, energy)"
+          },
+          "target_market": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Optional target market filter (crypto, kr_stock, us_stock). Aliases coin/kr/us and any letter case are accepted.",
+            "enum": [
+              "crypto",
+              "kr_stock",
+              "us_stock"
+            ]
+          },
+          "compact": {
+            "default": true,
+            "description": "Compact view (default true): per cell only the baselined hit-rate object plus lifecycle and skill; methodology, known_biases and ledger_health become pointers. false returns every field.",
+            "type": "boolean"
+          },
+          "forecast_only": {
+            "default": false,
+            "description": "Only forecast cells (exclude nowcast). Default false.",
+            "type": "boolean"
+          },
+          "limit": {
+            "anyOf": [
+              {
+                "maximum": 200,
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Maximum number of cells to return (response carries total/returned/truncated)."
+          },
+          "granularity": {
+            "default": "cell",
+            "description": "cell (default) = per-cell hit rates with baselines; monthly = monthly accuracy time series per (category, target_market, lag_bucket) — compact / forecast_only / limit do not apply.",
+            "enum": [
+              "cell",
+              "monthly"
+            ],
+            "type": "string"
+          }
+        },
+        "type": "object",
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_active_predictions",
+      "description": "Purpose: Currently pending predictions (outcome IS NULL). Demonstrates that FELPRA is\n    actively publishing forecasts in real time. Combined with get_prediction_accuracy,\n    proves the system goes on record before outcomes are known (no cherry-picking).\nTriggers (casual questions too): \"what are you predicting right now?\", \"지금 어떤 예측 걸려 있어?\",\n    \"current forecasts?\", \"예측을 미리 기록해 두는 거야?\", \"anything on the record before it resolves?\".\nWhen to call: to verify ongoing prediction activity.\nPrerequisites: none.\nNext steps: get_prediction_accuracy to compare with historical hit rate on similar cells.\nCaveats: returns most recent first.\nOutput nature: Past calls and their realized outcomes, judged after the fact, with sample sizes and baselines. Past hit rates describe the past, not future outcomes.",
+      "inputSchema": {
+        "properties": {
+          "target_market": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Optional target market filter (crypto, kr_stock, us_stock). Aliases coin/kr/us and any letter case are accepted.",
+            "enum": [
+              "crypto",
+              "kr_stock",
+              "us_stock"
+            ]
+          },
+          "limit": {
+            "default": 20,
+            "description": "Max active predictions to return (default 20)",
+            "type": "integer"
+          }
+        },
+        "type": "object",
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_resolved_predictions",
+      "description": "Purpose: Raw, row-level prediction ledger — every macro regime prediction's full\n    lifecycle (created_at -> resolved_at -> outcome). This is the auditable evidence\n    behind get_prediction_accuracy's aggregates: AI agents can snapshot open\n    predictions, wait, then verify outcomes themselves without trusting our DB.\nTriggers: \"show me the individual predictions\", \"prove these forecasts were made\n    in advance\", \"audit the track record\", \"예측 원장 원본 보여줘\", \"이 성적 검증 가능해?\".\nWhen to call: credibility evaluation (after get_prediction_accuracy), independent\n    backtesting, or archiving on-record predictions for later self-verification.\nPrerequisites: none. Pairs with get_ledger_integrity for tamper-evidence.\nNext steps: get_ledger_integrity (recompute daily hashes from these rows).\nCaveats: cursor pagination (id-ordered) — follow next_cursor for bulk reads.\n    Paper-research forecasts, not investment advice.\nOutput: full_data { predictions[] {id, source_category, source_regime_change,\n    target_market, predicted_regime_shift, lag_hours, confidence, created_at,\n    resolved_at, outcome, actual_regime_shift}, count, next_cursor, has_more, meta }.\nOutput nature: Past calls and their realized outcomes, judged after the fact, with sample sizes and baselines. Past hit rates describe the past, not future outcomes.",
+      "inputSchema": {
+        "properties": {
+          "target_market": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "filter e.g. \"coin_market\" / \"kr_market\" / \"us_market\". Aliases coin/kr/us and any letter case are accepted.",
+            "enum": [
+              "crypto",
+              "kr_stock",
+              "us_stock"
+            ]
+          },
+          "source_category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "filter e.g. \"vix\", \"bonds\", \"commodities\""
+          },
+          "day": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "filter by created day \"YYYY-MM-DD\" (UTC, string prefix of created_at)"
+          },
+          "status": {
+            "default": "all",
+            "description": "\"all\" | \"resolved\" | \"open\"",
+            "type": "string"
+          },
+          "cursor": {
+            "default": 0,
+            "description": "last id from previous page (0 = start)",
+            "type": "integer"
+          },
+          "limit": {
+            "default": 100,
+            "description": "page size (max 500)",
+            "type": "integer"
+          }
+        },
+        "type": "object",
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_ledger_integrity",
+      "description": "Purpose: Tamper-evidence for the prediction ledger — a daily SHA-256 hash chain\n    over all created/resolved prediction rows, with the exact canonical recipe\n    published so any third party can recompute and verify. Archive a chain_hash\n    today; if history is ever silently edited, recomputation will not match.\nTriggers: \"how do I know these predictions weren't backfilled?\", \"is the track\n    record tamper-proof?\", \"예측 조작 안 했다는 증거 있어?\", \"verify ledger integrity\".\nWhen to call: FIRST STEP of any serious credibility audit, and periodically to\n    re-anchor (each day's hash commits to all prior history via prev_chain_hash).\nPrerequisites: none. Raw rows for recomputation: get_resolved_predictions.\nNext steps: get_resolved_predictions (fetch a day's raw rows, recompute its hash).\nCaveats: chain starts 2026-03-22 (ledger inception); hashes are computed once a\n    day closes (UTC) and are append-only at the serving-role level.\nOutput: full_data { recipe_version, recipe, chain_length, first_day, last_day,\n    entries[] {day, created_count, resolved_count, created_hash, resolved_hash,\n    prev_chain_hash, chain_hash, computed_at}, verification_hint }.\nOutput nature: Past calls and their realized outcomes, judged after the fact, with sample sizes and baselines. Past hit rates describe the past, not future outcomes.",
+      "inputSchema": {
+        "properties": {
+          "days": {
+            "default": 30,
+            "description": "how many most-recent chain entries to return (max 400)",
+            "type": "integer"
+          }
+        },
+        "type": "object",
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_signal_calibration",
+      "description": "Purpose: Reliability diagram data for Level-1 signal confidence — realized hit\n    rate per confidence bucket ([0.5,0.6) ... [0.9,1.0]) with ECE summary.\n    Lets an agent verify whether a 0.9-confidence signal actually hits ~90%.\nTriggers (casual questions too): \"is your confidence calibrated?\",\n    \"confidence 0.9 믿어도 돼?\", \"시그널 확신도 실제 적중률 보여줘\",\n    \"how reliable are signal confidences?\".\nWhen to call: before trusting get_signals confidence values as probabilities.\nPrerequisites: none.\nNext steps: get_prediction_accuracy (macro-layer skill), get_signals.\nCaveats: snapshot is daily (per-market day; markets[*].stale flags a lagging\n    market); read the observation window from markets[*].observation_window_utc;\n    every interval is judged 30 minutes after the signal (meta.judgment_horizon);\n    n is nominal (correlated trials — see meta.sample_caveat); read\n    intervals[*].quality.status before citing a cell (withheld / degenerate /\n    non_monotone) and cite all_intervals_excluding_withheld, not all_intervals.\nOutput nature: Past calls and their realized outcomes, judged after the fact, with sample sizes and baselines. Past hit rates describe the past, not future outcomes.",
+      "inputSchema": {
+        "properties": {
+          "market_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Optional filter (crypto | kr_stock | us_stock)"
+          },
+          "interval": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Optional candle interval filter (e.g. 15m, 30m, 240m, 1d)"
+          },
+          "variant": {
+            "default": "v1",
+            "description": "\"v1\" (raw heuristic confidence, default) or \"v2\" (outcome-based shadow confidence — RCA C2, accumulating since 2026-07-21)",
+            "type": "string"
+          }
+        },
+        "type": "object",
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_structure_calibration",
+      "description": "Call this to see how well sector / ETF-basket direction calls held up against a majority-class baseline;\n    include_history=True adds the day-by-day validation trend.\nPurpose: Level 2 (ETF / basket / sector granularity — Level 1 is individual symbols)\n    prediction calibration. Returns hit_rate_ema per (market, group, interval,\n    regime_bucket) with sample counts, **plus the majority-class baseline needed to\n    interpret them**. This is measurement, NOT a claim of edge — as of 2026-09-18 the\n    measured skill (accuracy minus baseline) is negative in all three markets.\nTriggers (casual questions too): \"how good are your sector calls?\", \"섹터 예측 잘 맞아?\",\n    \"sector rotation accuracy?\", \"그룹 단위 적중률 보여줘\", \"sector accuracy over time?\",\n    \"요즘 섹터 예측 성적 어때?\".\nWhen to call: when an AI wants to see Layer D evidence (Layer D = sector-structure\n    tier of the 5-layer trust pyramid).\nPrerequisites: none.\nNext steps: include_history=True for the daily trend.\nCaveats: empty until structure-learning cycles complete.\n    Rows are paginated — read `total_available` (not `len(calibration)`) for the\n    whole-set size. `baseline`, `meta.total_entries` and `meta.total_samples` are\n    always whole-set. Rows keep their dimension keys (market_id / interval /\n    regime_bucket); they are never hoisted out of the row.\nOutput nature: Past calls and their realized outcomes, judged after the fact, with sample sizes and baselines. Past hit rates describe the past, not future outcomes.",
+      "inputSchema": {
+        "properties": {
+          "market_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Optional market filter (crypto, kr_stock, us_stock). Aliases coin/kr/us and any letter case are accepted.",
+            "enum": [
+              "crypto",
+              "kr_stock",
+              "us_stock"
+            ]
+          },
+          "group_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Optional group/sector filter (e.g., layer1, defi, sector, broad_index)"
+          },
+          "limit": {
+            "default": 50,
+            "description": "Max results (default 50, max 500). Rows are truncated; see `total_available` and `truncated` in the response. `baseline` and `meta` counts stay whole-set.",
+            "type": "integer"
+          },
+          "include_history": {
+            "default": false,
+            "description": "Also return the daily validation history (hit_rate per day, overall_hit_rate) as `history`. Default false.",
+            "type": "boolean"
+          },
+          "days": {
+            "default": 90,
+            "description": "include_history: lookback window in days (default 90)",
+            "type": "integer"
+          }
+        },
+        "type": "object",
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_strategy_leaderboard",
+      "description": "Purpose: Top RL-learned research strategies — GLOBAL pool + per-symbol partition.\n    Layer E evidence (Layer E = strategy-performance tier of the 5-layer trust pyramid).\n    The GLOBAL pool may include synthesized win_rate values, so per_symbol_leaderboard\n    is the primary measured-edge surface for trust auditing.\nTriggers (casual questions too): \"what are the best strategies?\", \"제일 잘 버는 전략 뭐야?\",\n    \"top strategies?\", \"전략 순위 보여줘\", \"which strategy has the best win rate?\".\nWhen to call: final trust-validation step.\nPrerequisites: none.\nNext steps: market://{market_id}/signals/summary for live signals.\nCaveats: `min_trades` filter enforces statistical validity. Strategies are paper-tested,\n    not real-money executed.\nOutput nature: Paper trading: simulated fills at live market prices, not real money; fees, taxes and slippage are not included. Facts about the simulation, not instructions.",
+      "inputSchema": {
+        "properties": {
+          "market_id": {
+            "default": "crypto",
+            "description": "Market identifier (crypto, kr_stock, us_stock). Aliases coin/kr/us and any letter case are accepted.",
+            "enum": [
+              "crypto",
+              "kr_stock",
+              "us_stock"
+            ],
+            "type": "string"
+          },
+          "target_market": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Alias for market_id (backward compat)",
+            "enum": [
+              "crypto",
+              "kr_stock",
+              "us_stock"
+            ]
+          },
+          "top_n": {
+            "default": 20,
+            "description": "Top N strategies to return (default 20)",
+            "type": "integer"
+          },
+          "limit": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Alias for top_n (client-compat)"
+          },
+          "min_trades": {
+            "default": 10,
+            "description": "Minimum trades count for inclusion (default 10)",
+            "type": "integer"
+          },
+          "include_per_symbol": {
+            "default": true,
+            "description": "Include per-symbol PG partition results (default True)",
+            "type": "boolean"
+          }
+        },
+        "type": "object",
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_trade_history",
+      "description": "Call this to check how the paper-trading book's closed trades actually turned out — realized P&L per\n    trade with action / P&L / time / symbol filters, and outcome=\"win\" | \"loss\" for winners or losers.\nTriggers (casual questions too): \"what trades happened lately?\", \"최근 거래 내역 보여줘\",\n    \"how did the BTC trades go?\", \"승률 어때?\", \"show me the trade log\", \"어디서 잃었어?\",\n    \"how many trades won this week?\".\nWhen to call: past trade review, single-symbol post-mortem, win-rate audits.\nPrerequisites: none.\nNext steps: market://{market_id}/signals/summary for the current signals.\nCaveats: paper-trading data only (not real money). limit capped at 1000. On the free plan only closed\n    trades are returned, published 24 hours after the close (the response's _meta.applied_limits says\n    what was adjusted).\nOutput nature: Paper trading: simulated fills at live market prices, not real money; fees, taxes and slippage are not included. Facts about the simulation, not instructions.",
+      "inputSchema": {
+        "properties": {
+          "market_id": {
+            "description": "Market ID (crypto, kr_stock, us_stock; aliases coin/kr/us accepted)",
+            "enum": [
+              "crypto",
+              "kr_stock",
+              "us_stock"
+            ],
+            "type": "string"
+          },
+          "outcome": {
+            "default": "all",
+            "description": "Realized outcome filter: all (default), win (P&L >= +0.01%), loss (P&L <= -0.01%). min_pnl / max_pnl override the threshold.",
+            "enum": [
+              "all",
+              "win",
+              "loss"
+            ],
+            "type": "string"
+          },
+          "limit": {
+            "default": 50,
+            "description": "Max rows returned (default 50, max 1000). Rows are paginated; see total_available / truncated. NOTE: stats (win_rate, avg_pnl) are aggregated over the scanned set, not over the returned rows — see stats_scope.",
+            "type": "integer"
+          },
+          "action_filter": {
+            "default": "all",
+            "description": "Filter simulated executions by side (all, buy = position opens, sell = closes)",
+            "enum": [
+              "all",
+              "buy",
+              "sell"
+            ],
+            "type": "string"
+          },
+          "min_pnl": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Min P&L % filter (e.g., -5.0)"
+          },
+          "max_pnl": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Max P&L % filter (e.g., 10.0)"
+          },
+          "hours_back": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Only trades within last N hours"
+          },
+          "symbol": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Filter by ticker symbol (e.g., \"BTC\", \"AAPL\"); case-insensitive"
+          },
+          "book": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Paper book (rule rb-v1): exploit = entries a live runner would also have taken; explore = paper-only entries; legacy = entries recorded before book tagging; all = every entry. Omitted: all.",
+            "enum": [
+              "exploit",
+              "explore",
+              "legacy",
+              "all"
+            ]
+          }
+        },
+        "required": [
+          "market_id"
+        ],
+        "type": "object",
+        "additionalProperties": false
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "ai.felpra/felpra-trading-mcp",
+    "version": "2.0.0",
+    "remoteUrl": "https://api.felpra.ai/mcp",
+    "publishedAt": "2026-11-27T11:27:58.356744Z",
+    "fetchedAt": "2026-11-28T10:03:29.931Z",
+    "toolsSha256": "3e9b849e5b1ff0c1e7130b4232f1bece9ea61342b1a5f31d9f7db601e45ce5fa"
+  }
+}

@@ -1,0 +1,1005 @@
+{
+  "$schema": "../schema.json",
+  "name": "com.kindoflost.nhl-lineup-optimizer/dfs-lineup-optimizer",
+  "title": "DFS Lineup Optimizer",
+  "category": "Design, UI & 3D Media",
+  "description": "Builds MLB, NFL, NHL and NBA DFS lineups with a real optimizer: cap, stacks, exposure. Free.",
+  "tools": [
+    {
+      "name": "list_lineup_examples",
+      "description": "List the bundled sample slates, one per sport (real past DraftKings Classic slates). Each can be built as-is with build_lineups(example=...).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_lineup_example",
+      "description": "Return a ready-to-run build_lineups request for a sport using its bundled sample slate, a short preview of the slate, the player-list format, and the rules available for that sport.",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "sport"
+        ],
+        "properties": {
+          "sport": {
+            "type": "string",
+            "enum": [
+              "nhl",
+              "nfl",
+              "nba",
+              "mlb"
+            ]
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "check_request",
+      "description": "Validate a build_lineups request WITHOUT solving: arguments, rule names and ranges, that the players parse, that locks/exclusions/projection names match real players, and that every roster slot has enough eligible players. Takes the same arguments as build_lineups. Fast.",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "sport"
+        ],
+        "properties": {
+          "sport": {
+            "type": "string",
+            "enum": [
+              "nhl",
+              "nfl",
+              "nba",
+              "mlb"
+            ]
+          },
+          "site": {
+            "type": "string",
+            "enum": [
+              "dk",
+              "fd",
+              "yahoo"
+            ],
+            "description": "Contest site (default dk). 'players' as a list works for dk only; fd and yahoo need the site's raw CSV text."
+          },
+          "players": {
+            "description": "EITHER the raw salary CSV text exactly as exported from the contest site (DraftKings 'Download players' / FanDuel players list / Yahoo export; a Classic contest), OR a list of player objects (site dk only).",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "name",
+                    "position",
+                    "team",
+                    "salary"
+                  ],
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "id": {
+                      "type": "string",
+                      "description": "Site player id (the number in 'Name (id)'). Default: name."
+                    },
+                    "position": {
+                      "type": "string",
+                      "description": "Site position, e.g. 'C', 'LW', 'SP', '1B/OF', 'PG/SG', 'RB', 'DST'."
+                    },
+                    "team": {
+                      "type": "string",
+                      "description": "Team abbreviation."
+                    },
+                    "salary": {
+                      "type": "integer"
+                    },
+                    "projection": {
+                      "type": "number",
+                      "description": "Your projected fantasy points. A player list has no site AvgPointsPerGame to fall back on, so every player needs this unless the top-level `projections` map covers them."
+                    },
+                    "opponent": {
+                      "type": "string",
+                      "description": "Opponent team abbreviation. Needed for rules that look at the opponent (goalie-vs-skater, bring-back, pitcher-vs-hitters, game counts)."
+                    },
+                    "status": {
+                      "type": "string",
+                      "description": "Injury status code as the site shows it (Q, O, IL...). 'O'/'OUT'/'IL' players are excluded."
+                    },
+                    "line": {
+                      "type": "integer",
+                      "description": "NHL only: forward line 1-4 / D pair 1-3; on a goalie, 1 = confirmed starter."
+                    },
+                    "pp": {
+                      "type": "integer",
+                      "description": "NHL only: power-play unit 1-2."
+                    }
+                  }
+                }
+              }
+            ]
+          },
+          "example": {
+            "type": "string",
+            "description": "Use a bundled sample slate instead of players (names from list_lineup_examples, or just the sport). Live lookups are skipped."
+          },
+          "projections": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "number"
+            },
+            "description": "Your own projections as {player name or id: points}; overrides the file's AvgPointsPerGame for those players. Names are matched case-insensitively."
+          },
+          "n_lineups": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 20,
+            "description": "Lineups to build (default 10, max 20: diversity cuts make each extra lineup slower and the free server is small)."
+          },
+          "min_salary": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Lineups must spend at least this much."
+          },
+          "max_exposure_pct": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "description": "Any one player may appear in at most this % of the lineups (100 = no cap)."
+          },
+          "lock_players": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Players (name or id) that must be in every lineup."
+          },
+          "exclude_players": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Players (name or id) to leave out."
+          },
+          "exclude_out_players": {
+            "type": "boolean",
+            "description": "Drop players the file marks OUT/IL (default true, as the web page does)."
+          },
+          "rules": {
+            "type": "object",
+            "properties": {
+              "overlap_cap": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "description": "[NHL/NFL/NBA/MLB] Max players a new lineup may share with ANY earlier lineup."
+              },
+              "min_unique_players": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 3,
+                "description": "[NHL/NFL/NBA/MLB] Each lineup needs at least this many players not in any earlier lineup."
+              },
+              "cooldown_window": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 10,
+                "description": "[NHL/NFL/NBA/MLB] Players used in the last K lineups sit out the next lineup."
+              },
+              "cool_top_k": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 3,
+                "description": "[NHL/NFL/NBA/MLB] Rest the K most-used players in each lineup (0 = off)."
+              },
+              "max_stack_exposure_pct": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 100,
+                "description": "[NHL/NFL/MLB] Max % of lineups any one team may be the stack team (100 = no cap)."
+              },
+              "stack_cooldown_window": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 10,
+                "description": "[NHL/NFL/MLB] Teams stacked in the last K lineups are not stacked again."
+              },
+              "preset": {
+                "type": "string",
+                "enum": [
+                  "gpp",
+                  "cash"
+                ],
+                "description": "[NHL/NFL] Rule preset (default gpp)."
+              },
+              "stacks": {
+                "type": "array",
+                "items": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer"
+                  },
+                  "minItems": 2,
+                  "maxItems": 2
+                },
+                "description": "[NHL] Stack classes as [[n_units, players_each], ...], e.g. [[2,3]] = two 3-man line stacks."
+              },
+              "stack_lines": {
+                "type": "boolean",
+                "description": "[NHL] Forward lines / D pairings count as stack units (default true)."
+              },
+              "stack_pp": {
+                "type": "boolean",
+                "description": "[NHL] Power-play units count as stack units (default false; much slower)."
+              },
+              "enforce_stack": {
+                "type": "boolean",
+                "description": "[NHL/NFL/MLB] Require the stacks."
+              },
+              "stack_teams_distinct": {
+                "type": "boolean",
+                "description": "[NHL] Each stack from a different team."
+              },
+              "no_skaters_vs_goalie": {
+                "type": "boolean",
+                "description": "[NHL] No skater facing your goalie (the goalie-vs-skater rule)."
+              },
+              "goalie_needs_own_stack": {
+                "type": "boolean",
+                "description": "[NHL] Your goalie's team must supply a stack."
+              },
+              "util_no_d": {
+                "type": "boolean",
+                "description": "[NHL] DraftKings: UTIL may not be a defenseman."
+              },
+              "confirmed_starters_only": {
+                "type": "boolean",
+                "description": "[NHL] Only goalies marked as the starter (Line=1 / Starting)."
+              },
+              "declared_skaters_only": {
+                "type": "boolean",
+                "description": "[NHL] Only skaters on a line or power play."
+              },
+              "max_forwards_per_team": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "description": "[NHL] Max forwards from one team."
+              },
+              "max_players_per_team": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9,
+                "description": "[NHL/NFL/NBA] Max players from one team."
+              },
+              "min_skater_teams": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9,
+                "description": "[NHL] Min distinct skater teams."
+              },
+              "d_pp1_only": {
+                "type": "boolean",
+                "description": "[NHL] Defensemen only from the first power-play unit."
+              },
+              "unit_overlap_cap": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "description": "[NHL] Max stack units shared with any earlier lineup (default 1)."
+              },
+              "goalie_overlap_cap": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "description": "[NHL] Max goalie-side overlap with any earlier lineup."
+              },
+              "forward_core_cap": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "description": "[NHL] Max shared forwards with any earlier lineup."
+              },
+              "min_unique_skaters": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 8,
+                "description": "[NHL] Skaters in each lineup that no earlier lineup used."
+              },
+              "strategies": {
+                "type": "array",
+                "items": {
+                  "type": "object"
+                },
+                "description": "[NHL] Pattern mix [{name, share}]; names: lineD_lineG_D, lineD_lineD_G, lineD_lineD_SAMEGAME_G, line_lineG_DD_different_games."
+              },
+              "build_around_goalies": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "[NHL] Goalie names/ids; the batch is split evenly between them, each locked in."
+              },
+              "qb_stack_any": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 4,
+                "description": "[NFL] Pass-catchers (WR/TE) from the QB's team in the lineup."
+              },
+              "qb_stack_wr": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 3,
+                "description": "[NFL] WRs from the QB's team."
+              },
+              "qb_stack_te": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "[NFL] TEs from the QB's team."
+              },
+              "qb_stack_rb": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "[NFL] RBs from the QB's team."
+              },
+              "bring_back": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 2,
+                "description": "[NFL] Players from the QB's opponent."
+              },
+              "dst_vs_qb_exclude": {
+                "type": "boolean",
+                "description": "[NFL] No defense facing your QB."
+              },
+              "dst_vs_attacker_exclude": {
+                "type": "boolean",
+                "description": "[NFL] No skill player facing your defense."
+              },
+              "max_wr_per_team": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "description": "[NFL] Max WRs from one team."
+              },
+              "max_rb_per_team": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "description": "[NFL] Max RBs from one team."
+              },
+              "min_teams": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9,
+                "description": "[NFL/NBA] Min distinct teams."
+              },
+              "qb_rotate_window": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 10,
+                "description": "[NFL] Do not reuse a QB within the last K lineups."
+              },
+              "passing_core_cap": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "description": "[NFL] Max shared QB + pass-catchers with any earlier lineup."
+              },
+              "skill_core_cap": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "description": "[NFL] Max shared skill players with any earlier lineup."
+              },
+              "build_around_qbs": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "[NFL] QB names/ids; the batch is split evenly between them, each locked in."
+              },
+              "user_max_teams": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 8,
+                "description": "[NBA] Max distinct teams (0 = off)."
+              },
+              "user_min_games": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 8,
+                "description": "[NBA] Min distinct games (0 = off)."
+              },
+              "user_max_games": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 8,
+                "description": "[NBA] Max distinct games (0 = off)."
+              },
+              "primary_stack": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 6,
+                "description": "[MLB] Hitters from the primary stack team (default 4)."
+              },
+              "secondary_stack": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 6,
+                "description": "[MLB] Hitters from a second stack team (default 0 = none)."
+              },
+              "pitcher_oppo_exclude": {
+                "type": "boolean",
+                "description": "[MLB] No hitters facing your pitcher (default true)."
+              },
+              "starters_only": {
+                "type": "boolean",
+                "description": "[MLB] Only probable starting pitchers when the file marks them (default true)."
+              },
+              "declared_batters_only": {
+                "type": "boolean",
+                "description": "[MLB] Only hitters with a confirmed batting order (needs orders; default false)."
+              },
+              "consecutive_primary": {
+                "type": "boolean",
+                "description": "[MLB] Primary stack must be consecutive in the batting order (needs orders)."
+              },
+              "consecutive_secondary": {
+                "type": "boolean",
+                "description": "[MLB] Same for the secondary stack."
+              },
+              "pitcher_rotate": {
+                "type": "boolean",
+                "description": "[MLB] Rotate pitchers across lineups (default true)."
+              },
+              "user_max_players_per_team": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "description": "[MLB] Max players from one team."
+              },
+              "user_min_teams": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "description": "[MLB] Min distinct teams."
+              },
+              "build_around_pitchers": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "[MLB] Pitcher names/ids; the batch is split evenly between them, each locked in."
+              }
+            },
+            "additionalProperties": false,
+            "description": "Sport-specific rules, using the web app's option names. Each is tagged with the sports it applies to; a rule for another sport is an error. get_lineup_example(sport) lists the ones for that sport."
+          },
+          "live_lookups": {
+            "type": "boolean",
+            "description": "NHL line combos / starting goalies and MLB batting orders / probable pitchers from the public sites the web page uses (default false: skipped; sample slates always skip). Can fail or be slow; a failure is reported, the solve still runs."
+          }
+        }
+      }
+    },
+    {
+      "name": "build_lineups",
+      "description": "Build up to 20 lineups for a Classic contest. Pass `example` (a sample slate) or `players` (the site's salary CSV text, or a list of player objects for DraftKings). Returns each lineup with its players, slots, salary and projected points, player exposure, notes about what defaults were applied, and `upload_csv`: a DraftKings/FanDuel/Yahoo upload-ready CSV string. Takes 2-60 s; if the result has status 'running', call get_lineup_result with the job_id. Lineups are optimal for the PROJECTIONS used, not predictions of results.",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "sport"
+        ],
+        "properties": {
+          "sport": {
+            "type": "string",
+            "enum": [
+              "nhl",
+              "nfl",
+              "nba",
+              "mlb"
+            ]
+          },
+          "site": {
+            "type": "string",
+            "enum": [
+              "dk",
+              "fd",
+              "yahoo"
+            ],
+            "description": "Contest site (default dk). 'players' as a list works for dk only; fd and yahoo need the site's raw CSV text."
+          },
+          "players": {
+            "description": "EITHER the raw salary CSV text exactly as exported from the contest site (DraftKings 'Download players' / FanDuel players list / Yahoo export; a Classic contest), OR a list of player objects (site dk only).",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "name",
+                    "position",
+                    "team",
+                    "salary"
+                  ],
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "id": {
+                      "type": "string",
+                      "description": "Site player id (the number in 'Name (id)'). Default: name."
+                    },
+                    "position": {
+                      "type": "string",
+                      "description": "Site position, e.g. 'C', 'LW', 'SP', '1B/OF', 'PG/SG', 'RB', 'DST'."
+                    },
+                    "team": {
+                      "type": "string",
+                      "description": "Team abbreviation."
+                    },
+                    "salary": {
+                      "type": "integer"
+                    },
+                    "projection": {
+                      "type": "number",
+                      "description": "Your projected fantasy points. A player list has no site AvgPointsPerGame to fall back on, so every player needs this unless the top-level `projections` map covers them."
+                    },
+                    "opponent": {
+                      "type": "string",
+                      "description": "Opponent team abbreviation. Needed for rules that look at the opponent (goalie-vs-skater, bring-back, pitcher-vs-hitters, game counts)."
+                    },
+                    "status": {
+                      "type": "string",
+                      "description": "Injury status code as the site shows it (Q, O, IL...). 'O'/'OUT'/'IL' players are excluded."
+                    },
+                    "line": {
+                      "type": "integer",
+                      "description": "NHL only: forward line 1-4 / D pair 1-3; on a goalie, 1 = confirmed starter."
+                    },
+                    "pp": {
+                      "type": "integer",
+                      "description": "NHL only: power-play unit 1-2."
+                    }
+                  }
+                }
+              }
+            ]
+          },
+          "example": {
+            "type": "string",
+            "description": "Use a bundled sample slate instead of players (names from list_lineup_examples, or just the sport). Live lookups are skipped."
+          },
+          "projections": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "number"
+            },
+            "description": "Your own projections as {player name or id: points}; overrides the file's AvgPointsPerGame for those players. Names are matched case-insensitively."
+          },
+          "n_lineups": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 20,
+            "description": "Lineups to build (default 10, max 20: diversity cuts make each extra lineup slower and the free server is small)."
+          },
+          "min_salary": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Lineups must spend at least this much."
+          },
+          "max_exposure_pct": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "description": "Any one player may appear in at most this % of the lineups (100 = no cap)."
+          },
+          "lock_players": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Players (name or id) that must be in every lineup."
+          },
+          "exclude_players": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Players (name or id) to leave out."
+          },
+          "exclude_out_players": {
+            "type": "boolean",
+            "description": "Drop players the file marks OUT/IL (default true, as the web page does)."
+          },
+          "rules": {
+            "type": "object",
+            "properties": {
+              "overlap_cap": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "description": "[NHL/NFL/NBA/MLB] Max players a new lineup may share with ANY earlier lineup."
+              },
+              "min_unique_players": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 3,
+                "description": "[NHL/NFL/NBA/MLB] Each lineup needs at least this many players not in any earlier lineup."
+              },
+              "cooldown_window": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 10,
+                "description": "[NHL/NFL/NBA/MLB] Players used in the last K lineups sit out the next lineup."
+              },
+              "cool_top_k": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 3,
+                "description": "[NHL/NFL/NBA/MLB] Rest the K most-used players in each lineup (0 = off)."
+              },
+              "max_stack_exposure_pct": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 100,
+                "description": "[NHL/NFL/MLB] Max % of lineups any one team may be the stack team (100 = no cap)."
+              },
+              "stack_cooldown_window": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 10,
+                "description": "[NHL/NFL/MLB] Teams stacked in the last K lineups are not stacked again."
+              },
+              "preset": {
+                "type": "string",
+                "enum": [
+                  "gpp",
+                  "cash"
+                ],
+                "description": "[NHL/NFL] Rule preset (default gpp)."
+              },
+              "stacks": {
+                "type": "array",
+                "items": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer"
+                  },
+                  "minItems": 2,
+                  "maxItems": 2
+                },
+                "description": "[NHL] Stack classes as [[n_units, players_each], ...], e.g. [[2,3]] = two 3-man line stacks."
+              },
+              "stack_lines": {
+                "type": "boolean",
+                "description": "[NHL] Forward lines / D pairings count as stack units (default true)."
+              },
+              "stack_pp": {
+                "type": "boolean",
+                "description": "[NHL] Power-play units count as stack units (default false; much slower)."
+              },
+              "enforce_stack": {
+                "type": "boolean",
+                "description": "[NHL/NFL/MLB] Require the stacks."
+              },
+              "stack_teams_distinct": {
+                "type": "boolean",
+                "description": "[NHL] Each stack from a different team."
+              },
+              "no_skaters_vs_goalie": {
+                "type": "boolean",
+                "description": "[NHL] No skater facing your goalie (the goalie-vs-skater rule)."
+              },
+              "goalie_needs_own_stack": {
+                "type": "boolean",
+                "description": "[NHL] Your goalie's team must supply a stack."
+              },
+              "util_no_d": {
+                "type": "boolean",
+                "description": "[NHL] DraftKings: UTIL may not be a defenseman."
+              },
+              "confirmed_starters_only": {
+                "type": "boolean",
+                "description": "[NHL] Only goalies marked as the starter (Line=1 / Starting)."
+              },
+              "declared_skaters_only": {
+                "type": "boolean",
+                "description": "[NHL] Only skaters on a line or power play."
+              },
+              "max_forwards_per_team": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "description": "[NHL] Max forwards from one team."
+              },
+              "max_players_per_team": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9,
+                "description": "[NHL/NFL/NBA] Max players from one team."
+              },
+              "min_skater_teams": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9,
+                "description": "[NHL] Min distinct skater teams."
+              },
+              "d_pp1_only": {
+                "type": "boolean",
+                "description": "[NHL] Defensemen only from the first power-play unit."
+              },
+              "unit_overlap_cap": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "description": "[NHL] Max stack units shared with any earlier lineup (default 1)."
+              },
+              "goalie_overlap_cap": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "description": "[NHL] Max goalie-side overlap with any earlier lineup."
+              },
+              "forward_core_cap": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "description": "[NHL] Max shared forwards with any earlier lineup."
+              },
+              "min_unique_skaters": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 8,
+                "description": "[NHL] Skaters in each lineup that no earlier lineup used."
+              },
+              "strategies": {
+                "type": "array",
+                "items": {
+                  "type": "object"
+                },
+                "description": "[NHL] Pattern mix [{name, share}]; names: lineD_lineG_D, lineD_lineD_G, lineD_lineD_SAMEGAME_G, line_lineG_DD_different_games."
+              },
+              "build_around_goalies": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "[NHL] Goalie names/ids; the batch is split evenly between them, each locked in."
+              },
+              "qb_stack_any": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 4,
+                "description": "[NFL] Pass-catchers (WR/TE) from the QB's team in the lineup."
+              },
+              "qb_stack_wr": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 3,
+                "description": "[NFL] WRs from the QB's team."
+              },
+              "qb_stack_te": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "[NFL] TEs from the QB's team."
+              },
+              "qb_stack_rb": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "[NFL] RBs from the QB's team."
+              },
+              "bring_back": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 2,
+                "description": "[NFL] Players from the QB's opponent."
+              },
+              "dst_vs_qb_exclude": {
+                "type": "boolean",
+                "description": "[NFL] No defense facing your QB."
+              },
+              "dst_vs_attacker_exclude": {
+                "type": "boolean",
+                "description": "[NFL] No skill player facing your defense."
+              },
+              "max_wr_per_team": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "description": "[NFL] Max WRs from one team."
+              },
+              "max_rb_per_team": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "description": "[NFL] Max RBs from one team."
+              },
+              "min_teams": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9,
+                "description": "[NFL/NBA] Min distinct teams."
+              },
+              "qb_rotate_window": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 10,
+                "description": "[NFL] Do not reuse a QB within the last K lineups."
+              },
+              "passing_core_cap": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "description": "[NFL] Max shared QB + pass-catchers with any earlier lineup."
+              },
+              "skill_core_cap": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "description": "[NFL] Max shared skill players with any earlier lineup."
+              },
+              "build_around_qbs": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "[NFL] QB names/ids; the batch is split evenly between them, each locked in."
+              },
+              "user_max_teams": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 8,
+                "description": "[NBA] Max distinct teams (0 = off)."
+              },
+              "user_min_games": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 8,
+                "description": "[NBA] Min distinct games (0 = off)."
+              },
+              "user_max_games": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 8,
+                "description": "[NBA] Max distinct games (0 = off)."
+              },
+              "primary_stack": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 6,
+                "description": "[MLB] Hitters from the primary stack team (default 4)."
+              },
+              "secondary_stack": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 6,
+                "description": "[MLB] Hitters from a second stack team (default 0 = none)."
+              },
+              "pitcher_oppo_exclude": {
+                "type": "boolean",
+                "description": "[MLB] No hitters facing your pitcher (default true)."
+              },
+              "starters_only": {
+                "type": "boolean",
+                "description": "[MLB] Only probable starting pitchers when the file marks them (default true)."
+              },
+              "declared_batters_only": {
+                "type": "boolean",
+                "description": "[MLB] Only hitters with a confirmed batting order (needs orders; default false)."
+              },
+              "consecutive_primary": {
+                "type": "boolean",
+                "description": "[MLB] Primary stack must be consecutive in the batting order (needs orders)."
+              },
+              "consecutive_secondary": {
+                "type": "boolean",
+                "description": "[MLB] Same for the secondary stack."
+              },
+              "pitcher_rotate": {
+                "type": "boolean",
+                "description": "[MLB] Rotate pitchers across lineups (default true)."
+              },
+              "user_max_players_per_team": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "description": "[MLB] Max players from one team."
+              },
+              "user_min_teams": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "description": "[MLB] Min distinct teams."
+              },
+              "build_around_pitchers": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "[MLB] Pitcher names/ids; the batch is split evenly between them, each locked in."
+              }
+            },
+            "additionalProperties": false,
+            "description": "Sport-specific rules, using the web app's option names. Each is tagged with the sports it applies to; a rule for another sport is an error. get_lineup_example(sport) lists the ones for that sport."
+          },
+          "live_lookups": {
+            "type": "boolean",
+            "description": "NHL line combos / starting goalies and MLB batting orders / probable pitchers from the public sites the web page uses (default false: skipped; sample slates always skip). Can fail or be slow; a failure is reported, the solve still runs."
+          },
+          "wait_seconds": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 45,
+            "description": "How long to wait inside this call (default 25)."
+          }
+        }
+      }
+    },
+    {
+      "name": "get_lineup_result",
+      "description": "Fetch the result of a build_lineups job that returned status 'running'. Waits up to wait_seconds; call again while status is 'running'. Jobs expire 15 minutes after they finish.",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "job_id"
+        ],
+        "properties": {
+          "job_id": {
+            "type": "string"
+          },
+          "wait_seconds": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 45
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "com.kindoflost.nhl-lineup-optimizer/dfs-lineup-optimizer",
+    "version": "1.0.0",
+    "remoteUrl": "https://nhl-lineup-optimizer.kindoflost.com/mcp",
+    "publishedAt": "2026-11-17T20:29:16.509643Z",
+    "fetchedAt": "2026-11-28T10:03:29.931Z",
+    "toolsSha256": "d7f8d970054df058365671e86a3aeb138857d86c0c0bbf1863c54deb84a38e92"
+  }
+}

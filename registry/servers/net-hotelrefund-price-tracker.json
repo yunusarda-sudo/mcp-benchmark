@@ -1,0 +1,540 @@
+{
+  "$schema": "../schema.json",
+  "name": "net.hotelrefund/price-tracker",
+  "title": "HotelRefund Price Tracker",
+  "category": "E-Commerce & Retail",
+  "description": "Tracks Agoda hotel prices for your dates, keeps checking, and shows what changed — with evidence.",
+  "tools": [
+    {
+      "name": "search_hotels",
+      "description": "Resolve a hotel to the agoda_hotel_id that track_hotel_price needs. This is a lookup step, not a hotel search engine: it returns catalog entries (name, address, stars, rating, review count) and no prices — for prices, track the hotel or use list_hotel_deals. Give a city, region or airport name (Korean, Japanese, Chinese or English) and, when the user named a hotel, the hotel filter; the city is resolved to the best catalog match. A hotel name alone (no city) also works for well-reviewed hotels: it searches every city and returns each hotel with its city — confirm the city with the user before tracking. If it finds nothing, ask for the city. If several cities match, other_city_matches lists them — pass one of their city_id values (instead of city) to search that city. Typical flow: search_hotels → track_hotel_price → get_price_history.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "city": {
+            "type": "string",
+            "description": "City, region or airport name, e.g. \"Sapporo\", \"삿포로\", \"札幌\". Optional when hotel is given; otherwise required unless city_id is given."
+          },
+          "city_id": {
+            "type": "integer",
+            "description": "Catalog city id from a previous result (other_city_matches). Overrides city."
+          },
+          "hotel": {
+            "type": "string",
+            "description": "Hotel name, e.g. \"Hilton Sapporo\", \"신라호텔\", \"ソウル新羅ホテル\". With a city it filters that city; without a city it searches well-reviewed hotels in every city. Omit (with a city) to list notable hotels."
+          },
+          "country": {
+            "type": "string",
+            "description": "Optional ISO 3166-1 alpha-2 country code, e.g. \"KR\". With a hotel name and no city, ranks equally matching hotels from this country first; other countries still appear. Pass it only when the user is looking in that country."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 20,
+            "description": "Max hotels to return (default 8)."
+          }
+        }
+      }
+    },
+    {
+      "name": "track_hotel_price",
+      "description": "Today is 2026-11-28 (UTC) — never infer the date from the conversation or from training data. Stay dates are calendar days in the hotel's local time zone, which in Asia is already ahead of UTC, so check_in must be 2026-11-27 or later; an earlier check_in is rejected, not silently accepted. Start tracking one hotel (agoda_hotel_id from search_hotels) for one stay (check_in to check_out, YYYY-MM-DD). This is the tool that creates lasting state: from now on the Agoda price is checked automatically several times a day and every observed price is recorded, so the same tracking_id can be asked about days or weeks later with get_price_history. Free, anonymous and public; no account. If the same hotel and dates are already tracked, the existing tracking is returned instead of a duplicate, so it is safe to call again. The response includes tracking_id, booking_url (the Agoda page for this hotel via a HotelRefund redirect) and track_page_url (the booking-decision page: price chart, timing read and a book button; in the language given by language, with track_page_urls for all four). Used both before booking (to catch a drop) and after booking a refundable rate (to see when rebooking would pay off). Optional alert_email makes HotelRefund email that address when this stay's price moves from the last alert: 3% or more down (at most once a day), or 10% or more up (at most twice a week); every email has an unsubscribe link. Without it nobody is notified, and the price is only seen when someone asks again. price_alerts in the response says whether the address was attached.",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "agoda_hotel_id",
+          "check_in",
+          "check_out"
+        ],
+        "properties": {
+          "agoda_hotel_id": {
+            "type": "integer",
+            "description": "Hotel id from search_hotels."
+          },
+          "check_in": {
+            "type": "string",
+            "description": "Check-in date, YYYY-MM-DD (today up to 540 days ahead)."
+          },
+          "check_out": {
+            "type": "string",
+            "description": "Check-out date, YYYY-MM-DD (after check_in, stay of 60 nights or less)."
+          },
+          "currency": {
+            "type": "string",
+            "description": "Optional ISO currency for recorded prices: KRW, JPY, USD, EUR, TWD, HKD, CNY, SGD, THB, GBP, AUD or VND. Defaults by language."
+          },
+          "language": {
+            "type": "string",
+            "description": "Optional locale for the tracked rate: ko-kr, ja-jp, en-us, zh-cn, zh-tw or zh-hk (default en-us)."
+          },
+          "alert_email": {
+            "type": "string",
+            "description": "Optional email address the user gave to receive price alerts for this stay. Use only an address the user provided for this purpose in the conversation. One recipient per tracking: if the tracking already has one, the address is not added."
+          }
+        }
+      }
+    },
+    {
+      "name": "get_price_history",
+      "description": "Return the recorded prices for one tracking (tracking_id): current, first, lowest and highest price, percentage change and trend since tracking started, and the time series of observed prices. Also returns booking_guidance — a book-now-or-wait signal computed from this stay's full tracked record (share of observations lower than now, distance from the median, overall spread, days left), and headline + summary sentences (in language: en, ko, ja or zh) that explain the read the same way the page does. track_page_url is the booking-decision page in that language. And report_url / csv_url: every observation with UTC timestamps as a printable page and a CSV, which people use as evidence for best-price-guarantee claims, refund requests and check-in negotiation. When available, seasonality adds the destination's forecast monthly rates for the hotel's star band (a separate scale from the tracked prices — it says whether the stay month is a high or low month for the city, and which nearby month is cheapest). A tracking created moments ago may report awaiting_first_price until its first check completes; no_rates means there is no sellable rate for these dates right now (sold out or not open yet) and it is re-checked daily.",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "tracking_id"
+        ],
+        "properties": {
+          "tracking_id": {
+            "type": "integer",
+            "description": "Tracking id from track_hotel_price or list_tracked_hotels."
+          },
+          "language": {
+            "type": "string",
+            "enum": [
+              "en",
+              "ko",
+              "ja",
+              "zh"
+            ],
+            "description": "Language for booking_guidance.headline/summary and track_page_url: en (default), ko, ja or zh."
+          }
+        }
+      }
+    },
+    {
+      "name": "list_tracked_hotels",
+      "description": "List the hotels currently being tracked (all trackings are public), with current price, change since tracking started, stay dates and per-item booking_url / track_page_url (in language), sorted with the biggest price drops first.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50,
+            "description": "Max items to return (default 20)."
+          },
+          "language": {
+            "type": "string",
+            "enum": [
+              "en",
+              "ko",
+              "ja",
+              "zh"
+            ],
+            "description": "Language of each track_page_url: en (default), ko, ja or zh."
+          }
+        }
+      }
+    },
+    {
+      "name": "list_hotel_deals",
+      "description": "List today's biggest observed hotel discounts: Agoda's live rate for a 1-night stay about two weeks ahead (2 adults, USD) compared with Agoda's own listed rate for the same room; only discounts of 5% or more are kept. Without arguments, returns the single best deal per city across major cities worldwide, biggest discount first. With city (a city name in Korean, Japanese, Chinese or English) or city_id, returns the current deals for that city (up to 6; an uncached city is fetched live at most once per 6 hours). Each deal includes booking_url, the Agoda page for that hotel and stay, and image_url when a photo is available.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "city": {
+            "type": "string",
+            "description": "Optional city, region or airport name, e.g. \"Tokyo\", \"도쿄\", \"東京\". Omit for the worldwide list."
+          },
+          "city_id": {
+            "type": "integer",
+            "description": "Catalog city id from a previous search_hotels or list_hotel_deals result. Overrides city."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 60,
+            "description": "Max deals to return (default 20)."
+          }
+        }
+      }
+    },
+    {
+      "name": "get_hotel_price_calendar",
+      "description": "Show what one hotel (agoda_hotel_id from search_hotels) costs on Agoda for each check-in date in a window — the \"what if I move my dates\" view. Returns one price snapshot per date (with fetched_at), the cheapest date, and low/high bands for the hotel; dates with an active tracking are marked is_tracked with their track_page_url. This is a cross-section by date, not a time series: to keep watching a date, call track_hotel_price for it. Most dates are fetched in the background on the first call, so pending may be > 0 — call again with the same arguments after ~3 seconds to get the rest. Default window: 28 days from start_date (or today), 1 night, 2 adults.",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "agoda_hotel_id"
+        ],
+        "properties": {
+          "agoda_hotel_id": {
+            "type": "integer",
+            "description": "Hotel id from search_hotels."
+          },
+          "start_date": {
+            "type": "string",
+            "description": "First check-in date to show, YYYY-MM-DD (default today; past dates are moved to today)."
+          },
+          "nights": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 14,
+            "description": "Stay length for every date (default 1)."
+          },
+          "days": {
+            "type": "integer",
+            "minimum": 7,
+            "maximum": 35,
+            "description": "How many consecutive check-in dates (default 28, max 35)."
+          },
+          "currency": {
+            "type": "string",
+            "description": "KRW, JPY, USD, EUR, TWD, HKD, CNY, SGD, THB, GBP, AUD or VND (default USD)."
+          },
+          "language": {
+            "type": "string",
+            "description": "Agoda locale for the rate: ko-kr, ja-jp, en-us, zh-cn, zh-tw or zh-hk (default en-us)."
+          }
+        }
+      }
+    },
+    {
+      "name": "get_refund_guide",
+      "description": "Return the full text of one HotelRefund reference guide on what to do about a booking that already exists: cancellation deadlines, getting a refund, what to do when the price drops after booking, how best-price guarantees work, refundable vs non-refundable rates, and why rates move. Call without arguments to list every guide with its topic id and a one-line summary. Guide text is English; language returns the matching Korean, Japanese or Chinese page url alongside it.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "topic": {
+            "type": "string",
+            "description": "Topic id from a previous listing (e.g. \"hotel-free-cancellation-deadline\"), or plain words describing the situation (e.g. \"price dropped after booking\", \"취소 마감\"). Omit to list all guides."
+          },
+          "language": {
+            "type": "string",
+            "enum": [
+              "en",
+              "ko",
+              "ja",
+              "zh"
+            ],
+            "description": "Language for the returned url: en (default), ko, ja or zh."
+          }
+        }
+      }
+    },
+    {
+      "name": "get_service_status",
+      "description": "Report whether the tracker is running and what it covers: the number of hotels and cities in the catalog that can be tracked, how many stays are tracked right now, price checks in the last 24 hours, and the remaining shared daily registration allowance for AI clients. Useful before starting a longer flow, or to confirm the server is live.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "get_current_price",
+      "description": "Read the Agoda price for one hotel (agoda_hotel_id from search_hotels) and one stay right now: total for the whole stay with taxes and fees, 2 adults, standard rate, plus room type and breakfast when Agoda reports them. A one-time reading — nothing is tracked or stored about the request. Used after booking elsewhere to see whether Agoda is now cheaper (input for check_refund_claim), or to compare a quoted price. agoda_url is a plain Agoda link for the same stay, suitable as evidence. Readings are cached for 30 minutes; live lookups share a daily budget.",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "agoda_hotel_id",
+          "check_in",
+          "check_out"
+        ],
+        "properties": {
+          "agoda_hotel_id": {
+            "type": "integer",
+            "description": "Hotel id from search_hotels."
+          },
+          "check_in": {
+            "type": "string",
+            "description": "Check-in date, YYYY-MM-DD."
+          },
+          "check_out": {
+            "type": "string",
+            "description": "Check-out date, YYYY-MM-DD (stay of 30 nights or less)."
+          },
+          "currency": {
+            "type": "string",
+            "description": "ISO currency: KRW, JPY, USD, EUR, TWD, HKD, CNY, SGD, THB, GBP, AUD or VND (default USD). Use the currency the booking was paid in."
+          },
+          "language": {
+            "type": "string",
+            "enum": [
+              "en",
+              "ko",
+              "ja",
+              "zh"
+            ],
+            "description": "en (default), ko, ja or zh."
+          }
+        }
+      }
+    },
+    {
+      "name": "check_refund_claim",
+      "description": "Check whether a lower price found after booking qualifies for the booking site's best price guarantee, using the same rules as the HotelRefund Refund Report: same-site drops, sites that ended their guarantee (Hotels.com; Expedia for newer bookings), currency mismatch, a price that is not actually lower, and the four matching conditions. Returns a verdict, the claim deadline (date, rule and days left), how the site pays out, the difference, and — with tracking_id — whether HotelRefund's timestamped Agoda records cover the same dates. No personal data is needed or accepted.",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "booked_on",
+          "lower_price_site",
+          "check_in"
+        ],
+        "properties": {
+          "booked_on": {
+            "type": "string",
+            "enum": [
+              "booking",
+              "agoda",
+              "trip",
+              "expedia",
+              "hotels",
+              "other"
+            ],
+            "description": "Where the stay was booked."
+          },
+          "lower_price_site": {
+            "type": "string",
+            "enum": [
+              "booking",
+              "agoda",
+              "trip",
+              "expedia",
+              "hotels",
+              "other"
+            ],
+            "description": "Where the lower price was seen."
+          },
+          "lower_price_site_other": {
+            "type": "string",
+            "description": "Site name when lower_price_site is \"other\"."
+          },
+          "check_in": {
+            "type": "string",
+            "description": "Check-in date, YYYY-MM-DD."
+          },
+          "check_out": {
+            "type": "string",
+            "description": "Check-out date, YYYY-MM-DD."
+          },
+          "booked_date": {
+            "type": "string",
+            "description": "Date the booking was made, YYYY-MM-DD (decides old Expedia bookings)."
+          },
+          "paid_total": {
+            "type": "number",
+            "description": "Total paid for the stay, taxes included."
+          },
+          "paid_currency": {
+            "type": "string",
+            "description": "ISO currency of paid_total."
+          },
+          "lower_total": {
+            "type": "number",
+            "description": "Total of the lower offer for the same stay, taxes included."
+          },
+          "lower_currency": {
+            "type": "string",
+            "description": "ISO currency of lower_total (defaults to paid_currency)."
+          },
+          "cancellation_policy": {
+            "type": "string",
+            "enum": [
+              "free_cancellation",
+              "non_refundable"
+            ],
+            "description": "The booking's cancellation policy."
+          },
+          "conditions_match": {
+            "type": "object",
+            "description": "What the user has confirmed about the lower offer. Anything not true is reported as unconfirmed.",
+            "properties": {
+              "same_hotel_and_room": {
+                "type": "boolean"
+              },
+              "same_dates_and_guests": {
+                "type": "boolean"
+              },
+              "same_policy_and_breakfast": {
+                "type": "boolean"
+              },
+              "public_rate": {
+                "type": "boolean",
+                "description": "Not a member, app-only, coupon or package rate."
+              }
+            }
+          },
+          "tracking_id": {
+            "type": "integer",
+            "description": "Optional HotelRefund tracking for the same stay — its recorded prices are summarized as independent evidence."
+          },
+          "language": {
+            "type": "string",
+            "enum": [
+              "en",
+              "ko",
+              "ja",
+              "zh"
+            ],
+            "description": "Language of the verdict text: en (default), ko, ja or zh."
+          }
+        }
+      }
+    },
+    {
+      "name": "draft_refund_request",
+      "description": "Write the text for one of four requests, in en, ko, ja or zh: price_guarantee (claim to the booking site for the difference), date_change, goodwill_refund (for a non-refundable booking, with a reason) or checkin_request (upgrade, late check-out or breakfast, citing the lower price) to the hotel. Returns a short message for a chat or claim form and a full letter. The confirmation number and guest name are not accepted; they appear as placeholders in the text. With tracking_id, HotelRefund's recorded Agoda prices for the same dates are added to price_guarantee and checkin_request letters. The same letter can be saved as a PDF at refund_report_url.",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "kind",
+          "hotel_name",
+          "check_in",
+          "check_out"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "price_guarantee",
+              "date_change",
+              "goodwill_refund",
+              "checkin_request"
+            ]
+          },
+          "letter_language": {
+            "type": "string",
+            "enum": [
+              "en",
+              "ko",
+              "ja",
+              "zh"
+            ],
+            "description": "Language of the text: en (default), ko, ja or zh. Usually the language the booking site or hotel reads."
+          },
+          "hotel_name": {
+            "type": "string"
+          },
+          "city": {
+            "type": "string"
+          },
+          "check_in": {
+            "type": "string",
+            "description": "YYYY-MM-DD."
+          },
+          "check_out": {
+            "type": "string",
+            "description": "YYYY-MM-DD."
+          },
+          "booked_on": {
+            "type": "string",
+            "enum": [
+              "booking",
+              "agoda",
+              "trip",
+              "expedia",
+              "hotels",
+              "other"
+            ],
+            "description": "Booking site. Required for price_guarantee; omit for a direct hotel booking."
+          },
+          "room_type": {
+            "type": "string"
+          },
+          "adults": {
+            "type": "integer",
+            "description": "Default 2."
+          },
+          "cancellation_policy": {
+            "type": "string",
+            "enum": [
+              "free_cancellation",
+              "non_refundable"
+            ]
+          },
+          "breakfast": {
+            "type": "boolean",
+            "description": "Breakfast included in the booking."
+          },
+          "paid_total": {
+            "type": "number",
+            "description": "Total paid, taxes included. Required for price_guarantee."
+          },
+          "paid_currency": {
+            "type": "string",
+            "description": "ISO currency of paid_total."
+          },
+          "booked_date": {
+            "type": "string",
+            "description": "YYYY-MM-DD."
+          },
+          "lower_price_site": {
+            "type": "string",
+            "enum": [
+              "booking",
+              "agoda",
+              "trip",
+              "expedia",
+              "hotels",
+              "other"
+            ],
+            "description": "Required for price_guarantee."
+          },
+          "lower_price_site_other": {
+            "type": "string"
+          },
+          "lower_total": {
+            "type": "number",
+            "description": "Required for price_guarantee."
+          },
+          "lower_currency": {
+            "type": "string"
+          },
+          "lower_seen_at": {
+            "type": "string",
+            "description": "When the lower price was seen, e.g. 2026-10-02 14:30."
+          },
+          "lower_url": {
+            "type": "string",
+            "description": "Link to the lower offer."
+          },
+          "new_check_in": {
+            "type": "string",
+            "description": "date_change: requested new check-in, YYYY-MM-DD. Omit to ask which dates are possible."
+          },
+          "new_check_out": {
+            "type": "string",
+            "description": "date_change: requested new check-out, YYYY-MM-DD."
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "illness",
+              "flight",
+              "visa",
+              "family",
+              "disaster",
+              "other"
+            ],
+            "description": "goodwill_refund: why the stay cannot go ahead."
+          },
+          "perks": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "upgrade",
+                "late",
+                "breakfast"
+              ]
+            },
+            "description": "checkin_request: what to ask for."
+          },
+          "tracking_id": {
+            "type": "integer",
+            "description": "Optional HotelRefund tracking for the same stay."
+          }
+        }
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "net.hotelrefund/price-tracker",
+    "version": "1.5.1",
+    "remoteUrl": "https://hotelrefund.net/mcp",
+    "publishedAt": "2026-11-28T08:16:55.111511Z",
+    "fetchedAt": "2026-11-28T10:03:29.931Z",
+    "toolsSha256": "cfa913121a6ee4899d70baf3770f6512829a3df13338932bbe0e8009046fd521"
+  }
+}

@@ -1,0 +1,227 @@
+{
+  "$schema": "../schema.json",
+  "name": "com.sendfinery/spf-dkim-dmarc-checker",
+  "title": "Sendfinery",
+  "category": "Communication & Alerting",
+  "description": "Check a domain's SPF, DKIM, DMARC and MX records, look up DNS and read email headers. Web, API, MCP.",
+  "repository": "https://github.com/sendfinery-com/sendfinery",
+  "tools": [
+    {
+      "name": "check_spf",
+      "description": "Check a domain's SPF record, the DNS TXT record (starting with v=spf1)\nthat lists the servers allowed to send email for the domain.\n\nIt checks that the domain has exactly one SPF record, parses it,\nfollows every include: and redirect= into a tree, and counts the DNS\nlookups a receiver makes against RFC 7208's limit of 10 and the void\nlookups (lookups that find nothing) against the limit of 2. Above\neither limit receivers fail SPF for every message. It also flags +all\n(any server may send as the domain), ?all, a missing all, ptr,\nsyntax errors and include loops.\n\nReturns {\"domain\", \"record\" (the record text, null without exactly\none), \"tree\" (each node: domain, via, status, record, children),\n\"lookups\", \"lookups_exact\" (false when counting stopped past the\nlimit, so lookups is a lower bound), \"void_lookups\", \"findings\"\n(each {\"level\": \"ok\"|\"info\"|\"warn\"|\"error\", \"code\", \"text\"}; \"info\"\nis a note that grades nothing), \"grade\" (the worst level)}. Show the\nuser the findings' text.\n\nCredits: 1 per call.",
+      "inputSchema": {
+        "properties": {
+          "domain": {
+            "description": "The domain to check, such as example.com. A URL or an email address works too: the tool takes the domain from it.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "domain"
+        ],
+        "type": "object",
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "check_dkim",
+      "description": "Look up a domain's DKIM public keys in DNS and check them.\n\nWith a selector, reads the key at <selector>._domainkey.<domain>.\nWithout one, tries a fixed list of common selectors (Google Workspace,\nMicrosoft 365, Amazon SES, SendGrid, Mailchimp and others); DNS cannot\nlist a domain's selectors, so a key under any other name is not found\nand `common_only` is true. If nothing is found, ask the user for the\ns= tag of the DKIM-Signature header in a message they sent, and check\nagain with that selector.\n\nReturns `found` (each selector with its DNS `name` and parsed `key`:\ntype `k`, RSA size `bits`, `testing`, `revoked`), `tried` (the\nselectors queried), `findings` (level, code, text) and `grade`, the\nworst level among the findings.\n\nCredits: 1 per call.",
+      "inputSchema": {
+        "properties": {
+          "domain": {
+            "description": "The domain that sends the mail, such as example.com.",
+            "type": "string"
+          },
+          "selector": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "The DKIM selector: the s= tag of the DKIM-Signature header in a message the domain sent. Leave it out to try common selectors."
+          }
+        },
+        "required": [
+          "domain"
+        ],
+        "type": "object",
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "check_dmarc",
+      "description": "Look up the DMARC policy that applies to a domain and check it against RFC 9989\n(which replaced RFC 7489 in 2026).\n\nUse it when a user asks whether a domain has DMARC, why its mail fails DMARC or\nlands in spam, or whether its DMARC reports arrive. When the domain has no record of\nits own, the parent domains are tried (RFC 9989's DNS tree walk): `policy_domain`\nnames where the record was found and `inherited` says whether it is a parent's.\n`effective_policy` is what receivers apply (none, quarantine or reject), `record`\nholds the parsed tags, and `rua` says for each report address on another domain\nwhether that domain authorizes the reports. `findings` lists each problem in plain\nEnglish with what to change; `grade` is the worst level (ok, warn or error).\n\nCredits: 1 per call.",
+      "inputSchema": {
+        "properties": {
+          "domain": {
+            "description": "The domain to check, such as example.com. A URL or an email address works too: only its domain is used.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "domain"
+        ],
+        "type": "object",
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "lookup_mx",
+      "description": "Look up where a domain receives email: its MX records, sorted by\npreference, and the IPv4/IPv6 addresses of each mail server.\n\nUse it to answer \"which mail provider does this domain use\", \"why does\nmail to this domain bounce\" or \"is this domain's MX set up right\".\nThe result is `{\"domain\", \"hosts\": [{\"preference\", \"host\",\n\"addresses\", \"cname\"}], \"null_mx\", \"fallback\", \"findings\": [{\"level\",\n\"code\", \"text\"}], \"grade\"}`. `null_mx` true means the domain says it\nreceives no mail (RFC 7505). An empty `hosts` with a non-empty\n`fallback` means the domain has no MX record and senders deliver to\nthose addresses instead. Relay the `findings` texts to the user: they\nsay what is wrong and what to change.\n\nCredits: 1 per call.",
+      "inputSchema": {
+        "properties": {
+          "domain": {
+            "description": "The domain, such as example.com. A URL or an email address works too: only its domain is used.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "domain"
+        ],
+        "type": "object",
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "lookup_dns",
+      "description": "Look up a domain's DNS records through public resolvers (Quad9,\nthen Cloudflare), with no cache, so the answer is what the internet\nsees now.\n\nReturns `answers`, one per record type: `status` (ok, nxdomain for a\ndomain that does not exist, nodata for no record of that type,\ntimeout or error with a `reason`), `records` as text (MX as\n\"preference host\", SOA as \"mname rname serial refresh retry expire\nminimum\", CAA as 'flags tag \"value\"') and `ttl` in seconds. A CNAME\nis followed for the other types, so their records can belong to the\nname it points to. `findings` names a domain that does not exist and\nqueries that failed, and `grade` is the worst level among them.\n\nCredits: 1 per call.",
+      "inputSchema": {
+        "properties": {
+          "domain": {
+            "description": "The domain to look up, such as example.com.",
+            "type": "string"
+          },
+          "types": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Record types to look up: any of A, AAAA, MX, TXT, NS, CNAME, SOA and CAA. Leave it out to look up all eight."
+          }
+        },
+        "required": [
+          "domain"
+        ],
+        "type": "object",
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "analyze_email_headers",
+      "description": "Read an email's header and report how the message was delivered.\n\nHeaders are parsed in memory and not stored. Nothing is looked up in\nDNS: the verdicts are the ones the receiving server wrote.\n\nReturns `subject`, `date` and `message_id`; `from_domain`,\n`return_path_domain` and `dkim_domains`; `hops` (the Received headers\noldest first: `from_host`, `by_host`, `with_protocol`, `timestamp` and\n`delay_seconds` since the previous hop); `authserv_id` and\n`auth_results` (the SPF, DKIM and DMARC verdicts of the topmost\nAuthentication-Results header); `alignment` (`spf_aligned`,\n`dkim_aligned`: whether the From domain matches the Return-Path and a\nDKIM signature's d= domain; DMARC needs one); `findings` (level,\ncode, text) and `grade`, the worst level among the findings.\n\nCredits: 1 per call.",
+      "inputSchema": {
+        "properties": {
+          "headers": {
+            "description": "The message header as text, from the first Received: line down to the blank line before the body (a mail program's 'Show original' or 'View message source'). A whole message is fine; the body is ignored. At most 200 KB.",
+            "maxLength": 204800,
+            "type": "string"
+          }
+        },
+        "required": [
+          "headers"
+        ],
+        "type": "object",
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "check_domain",
+      "description": "Check a domain's SPF, DMARC, DKIM and MX records at once.\n\nOne call runs four checks and costs 3 checks. DKIM tries only a fixed\nlist of common selectors (Google Workspace, Microsoft 365, Amazon SES,\nSendGrid, Mailchimp and others), since DNS cannot list a domain's\nselectors; for a key under another name, use check_dkim with the s=\ntag of the DKIM-Signature header in a message the domain sent.\n\nReturns `spf`, `dmarc`, `dkim` and `mx`, each with its own `findings`\n(level, code, text) and `grade`, and the overall `grade`: the worst\nlevel among all findings (ok, warn or error).\n\nCredits: 3 per call.",
+      "inputSchema": {
+        "properties": {
+          "domain": {
+            "description": "The domain to check, such as example.com.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "domain"
+        ],
+        "type": "object",
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "list_watched_domains",
+      "description": "List the domains your account watches, oldest first.\n\nEach domain has its latest `grade` (ok, warn or error; null before its\nfirst check), `last_checked_at` and `next_check_at` (every 7 days),\nand `paused`: a domain past your plan's limit, kept but not checked.\nAlso returns `limit` (how many domains your plan watches: free 1,\nEssential 10, Scale 50; null for no limit) and `used`. Requires an\naccount (an API key or sign-in).\n\nCredits: free. This tool is not metered.",
+      "inputSchema": {
+        "properties": {},
+        "type": "object",
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "watch_domain",
+      "description": "Start watching a domain: Sendfinery checks its SPF, DMARC, DKIM\n(common selectors) and MX now and again every 7 days, and sums up\nthe DMARC aggregate reports that arrive for it.\n\nReturns the domain's report after its first check: `domain`, the\n`findings` (section, level, code, text), the check in `checks`, and\nempty DMARC totals in `week` and `month`. Refused with\n`already_watched` when you watch it already, and with\n`quota_exceeded` when your plan's domain limit is reached (free 1,\nEssential 10, Scale 50). Requires an account (an API key or sign-in).\n\nCredits: free. This tool is not metered.",
+      "inputSchema": {
+        "properties": {
+          "domain": {
+            "description": "The domain, such as example.com. A URL or an email address works too.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "domain"
+        ],
+        "type": "object",
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_domain_report",
+      "description": "Get the report of a domain you watch, from its stored checks and\nDMARC reports (it runs no new check).\n\nReturns `domain` (grade, last and next check, paused), `findings` of\nthe latest check (section spf, dkim, dmarc or mx; level ok, info (a\nnote that grades nothing), warn or error; code; text), `snapshot`\n(the records the latest check read), `checks` (the last 10, newest\nfirst, each with `changes`: what changed since the check before, in\nwords), and `week` and `month`: the DMARC\naggregate reports of the last 7 and 30 days, with `messages`,\n`passed`, `pass_rate` (aligned DKIM or SPF) and `failing_sources`\n(sending IPs that passed neither). Requires an account (an API key or\nsign-in).\n\nCredits: free. This tool is not metered.",
+      "inputSchema": {
+        "properties": {
+          "domain": {
+            "description": "The domain, such as example.com. A URL or an email address works too.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "domain"
+        ],
+        "type": "object",
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "unwatch_domain",
+      "description": "Stop watching a domain. Its check history and DMARC reports are\ndeleted and cannot be restored; watching it again starts afresh.\nReturns the removed domain's name. Requires an account (an API key or\nsign-in).\n\nCredits: free. This tool is not metered.",
+      "inputSchema": {
+        "properties": {
+          "domain": {
+            "description": "The domain, such as example.com. A URL or an email address works too.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "domain"
+        ],
+        "type": "object",
+        "additionalProperties": false
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "com.sendfinery/spf-dkim-dmarc-checker",
+    "version": "1.0.0",
+    "remoteUrl": "https://api.sendfinery.com/mcp/",
+    "publishedAt": "2026-11-27T16:49:56.70613Z",
+    "fetchedAt": "2026-11-28T10:03:29.931Z",
+    "toolsSha256": "3ae02aaeed528aeb52b61ed0569750bad3b61a5598e16a975978546f896432c1"
+  }
+}

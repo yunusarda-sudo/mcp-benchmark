@@ -1,0 +1,708 @@
+{
+  "$schema": "../schema.json",
+  "name": "io.github.FTHTrading/genesis402-mcp",
+  "title": "Genesis402 by UnyKorn (x402 pay-per-call)",
+  "category": "AI, LLMs & Agents",
+  "description": "Counterparty checks and 360+ pay-per-call APIs over x402. Seller: ERC-8004 agent 95721 on Base.",
+  "repository": "https://github.com/FTHTrading/genesis402-agent-kit",
+  "tools": [
+    {
+      "name": "genesis402_catalog",
+      "description": "Free, no payment, read-only. Lists Genesis402 endpoints with name, HTTP path, USD price, title and parameter schema, read from the rail's live /.well-known/x402 manifest (refreshed every 10 minutes). Use it to find an endpoint that has no dedicated genesis402_* tool, then pass its exact name and parameters to genesis402_call. Filter by keyword to keep the list short (e.g. \"defi\", \"sec\", \"wiki\"); with no filter it returns every endpoint, up to 400. Returns the rail origin, total endpoint count, number matched, the current payer mode (QUOTE_ONLY, HOSTED or LIVE with its cap) and the matching endpoints.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "specialist": {
+            "type": "string",
+            "maxLength": 40,
+            "description": "Optional specialist to list only its endpoints: prices, chain-reader, defi, web, geo-records, research, ai-tools or utilities."
+          },
+          "filter": {
+            "type": "string",
+            "maxLength": 60,
+            "description": "Optional keyword to narrow the list, matched against endpoint name, title and tags, e.g. \"defi\", \"sec\", \"price\". Omit for all endpoints."
+          }
+        },
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "genesis402_receipt",
+      "description": "Free, no payment, read-only and idempotent. Fetches one receipt by id from the rail's public receipts feed (twin.unykorn.org/receipts) to confirm that a paid call was settled and delivered. Use after any paid call, or to check a genesis402_prove receipt, using the receipt id returned with that result. It does not list or search receipts; you need the exact id. Returns the receipt exactly as published: the task called, amount in USD, payment rail, settlement transaction hash, settler, payer and timestamp. An unknown id returns an error with HTTP status 404; nothing is charged either way.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "receipt_id": {
+            "type": "string",
+            "minLength": 4,
+            "maxLength": 80,
+            "description": "The receipt id exactly as returned with a paid call result or by genesis402_prove, 4 to 80 characters."
+          }
+        },
+        "required": [
+          "receipt_id"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "genesis402_call",
+      "description": "Calls any of the 380 Genesis402 endpoints by name (DeFi, SEC filings, research, web/domain intel, AI text tools, multi-chain reads). Each endpoint has its own price in USDC on Base, listed by genesis402_catalog. Use for any endpoint without a dedicated tool; look up the name and parameters with genesis402_catalog first. Parameters are validated for free before any quote. Without payment_signature (or a local payer) it returns the exact price quote and signs nothing; with payment it returns the result plus the settlement details.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "endpoint": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 64,
+            "description": "Endpoint name exactly as listed by genesis402_catalog, e.g. \"defi-yields\" or \"wallet-brief\" (a leading slash is ignored)."
+          },
+          "params": {
+            "type": "object",
+            "additionalProperties": {},
+            "description": "Parameters for that endpoint as an object, matching the parameter schema shown in genesis402_catalog. Omit if the endpoint takes none."
+          },
+          "payment_signature": {
+            "type": "string",
+            "maxLength": 8000,
+            "description": "Optional. An x402 v2 payment you signed for this call's quote (the PAYMENT-SIGNATURE header value). Omit to get the price quote first; nothing is charged without it."
+          }
+        },
+        "required": [
+          "endpoint"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "genesis402_counterparty_report",
+      "description": "Paid ($0.25 USDC). Check one company before you deal with it. Resolves the company in the GLEIF register (name or 20-character LEI), follows its registered direct and ultimate parent, and screens every name in that group against the UN, US OFAC SDN, EU and UK sanctions lists. Returns one verdict (clear, review or stop) with every reason sourced, the registry record, the group screened, the list versions used, an Ed25519-signed receipt, a private link to a branded PDF (7 days) and a public verify page. A vague name (e.g. a bare brand) returns review and names the entity it assumed. Screening and registry signals only: not KYC, not a compliance determination, not legal advice. Payment: call once without payment_signature to get the exact price quote (nothing is charged or signed), then call again with the signed payment to receive the result and settlement details.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 200,
+            "description": "Company legal name (3 to 200 characters) or its 20-character LEI. The exact legal name or LEI gives the most precise result."
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "individual",
+              "entity"
+            ],
+            "description": "Optional. Used only when no registry record is found and the name is screened as given."
+          },
+          "payment_signature": {
+            "type": "string",
+            "maxLength": 8000,
+            "description": "Optional. An x402 v2 payment you signed for this call's quote (the PAYMENT-SIGNATURE header value). Omit to get the price quote first; nothing is charged without it."
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "genesis402_sanctions_name_screen",
+      "description": "Paid ($0.02 USDC). Screen one person or organisation name against the UN, US OFAC SDN, EU and UK consolidated sanctions lists, including aliases and transliterations. Returns match, possible match or no match, each hit with list, list id, matched name and score, and the published date and SHA-256 of every list version used. For a company and its parents in one call use genesis402_counterparty_report; for a wallet address use genesis402_screen_sanctions. Screening signal only: not KYC, not a compliance determination, not legal advice. Payment: call once without payment_signature to get the exact price quote (nothing is charged or signed), then call again with the signed payment to receive the result and settlement details.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 200,
+            "description": "The person or organisation name to screen, 3 to 200 characters."
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "individual",
+              "entity",
+              "vessel",
+              "aircraft"
+            ],
+            "description": "Optional. Restricts matching to that kind of list entry."
+          },
+          "dob_year": {
+            "type": "integer",
+            "minimum": 1900,
+            "maximum": 2100,
+            "description": "Optional four-digit birth year, used to flag hits with an inconsistent date of birth."
+          },
+          "payment_signature": {
+            "type": "string",
+            "maxLength": 8000,
+            "description": "Optional. An x402 v2 payment you signed for this call's quote (the PAYMENT-SIGNATURE header value). Omit to get the price quote first; nothing is charged without it."
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "genesis402_company_lookup",
+      "description": "Paid ($0.01 USDC). Look up one company worldwide in the official registers: GLEIF (Legal Entity Identifiers, every country) and US SEC EDGAR. By LEI: legal name, status, jurisdiction, addresses, registration authority, renewal dates and its registered direct and ultimate parent. By name: ranked matches, live registrations first, with legal forms understood across languages and names in their own script. By SEC CIK: filer profile, tickers and latest filings. Registry data only: not KYC, not a compliance determination, not legal advice. Payment: call once without payment_signature to get the exact price quote (nothing is charged or signed), then call again with the signed payment to receive the result and settlement details.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 200,
+            "description": "Company name (3 to 200 characters), 20-character LEI, or SEC CIK."
+          },
+          "payment_signature": {
+            "type": "string",
+            "maxLength": 8000,
+            "description": "Optional. An x402 v2 payment you signed for this call's quote (the PAYMENT-SIGNATURE header value). Omit to get the price quote first; nothing is charged without it."
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "genesis402_wallet_brief",
+      "description": "Paid ($0.03 USDC). Full risk brief for one EVM wallet in a single call: sanctions-list check (OFAC SDN digital-currency entries), native balance and activity scan across 10 EVM chains, recent activity on the chosen chain and a plain-language summary. Use before sending funds to, or accepting funds from, an unknown address. For a sanctions check alone use genesis402_screen_sanctions (cheaper, any chain); for balances without risk signals use genesis402_multi_chain_scan; for a token contract use genesis402_token_brief. Returns each part with its own sources (a part that cannot be read is marked unavailable with the reason, never zeroed) and an evidence hash over all parts. Heuristic signals from public data: not KYC, not a compliance determination, not legal advice. Payment: call once without payment_signature to get the exact price quote (nothing is charged or signed), then call again with the signed payment to receive the result and settlement details.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "address": {
+            "type": "string",
+            "pattern": "^0x[0-9a-fA-F]{40}$",
+            "description": "The EVM wallet address to check, 0x followed by 40 hex characters. Checksum case is optional."
+          },
+          "chain": {
+            "type": "string",
+            "maxLength": 24,
+            "description": "Optional EVM chain name to focus on, e.g. ethereum or base. Omit to cover all supported chains."
+          },
+          "payment_signature": {
+            "type": "string",
+            "maxLength": 8000,
+            "description": "Optional. An x402 v2 payment you signed for this call's quote (the PAYMENT-SIGNATURE header value). Omit to get the price quote first; nothing is charged without it."
+          }
+        },
+        "required": [
+          "address"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "genesis402_token_brief",
+      "description": "Paid ($0.03 USDC). Pre-trade check for one ERC-20 token contract in a single call: name, symbol, decimals and supply, current USD price, top-holder concentration, source-verification status and a sanctions-list check on the contract address. Use before buying, listing or accepting an unfamiliar token. For a wallet rather than a token use genesis402_wallet_brief. Returns each part with its sources (unreadable parts are marked unavailable, never zeroed) and an evidence hash. Signals only, not investment advice. Payment: call once without payment_signature to get the exact price quote (nothing is charged or signed), then call again with the signed payment to receive the result and settlement details.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "contract": {
+            "type": "string",
+            "pattern": "^0x[0-9a-fA-F]{40}$",
+            "description": "The ERC-20 token contract address, 0x followed by 40 hex characters. Must be the token contract, not a holder's wallet."
+          },
+          "chain": {
+            "type": "string",
+            "enum": [
+              "base",
+              "ethereum",
+              "polygon",
+              "arbitrum",
+              "optimism"
+            ],
+            "description": "Chain the token contract lives on. Defaults to base when omitted."
+          },
+          "payment_signature": {
+            "type": "string",
+            "maxLength": 8000,
+            "description": "Optional. An x402 v2 payment you signed for this call's quote (the PAYMENT-SIGNATURE header value). Omit to get the price quote first; nothing is charged without it."
+          }
+        },
+        "required": [
+          "contract"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "genesis402_screen_sanctions",
+      "description": "Paid ($0.008 USDC). List lookup for one address on any chain against OFAC SDN digital-currency entries, community scam-address blocklists and the Blockchain Fraud case registry. Use as a fast, cheap first gate on a counterparty address. For balances plus sanctions plus a summary on an EVM address use genesis402_wallet_brief. Returns whether any list matched, and for every list consulted its dataset name, fetch URL and entry count, plus an evidence hash. A hit means the address appears on a published list; absence from every list is not a clearance. Not a compliance decision, not a finding about any person, not legal advice. Payment: call once without payment_signature to get the exact price quote (nothing is charged or signed), then call again with the signed payment to receive the result and settlement details.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "address": {
+            "type": "string",
+            "minLength": 4,
+            "maxLength": 120,
+            "description": "The crypto address to screen, on any chain, exactly as written on that chain (4 to 120 characters, no spaces)."
+          },
+          "payment_signature": {
+            "type": "string",
+            "maxLength": 8000,
+            "description": "Optional. An x402 v2 payment you signed for this call's quote (the PAYMENT-SIGNATURE header value). Omit to get the price quote first; nothing is charged without it."
+          }
+        },
+        "required": [
+          "address"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "genesis402_multi_chain_scan",
+      "description": "Paid ($0.008 USDC). Sweeps one address across 10 EVM chains at once and reports where it is actually active. Use to find which networks an address uses before drilling into one chain. No risk scoring or sanctions check: for that use genesis402_wallet_brief. Returns, per chain, the native balance, the number of transactions sent and whether contract bytecode is deployed; chains whose RPC did not answer are listed separately, never counted as inactive. Activity is inferred from nonce, balance and code, so an address that only ever received tokens can show a zero nonce; check its balance field. Public on-chain data with sources and an evidence hash. Payment: call once without payment_signature to get the exact price quote (nothing is charged or signed), then call again with the signed payment to receive the result and settlement details.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "address": {
+            "type": "string",
+            "pattern": "^0x[0-9a-fA-F]{40}$",
+            "description": "The EVM address to scan, 0x followed by 40 hex characters. Checksum case is optional."
+          },
+          "payment_signature": {
+            "type": "string",
+            "maxLength": 8000,
+            "description": "Optional. An x402 v2 payment you signed for this call's quote (the PAYMENT-SIGNATURE header value). Omit to get the price quote first; nothing is charged without it."
+          }
+        },
+        "required": [
+          "address"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "genesis402_defi_yields",
+      "description": "Paid ($0.01 USDC). Ranked DeFi yield pools from DefiLlama (15,000+ pools), filterable by chain, protocol, token, stablecoin-only and minimum TVL. Use to answer 'where is the best yield for X'. For other DeFi or market data search genesis402_catalog and call the endpoint through genesis402_call. All filters are optional and combine with AND; with none set it returns the top pools above $1M TVL. Returns up to limit pools, each with protocol, chain, symbol, TVL, base APY vs reward APY, 30-day mean APY, impermanent-loss risk, exposure and DefiLlama's outlook class. APYs are variable and backward-looking; not investment advice. Payment: call once without payment_signature to get the exact price quote (nothing is charged or signed), then call again with the signed payment to receive the result and settlement details.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "chain": {
+            "type": "string",
+            "maxLength": 40,
+            "description": "Filter to one chain by name, e.g. Ethereum, Base, Arbitrum. Omit for all chains."
+          },
+          "token": {
+            "type": "string",
+            "maxLength": 20,
+            "description": "Token symbol that must be in the pool, e.g. USDC, ETH, WBTC."
+          },
+          "project": {
+            "type": "string",
+            "maxLength": 60,
+            "description": "Filter to one protocol by its DefiLlama slug, e.g. aave-v3. Omit for all protocols."
+          },
+          "stablecoin_only": {
+            "type": "boolean",
+            "description": "true = only stablecoin pools. Omit or false for all pools."
+          },
+          "min_tvl_usd": {
+            "type": "number",
+            "description": "Minimum pool TVL in US dollars as a plain number. Defaults to 1000000 ($1M) when omitted."
+          },
+          "sort": {
+            "type": "string",
+            "enum": [
+              "apy",
+              "tvl"
+            ],
+            "description": "Sort order: 'apy' (highest yield first) or 'tvl' (largest pool first)."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "description": "How many pools to return, 1 to 100."
+          },
+          "payment_signature": {
+            "type": "string",
+            "maxLength": 8000,
+            "description": "Optional. An x402 v2 payment you signed for this call's quote (the PAYMENT-SIGNATURE header value). Omit to get the price quote first; nothing is charged without it."
+          }
+        },
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "genesis402_market_snapshot",
+      "description": "Paid ($0.004 USDC). USD price with 24-hour and 7-day change for the major crypto assets in a single call, or for up to 25 coins you name. Use when you need more than one price at once: one payment instead of one per coin. For a single coin, or for a token by contract address, search genesis402_catalog and call the endpoint through genesis402_call. Returns one row per coin with price, both changes, timestamp and pricing confidence, plus how many coins rose and fell over 24 hours. Coins with no live price are marked unavailable, never priced at zero. Third-party market data from DefiLlama, as published: not investment advice and no recommendation. Payment: call once without payment_signature to get the exact price quote (nothing is charged or signed), then call again with the signed payment to receive the result and settlement details.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "coins": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 60
+            },
+            "maxItems": 25,
+            "description": "Up to 25 coins as CoinGecko ids (bitcoin, ethereum, solana) or major-coin tickers (BTC, ETH, SOL). Omit for the twelve major coins."
+          },
+          "payment_signature": {
+            "type": "string",
+            "maxLength": 8000,
+            "description": "Optional. An x402 v2 payment you signed for this call's quote (the PAYMENT-SIGNATURE header value). Omit to get the price quote first; nothing is charged without it."
+          }
+        },
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "genesis402_sec_financials",
+      "description": "Paid ($0.01 USDC). As-reported fundamentals for one SEC filer from XBRL company facts. Use for quick fundamentals without a data vendor. For other SEC data search genesis402_catalog for \"sec\" and use genesis402_call. Give ticker or cik; one is required. Returns the latest annual and latest quarterly values for revenue, net income, operating income, total assets, liabilities, equity, cash, operating cash flow and diluted EPS, each with period end and filing date. Missing tags are marked unavailable, never estimated. Not investment advice. Payment: call once without payment_signature to get the exact price quote (nothing is charged or signed), then call again with the signed payment to receive the result and settlement details.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "ticker": {
+            "type": "string",
+            "maxLength": 60,
+            "description": "Stock ticker, e.g. COIN or AAPL. Provide this or cik."
+          },
+          "cik": {
+            "type": "string",
+            "maxLength": 10,
+            "description": "SEC Central Index Key, digits only, up to 10, e.g. 320193. Provide this or ticker."
+          },
+          "payment_signature": {
+            "type": "string",
+            "maxLength": 8000,
+            "description": "Optional. An x402 v2 payment you signed for this call's quote (the PAYMENT-SIGNATURE header value). Omit to get the price quote first; nothing is charged without it."
+          }
+        },
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "genesis402_email_check",
+      "description": "Paid ($0.003 USDC). Deliverability and trust check for an email address or domain. Use to vet a signup email or an inbound sender. For the domain's registration age and registrar use genesis402_whois. Returns whether it can receive mail (MX), the hosting provider, SPF and DMARC records and policy, a disposable-domain flag and a 0-5 trust score. DNS-only: no SMTP probe, no email sent, the mailbox is never contacted. Payment: call once without payment_signature to get the exact price quote (nothing is charged or signed), then call again with the signed payment to receive the result and settlement details.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "email_or_domain": {
+            "type": "string",
+            "maxLength": 320,
+            "description": "A full email address (user@domain.com) or a bare domain (domain.com), without scheme or path."
+          },
+          "payment_signature": {
+            "type": "string",
+            "maxLength": 8000,
+            "description": "Optional. An x402 v2 payment you signed for this call's quote (the PAYMENT-SIGNATURE header value). Omit to get the price quote first; nothing is charged without it."
+          }
+        },
+        "required": [
+          "email_or_domain"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "genesis402_whois",
+      "description": "Paid ($0.003 USDC). Registry data for one domain via RDAP. Young domains are a common phishing and fraud signal. Use to vet a website or counterparty domain. For mail setup (MX, SPF, DMARC) use genesis402_email_check; for page content use genesis402_web_extract. Returns registrar, registration and expiry dates, domain age in days, days to expiry, status codes, nameservers and DNSSEC state. Payment: call once without payment_signature to get the exact price quote (nothing is charged or signed), then call again with the signed payment to receive the result and settlement details.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "domain": {
+            "type": "string",
+            "maxLength": 260,
+            "description": "The domain to look up, e.g. example.com. No scheme (https://), path or port."
+          },
+          "payment_signature": {
+            "type": "string",
+            "maxLength": 8000,
+            "description": "Optional. An x402 v2 payment you signed for this call's quote (the PAYMENT-SIGNATURE header value). Omit to get the price quote first; nothing is charged without it."
+          }
+        },
+        "required": [
+          "domain"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "genesis402_extract_json",
+      "description": "Paid ($0.006 USDC). Pull the fields you define out of unstructured text as JSON. Anything the text does not state comes back null, never invented. Use to turn emails, invoices, contracts or listings into structured data. To get a web page's text first use genesis402_web_extract. The field descriptions steer the extraction, so include units and formats (e.g. \"ISO date\", \"number in USD\"). Returns one JSON object with exactly your keys, each holding the extracted value or null. Payment: call once without payment_signature to get the exact price quote (nothing is charged or signed), then call again with the signed payment to receive the result and settlement details.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "maxLength": 16000,
+            "description": "The source text to read, up to 16,000 characters. Trim longer input first."
+          },
+          "fields": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Up to 30 fields: an object mapping each output key to a short description of what it should hold, including unit or format, e.g. { \"invoice_total\": \"total amount due in USD, number\", \"due_date\": \"ISO date\" }."
+          },
+          "payment_signature": {
+            "type": "string",
+            "maxLength": 8000,
+            "description": "Optional. An x402 v2 payment you signed for this call's quote (the PAYMENT-SIGNATURE header value). Omit to get the price quote first; nothing is charged without it."
+          }
+        },
+        "required": [
+          "text",
+          "fields"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "genesis402_web_extract",
+      "description": "Paid ($0.004 USDC). Server-side fetch of one public web page, returned as clean readable text. Use when you need a page's actual content. To pull specific fields out of the result use genesis402_extract_json; for domain registration facts use genesis402_whois. Returns the title, meta description, readable text with markdown-style headings (capped at max_chars), up to 40 headings, up to 50 absolute links, the final URL after redirects and a SHA-256 of the fetched bytes. No JavaScript is executed, so client-rendered pages may come back thin. Private or internal addresses are refused, and pages behind a login or paywall are not accessible. Payment: call once without payment_signature to get the exact price quote (nothing is charged or signed), then call again with the signed payment to receive the result and settlement details.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "format": "uri",
+            "description": "Full URL of one public page, starting with http:// or https://."
+          },
+          "max_chars": {
+            "type": "integer",
+            "minimum": 500,
+            "maximum": 60000,
+            "description": "Maximum characters of page text to return, 500 to 60,000. Defaults to 20,000. Text past the cap is cut off."
+          },
+          "include_links": {
+            "type": "boolean",
+            "description": "Include the page's links in the result. Defaults to true; set false for text only."
+          },
+          "payment_signature": {
+            "type": "string",
+            "maxLength": 8000,
+            "description": "Optional. An x402 v2 payment you signed for this call's quote (the PAYMENT-SIGNATURE header value). Omit to get the price quote first; nothing is charged without it."
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "genesis402_prove",
+      "description": "Paid ($0.25 USDC). Issue one Ed25519-signed, hash-chained receipt recording that a SHA-256 digest existed at the time of payment. Use as a cheap timestamped proof that you held a document or statement. To look the receipt up later use genesis402_receipt (free). Send text (hashed by the rail, labelled OBSERVED) or a sha256 you computed yourself (labelled ATTESTED; keeps the content private), not both. Returns the receipt bound to your payment transaction, with its truth labels and limitations. It verifies offline with the open verifier at github.com/FTHTrading/402-truth. The rail stores the receipt, never your bytes. Not externally anchored on a public blockchain yet. Payment: call once without payment_signature to get the exact price quote (nothing is charged or signed), then call again with the signed payment to receive the result and settlement details.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$",
+            "description": "Lowercase hex SHA-256 digest (64 characters) of the content to prove. Provide this or text, not both."
+          },
+          "text": {
+            "type": "string",
+            "maxLength": 16384,
+            "description": "Raw UTF-8 text to hash and prove, up to 16 KiB (16,384 characters). Provide this or sha256, not both."
+          },
+          "claim": {
+            "type": "string",
+            "maxLength": 512,
+            "description": "Optional short statement bound into the signed receipt, up to 512 characters, e.g. 'Draft v2 of the purchase agreement'."
+          },
+          "payment_signature": {
+            "type": "string",
+            "maxLength": 8000,
+            "description": "Optional. An x402 v2 payment you signed for this call's quote (the PAYMENT-SIGNATURE header value). Omit to get the price quote first; nothing is charged without it."
+          }
+        },
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "genesis402_summarize",
+      "description": "Paid ($0.006 USDC). Summarize long text you already have (a report, transcript, filing, thread) as a paragraph, bullet list or one-line TL;DR, within a word limit, on UnyKorn's own GPU. Use when the text is in hand; to summarize a live web page by URL instead, call the summarize-url endpoint through genesis402_call. To answer one specific question from the text use genesis402_answer_from_text. Returns the summary in the requested style as JSON. Works only from the supplied text. Payment: call once without payment_signature to get the exact price quote (nothing is charged or signed), then call again with the signed payment to receive the result and settlement details.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 24000,
+            "description": "The text to summarize, up to 24,000 characters. Trim longer input first."
+          },
+          "style": {
+            "type": "string",
+            "enum": [
+              "paragraph",
+              "bullets",
+              "tldr"
+            ],
+            "description": "Output shape: 'paragraph' (default), 'bullets' for a bullet list, or 'tldr' for one or two sentences."
+          },
+          "max_words": {
+            "type": "integer",
+            "minimum": 20,
+            "maximum": 400,
+            "description": "Upper bound on summary length in words, 20 to 400. Defaults to 120."
+          },
+          "payment_signature": {
+            "type": "string",
+            "maxLength": 8000,
+            "description": "Optional. An x402 v2 payment you signed for this call's quote (the PAYMENT-SIGNATURE header value). Omit to get the price quote first; nothing is charged without it."
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "genesis402_answer_from_text",
+      "description": "Paid ($0.006 USDC). Answer one question strictly from a document you supply, and return the verbatim quote that supports the answer. Use for contract, policy, filing or email questions where the answer must be traceable to the source. For an overview rather than one answer use genesis402_summarize; to pull many named fields at once use genesis402_extract_json. Returns the answer and a supporting quote that the rail verifies appears in the text. Payment: call once without payment_signature to get the exact price quote (nothing is charged or signed), then call again with the signed payment to receive the result and settlement details.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 24000,
+            "description": "The source document to answer from, up to 24,000 characters."
+          },
+          "question": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 500,
+            "description": "One question about the text, up to 500 characters, e.g. 'What is the termination notice period?'."
+          },
+          "payment_signature": {
+            "type": "string",
+            "maxLength": 8000,
+            "description": "Optional. An x402 v2 payment you signed for this call's quote (the PAYMENT-SIGNATURE header value). Omit to get the price quote first; nothing is charged without it."
+          }
+        },
+        "required": [
+          "text",
+          "question"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "genesis402_translate",
+      "description": "Paid ($0.006 USDC). Translate text into any major language while preserving names, numbers and formatting. Use for customer messages, documents or UI strings. To only identify a text's language call the language-detect endpoint through genesis402_call. Returns the translation as JSON. Payment: call once without payment_signature to get the exact price quote (nothing is charged or signed), then call again with the signed payment to receive the result and settlement details.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 8000,
+            "description": "The text to translate, up to 8,000 characters."
+          },
+          "to": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 40,
+            "description": "Target language as a name or ISO 639-1 code, e.g. 'Spanish' or 'es'."
+          },
+          "from": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 40,
+            "description": "Source language as a name or ISO code. Omit to auto-detect."
+          },
+          "payment_signature": {
+            "type": "string",
+            "maxLength": 8000,
+            "description": "Optional. An x402 v2 payment you signed for this call's quote (the PAYMENT-SIGNATURE header value). Omit to get the price quote first; nothing is charged without it."
+          }
+        },
+        "required": [
+          "text",
+          "to"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "genesis402_paper_search",
+      "description": "Paid ($0.003 USDC). Search scholarly literature in OpenAlex and get works with citation counts and open-access links. Use to find research, prior art or the most-cited work on a topic. For preprints by recency search arXiv (arxiv-search) and for one known DOI use crossref-doi, both through genesis402_call. Returns up to limit works, ranked by relevance or by citations. Payment: call once without payment_signature to get the exact price quote (nothing is charged or signed), then call again with the signed payment to receive the result and settlement details.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "q": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 300,
+            "description": "Search terms, e.g. 'zero-knowledge proof rollups' or an exact paper title."
+          },
+          "from_year": {
+            "type": "integer",
+            "minimum": 1900,
+            "maximum": 2100,
+            "description": "Only works published in or after this year, e.g. 2020. Omit for all years."
+          },
+          "sort": {
+            "type": "string",
+            "enum": [
+              "relevance",
+              "cited"
+            ],
+            "description": "'relevance' (default) or 'cited' for most-cited first."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50,
+            "description": "How many works to return, 1 to 50. Defaults to 10."
+          },
+          "payment_signature": {
+            "type": "string",
+            "maxLength": 8000,
+            "description": "Optional. An x402 v2 payment you signed for this call's quote (the PAYMENT-SIGNATURE header value). Omit to get the price quote first; nothing is charged without it."
+          }
+        },
+        "required": [
+          "q"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "io.github.FTHTrading/genesis402-mcp",
+    "version": "0.3.13",
+    "remoteUrl": "https://twin.unykorn.org/mcp",
+    "publishedAt": "2026-11-18T05:37:44.2927Z",
+    "fetchedAt": "2026-11-28T10:03:29.931Z",
+    "toolsSha256": "1f71a3f0e69944c2c73ef1dc6538f8ea05208bf56788c8d71b197a32ebaebdaf"
+  }
+}

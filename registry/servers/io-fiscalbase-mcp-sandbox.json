@@ -1,0 +1,584 @@
+{
+  "$schema": "../schema.json",
+  "name": "io.fiscalbase/mcp-sandbox",
+  "title": "Fiscalbase Sandbox",
+  "category": "AI, LLMs & Agents",
+  "description": "Fiscalbase on a simulated SRI: try Ecuador's e-invoices from an agent, with no tax validity.",
+  "tools": [
+    {
+      "name": "fiscalbase_me",
+      "description": "Call this first, once. Returns who you act for (`credential`: the person's role, and whether this connection reads or also writes), the one business and whether it can issue now (`blockers` say what it lacks), its `establishments` with their emission points (ids to number a document at), this month's `usage` against the plan, and a `playbook`: the calls and formats of the usual tasks.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "fiscalbase_docs",
+      "description": "Fiscalbase's documentation, for what the playbook of fiscalbase_me doesn't cover. `action`:\n- \"guide\": how to issue a `type`: its rules, an example and every field of its body. The same text as the resource fiscalbase://guides/{type}.\n- \"search\": searches docs.fiscalbase.io (in Spanish) for `query`: SRI rules and refusals, credit notes, webhooks, imports, the recipient portal, plans and billing. Returns pages with the section that matched.\n- \"read\": a page by its `url` from a search, as Markdown. A long page comes in parts: pass `next_offset` as `offset` to read on.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "guide",
+              "search",
+              "read"
+            ]
+          },
+          "type": {
+            "description": "guide only.",
+            "type": "string",
+            "enum": [
+              "invoice",
+              "credit_note",
+              "debit_note",
+              "withholding",
+              "delivery_note",
+              "purchase_settlement"
+            ]
+          },
+          "query": {
+            "description": "search only.",
+            "type": "string",
+            "minLength": 1
+          },
+          "url": {
+            "description": "read only.",
+            "type": "string"
+          },
+          "offset": {
+            "default": 0,
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "ec_lookup_taxpayer",
+      "description": "Turns a RUC (13 digits) or `cédula` (10 digits) into the `buyer` (or `supplier`) object of a document: the name the SRI registers and the head office address. `buyer.email` stays empty: `suggested_email` is the email this business used before for this exact identification, which you propose to the person and use only once they confirm it; with none, ask for one. For a RUC it also returns the SRI's record (`taxpayer`): status, regime, `contribuyente especial`, withholding agent.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "identification": {
+            "type": "string",
+            "description": "RUC or `cédula`, digits only."
+          }
+        },
+        "required": [
+          "identification"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "ec_find",
+      "description": "Searches the business, most recent first, in concise rows with ids. `resource`:\n- \"documents\": issued, by `type`, `status`, `counterparty_identification`, `q` (number, access key or name), `issue_date` and where they were numbered. ec_get_document reads one whole.\n- \"received_documents\": what suppliers issued to it, by `type`, `q`, `counterparty_identification` (the issuer's RUC) and `issue_date`.\n- \"contacts\": who it issues to, by `q` (name words or identification), with the email last used.\n- \"suppliers\": who issued to it, by `q`.\n- \"products\": its catalog, by `q` (words, code or barcode).\n- \"line_suggestions\": lines it issued before, by `q`: description, codes, `unit_price` before IVA, taxes. One `type` (default invoices).\n- \"series\": each emission point and type: who issues there, last number, `gaps`. One `type`.\n\nA filter a resource doesn't take is refused. `next_cursor` reads on as `cursor`.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "resource": {
+            "type": "string",
+            "enum": [
+              "documents",
+              "received_documents",
+              "contacts",
+              "suppliers",
+              "products",
+              "line_suggestions",
+              "series"
+            ]
+          },
+          "q": {
+            "type": "string"
+          },
+          "type": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "invoice",
+                "credit_note",
+                "debit_note",
+                "withholding",
+                "delivery_note",
+                "purchase_settlement"
+              ]
+            }
+          },
+          "status": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "pending",
+                "submitted",
+                "authorized",
+                "returned",
+                "not_authorized",
+                "annulled"
+              ]
+            }
+          },
+          "counterparty_identification": {
+            "type": "string"
+          },
+          "establishment_id": {
+            "type": "string"
+          },
+          "emission_point_id": {
+            "type": "string"
+          },
+          "issue_date": {
+            "type": "object",
+            "properties": {
+              "gte": {
+                "type": "string",
+                "format": "date"
+              },
+              "lte": {
+                "type": "string",
+                "format": "date"
+              }
+            },
+            "additionalProperties": false
+          },
+          "limit": {
+            "default": 10,
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 20
+          },
+          "cursor": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "resource"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "ec_get_document",
+      "description": "Reads documents by id, issued or received, up to 10 at once: every field, the SRI's messages, an issued one's `timeline`, and links to the XML and PDF (read them only when needed). `wait_seconds` (up to 25) waits for the SRI's decision on a `pending` or `submitted` document.\n\nStatuses: `pending` and `submitted` are on their way; `authorized` is final; `returned` and `not_authorized` were refused (do what each message's `remedy` says; when it says to resubmit, ec_document_action \"resubmit\"); `annulled`.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "ids": {
+            "minItems": 1,
+            "maxItems": 10,
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "wait_seconds": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 25
+          }
+        },
+        "required": [
+          "ids"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "ec_preview_document",
+      "description": "Validates a document and computes its taxes and totals without issuing it: no number is spent, nothing reaches the SRI or the buyer. Returns `preview_id` and the `preview`: the document as it would be issued, its totals and `warnings` (what would stop issuing it now). A refusal lists every problem in `errors`, with paths inside `document`: fix them all and preview again.\n\n`document` is the type's body; fiscalbase_docs \"guide\" lists every field. What agents get wrong:\n- amounts and quantities are decimal strings: \"2000.00\", \"1\";\n- `unit_price` is before IVA, and each line has one `{\"type\": \"iva\", \"rate\": \"iva_15\"}`;\n- a `ruc`, `cedula` or `pasaporte` buyer needs `name` and `email`;\n- a credit term is `{\"length\": 10, \"unit\": \"days\"}` in the payment's `term`.\n\nExample: {\"type\": \"invoice\", \"document\": {\"buyer\": {\"identification_type\": \"consumidor_final\"}, \"lines\": [{\"description\": \"Café pasado\", \"quantity\": \"2\", \"unit_price\": \"2.50\", \"taxes\": [{\"type\": \"iva\", \"rate\": \"iva_15\"}]}], \"payments\": [{\"method\": \"sin_sistema_financiero\"}]}}",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "invoice",
+              "credit_note",
+              "debit_note",
+              "withholding",
+              "delivery_note",
+              "purchase_settlement"
+            ]
+          },
+          "document": {
+            "type": "object",
+            "description": "The type's request body."
+          }
+        },
+        "required": [
+          "type",
+          "document"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "ec_issue_document",
+      "description": "Issues a document: it is numbered, signed and sent to the SRI and, once authorized, emailed on its own to its recipient when the document names their email. Send one of: `type` and `document` (ec_preview_document's format), `draft_id` (a saved draft), or `quote_id` (a quote, as its factura). With the `preview_id` of a preview, the API issues exactly the document previewed, or refuses with preview_mismatch.\n\n`idempotency_key`: a new UUID per document, and the same one to retry after a timeout, so a retry never issues twice. `wait_seconds` (up to 25) waits for the SRI's decision. Returns the status, number, SRI messages (each with a cause and a remedy), `next_step` and, once authorized, links to the XML and PDF.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "invoice",
+              "credit_note",
+              "debit_note",
+              "withholding",
+              "delivery_note",
+              "purchase_settlement"
+            ]
+          },
+          "document": {
+            "type": "object",
+            "description": "The type's request body."
+          },
+          "draft_id": {
+            "type": "string"
+          },
+          "quote_id": {
+            "type": "string"
+          },
+          "preview_id": {
+            "type": "string"
+          },
+          "idempotency_key": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "description": "A new UUID per document; the same one only to retry."
+          },
+          "wait_seconds": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 25
+          }
+        },
+        "required": [
+          "idempotency_key"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "ec_document_action",
+      "description": "Acts on one issued document by `id`. `action`:\n- \"email\": emails its XML and PDF again, to its recipient or to `to` (up to 10 addresses).\n- \"refresh_status\": asks the SRI now about a `submitted` document, at most once every 10 seconds.\n- \"resubmit\": sends a corrected `returned` or `not_authorized` document with the same number; `document` is the whole corrected body.\n- \"renumber\": a `returned` document whose number the SRI already has (message 45) takes the next one; automatic in `sandbox`.\n- \"annul\": records an annulment made in the SRI's portal: `annulled_on` (YYYY-MM-DD) and optionally `reason`.\n\nReturns the document afterwards, concise.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "email",
+              "refresh_status",
+              "resubmit",
+              "renumber",
+              "annul"
+            ]
+          },
+          "to": {
+            "minItems": 1,
+            "maxItems": 10,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "email"
+            }
+          },
+          "document": {
+            "description": "resubmit only: the corrected body.",
+            "type": "object"
+          },
+          "annulled_on": {
+            "type": "string",
+            "format": "date"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "action"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "ec_report",
+      "description": "What the business issued, at a glance. `view`:\n- \"period\" (default): a period's documents, the current month in Ecuador by default: how many and for how much, by status and by type, the refused ones grouped by the SRI's message with its cause and remedy, and `sri`: whether the SRI is slow right now, so you know whether to wait before retrying. Optionally one `establishment_id`. For \"how did this month go\" or \"what was refused and why\".\n- \"habits\": how it usually issues, over the last 90 days by default (a year at most), by type: the usual emission points, payment methods, IVA rates, additional information and kinds of buyer, with counts and the latest documents' ids. Only when the person leaves a document open (\"the usual invoice\"): mirror the majority and say so. Never take the buyer, quantities or prices from it.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "view": {
+            "default": "period",
+            "type": "string",
+            "enum": [
+              "period",
+              "habits"
+            ]
+          },
+          "issue_date": {
+            "type": "object",
+            "properties": {
+              "gte": {
+                "type": "string",
+                "format": "date"
+              },
+              "lte": {
+                "type": "string",
+                "format": "date"
+              }
+            },
+            "additionalProperties": false
+          },
+          "establishment_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "ec_suggest_withholding",
+      "description": "Proposes the `comprobante de retención` for a supplier's invoice: the `supplier` and the `support_documents` entry (invoice, totals, tax support, each renta and IVA withholding). Put both in ec_preview_document's `document` with type \"withholding\"; check the renta code against what was bought (catalog `renta_withholdings`).\n\nName the invoice one way: its 49-digit `access_key`, `received_document_id` (a row of ec_find \"received_documents\"), or `invoice` with its issuer's `supplier_identification`. `kind`: \"goods\" (renta 312, IVA 30 %), \"services\" (renta 3440, IVA 70 %; labour, transport and rent have their own codes) or \"professional_services\" (renta 303A and IVA 70 % from a company, 303 and 100 % from a natural person). The SRI's record of the supplier (`supplier_facts`: special taxpayer, RIMPE) changes the percents. Not for a supplier abroad: fiscalbase_docs guide \"withholding\".",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "access_key": {
+            "type": "string"
+          },
+          "received_document_id": {
+            "type": "string"
+          },
+          "invoice": {
+            "description": "Without an access key: the supplier's invoice as it was issued.",
+            "type": "object",
+            "properties": {
+              "number": {
+                "type": "string",
+                "description": "`001-001-000000001`"
+              },
+              "issue_date": {
+                "type": "string",
+                "description": "`YYYY-MM-DD`"
+              },
+              "authorization_number": {
+                "type": "string"
+              },
+              "subtotal": {
+                "type": "string"
+              },
+              "total": {
+                "type": "string"
+              },
+              "taxes": {
+                "type": "array",
+                "items": {
+                  "type": "object"
+                },
+                "description": "Each `{type: iva, rate: iva_15, base, value}`."
+              },
+              "payments": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "method": {
+                      "type": "string"
+                    },
+                    "amount": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "method"
+                  ],
+                  "additionalProperties": false
+                },
+                "description": "Each `{method, amount?}`, as in the playbook's `payment_methods`."
+              }
+            },
+            "required": [
+              "number",
+              "issue_date",
+              "subtotal",
+              "total",
+              "taxes",
+              "payments"
+            ],
+            "additionalProperties": false
+          },
+          "supplier_identification": {
+            "description": "Required with `invoice`, beside it: its issuer's RUC or `cédula`.",
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "goods",
+              "services",
+              "professional_services"
+            ]
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "fiscalbase_api_search",
+      "description": "Finds what the `ec_*` tools don't cover: every other operation of the Fiscalbase API this connection may call (products, stock, contacts, drafts, quotes, imports, received documents, catalogs, webhooks, numbering, establishments, portal, team, plan, API keys). `query`: words in English (\"adjust stock\", \"webhook deliveries\"); returns up to 10 operations with their `effect`. `operation`: one id, for its path and query parameters, its body's fields and its refusal codes. Then run it with fiscalbase_api_read (effect `read`) or fiscalbase_api_write (`write`); an `irreversible` one names the `tool` that does it.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "minLength": 1
+          },
+          "operation": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "fiscalbase_api_read",
+      "description": "Runs a `read` operation of the Fiscalbase API by its id (fiscalbase_api_search finds it and lists its parameters). `path` fills the path's parameters; `query` is the API's own, a list's `limit` (at most 20) and `cursor` included; `body` only for a read that takes one. `fields` keeps only those fields of the object, or of each row of a list: send it for wide objects. Example: {\"operation\": \"ecListCatalogEntries\", \"path\": {\"table\": \"payment_methods\"}, \"query\": {\"q\": \"tarjeta\"}}",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "operation": {
+            "type": "string"
+          },
+          "path": {
+            "description": "The path's `{parameters}`.",
+            "type": "object",
+            "additionalProperties": {
+              "type": [
+                "string",
+                "number"
+              ]
+            }
+          },
+          "query": {
+            "type": "object",
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              ]
+            }
+          },
+          "body": {
+            "type": "object"
+          },
+          "fields": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "operation"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "fiscalbase_api_write",
+      "description": "Runs a `write` operation of the Fiscalbase API by its id: it creates, changes, deletes or revokes, as the person this connection acts for. Read it with fiscalbase_api_search {operation} first: an unknown body field is refused. `path` fills the path's parameters; `idempotency_key` (a new UUID) makes a retry safe where the operation takes one. What cannot be undone (issuing, emailing, annulling) is refused: ec_issue_document and ec_document_action do it. Example: {\"operation\": \"ecUpdateProduct\", \"path\": {\"id\": \"…\"}, \"body\": {\"unit_price\": \"2.50\"}}",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "operation": {
+            "type": "string"
+          },
+          "path": {
+            "description": "The path's `{parameters}`.",
+            "type": "object",
+            "additionalProperties": {
+              "type": [
+                "string",
+                "number"
+              ]
+            }
+          },
+          "query": {
+            "type": "object",
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              ]
+            }
+          },
+          "body": {
+            "type": "object"
+          },
+          "idempotency_key": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          }
+        },
+        "required": [
+          "operation"
+        ],
+        "additionalProperties": false
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "io.fiscalbase/mcp-sandbox",
+    "version": "3.0.0",
+    "remoteUrl": "https://mcp-sandbox.fiscalbase.io/mcp",
+    "publishedAt": "2026-11-28T01:16:40.130772Z",
+    "fetchedAt": "2026-11-28T10:03:29.931Z",
+    "toolsSha256": "8048369341932b25c3174054430900119839b230e756f83f8723ba80775ce05b"
+  }
+}

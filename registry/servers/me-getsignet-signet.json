@@ -1,0 +1,333 @@
+{
+  "$schema": "../schema.json",
+  "name": "me.getsignet/signet",
+  "title": "Signet: Telegram username availability",
+  "category": "Communication & Alerting",
+  "description": "Is a Telegram @username available, and how to get it? Advice-only, with alternatives.",
+  "tools": [
+    {
+      "name": "check_handles",
+      "description": "Check whether Telegram usernames are available and how a person could get each one.\n\nUse when the user names one or more candidate @handles (\"is @coffee taken?\", \"check these\nnames for my channel\"). Accepts up to 10 handles per call; '@name', 'name' and\n't.me/name' are all fine. Fresh names are read from Fragment at about 1 per second, so a cold\nbatch of 10 can take 10-20 s; repeated names are cached for minutes.\n\nFor each handle you get `route` (claim_free, start_auction, bid_auction, buy_listing,\nowned_not_for_sale, taken_by_account, invalid, unknown), plain-English `how_to_get`, `facts`\n(each with source and checked_at; amounts in nanoton = 1e-9 GRAM (prev. Toncoin), as third-party\nobservations), `risk_notes`, `fragment_url` and `watch_url`. claim_free means the person can\ntry setting it free in Telegram Settings; unknown is NOT available. Always show the user the\nfragment_url and watch_url. taken_by_account includes names that Telegram's t.me page shows in\nuse by an account, channel, group or bot. Advice-only: Signet does not sell or price usernames.\n\ncheck_handles stays lean to keep batches fast: it has no price context (comparable recent\nsales). Call handle_report for one name when the user wants that.",
+      "inputSchema": {
+        "properties": {
+          "handles": {
+            "description": "Usernames to check, 1-10; '@name', 'name' or 't.me/name'.",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 10,
+            "minItems": 1,
+            "title": "Handles",
+            "type": "array"
+          }
+        },
+        "required": [
+          "handles"
+        ],
+        "type": "object",
+        "title": "check_handlesArguments"
+      }
+    },
+    {
+      "name": "handle_report",
+      "description": "Detailed availability report for ONE Telegram username.\n\nUse when the user wants the full picture for a single @handle (who could get it, auction or\nlisting details, risks, what similar names recently sold for). Same data as check_handles plus\n`route_explained`, `facts_readable` (amounts converted to GRAM, times in ISO UTC, each labelled\nwith its source and observation time) and `price_context`.\n\n`price_context` is comparable recent sales of other, similar names observed on Fragment (n,\nmedian, middle half, window, examples, `summary`): an observation, not a valuation of this name\nor a quote. Present it as \"similar names sold for ...\". It is null for routes\nclaim_free, taken_by_account, invalid, with fewer than 5 comparable sales, or when the sales\nindex is unavailable; `price_context_reason` then says why. Prices are third-party observations, never\nSignet quotes. Show the user the fragment_url and watch_url (follow changes in Telegram).",
+      "inputSchema": {
+        "properties": {
+          "handle": {
+            "description": "One username, e.g. 'coffee' or '@coffee'.",
+            "title": "Handle",
+            "type": "string"
+          }
+        },
+        "required": [
+          "handle"
+        ],
+        "type": "object",
+        "title": "handle_reportArguments"
+      }
+    },
+    {
+      "name": "suggest_handles",
+      "description": "Suggest available Telegram usernames from a short description of what the user wants.\n\nUse when the user describes a channel/brand/project (\"a username for my Berlin coffee\nroastery\") or when the name they asked for is taken and they want alternatives. `brief` is\nplain text (max 500 chars) or a handle; `limit` 1-12 (default 8).\nCandidates are generated, screened, and checked live (bounded lookups, so this can take\n~10-30 s), then ranked by how easy they are to get: claim_free first, then start_auction,\nbuy_listing, bid_auction; within each, names that carry more of the brief's main words\ncome first. Each suggestion has `handle`, `why`, `trademark_flag` (a possible\nconflict with a known brand; suggest the user avoid it), full `intel` and `watch_url`.\nResults are observations at checked_at, not reservations: tell the user to claim quickly.",
+      "inputSchema": {
+        "properties": {
+          "brief": {
+            "description": "What the username is for, in plain words, or a taken handle to vary.",
+            "maxLength": 500,
+            "title": "Brief",
+            "type": "string"
+          },
+          "limit": {
+            "default": 8,
+            "description": "How many suggestions to return.",
+            "maximum": 12,
+            "minimum": 1,
+            "title": "Limit",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "brief"
+        ],
+        "type": "object",
+        "title": "suggest_handlesArguments"
+      }
+    },
+    {
+      "name": "register_interest",
+      "description": "Give the user a one-tap Telegram link to get alerts when a username changes.\n\nUse when the user wants to be told if a Telegram username becomes available, goes to auction,\nis listed for sale, or otherwise changes: typically after check_handles/handle_report shows the\nname is taken, owned or not listed, and the user says \"let me know if it frees up\" / \"tell me\nif it's listed\". Do not call it just to look a name up (use handle_report).\n\nReturns `follow_url` (https://t.me/GetSignetBot?start=...), `message_for_user` (ready-to-show\ntext) and `intel` (the name's current route and how_to_get). ALWAYS show the user the\nfollow_url: when they open it in Telegram and tap Start, the Signet bot starts watching the\nname for them and messages them there on route or listed-price changes. Nothing happens until\nthey tap it; Signet stores no data about the user here. Each call makes a new link.\n\n`note` is optional free text (max 500 chars, stored truncated to 200) for\ncontext such as \"name for a coffee roastery channel\". Never put personal data in it: no names,\ne-mail addresses, phone numbers, Telegram IDs or account details. Advice-only: alerts are\nobservations; Signet does not reserve, sell, price or buy usernames.\n\nOptional `max_price` (whole GRAM, prev. Toncoin) and `need_by` (YYYY-MM-DD): if the user says\nwhat they would pay at most or when they need the name, pass them; the watch then also sends\none message when the name is observed listed (or with an instant-buy price) at or below\nmax_price, and one reminder in the 7 days before need_by. Ask the user; never guess. They are\nechoed back as `max_price` / `need_by`.\n\nAlso returns `ref` and `status_url`: call interest_status(ref) later to learn whether the user\nhas tapped Start (watch_started true/false only). No key or signup is needed.",
+      "inputSchema": {
+        "properties": {
+          "handle": {
+            "description": "The username to follow, e.g. 'coffee' or '@coffee'.",
+            "title": "Handle",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Optional short context about the request (e.g. 'name for a coffee roastery channel'). No personal data: no names, e-mails, phone numbers or account details.",
+            "title": "Note"
+          },
+          "max_price": {
+            "anyOf": [
+              {
+                "maximum": 1000000000,
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Optional: the most the user would pay, in whole GRAM (prev. Toncoin). The bot then also sends one message when the name is observed listed, or on auction with an instant-buy price, at or below it. Not an offer; nothing is bought.",
+            "title": "Max Price"
+          },
+          "need_by": {
+            "anyOf": [
+              {
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Optional: the date the user needs the name by, ISO YYYY-MM-DD (today or later). The bot sends one reminder in the 7 days before it.",
+            "title": "Need By"
+          }
+        },
+        "required": [
+          "handle"
+        ],
+        "type": "object",
+        "title": "register_interestArguments"
+      }
+    },
+    {
+      "name": "interest_status",
+      "description": "Has the user started the watch behind a register_interest link? Answers watch_started true/false.\n\nUse after register_interest, when you want to close the loop: for example to stop reminding\nthe user to open follow_url, or to tell them the alerts are set up. `ref` is the\n8-character `ref` that register_interest returned. Returns only `ref` and\n`watch_started` (true once the user opened follow_url in Telegram and tapped Start; it stays\ntrue even if they stop the watch later). Never the username, the user or a time. Unknown refs\nare an error (unknown_ref). Don't poll: ask at most every few minutes and stop once it is true.\nNo key or signup is needed.",
+      "inputSchema": {
+        "properties": {
+          "ref": {
+            "description": "The 8-character `ref` that register_interest returned.",
+            "maxLength": 64,
+            "title": "Ref",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ref"
+        ],
+        "type": "object",
+        "title": "interest_statusArguments"
+      }
+    },
+    {
+      "name": "feed_matches",
+      "description": "List Fragment username listings that Signet's sampled feed observed and that match a filter.\n\nUse when the user describes a KIND of Telegram username to look out for rather than a specific\nname (\"4-5 letter dictionary words on auction with no bid yet\", \"names starting with coffee for\nsale under 1,000 GRAM\", \"auctions ending in the next 12 hours\"). Read-only and fast: it reads\nSignet's own feed, not Fragment.\n\nGive `filter` as text in the bot's /filter grammar (max 300 chars, e.g. \"4-5\nletters word below 300 auction nobid ending 12h\") OR the structured fields (min_len, max_len,\nkinds, prefix, contains, max_price in whole GRAM, listing auction|sale, no_bid,\nending_within_hours 1-168). At least one criterion is required.\n\nReturns `matches` (handle, listing_kind, amount_nanoton, amount_label, amount_text, pre_bid,\nends_at, listed_at, observed_at, fragment_url, sampled: true; new listings from the last\n48 h, plus active listings when the filter has an ending window or nobid),\n`filter` (criteria in words), `feed_available`, `feed_last_run_at` and `sampling_note`. The\nfeed is a sample, so say so: some listings are missed and amounts may have changed. Always show\nthe fragment_url. Matches are observations, not advice and not a valuation.\n\nTo get alerts for future matches, show the user `subscribe_url` (one tap in Telegram adds this\nfilter in @GetSignetBot) and `subscribe_message`; when subscribe_url is null, the message says\nwhich /filter command to send to the bot. Nothing about the filter is stored by this call.",
+      "inputSchema": {
+        "properties": {
+          "filter": {
+            "anyOf": [
+              {
+                "maxLength": 300,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Criteria in the bot's /filter grammar, e.g. '4-5 letters word below 300 auction nobid ending 12h'. Give this OR the structured fields.",
+            "title": "Filter"
+          },
+          "min_len": {
+            "anyOf": [
+              {
+                "maximum": 32,
+                "minimum": 4,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Shortest name length.",
+            "title": "Min Len"
+          },
+          "max_len": {
+            "anyOf": [
+              {
+                "maximum": 32,
+                "minimum": 4,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Longest name length.",
+            "title": "Max Len"
+          },
+          "kinds": {
+            "anyOf": [
+              {
+                "items": {
+                  "enum": [
+                    "word",
+                    "pronounceable",
+                    "hard",
+                    "other"
+                  ],
+                  "type": "string"
+                },
+                "maxItems": 4,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Name kinds, any one matches: word (dictionary word), pronounceable, hard (hard to pronounce), other (digits or underscores).",
+            "title": "Kinds"
+          },
+          "prefix": {
+            "anyOf": [
+              {
+                "maxLength": 32,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "The name starts with this text.",
+            "title": "Prefix"
+          },
+          "contains": {
+            "anyOf": [
+              {
+                "maxLength": 32,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "The name contains this text.",
+            "title": "Contains"
+          },
+          "max_price": {
+            "anyOf": [
+              {
+                "maximum": 1000000000,
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Amount shown at or below this many whole GRAM (prev. Toncoin). On an auction the amount is the minimum bid until someone bids, then the highest bid.",
+            "title": "Max Price"
+          },
+          "listing": {
+            "anyOf": [
+              {
+                "enum": [
+                  "auction",
+                  "sale"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "auction, or sale (fixed price); any when omitted.",
+            "title": "Listing"
+          },
+          "no_bid": {
+            "default": false,
+            "description": "Only auctions with no bid observed yet.",
+            "title": "No Bid",
+            "type": "boolean"
+          },
+          "ending_within_hours": {
+            "anyOf": [
+              {
+                "maximum": 168,
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Only listings ending within this many hours.",
+            "title": "Ending Within Hours"
+          },
+          "limit": {
+            "default": 20,
+            "description": "Most matches to return.",
+            "maximum": 50,
+            "minimum": 1,
+            "title": "Limit",
+            "type": "integer"
+          }
+        },
+        "type": "object",
+        "title": "feed_matchesArguments"
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "me.getsignet/signet",
+    "version": "0.8.0",
+    "remoteUrl": "https://getsignet.me/mcp",
+    "publishedAt": "2026-11-27T22:26:17.124654Z",
+    "fetchedAt": "2026-11-28T10:03:29.931Z",
+    "toolsSha256": "8a64b8614d2b4244869310b33261e43320211967fe060ff9e569e1dce4d4128b"
+  }
+}

@@ -1,0 +1,543 @@
+{
+  "$schema": "../schema.json",
+  "name": "info.mdb-group/b2b-check",
+  "title": "MDB B2B Check",
+  "category": "Design, UI & 3D Media",
+  "description": "Checks EU VAT IDs, Swiss UIDs, EORI, Peppol, LEI, IBAN/BIC and company registers, with source.",
+  "tools": [
+    {
+      "name": "check_vat_id",
+      "description": "Checks one EU VAT ID (27 member states plus XI) or one Swiss UID live in the official register (VIES or the Swiss UID register). Returns valid / invalid / unavailable / format_error / unsupported (a GB VAT number: not checked here), the registered name and address where published, the source with the time of the check (UTC) and a ready-to-file record. Accepts any common spelling (spaces, dots, dashes, lower case, 'MWST'). Use before reverse-charge invoices or to verify a business partner.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "vat_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 60,
+            "description": "The VAT ID or Swiss UID, with country prefix, e.g. DE123456788, ATU12345675 or CHE-123.456.788 MWST."
+          },
+          "requester_vat_id": {
+            "description": "Optional: the user's OWN EU VAT ID. If given and accepted by VIES, a valid EU VAT ID is answered with a consultation number as official proof of the check (not for Swiss UIDs). Only pass it when the user provided their own VAT ID for this purpose.",
+            "type": "string",
+            "maxLength": 40
+          },
+          "expected_name": {
+            "description": "Optional: the company name you expect. VIES compares it with the register where the country supports this (e.g. Spain).",
+            "type": "string",
+            "maxLength": 200
+          },
+          "expected_street": {
+            "description": "Optional: expected street, compared by VIES.",
+            "type": "string",
+            "maxLength": 200
+          },
+          "expected_postal_code": {
+            "description": "Optional: expected postal code, compared by VIES.",
+            "type": "string",
+            "maxLength": 20
+          },
+          "expected_city": {
+            "description": "Optional: expected city, compared by VIES.",
+            "type": "string",
+            "maxLength": 100
+          }
+        },
+        "required": [
+          "vat_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "check_vat_ids",
+      "description": "Checks up to 20 EU VAT IDs and/or Swiss UIDs live in the official registers. Returns one result per number in the same order, plus a summary count. Duplicates are looked up once.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "vat_ids": {
+            "minItems": 1,
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 60
+            },
+            "description": "1 to 20 VAT IDs or Swiss UIDs, each with country prefix."
+          },
+          "requester_vat_id": {
+            "description": "Optional: the user's OWN EU VAT ID. If given and accepted by VIES, a valid EU VAT ID is answered with a consultation number as official proof of the check (not for Swiss UIDs). Only pass it when the user provided their own VAT ID for this purpose.",
+            "type": "string",
+            "maxLength": 40
+          }
+        },
+        "required": [
+          "vat_ids"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "validate_vat_format",
+      "description": "Offline check of format and check digit for up to 100 EU VAT IDs or Swiss UIDs, without contacting any register. It cannot tell whether a number is registered; use check_vat_id for that.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "vat_ids": {
+            "minItems": 1,
+            "maxItems": 100,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 60
+            },
+            "description": "1 to 100 VAT IDs or Swiss UIDs."
+          }
+        },
+        "required": [
+          "vat_ids"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "vies_status",
+      "description": "Shows which EU member state services in VIES are currently available. Use it when a check returned 'unavailable' to see whether the national service is down.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "country_code": {
+            "description": "Optional two-letter country code, e.g. DE. Greece is EL.",
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 2
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "find_swiss_company",
+      "description": "Searches the public Swiss UID register by company name (optionally with postal code or town) and returns up to 10 matches with UID, VAT registration status, and name and address where the register publishes them. Matches can include sole proprietorships under a personal name. Use it when the user knows a Swiss company's name but not its UID.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 120,
+            "description": "Company name or a distinctive part of it, at least 3 characters."
+          },
+          "postal_code": {
+            "description": "Optional Swiss postal code, 4 digits.",
+            "type": "string",
+            "pattern": "^\\d{4}$"
+          },
+          "town": {
+            "description": "Optional town.",
+            "type": "string",
+            "maxLength": 80
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "check_eori",
+      "description": "Checks up to 10 EU EORI customs numbers (incl. XI) live in the European Commission's EOS validation service. Returns per number valid / invalid / unavailable / format_error / unsupported (GB EORI numbers, which HMRC checks, and codes outside the EU), and name and address where the holder agreed to publish them.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "eori_numbers": {
+            "minItems": 1,
+            "maxItems": 10,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 40
+            },
+            "description": "1 to 10 EORI numbers with country code, e.g. DE1234567890123."
+          }
+        },
+        "required": [
+          "eori_numbers"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "find_peppol_participant",
+      "description": "Looks up a company in Peppol, the network for e-invoices. Search by VAT ID (for an EU VAT ID or a Swiss UID the Peppol identifiers are derived from it automatically and the answer names them, and for a UK VAT ID with 9 or 12 digits after GB those of scheme 9932; from an XI VAT ID none is derived, and the status is unsupported), by a known Peppol participant ID, or by company name. Returns two parts: the Peppol Directory (where listing is voluntary) and, for a VAT ID or participant ID, the Peppol network itself (SML and the provider's SMP), which also finds companies that are not listed in the directory. For each identifier in invoices_confirmed_for, the provider's SMP ServiceGroup lists a recognised invoice type; this does not prove delivery. A listing in the directory, reachable: true, 'registered' without confirmed (only an SML entry), or 'registered' with confirmed: true but no invoice type among the documents the SMP lists is not such a confirmation. The documents are given per identifier, and so is a lookup that did not answer; that is not 'not registered'. 'not registered' only covers the identifiers looked up; the company may use another one. A name search asks the directory only and confirms no invoice type.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "vat_id": {
+            "description": "The company's VAT ID or Swiss UID. If vat_id is given, name is ignored.",
+            "type": "string",
+            "maxLength": 60
+          },
+          "participant_id": {
+            "description": "A known Peppol participant ID: four-digit scheme code, colon, identifier, e.g. 0208:0202239951. If participant_id is given, vat_id and name are ignored.",
+            "type": "string",
+            "maxLength": 120
+          },
+          "name": {
+            "description": "Company name, if neither VAT ID nor participant ID is known.",
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 120
+          },
+          "country": {
+            "description": "Optional two-letter country code for a name search.",
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 2
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "find_lei",
+      "description": "Looks up a company's LEI in the GLEIF database: by LEI code (with entity status, registration status, BIC and direct and ultimate parent company) or by company name (possible matches, optionally filtered by country).",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "lei": {
+            "description": "A 20-character LEI code. If lei is given, name is ignored.",
+            "type": "string",
+            "maxLength": 30
+          },
+          "name": {
+            "description": "Company name, if no LEI is known.",
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 120
+          },
+          "country": {
+            "description": "Optional two-letter country code for a name search.",
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 2
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "check_business_partner",
+      "description": "One report on a business partner before invoicing or delivering: VAT ID (VIES or Swiss UID register), EORI customs number (the given one, or the VAT ID tried as EORI), Peppol e-invoicing (per identifier, whether the provider's SMP lists a recognised invoice type; this does not prove delivery), and LEI (with the parent company when an LEI is given, otherwise up to 3 possible matches by name). Each part has its own status, and names its source and time where a source was asked. A part that does not apply is left out: EORI for a Swiss UID, a GB VAT number or after a format error of the VAT ID, unless an EORI is given; Peppol for a GB VAT number and after a format error of the VAT ID; LEI when no LEI is given and no name is known (from the VAT register, the EORI service or the input). A part whose source is down says so without affecting the others, except LEI, which is left out when that leaves no name. No sanctions screening.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "vat_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 60,
+            "description": "The partner's VAT ID or Swiss UID."
+          },
+          "eori": {
+            "description": "Optional: the partner's EORI number, if different from the VAT ID.",
+            "type": "string",
+            "maxLength": 40
+          },
+          "lei": {
+            "description": "Optional: the partner's LEI code.",
+            "type": "string",
+            "maxLength": 30
+          },
+          "name": {
+            "description": "Optional: the partner's name, used for the LEI search when neither the VAT register (VIES or the Swiss UID register) nor the EORI service gives a name; ignored when lei is given.",
+            "type": "string",
+            "maxLength": 200
+          },
+          "requester_vat_id": {
+            "description": "Optional: the user's OWN EU VAT ID. If given and accepted by VIES, a valid EU VAT ID is answered with a consultation number as official proof of the check (not for Swiss UIDs). Only pass it when the user provided their own VAT ID for this purpose.",
+            "type": "string",
+            "maxLength": 40
+          }
+        },
+        "required": [
+          "vat_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "check_iban",
+      "description": "Use for one or several IBANs when no BIC is given. With a BIC, use check_payment_details. Offline check of up to 20 IBANs: format, length for the country and check digits. Optionally compares the account's country with the partner's country (argument partner: a country code or the partner's VAT ID) and flags a mismatch as a notice; without partner the result says that no comparison was made. It cannot verify who owns the account.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "ibans": {
+            "minItems": 1,
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 50
+            },
+            "description": "1 to 20 IBANs, with or without spaces."
+          },
+          "partner": {
+            "description": "Optional: the partner's two-letter country code or VAT ID, to compare with the account's country.",
+            "type": "string",
+            "maxLength": 60
+          }
+        },
+        "required": [
+          "ibans"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_exchange_rate",
+      "description": "Returns the European Central Bank's euro reference rate for a currency on a given date (or the last rate before it, on weekends and holidays), and optionally converts an amount to or from euro. Use it for invoices in foreign currency.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 3,
+            "description": "Three-letter currency code, e.g. CHF, USD, CZK."
+          },
+          "date": {
+            "description": "Date as YYYY-MM-DD, e.g. the invoice date. Default: today.",
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          },
+          "amount": {
+            "description": "Optional amount to convert.",
+            "type": "number"
+          },
+          "direction": {
+            "description": "to_eur (default): the amount is in the currency and is converted to euro. from_eur: the amount is in euro.",
+            "type": "string",
+            "enum": [
+              "to_eur",
+              "from_eur"
+            ]
+          }
+        },
+        "required": [
+          "currency"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "check_payment_details",
+      "description": "Use when an IBAN comes together with a BIC (SWIFT code). For IBANs without a BIC, use check_iban. Checks the IBAN (length for the country per SWIFT IBAN Registry, Release 101, 89 countries, and check digits) and the BIC (format, 8 or 11 characters; BIC country against the IBAN country; the bank behind the BIC where GLEIF's BIC-to-LEI list has it; asked only for a valid IBAN). Optionally compares the account country with the partner's country (argument partner); without it the result says that no comparison was made. It cannot verify who owns the account.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "iban": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 50,
+            "description": "The IBAN, with or without spaces."
+          },
+          "bic": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20,
+            "description": "The BIC (SWIFT code), 8 or 11 characters, e.g. DEUTDEFF or UBSWCHZH80A. Required here; without a BIC use check_iban."
+          },
+          "partner": {
+            "description": "Optional: the partner's two-letter country code or VAT ID, to compare with the account's country.",
+            "type": "string",
+            "maxLength": 60
+          }
+        },
+        "required": [
+          "iban",
+          "bic"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "calculate_late_interest",
+      "description": "Calculates the statutory minimum interest on a late business payment. Euro area: ECB main refinancing rate on 1 January / 1 July of each half-year plus 8 percentage points, split by half-year, plus a fixed 40 EUR compensation (Directive 2011/7/EU); the ECB rate is loaded live. Sweden (SEK), Denmark (DKK), Poland (PLN) and Czechia (CZK): the national reference rate plus 8 points (Poland: 10) and the national fixed compensation (SEK 450, DKK 310, EUR 40/70/100 in PLN, at least CZK 1,200); in Czechia one rate for the whole delay. Switzerland: 5 % per year (Art. 104 OR). Hungary and Romania are not supported. Returns the formula, the rate for each period and the amounts. Contracts and national laws can differ.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "amount": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "The overdue amount in the national currency: EUR (euro area), SEK, DKK, PLN, CZK or CHF."
+          },
+          "due_date": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "description": "Due date of the invoice, YYYY-MM-DD. Interest runs from the next day."
+          },
+          "payment_date": {
+            "description": "Date of payment, YYYY-MM-DD. Default: today.",
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          },
+          "country": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 2,
+            "description": "Two-letter code of the country whose law applies, e.g. DE, SK, CH."
+          },
+          "currency": {
+            "description": "Optional currency code; default the national currency (EUR in the euro area, SEK, DKK, PLN, CZK, CHF).",
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 3
+          }
+        },
+        "required": [
+          "amount",
+          "due_date",
+          "country"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "validate_tax_id_format",
+      "description": "Offline check of the format, and of the check digit where the number type has a public one, for up to 50 tax or company numbers outside the EU (e.g. GB VAT, NO, AU ABN, NZ IRD, SG UEN, JP corporate number, CA BN, US EIN, IN GSTIN, BR CNPJ, MX RFC, TR, ZA, KR, AR, CL, CN, CO, IL, RU, UA) as well as EU VAT IDs and Swiss UIDs. Each answer states its depth: 'only the format was checked', 'nothing was checked' (no number was given) or 'not supported'. It never says that a number is registered.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "tax_ids": {
+            "minItems": 1,
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "country": {
+                  "type": "string",
+                  "minLength": 2,
+                  "maxLength": 2,
+                  "description": "Two-letter country code, e.g. AU."
+                },
+                "number": {
+                  "type": "string",
+                  "maxLength": 60,
+                  "description": "The number, with or without separators."
+                }
+              },
+              "required": [
+                "country",
+                "number"
+              ],
+              "additionalProperties": false
+            },
+            "description": "1 to 50 numbers, each with its country."
+          }
+        },
+        "required": [
+          "tax_ids"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "check_company_register",
+      "description": "Looks up a company live in the official national company register of Norway (Brønnøysund Enhetsregisteret), Czechia (ARES), Finland (PRH / YTJ) or the United Kingdom (Companies House), by company number or by name (at most 10 matches). Returns name, legal form, address, registration date, state as the register says it (\"active\" only where the register says so, \"registered\" = entered and not deleted, \"deleted\", \"ceased\", \"unknown\" where the register's words fit none of these), bankruptcy, liquidation or restructuring as separate fields where the register publishes them, and whether the company is VAT registered (true, false, or null if the register says nothing). The core fields are always present and null where the register says nothing; warning and other extra fields appear only when present. A name search can also return sole traders under a personal name, as the register publishes them. Use it to confirm that a Norwegian, Czech, Finnish or British partner exists and is neither deleted nor ceased (\"active\" where the register says so). \"deleted\" means the register shows a deletion, removal or end. \"ceased\" means the register says the legal unit has ceased. Finland: the Trade Register says \"Ceased\" (Lakannut); the entry stays in the register. Czechia: the state follows ARES, in this order: an end date gives \"deleted\"; without one, \"ZANIKLY\" in both of its sources ROS and VR gives \"deleted\"; \"registered\" when one says \"AKTIVNI\" and the other \"AKTIVNI\" or \"NEEXISTUJICI\"; any other combination, a missing source included, gives state \"unknown\", never \"registered\".",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "country": {
+            "type": "string",
+            "enum": [
+              "NO",
+              "CZ",
+              "FI",
+              "GB"
+            ],
+            "description": "NO (Norway), CZ (Czechia), FI (Finland) or GB (United Kingdom)."
+          },
+          "number": {
+            "description": "The national company number: NO organisation number (9 digits), CZ IČO (8 digits), FI Business ID / Y-tunnus (e.g. 0112038-9), GB company number (8 characters, e.g. 02050399 or SC002180). Give number OR name.",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 30
+          },
+          "name": {
+            "description": "Company name to search for (at most 10 matches). Give number OR name.",
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 100
+          }
+        },
+        "required": [
+          "country"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "check_registered_bank_account",
+      "description": "Checks live whether a bank account is reported to the tax authority for a given taxpayer: Poland (Ministry of Finance white list, 'Wykaz podatników VAT'; the answer carries the ministry's identifier of the query, request_id) or Czechia (register of VAT payers, published accounts, with the flag 'nespolehlivý plátce' / unreliable VAT payer). It shows whether the account is reported for this taxpayer; it does not prove who owns the account, and 'not registered' is a hint, not a judgement. Poland: the NIP and the account are sent to the ministry. Czechia: only the DIČ is sent to the register; the account is compared locally with the published list.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "country": {
+            "type": "string",
+            "enum": [
+              "PL",
+              "CZ"
+            ],
+            "description": "PL (Poland) or CZ (Czechia)."
+          },
+          "tax_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20,
+            "description": "PL: NIP (10 digits, with or without PL and dashes). CZ: DIČ (CZ followed by 8 to 10 digits)."
+          },
+          "account": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 50,
+            "description": "The bank account: IBAN, or the national form (PL: 26-digit NRB; CZ: prefix-number/bank code, e.g. 19-2000145399/0800)."
+          }
+        },
+        "required": [
+          "country",
+          "tax_id",
+          "account"
+        ],
+        "additionalProperties": false
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "info.mdb-group/b2b-check",
+    "version": "0.6.4",
+    "remoteUrl": "https://b2b.mdb-group.info/mcp",
+    "publishedAt": "2026-11-18T07:37:42.231661Z",
+    "fetchedAt": "2026-11-28T10:03:29.931Z",
+    "toolsSha256": "6c3d8b54bc672286297faf3c975a926abf37e04d8881638c8ddf609d37c555de"
+  }
+}

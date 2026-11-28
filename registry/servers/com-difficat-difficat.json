@@ -1,0 +1,371 @@
+{
+  "$schema": "../schema.json",
+  "name": "com.difficat/difficat",
+  "title": "DiffiCat",
+  "category": "Social, Media & Knowledge",
+  "description": "Compare a website before and after a migration: missing pages, content changes, visual diffs.",
+  "tools": [
+    {
+      "name": "check_page",
+      "description": "Use when you deployed or edited a page and need to catch visual regressions and content changes: it compares the live URL with a baseline captured on the first call, a snapshot or a production URL, and answers the regressions. Free up to 100 pages per client address per day, no key needed.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "url": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048,
+            "description": "The live page to check (full URL)."
+          },
+          "baseline": {
+            "description": "What to compare against: a saved snapshot ({ snapshotId, shareToken? }) or a production origin ({ productionUrl }). Omit it to use the baseline the first call captured.",
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "snapshotId": {
+                    "type": "string",
+                    "pattern": "^snap-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                    "description": "The snapshot id, snap-<uuid>, from the web app or a snapshot listing."
+                  },
+                  "shareToken": {
+                    "description": "A share token (dcs_…) the snapshot’s owner issued for agents. Needed unless the account key on the request’s HTTP headers owns or was granted the snapshot.",
+                    "type": "string",
+                    "minLength": 20,
+                    "maxLength": 200
+                  }
+                },
+                "required": [
+                  "snapshotId"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "productionUrl": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2048,
+                    "description": "A production origin: the page at the same path and query there is Site A."
+                  }
+                },
+                "required": [
+                  "productionUrl"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          },
+          "rebaseline": {
+            "description": "Capture a new baseline now instead of comparing with the stored one.",
+            "type": "boolean"
+          },
+          "viewportWidth": {
+            "description": "Capture width in px (default 1440).",
+            "type": "integer",
+            "minimum": 320,
+            "maximum": 2560
+          },
+          "checkMode": {
+            "description": "full (existence, content and visual, the default), text-only (no screenshots) or existence-only.",
+            "type": "string",
+            "enum": [
+              "full",
+              "text-only",
+              "existence-only"
+            ]
+          },
+          "maxPriceUsd": {
+            "description": "Spend cap in USD: a job priced above it is refused before any challenge.",
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "idempotencyKey": {
+            "description": "Retry key: under a prepaid balance, the same value within 24 hours is not charged again and answers DUPLICATE_REQUEST with the first jobId.",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          }
+        },
+        "required": [
+          "url"
+        ]
+      }
+    },
+    {
+      "name": "diff_deploy",
+      "description": "Use when a staging or preview deploy should match production, or a migrated site its old one: it compares the pages of both origins and answers only the pages that are missing, changed or look different. Free up to 100 pages per client address per day, no key needed.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "previewUrl": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048,
+            "description": "The preview or staging site (full URL), compared as Site B."
+          },
+          "productionUrl": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048,
+            "description": "The production site (full URL), compared as Site A."
+          },
+          "paths": {
+            "description": "Pages to compare, each starting with /; skips discovery.",
+            "minItems": 1,
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048,
+              "pattern": "^\\/(?![/\\\\])"
+            }
+          },
+          "maxPages": {
+            "description": "Without paths: pages discovery compares, default 10.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50
+          },
+          "viewportWidth": {
+            "description": "Capture width in px.",
+            "type": "integer",
+            "minimum": 320,
+            "maximum": 2560
+          },
+          "checkMode": {
+            "description": "full (existence, content and visual, the default), text-only (no screenshots) or existence-only.",
+            "type": "string",
+            "enum": [
+              "full",
+              "text-only",
+              "existence-only"
+            ]
+          },
+          "threshold": {
+            "description": "Visual diff tolerance as a fraction from 0 (exact) to 1: 0.05 means 5%. The web app takes a percentage; the API does not.",
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "maxPriceUsd": {
+            "description": "Spend cap in USD: a job priced above it is refused before any challenge.",
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "idempotencyKey": {
+            "description": "Retry key: under a prepaid balance, the same value within 24 hours is not charged again and answers DUPLICATE_REQUEST with the first jobId.",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          }
+        },
+        "required": [
+          "previewUrl",
+          "productionUrl"
+        ]
+      }
+    },
+    {
+      "name": "wait_for_comparison",
+      "description": "Waits until the job is completed, failed or cancelled, or timeoutSeconds pass, then answers status, progress and, once terminal, the summary (passed, failed, issuesBySeverity). On \"running\", call it again. Free.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "jobId": {
+            "type": "string",
+            "pattern": "^(?:web|cmp)-[a-z0-9-]+$",
+            "description": "Returned at job creation, e.g. web-1a2b3c."
+          },
+          "jobToken": {
+            "description": "Returned at job creation; optional when the HTTP headers carry the key that paid the job.",
+            "type": "string",
+            "minLength": 20,
+            "maxLength": 200
+          },
+          "timeoutSeconds": {
+            "description": "Seconds to wait for a terminal status before answering with the current one (default 60, at most 300).",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 300
+          }
+        },
+        "required": [
+          "jobId"
+        ]
+      }
+    },
+    {
+      "name": "get_report",
+      "description": "The finished report. Call it first with failedOnly: true and view: \"digest\": only the failed pages, each with its issues, diff percentage and largest regions, and a text line per page; summary covers every page. check_page and diff_deploy return the first regressed region's image; get_screenshot (?surface=full) fetches a region by filename. Without view, results are { path, status, failedChecks }; responseFormat: \"detailed\" returns per-check fields. offset and limit page through results (default 50, at most 5000; nextOffset is next); limit: 1 returns the summary alone; includeText: true adds the plain-text report. A change whose flakyShare is at least 0.5 is likely the page moving on its own: mask its fingerprint's element (visual.masks), not a regression. Call wait_for_comparison first. Free.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "jobId": {
+            "type": "string",
+            "pattern": "^(?:web|cmp)-[a-z0-9-]+$",
+            "description": "Returned at job creation, e.g. web-1a2b3c."
+          },
+          "jobToken": {
+            "description": "Returned at job creation; optional when the HTTP headers carry the key that paid the job.",
+            "type": "string",
+            "minLength": 20,
+            "maxLength": 200
+          },
+          "offset": {
+            "description": "Index of the first page result to return (default 0).",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "limit": {
+            "description": "Page results to return (at most 5000; default 1000 on REST, 50 over MCP).",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "failedOnly": {
+            "description": "Only failed pages in results, total, nextOffset and text; summary still covers every page.",
+            "type": "boolean"
+          },
+          "view": {
+            "description": "full (default): every page result with its diffs, screenshots and text; digest: one small object per page (status, failed checks, issues, diff percentage), no text.",
+            "type": "string",
+            "enum": [
+              "full",
+              "digest"
+            ]
+          },
+          "responseFormat": {
+            "description": "concise (default): each result is { path, status, failedChecks }, plus snapshots when a side came from one; detailed: every per-check field, diff and screenshot name.",
+            "type": "string",
+            "enum": [
+              "concise",
+              "detailed"
+            ]
+          },
+          "includeText": {
+            "description": "Also put the text block in structuredContent.text.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "jobId"
+        ]
+      }
+    },
+    {
+      "name": "capture_screenshot",
+      "description": "Takes a full-page screenshot of one URL, for example to see how a relaunched page or a mobile layout looks. Free 10 times per client address per day, no key needed. The PNG is taken at the given viewport width and returned inline when small, else as links.file to fetch with the jobToken. Call it for a one-off look at a page or a mobile-width check. Do not call it for pages a comparison job covers: the job already stored their screenshots. Example: { \"url\": \"https://new.example/pricing\", \"viewportWidth\": 375 }. Answers with jobId, jobToken, filename, url, dimensions, bytes, links.file and, on a free run, sample and allowanceRemaining.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "url": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048,
+            "description": "Page to capture (full URL)."
+          },
+          "auth": {
+            "description": "HTTP basic auth for the page.",
+            "type": "object",
+            "properties": {
+              "username": {
+                "type": "string",
+                "maxLength": 512,
+                "description": "Username for HTTP basic auth."
+              },
+              "password": {
+                "type": "string",
+                "maxLength": 512,
+                "description": "Password for HTTP basic auth."
+              }
+            },
+            "required": [
+              "username",
+              "password"
+            ]
+          },
+          "viewportWidth": {
+            "description": "Capture width in px.",
+            "type": "integer",
+            "minimum": 320,
+            "maximum": 2560
+          },
+          "visual": {
+            "description": "Capture rules applied to both sides.",
+            "type": "object",
+            "properties": {
+              "masks": {
+                "description": "CSS selectors of elements hidden on both sites before the screenshot (at most 50, each up to 200 characters). The layout keeps its place.",
+                "maxItems": 50,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                }
+              },
+              "freeze": {
+                "description": "Switches that stop motion before the screenshot.",
+                "type": "object",
+                "properties": {
+                  "animations": {
+                    "description": "Stop CSS animations and transitions before the screenshot.",
+                    "type": "boolean"
+                  },
+                  "clock": {
+                    "description": "Pause timers and the clock after load; a page that needs a timer to render may stay empty.",
+                    "type": "boolean"
+                  },
+                  "clockSeconds": {
+                    "description": "With clock: seconds the clock runs after load before it stops (1 to 600, default 60).",
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 600
+                  }
+                },
+                "additionalProperties": false
+              }
+            },
+            "additionalProperties": false
+          },
+          "idempotencyKey": {
+            "description": "Retry key: under a prepaid balance, the same value within 24 hours is not charged again and answers DUPLICATE_REQUEST with the first jobId.",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          }
+        },
+        "required": [
+          "url"
+        ]
+      }
+    },
+    {
+      "name": "get_balance",
+      "description": "The prepaid balance and last 20 ledger entries of the key in the request’s Authorization: Bearer or X-DiffiCat-Key header; a human obtains one on the account page (/account), which a refusal’s nextSteps name. A Pro key also returns allowance (included pages shared with the web app, used, reset time) and overage (amount this period, cap). Each entry names its surface, web or api. Without a key, answers the free allowance left for your address and prices, the USD a call costs beyond it; comparisons, discoveries and screenshots on old.difficat.com and new.difficat.com draw on demoPages first. Free.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "com.difficat/difficat",
+    "version": "3.164.0",
+    "remoteUrl": "https://app.difficat.com/mcp?via=registry",
+    "publishedAt": "2026-11-27T17:50:56.085367Z",
+    "fetchedAt": "2026-11-28T10:03:29.931Z",
+    "toolsSha256": "bb8cb594e925a7330b8676daee6954104adc5b17136e5a3553e5f02f6174e382"
+  }
+}

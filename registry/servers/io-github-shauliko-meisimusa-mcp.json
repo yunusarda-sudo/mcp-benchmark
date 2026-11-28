@@ -1,0 +1,478 @@
+{
+  "$schema": "../schema.json",
+  "name": "io.github.Shauliko/meisimusa-mcp",
+  "title": "MeiSIM USA",
+  "category": "AI, LLMs & Agents",
+  "description": "Real US mobile numbers for AI agents: buy numbers, read and send texts with a MeiSIM API key.",
+  "repository": "https://github.com/Shauliko/meisimusa-mcp",
+  "tools": [
+    {
+      "name": "search_plans",
+      "description": "Search travel eSIM data plans for a destination country. Returns plans with data allowance, validity in days, and USD price. Use this first when a user wants mobile data for a trip (e.g. \"5GB in Italy for 10 days\"). Returns a plan_id to pass to get_quote / purchase.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "country_code": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 2,
+            "pattern": "^[A-Za-z]{2}$",
+            "description": "Destination country as an ISO 3166-1 alpha-2 code, e.g. \"IT\" for Italy."
+          },
+          "duration_days": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Days of coverage needed. Plans shorter than this are filtered out."
+          },
+          "data_gb": {
+            "description": "Minimum data in GB. Omit to return all sizes (unlimited plans always pass).",
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "sort_by": {
+            "default": "price",
+            "description": "Result ordering. \"price\" = cheapest first (default).",
+            "type": "string",
+            "enum": [
+              "price",
+              "data_per_dollar",
+              "duration"
+            ]
+          }
+        },
+        "required": [
+          "country_code",
+          "duration_days"
+        ]
+      }
+    },
+    {
+      "name": "get_quote",
+      "description": "Confirm the current USD price for a specific eSIM plan before purchasing. Returns the full plan plus a price breakdown and a short-lived quote. Call after search_plans, before purchase.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "plan_id": {
+            "type": "string",
+            "description": "The plan_id (productId) returned by search_plans."
+          }
+        },
+        "required": [
+          "plan_id"
+        ]
+      }
+    },
+    {
+      "name": "get_ai_line_offer",
+      "description": "MeiSIM's current offer for real US phone lines used by AI agents: the monthly price per number for texts, and for texts plus voice over SIP; the first-term minimum; what a line includes (a real US mobile number on a national carrier, inbound texts to a webhook or over the API, voice over SIP with the number as caller ID, one call at a time, outbound calls to US numbers only); delivery time; payment methods; the lower price per line for more lines and who to write to from 1,000 lines; and links to apply and to the API docs. For people building voice agents, phone assistants, companion apps or SMS customer service who ask what a line costs, what it includes or how to get one. Takes no input. Read-only: it cannot open an account or order a line.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "search_us_numbers",
+      "description": "Find real US phone-number plans (a genuine US carrier line with calls, texts, and data, no SSN or contract). Use this when the user wants an actual US number, not just travel data. Returns a plan_id for purchase.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "max_price_usd": {
+            "description": "Optional max monthly price in USD.",
+            "type": "number",
+            "exclusiveMinimum": 0
+          }
+        }
+      }
+    },
+    {
+      "name": "purchase",
+      "description": "Begin buying an eSIM plan. Returns a secure Stripe payment link the customer opens to pay with their own card; the eSIM + QR are emailed automatically once payment clears. Poll get_activation with the returned order_id to fetch the QR. Safe to retry with the same idempotency_key.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "plan_id": {
+            "type": "string",
+            "description": "The plan_id (productId) to buy, from search_plans / get_quote."
+          },
+          "customer_email": {
+            "type": "string",
+            "format": "email",
+            "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$",
+            "description": "Where the eSIM/QR is emailed after payment."
+          },
+          "payment_method": {
+            "description": "Not used: payment happens on the hosted Stripe page via payment_url. Reserved for a future direct-charge path.",
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "stored_card",
+                  "stripe_payment_method"
+                ]
+              },
+              "token": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "token"
+            ]
+          },
+          "billing_country": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 2
+          },
+          "idempotency_key": {
+            "description": "Generated if omitted. Reusing a key returns the first checkout instead of starting another.",
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$"
+          }
+        },
+        "required": [
+          "plan_id",
+          "customer_email"
+        ]
+      }
+    },
+    {
+      "name": "get_activation",
+      "description": "Get the eSIM install QR code, activation (LPA) string, and status for an order. Pass the order_id from purchase. Status is \"ready\" when the profile can be installed (after the customer pays).",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "order_id": {
+            "type": "string",
+            "description": "The order_id returned by purchase."
+          }
+        },
+        "required": [
+          "order_id"
+        ]
+      }
+    },
+    {
+      "name": "topup_lookup",
+      "description": "Look up an existing US prepaid line (by phone) or an eSIM (by ICCID / order) and list the top-up plans available for it. Returns product_ids to pass to topup_start.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "line_type": {
+            "type": "string",
+            "enum": [
+              "us_prepaid",
+              "esim"
+            ],
+            "description": "\"us_prepaid\" for a US phone line, \"esim\" for a travel eSIM."
+          },
+          "phone": {
+            "description": "US phone number (for us_prepaid).",
+            "type": "string"
+          },
+          "carrier": {
+            "description": "Carrier name/id (for us_prepaid; see topup carriers).",
+            "type": "string"
+          },
+          "iccid": {
+            "description": "eSIM ICCID (for esim).",
+            "type": "string"
+          },
+          "email": {
+            "description": "Customer email (required for esim lookup).",
+            "type": "string",
+            "format": "email",
+            "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+          }
+        },
+        "required": [
+          "line_type"
+        ]
+      }
+    },
+    {
+      "name": "topup_start",
+      "description": "Start a top-up/recharge for an existing line or eSIM, using a product_id from topup_lookup. Returns an order_id and a payment URL where the customer completes payment. For range plans, pass custom_amount.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "line_type": {
+            "type": "string",
+            "enum": [
+              "us_prepaid",
+              "esim"
+            ]
+          },
+          "product_id": {
+            "type": "string",
+            "description": "Top-up plan id from topup_lookup."
+          },
+          "customer_email": {
+            "type": "string",
+            "format": "email",
+            "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+          },
+          "phone": {
+            "description": "US phone (us_prepaid).",
+            "type": "string"
+          },
+          "carrier": {
+            "type": "string"
+          },
+          "iccid": {
+            "description": "eSIM ICCID (esim).",
+            "type": "string"
+          },
+          "source_order_id": {
+            "description": "Original eSIM order id (esim).",
+            "type": "string"
+          },
+          "custom_amount": {
+            "description": "For range/RTR plans only.",
+            "type": "number",
+            "exclusiveMinimum": 0
+          }
+        },
+        "required": [
+          "line_type",
+          "product_id",
+          "customer_email"
+        ]
+      }
+    },
+    {
+      "name": "get_account",
+      "description": "Show the MeiSIM account behind your API key: company, status, prepaid wallet balance in USD, and how many new numbers you may still activate today. Use before buy_numbers, or when the user asks what is left. Needs your API key.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "get_number_pricing",
+      "description": "Show what a new US number costs on your MeiSIM account and whether you can order: the daily rate (minimum days, one-time activation fee, how many are ready right now) and the monthly rate (first month, renewals, minimum months), with and without voice. Call before buy_numbers. Needs your API key.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "buy_numbers",
+      "description": "Order new US phone numbers on your MeiSIM account, paid from its prepaid wallet. Prepaid: no returns, no refunds once a number is delivered. Choose billing \"daily\" (a minimum number of days paid now, then each day from the wallet) or \"monthly\" (a minimum number of months paid up front). A monthly order also says line_history: \"fresh\" or \"any\"; ask the user which. Call get_number_pricing first and tell the user the total. Numbers usually land within about 15 minutes; check with get_order. Safe to retry with the same customer_reference. Needs your API key.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "count": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50,
+            "description": "How many numbers."
+          },
+          "billing": {
+            "type": "string",
+            "enum": [
+              "daily",
+              "monthly"
+            ],
+            "description": "\"daily\" or \"monthly\". See get_number_pricing."
+          },
+          "days": {
+            "description": "Daily billing only: days to pay now (at least the minimum).",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 365
+          },
+          "months": {
+            "description": "Monthly billing only: months to pay up front (at least the minimum).",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 12
+          },
+          "voice": {
+            "description": "Also calls over SIP (costs more; must be enabled on the account).",
+            "type": "boolean"
+          },
+          "line_history": {
+            "description": "Monthly billing: \"fresh\" for a number no other account has held (no refund if the carrier blocks it), or \"any\" for a number from stock that may have been used before. Required for monthly orders.",
+            "type": "string",
+            "enum": [
+              "fresh",
+              "any"
+            ]
+          },
+          "area_code": {
+            "description": "Preferred 3-digit US area code, if available.",
+            "type": "string",
+            "pattern": "^\\d{3}$"
+          },
+          "zip_code": {
+            "description": "5-digit US ZIP to pick the number's area, if available.",
+            "type": "string",
+            "pattern": "^\\d{5}$"
+          },
+          "customer_reference": {
+            "description": "Your own reference for this order; a repeat with the same reference returns the first order.",
+            "type": "string",
+            "maxLength": 120
+          }
+        },
+        "required": [
+          "count",
+          "billing"
+        ]
+      }
+    },
+    {
+      "name": "get_order",
+      "description": "Check a number order from buy_numbers: status (provisioning, partially_fulfilled, fulfilled, delayed, cancelled, closed_refunded), the numbers delivered so far and what was charged. Pass the order_id or your customer_reference. Needs your API key.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "order": {
+            "type": "string",
+            "maxLength": 120,
+            "description": "The order_id or the customer_reference."
+          }
+        },
+        "required": [
+          "order"
+        ]
+      }
+    },
+    {
+      "name": "list_my_numbers",
+      "description": "List the US phone numbers on your MeiSIM account: number, status, whether it has voice, how it is billed and the date it is paid through. Paged; pass next_offset to continue. Needs your API key.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "search": {
+            "description": "Optional: part of a number or a label to filter by.",
+            "type": "string",
+            "maxLength": 40
+          },
+          "limit": {
+            "description": "Numbers per page, default 100.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 500
+          },
+          "offset": {
+            "description": "Where to start; use next_offset from the previous page.",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        }
+      }
+    },
+    {
+      "name": "read_messages",
+      "description": "Read the text messages received on your MeiSIM numbers, newest first. Filter to one number and/or to messages after a timestamp. To follow a conversation, pass the received_at of the last message you saw as since. Needs your API key.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "number": {
+            "description": "One of your numbers, e.g. \"4234322309\" or \"+1 423 432 2309\". Omit for all numbers.",
+            "type": "string",
+            "maxLength": 20
+          },
+          "since": {
+            "description": "ISO 8601 timestamp; only messages received after it.",
+            "type": "string",
+            "maxLength": 40
+          },
+          "limit": {
+            "description": "Default 50.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200
+          }
+        }
+      }
+    },
+    {
+      "name": "wait_for_message",
+      "description": "Wait for the next text message on one of your MeiSIM numbers and return it. Blocks up to timeout_seconds (default 30, max 50). Pass since as the time you started waiting (default: now) so an older message is not mistaken for the new one. If nothing arrives, received is false; call again to keep waiting. Needs your API key.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "number": {
+            "description": "One of your numbers. Omit to watch every number on the account.",
+            "type": "string",
+            "maxLength": 20
+          },
+          "since": {
+            "description": "ISO 8601; only a message received after this counts. Default: now.",
+            "type": "string",
+            "maxLength": 40
+          },
+          "timeout_seconds": {
+            "description": "How long to wait, default 30.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50
+          }
+        }
+      }
+    },
+    {
+      "name": "send_message",
+      "description": "Send a text message from one of your MeiSIM numbers to a US number. Sending must be enabled on your account and each number has a monthly allowance; a refusal tells you which. The answer means accepted by the carrier: a mobile line has no delivery receipt. The same text to more than three numbers from one line inside an hour is refused (carriers drop that as a broadcast); write to each person in their own words. Not for emergency services. Needs your API key.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "maxLength": 20,
+            "description": "One of your numbers."
+          },
+          "to": {
+            "type": "string",
+            "maxLength": 20,
+            "description": "The destination number, e.g. \"+1 212 555 0100\"."
+          },
+          "message": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 800,
+            "description": "The text to send, up to 800 characters."
+          }
+        },
+        "required": [
+          "from",
+          "to",
+          "message"
+        ]
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "io.github.Shauliko/meisimusa-mcp",
+    "version": "0.3.5",
+    "remoteUrl": "https://mcp.meisimusa.com/mcp",
+    "publishedAt": "2026-11-17T16:18:13.025275Z",
+    "fetchedAt": "2026-11-28T10:03:29.931Z",
+    "toolsSha256": "8ae227151e75513110fa2d65aa86676e46b51441a22f7f7a9ce47346c2254ec9"
+  }
+}

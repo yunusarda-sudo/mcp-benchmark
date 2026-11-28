@@ -1,0 +1,515 @@
+{
+  "$schema": "../schema.json",
+  "name": "io.github.cyanheads/paleobiology-mcp-server",
+  "category": "Developer Tools & DevOps",
+  "description": "Search fossil occurrences, taxon ranges, diversity through deep time, and the geologic time scale.",
+  "repository": "https://github.com/cyanheads/paleobiology-mcp-server",
+  "tools": [
+    {
+      "name": "paleobiology_search_occurrences",
+      "description": "Search fossil occurrences by clade (base_name or base_id), taxonomic name with synonyms (taxon_name), recorded-name pattern (match_name), interval or max_ma/min_ma, modern geographic bounds, country, state, county, formation, lithology, environment, or collection_no. At least one filter is required. Formation matches PBDB stored names and preserves list/wildcard syntax; suffixes are not removed. Resolve uncertain taxon names with paleobiology_get_taxon. Rows carry modern lng/lat, reconstructed paleolng/paleolat, age, strata, classification, and source reference_no; keep the coordinate systems distinct. Every served page row is returned, with total matches and the offset that continues the page. With an explicit limit, a first page qualifies for SQL staging when more matches remain. With limit omitted, staging requires more than 100 matches (or the deployment page cap if lower). When this deployment has DataCanvas enabled, a qualifying first page stages up to 50,000 occurrences on a canvas: use paleobiology_dataframe_describe for columns, then paleobiology_dataframe_query for SQL over the staged set. The notice distinguishes complete from partial coverage. Later offsets and complete pages stage nothing and leave any supplied canvas untouched.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "base_name": {
+            "description": "Clade-inclusive taxon filter — this taxon and all descendants, e.g. \"Dinosauria\". Supply at most one of base_name, base_id, taxon_name, and match_name.",
+            "type": "string"
+          },
+          "base_id": {
+            "description": "Clade-inclusive taxon filter by PBDB taxon id — the accepted_no from paleobiology_get_taxon or an occurrence row. Supply at most one of base_name, base_id, taxon_name, and match_name.",
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "taxon_name": {
+            "description": "Taxonomic name filter including synonyms, without expanding to descendants. Accepts comma-separated names and wildcards; PBDB uses the most frequent name when a pattern matches several. Supply at most one of base_name, base_id, taxon_name, and match_name.",
+            "type": "string"
+          },
+          "match_name": {
+            "description": "Match recorded names by spelling without expanding synonyms. PBDB matches every name satisfying the comma-separated patterns, which can include % and _ wildcards. Supply at most one of base_name, base_id, taxon_name, and match_name.",
+            "type": "string"
+          },
+          "lithology": {
+            "description": "Recorded source rock type or lithology, e.g. \"mudstone\". PBDB accepts comma lists, a leading ! to exclude the list, or ^ to subtract subsequent values (e.g. \"carbonate,^bafflestone\").",
+            "type": "string"
+          },
+          "collection_no": {
+            "description": "Restrict to one collection (locality) by its PBDB collection_no — the fauna found together at that site. Take the id from a paleobiology_search_collections row to drill from a locality into its occurrences.",
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "interval": {
+            "description": "Named geologic interval bounding the age, e.g. \"Cretaceous\" or \"Maastrichtian\". Takes precedence over max_ma and min_ma.",
+            "type": "string"
+          },
+          "max_ma": {
+            "description": "Older age bound in millions of years ago. Ignored when interval is supplied. When paired with min_ma it must be strictly greater — max_ma is the deeper-time end of the window.",
+            "type": "number",
+            "minimum": 0
+          },
+          "min_ma": {
+            "description": "Younger age bound in millions of years ago. Ignored when interval is supplied. When paired with max_ma it must be strictly smaller — min_ma is the nearer-to-present end of the window.",
+            "type": "number",
+            "minimum": 0
+          },
+          "lngmin": {
+            "description": "Western edge of the bounding box, decimal degrees (−180…180). Longitude is a closed pair — supply lngmax with it or neither.",
+            "type": "number",
+            "minimum": -180,
+            "maximum": 180
+          },
+          "lngmax": {
+            "description": "Eastern edge of the bounding box, decimal degrees (−180…180). Longitude is a closed pair — supply lngmin with it or neither.",
+            "type": "number",
+            "minimum": -180,
+            "maximum": 180
+          },
+          "latmin": {
+            "description": "Southern edge of the bounding box, decimal degrees (−90…90). Valid on its own — a lone latitude edge filters as a half-plane.",
+            "type": "number",
+            "minimum": -90,
+            "maximum": 90
+          },
+          "latmax": {
+            "description": "Northern edge of the bounding box, decimal degrees (−90…90). Valid on its own — a lone latitude edge filters as a half-plane.",
+            "type": "number",
+            "minimum": -90,
+            "maximum": 90
+          },
+          "environment": {
+            "description": "Depositional environment: \"marine\", \"terrestrial\", or \"freshwater\" (lacustrine + fluvial). Omit for all.",
+            "type": "string",
+            "enum": [
+              "marine",
+              "terrestrial",
+              "freshwater"
+            ]
+          },
+          "formation": {
+            "description": "Stored formation name or PBDB list/wildcard expression, passed unchanged; suffixes such as Formation are not removed.",
+            "type": "string"
+          },
+          "country": {
+            "description": "PBDB country/continent codes, comma-separated; ! excludes a list and ^ subtracts a code, e.g. NOA,^US.",
+            "type": "string",
+            "pattern": "^[!^]?(?:[A-Z]{2}|NOA|SOA|EUR|ASI|AFR|AUS|ATA|OCE|IOC)(?:,\\^?(?:[A-Z]{2}|NOA|SOA|EUR|ASI|AFR|AUS|ATA|OCE|IOC))*$"
+          },
+          "state": {
+            "description": "State or province name as recorded by PBDB, e.g. \"Texas\". Pair with country to disambiguate; coverage may be incomplete.",
+            "type": "string"
+          },
+          "county": {
+            "description": "County or other sub-state division name as recorded by PBDB, e.g. \"Brewster\". Pair with state and country to disambiguate; coverage may be incomplete.",
+            "type": "string"
+          },
+          "limit": {
+            "default": 25,
+            "description": "Number of occurrences requested for this page (default 25). The server serves at most 10000 per call, and this deployment may serve fewer. The notice discloses the cap when applied. Pair with offset to page through matches.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "offset": {
+            "default": 0,
+            "description": "Number of matching occurrences to skip before this page — page with limit by advancing offset. The response notice names the exact offset that reaches the next page.",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "canvas_id": {
+            "description": "Canvas id from a prior call to restage onto the same workspace. Used only when staging a first page: replaces the prior occurrence table atomically with a bounded matching set, without appending. Later offsets and complete pages leave the canvas untouched. Supply an explicit limit below the match count to stage sooner. Omit the id to start fresh.",
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{10}$"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "paleobiology_get_taxon",
+      "description": "Resolve a taxon by name (e.g. \"Tyrannosaurus\") or integer taxon_no. The matched name, rank, parent, occurrence count and first/last appearance range describe taxon_no; accepted_no, accepted_name and accepted_rank identify PBDB's accepted taxon separately, and status carries its taxonomic opinion verbatim. Pass reference_no, when present, to paleobiology_get_references for the publication PBDB used to enter the matched name. Pass accepted_no as base_id to paleobiology_search_occurrences, paleobiology_get_diversity or paleobiology_search_collections for accepted-clade searches. Set show_children to page immediate child taxa with their own ranks and statuses.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "name": {
+            "description": "Taxon name to resolve, e.g. \"Tyrannosaurus\" or \"Ammonoidea\". Provide this or taxon_no.",
+            "type": "string"
+          },
+          "taxon_no": {
+            "description": "PBDB taxon id from a prior get_taxon, or accepted_no on an occurrence row. Provide this or name, never both.",
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "show_children": {
+            "default": false,
+            "description": "When true, include a page of the immediate child taxa of this taxon (at most 200 per call — children_truncated says whether more remain).",
+            "type": "boolean"
+          },
+          "children_offset": {
+            "default": 0,
+            "description": "Number of immediate children to skip before the returned page — used only when show_children is true. Advance it by 200 while children_truncated is true to walk the whole child list.",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "paleobiology_get_diversity",
+      "description": "Compute a diversity / origination / extinction curve for a clade across geologic time, binned by period, epoch, or age — answers \"plot dinosaur genus diversity across the Mesozoic.\" Pass a clade-inclusive base_name (or base_id, the same clade by resolved taxon id — exactly one of the two) and bound the span by a named interval (e.g. \"Mesozoic\") or a max_ma/min_ma range; choose what to count (genera, species, or families) and the bin resolution. The full bin set returns inline — a diversity series is a bounded set of geologic intervals — so you read the curve, the turnover, and the per-bin origination/extinction directly. Counts reflect SAMPLED diversity, biased by collection effort and rock availability, not true past diversity.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "base_name": {
+            "description": "Clade-inclusive taxon to count, e.g. \"Dinosauria\" or \"Ammonoidea\" — this taxon and all descendants. Supply this or base_id (exactly one is required, never both).",
+            "type": "string"
+          },
+          "base_id": {
+            "description": "Clade-inclusive taxon to count, by PBDB taxon id — use accepted_no from paleobiology_get_taxon or an occurrence row for an accepted-clade search. Supply this or base_name (exactly one is required, never both).",
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "count": {
+            "description": "What to count per bin: \"genera\" (default), \"species\", or \"families\".",
+            "default": "genera",
+            "type": "string",
+            "enum": [
+              "genera",
+              "species",
+              "families"
+            ]
+          },
+          "resolution": {
+            "description": "Bin resolution: \"period\" (default, coarse), \"epoch\", or \"age\" (finest).",
+            "default": "period",
+            "type": "string",
+            "enum": [
+              "period",
+              "epoch",
+              "age"
+            ]
+          },
+          "timerule": {
+            "description": "How PBDB selects occurrences and assigns bins: \"major\" (default) requires more than half the occurrence age range, \"contain\" requires full containment, and \"overlap\" includes any overlap and can count one occurrence in multiple bins.",
+            "type": "string",
+            "enum": [
+              "contain",
+              "major",
+              "overlap"
+            ]
+          },
+          "recent": {
+            "default": false,
+            "description": "When true, extend taxa PBDB knows are extant to the present instead of ending their ranges at the latest selected fossil. Default false preserves fossil-only counts; selection-boundary effects still apply.",
+            "type": "boolean"
+          },
+          "country": {
+            "description": "PBDB country or continent codes, e.g. \"US\", \"NOA,^US\", or \"!EUR,^IS\".",
+            "type": "string",
+            "pattern": "^[!^]?(?:[A-Z]{2}|NOA|SOA|EUR|ASI|AFR|AUS|ATA|OCE|IOC)(?:,\\^?(?:[A-Z]{2}|NOA|SOA|EUR|ASI|AFR|AUS|ATA|OCE|IOC))*$"
+          },
+          "state": {
+            "description": "Recorded state or province name, e.g. \"Texas\". Pair with country to distinguish repeated names.",
+            "type": "string"
+          },
+          "county": {
+            "description": "Recorded county name, e.g. \"Brewster\". Pair with state and country to distinguish repeated names.",
+            "type": "string"
+          },
+          "formation": {
+            "description": "Stored formation name, e.g. \"Hell Creek\"; comma lists and SQL wildcards are passed unchanged. Do not append Formation unless it is part of the stored name.",
+            "type": "string"
+          },
+          "lithology": {
+            "description": "Recorded source rock type or lithology, e.g. \"mudstone\". PBDB accepts comma lists, a leading ! to exclude the list, or ^ to subtract subsequent values (e.g. \"carbonate,^bafflestone\").",
+            "type": "string"
+          },
+          "environment": {
+            "description": "Depositional environment: marine, terrestrial, or freshwater (lacustrine + fluvial).",
+            "type": "string",
+            "enum": [
+              "marine",
+              "terrestrial",
+              "freshwater"
+            ]
+          },
+          "lngmin": {
+            "description": "Western longitude edge in degrees; requires lngmax. A pair may cross the antimeridian.",
+            "type": "number",
+            "minimum": -180,
+            "maximum": 180
+          },
+          "lngmax": {
+            "description": "Eastern longitude edge in degrees; requires lngmin.",
+            "type": "number",
+            "minimum": -180,
+            "maximum": 180
+          },
+          "latmin": {
+            "description": "Southern latitude edge in degrees; valid alone as a half-plane.",
+            "type": "number",
+            "minimum": -90,
+            "maximum": 90
+          },
+          "latmax": {
+            "description": "Northern latitude edge in degrees; valid alone as a half-plane. PBDB normalizes inverted latitude bounds.",
+            "type": "number",
+            "minimum": -90,
+            "maximum": 90
+          },
+          "interval": {
+            "description": "Named geologic interval bounding the span, e.g. \"Mesozoic\". Takes precedence over max_ma and min_ma.",
+            "type": "string"
+          },
+          "max_ma": {
+            "description": "Older bound of the span in millions of years ago. Ignored when interval is supplied. When paired with min_ma it must be strictly greater — max_ma is the deeper-time end of the span.",
+            "type": "number",
+            "minimum": 0
+          },
+          "min_ma": {
+            "description": "Younger bound of the span in millions of years ago. Ignored when interval is supplied. When paired with max_ma it must be strictly smaller — min_ma is the nearer-to-present end of the span.",
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "paleobiology_list_intervals",
+      "description": "Look up the geologic time scale — eons, eras, periods, epochs, and ages with their absolute-age boundaries in millions of years (Ma) and nesting. This is the reference that grounds every temporal filter on the other tools and translates a named interval like \"Late Cretaceous\" to its 100.5–66.0 Ma boundaries (and back). Filter by a name substring, a Ma range (overlap match), and/or a level; call with no filters to browse the full scale. Browsing and every name on the bundled PBDB international-scale snapshot are answered offline. A name the snapshot does not carry — the sub-stage and regional names that occurrence and collection rows report, such as \"Late Maastrichtian\" or \"Lancian\" — costs one PBDB lookup across its other time scales; the response names which source answered and which scale the interval belongs to.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "name": {
+            "description": "Case-insensitive substring of the interval name, e.g. \"cretaceous\" or \"Jurassic\". A name the bundled international scale does not carry is matched exactly against PBDB's other time scales.",
+            "type": "string"
+          },
+          "min_ma": {
+            "description": "Younger bound of an age window (Ma); intervals must overlap by more than a boundary point, including when only one bound is supplied. Equal min_ma and max_ma select all intervals containing that point, including their boundaries.",
+            "type": "number",
+            "minimum": 0
+          },
+          "max_ma": {
+            "description": "Older bound of an age window (Ma); intervals must overlap by more than a boundary point, including when only one bound is supplied. Must be at least min_ma when both are supplied; equal bounds include all intervals containing that point, including their boundaries.",
+            "type": "number",
+            "minimum": 0
+          },
+          "level": {
+            "description": "Restrict to one rank of the international scale: eon, era, period, epoch, or age (finest). Browsing is bounded to that scale, so the sub-stage and regional ranks are not selectable here.",
+            "type": "string",
+            "enum": [
+              "eon",
+              "era",
+              "period",
+              "epoch",
+              "age"
+            ]
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "paleobiology_search_collections",
+      "description": "Find fossil collections (localities) by collection IDs, taxon, geologic time, place, formation, lithology, or environment. Each locality returns modern and reconstructed coordinates when recorded, age, strata, lithology, depositional environment, and a scoped occurrence-record count. Results page inline via limit/offset within the attempted batch. If remaining_collection_nos is present, finish the current pages, then pass those IDs as collection_no with the same filters and offset 0. Pass a single collection_no from a locality row to paleobiology_search_occurrences to see the recorded fauna.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "base_name": {
+            "description": "Clade-inclusive taxon filter — localities yielding this taxon or its descendants, e.g. \"Dinosauria\". Supply this or base_id, never both.",
+            "type": "string"
+          },
+          "base_id": {
+            "description": "Clade-inclusive taxon filter by PBDB taxon id — the accepted_no from paleobiology_get_taxon or an occurrence row. Same semantics as base_name, but unambiguous where a name is not (homonyms, synonyms, unresolved spellings). Supply this or base_name, never both.",
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "collection_no": {
+            "description": "Filter to 1–10,000 PBDB collection IDs, such as collection_no values from paleobiology_search_occurrences. The first 1,000 distinct IDs are attempted in input order, with other filters narrowing the results. Page that batch before submitting remaining_collection_nos.",
+            "minItems": 1,
+            "maxItems": 10000,
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          "interval": {
+            "description": "Named geologic interval bounding the age, e.g. \"Maastrichtian\". Takes precedence over max_ma and min_ma.",
+            "type": "string"
+          },
+          "max_ma": {
+            "description": "Older age bound in millions of years ago. Ignored when interval is supplied. When paired with min_ma it must be strictly greater — max_ma is the deeper-time end of the window.",
+            "type": "number",
+            "minimum": 0
+          },
+          "min_ma": {
+            "description": "Younger age bound in millions of years ago. Ignored when interval is supplied. When paired with max_ma it must be strictly smaller — min_ma is the nearer-to-present end of the window.",
+            "type": "number",
+            "minimum": 0
+          },
+          "lngmin": {
+            "description": "Western edge of the bounding box, decimal degrees (−180…180). Longitude is a closed pair — supply lngmax with it or neither.",
+            "type": "number",
+            "minimum": -180,
+            "maximum": 180
+          },
+          "lngmax": {
+            "description": "Eastern edge of the bounding box, decimal degrees (−180…180). Longitude is a closed pair — supply lngmin with it or neither.",
+            "type": "number",
+            "minimum": -180,
+            "maximum": 180
+          },
+          "latmin": {
+            "description": "Southern edge of the bounding box, decimal degrees (−90…90). Valid on its own — a lone latitude edge filters as a half-plane.",
+            "type": "number",
+            "minimum": -90,
+            "maximum": 90
+          },
+          "latmax": {
+            "description": "Northern edge of the bounding box, decimal degrees (−90…90). Valid on its own — a lone latitude edge filters as a half-plane.",
+            "type": "number",
+            "minimum": -90,
+            "maximum": 90
+          },
+          "formation": {
+            "description": "Stored geologic formation name or PBDB list/wildcard expression, e.g. \"Hell Creek\"; passed unchanged, without stripping Formation, Group, or Member.",
+            "type": "string"
+          },
+          "country": {
+            "description": "PBDB country/continent codes, comma-separated; ! excludes a list and ^ subtracts a code, e.g. NOA,^US.",
+            "type": "string",
+            "pattern": "^[!^]?(?:[A-Z]{2}|NOA|SOA|EUR|ASI|AFR|AUS|ATA|OCE|IOC)(?:,\\^?(?:[A-Z]{2}|NOA|SOA|EUR|ASI|AFR|AUS|ATA|OCE|IOC))*$"
+          },
+          "state": {
+            "description": "State or province name as recorded by PBDB, e.g. \"Texas\". Pair with country to disambiguate; coverage may be incomplete.",
+            "type": "string"
+          },
+          "county": {
+            "description": "County or other sub-state division name as recorded by PBDB, e.g. \"Brewster\". Pair with state and country to disambiguate; coverage may be incomplete.",
+            "type": "string"
+          },
+          "lithology": {
+            "description": "Lithology (rock type) to filter by, e.g. \"sandstone\".",
+            "type": "string"
+          },
+          "environment": {
+            "description": "Depositional environment: \"marine\", \"terrestrial\", or \"freshwater\" (lacustrine + fluvial). Omit for all.",
+            "type": "string",
+            "enum": [
+              "marine",
+              "terrestrial",
+              "freshwater"
+            ]
+          },
+          "limit": {
+            "default": 25,
+            "description": "Number of localities requested for this page (default 25). The server serves at most 10000 per call, and this deployment may serve fewer. The notice discloses the cap when applied. Pair with offset to page through matches.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "offset": {
+            "default": 0,
+            "description": "Number of localities to skip — page with limit by advancing offset.",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "paleobiology_get_references",
+      "description": "Resolve reference_no values from paleobiology_get_taxon, paleobiology_search_occurrences or paleobiology_search_collections to full citations with authors, year, title, publication, volume, pages, and DOI. The first 500 distinct ids are resolved and any beyond that come back in remaining_reference_nos for a follow-up call. Ids PBDB has no reference for are listed in not_found. Results keep the order the ids were given.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "reference_nos": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991,
+              "description": "A reference_no from a taxon, occurrence or collection record."
+            },
+            "description": "PBDB reference ids to resolve. Repeats are resolved once. The first 500 distinct ids are resolved per call; any remaining ids are returned for continuation."
+          }
+        },
+        "required": [
+          "reference_nos"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "paleobiology_dataframe_query",
+      "description": "Run read-only SQL against occurrence result sets staged on a DataCanvas by paleobiology_search_occurrences. Count occurrences by early_interval, group by formation, country (cc), or accepted_name, or filter by a paleo/modern coordinate range. The classification column is JSON — roll up by rank with json_extract_string(classification, '$.family') (also $.phylum, $.class, $.order, $.genus). Staged rows are occurrences, so collection-only fields such as lithology are not present. Reference the table_name returned by paleobiology_search_occurrences. Inspect its columns with SHOW or DESCRIBE, or use paleobiology_dataframe_describe to list all staged tables. Use range() or generate_series() with constant arguments to fill gaps in grouped results. Every row supplied by the canvas is returned; choose smaller pages with SQL LIMIT/OFFSET. A capped result includes the stable ORDER BY … LIMIT/OFFSET continuation. Writes and file-reading functions are rejected.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "canvas_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{10}$",
+            "description": "Canvas id returned by paleobiology_search_occurrences when its result spilled."
+          },
+          "sql": {
+            "type": "string",
+            "description": "A read-only SQL statement, such as SELECT, SHOW, or DESCRIBE. Reference tables by the names paleobiology_search_occurrences or paleobiology_dataframe_describe returned."
+          }
+        },
+        "required": [
+          "canvas_id",
+          "sql"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "paleobiology_dataframe_describe",
+      "description": "List the tables and their columns staged on a DataCanvas by paleobiology_search_occurrences. Call this before paleobiology_dataframe_query to discover the exact table_name and column names to reference in SQL.",
+      "inputSchema": {
+        "type": "object",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "canvas_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{10}$",
+            "description": "Canvas id returned by paleobiology_search_occurrences when its result spilled."
+          }
+        },
+        "required": [
+          "canvas_id"
+        ],
+        "additionalProperties": false
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "io.github.cyanheads/paleobiology-mcp-server",
+    "version": "0.6.1",
+    "remoteUrl": "https://paleobiology.caseyjhand.com/mcp",
+    "publishedAt": "2026-11-28T08:47:06.94359Z",
+    "fetchedAt": "2026-11-28T10:03:29.931Z",
+    "toolsSha256": "074c8dcf936a059db9b3ddc18125a6c1eebacd46ceae0a87f302553ce59eb098"
+  }
+}

@@ -1,0 +1,895 @@
+{
+  "$schema": "../schema.json",
+  "name": "cloud.agent-tools/agent-tools-mcp",
+  "title": "agent-tools (x402 + MCP + A2A directory)",
+  "category": "AI, LLMs & Agents",
+  "description": "Discover x402 services, MCP servers and A2A agents by intent — agent-tools.cloud directory.",
+  "repository": "https://github.com/AgentTools-Cloud/AgentToolsCollection",
+  "tools": [
+    {
+      "name": "ask_services",
+      "description": "Ask for the best x402/MCP services for an agent intent.\n\n    This is the high-level discovery tool: it retrieves candidates from the\n    directory, asks the configured backend LLM to rank only those candidates,\n    and returns service cards for the selected recommendations. If the LLM is\n    unavailable, it falls back to the directory ranker.\n\n    Args:\n        intent: Natural-language job the agent wants to accomplish.\n        top_k: Max recommendations to return (1-10).\n        max_price_usd: Optional per-call budget cap.\n        category: Optional directory category filter.\n        chain: Optional payment network filter, e.g. \"base\" or \"solana\".\n        require_healthy: When true, only consider services marked health=ok.\n        min_confidence: Optional x402scan quality floor (0.0-1.0).\n        has_mcp: When true, only consider services with MCP endpoints.\n        use_llm: Set false for deterministic retrieval-only fallback.\n    ",
+      "inputSchema": {
+        "properties": {
+          "intent": {
+            "title": "Intent",
+            "type": "string",
+            "description": "Natural-language job the agent wants to accomplish."
+          },
+          "top_k": {
+            "default": 5,
+            "title": "Top K",
+            "type": "integer",
+            "description": "Max recommendations to return (1-10)."
+          },
+          "max_price_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Max Price Usd",
+            "description": "Optional per-call budget cap."
+          },
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Category",
+            "description": "Optional directory category filter."
+          },
+          "chain": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Chain",
+            "description": "Optional payment network filter, e.g. \"base\" or \"solana\"."
+          },
+          "require_healthy": {
+            "default": true,
+            "title": "Require Healthy",
+            "type": "boolean",
+            "description": "When true, only consider services marked health=ok."
+          },
+          "min_confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Min Confidence",
+            "description": "Optional x402scan quality floor (0.0-1.0)."
+          },
+          "has_mcp": {
+            "default": false,
+            "title": "Has Mcp",
+            "type": "boolean",
+            "description": "When true, only consider services with MCP endpoints."
+          },
+          "use_llm": {
+            "default": true,
+            "title": "Use Llm",
+            "type": "boolean",
+            "description": "Set false for deterministic retrieval-only fallback."
+          }
+        },
+        "required": [
+          "intent"
+        ],
+        "title": "ask_servicesArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "search_resources",
+      "description": "Unified search across x402 services, MCP servers and A2A agents.\n\n    Args:\n        intent: Natural-language query.\n        protocol: Optional filter: \"x402\", \"mcp\" or \"a2a\".\n        top_k: Max resources to return (1-50).\n    ",
+      "inputSchema": {
+        "properties": {
+          "intent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Intent",
+            "description": "Natural-language query."
+          },
+          "protocol": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Protocol",
+            "description": "Optional filter: \"x402\", \"mcp\" or \"a2a\"."
+          },
+          "top_k": {
+            "default": 10,
+            "title": "Top K",
+            "type": "integer",
+            "description": "Max resources to return (1-50)."
+          }
+        },
+        "title": "search_resourcesArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "search",
+      "description": "Find x402 / MCP services matching an intent or filter set.\n\n    Two usage modes (agents pick whichever fits):\n      A. Natural-language: `search(intent=\"fetch tweets for @user\")`\n      B. Pure browse:      `search(has_mcp=True, category=\"defi\", top_k=10)`\n         At least one of `intent`, `category`, `chain`, `has_mcp`,\n         `min_confidence` must be supplied — otherwise the call is\n         rejected (we won't dump 2300+ rows).\n\n    Results are ranked by:\n        (health=ok AND tx_30d>0) → health=ok → has-quality-signal →\n        confidence → paying wallets → tx_30d → recency.\n    So the highest-quality real-traffic services appear first.\n\n    Each item includes (when available):\n      - confidence    : 0.0–1.0 x402scan quality score.\n      - tx_30d        : USDC payments to the service's payTo in 30 days that\n                        settled with an EIP-3009 authorization (how x402 pays\n                        on EVM chains); plain transfers are not counted, and\n                        Solana is not measured (null). match_reason also\n                        shows payers_30d, the number of distinct paying\n                        wallets, which is the stronger signal.\n      - match_snippet : FTS snippet showing where `intent` hit ([[token]]).\n      - match_reason  : list[str] of human-readable ranking signals.\n      - mcp_url       : populated when the service exposes an MCP endpoint\n                        (you can call it directly via streamable-http).\n    Agents should prefer items with non-null confidence and tx_30d > 0\n    unless the user explicitly wants experimental endpoints.\n\n    Args:\n        intent: What the agent wants to do (English or Chinese). Optional\n            when at least one structured filter is set. Synonym expansion\n            covers twitter↔X↔推特, whale↔巨鲸, price↔价格 etc.\n        top_k: Max services to return (default 5, hard cap 25).\n        max_price_usd: Upper bound on per-call price in USD.\n        category: Filter (see `list_categories`).\n        chain: \"base\", \"polygon\", \"solana\", \"arbitrum\", ...\n        min_confidence: Minimum confidence (0.0–1.0). 0.8+ keeps only\n            services x402scan rates as high-quality.\n        has_mcp: When true, return only services with a callable MCP\n            endpoint. Use this when the agent wants to chain another MCP\n            server rather than perform raw HTTP+x402.\n    ",
+      "inputSchema": {
+        "properties": {
+          "intent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Intent",
+            "description": "What the agent wants to do (English or Chinese). Optional when at least one structured filter is set. Synonym expansion covers twitter↔X↔推特, whale↔巨鲸, price↔价格 etc."
+          },
+          "top_k": {
+            "default": 5,
+            "title": "Top K",
+            "type": "integer",
+            "description": "Max services to return (default 5, hard cap 25)."
+          },
+          "max_price_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Max Price Usd",
+            "description": "Upper bound on per-call price in USD."
+          },
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Category",
+            "description": "Filter (see `list_categories`)."
+          },
+          "chain": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Chain",
+            "description": "\"base\", \"polygon\", \"solana\", \"arbitrum\", ..."
+          },
+          "min_confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Min Confidence",
+            "description": "Minimum confidence (0.0–1.0). 0.8+ keeps only services x402scan rates as high-quality."
+          },
+          "has_mcp": {
+            "default": false,
+            "title": "Has Mcp",
+            "type": "boolean",
+            "description": "When true, return only services with a callable MCP endpoint. Use this when the agent wants to chain another MCP server rather than perform raw HTTP+x402."
+          }
+        },
+        "title": "searchArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "search_mcp_servers",
+      "description": "Find MCP servers in the directory.\n\n    Searches the standalone MCP directory (official MCP Registry, Smithery,\n    Agenstry and other crawled sources) unioned with x402 services that also\n    expose an MCP endpoint.\n    Returns normalised entries with a ready-to-use streamable-http\n    `call_hint.mcp.url`.\n\n    Args:\n        intent: Natural-language description of the tool/capability needed.\n        top_k: Max servers to return (1-20).\n        chain: Optional payment-network filter for paid MCP servers.\n        require_healthy: When true, only return servers marked health=ok.\n        scope: \"remote\" (default) = servers with an endpoint you can call now;\n            \"code\" = code-only servers (repository / package you install and\n            run yourself, no remote endpoint); \"all\" = both.\n    ",
+      "inputSchema": {
+        "properties": {
+          "intent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Intent",
+            "description": "Natural-language description of the tool/capability needed."
+          },
+          "top_k": {
+            "default": 5,
+            "title": "Top K",
+            "type": "integer",
+            "description": "Max servers to return (1-20)."
+          },
+          "chain": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Chain",
+            "description": "Optional payment-network filter for paid MCP servers."
+          },
+          "require_healthy": {
+            "default": false,
+            "title": "Require Healthy",
+            "type": "boolean",
+            "description": "When true, only return servers marked health=ok."
+          },
+          "scope": {
+            "default": "remote",
+            "title": "Scope",
+            "type": "string",
+            "description": "\"remote\" (default) = servers with an endpoint you can call now; \"code\" = code-only servers (repository / package you install and run yourself, no remote endpoint); \"all\" = both."
+          }
+        },
+        "title": "search_mcp_serversArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "search_a2a_agents",
+      "description": "Find A2A agents you can delegate a task to.\n\n    Args:\n        intent: Natural-language description of the task to delegate.\n        top_k: Max agents to return (1-20).\n        x402_only: When true, only return agents that advertise x402 payment.\n    ",
+      "inputSchema": {
+        "properties": {
+          "intent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Intent",
+            "description": "Natural-language description of the task to delegate."
+          },
+          "top_k": {
+            "default": 5,
+            "title": "Top K",
+            "type": "integer",
+            "description": "Max agents to return (1-20)."
+          },
+          "x402_only": {
+            "default": false,
+            "title": "X402 Only",
+            "type": "boolean",
+            "description": "When true, only return agents that advertise x402 payment."
+          }
+        },
+        "title": "search_a2a_agentsArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "get",
+      "description": "Get full details + ready-to-paste call template for a service.\n\n    Returns the service card with payment, call, quality, resource samples,\n    and ready-to-use MCP/x402 call hints. Use this after `search` or\n    `ask_services` before paying/calling an external service.\n\n    Args:\n        slug: Service slug as returned by `search` items.\n    ",
+      "inputSchema": {
+        "properties": {
+          "slug": {
+            "title": "Slug",
+            "type": "string",
+            "description": "Service slug as returned by `search` items."
+          }
+        },
+        "required": [
+          "slug"
+        ],
+        "title": "getArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "get_mcp_server",
+      "description": "Get the full card for one MCP server by slug.\n\n    Args:\n        slug: MCP server slug as returned by `search_mcp_servers` items.\n    ",
+      "inputSchema": {
+        "properties": {
+          "slug": {
+            "title": "Slug",
+            "type": "string",
+            "description": "MCP server slug as returned by `search_mcp_servers` items."
+          }
+        },
+        "required": [
+          "slug"
+        ],
+        "title": "get_mcp_serverArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "scan_mcp_safety",
+      "description": "Check an MCP server for malware / prompt-injection lures by its endpoint URL.\n\n    Give the server's streamable-http endpoint URL. Two paths:\n\n      * **Already in the agent-tools directory** → returns our LATEST stored\n        rule verdict. Every indexed server is re-scanned hourly, so you get a\n        consistent, continuously-refreshed answer without re-probing.\n      * **Not yet indexed** → we probe the endpoint live, statically scan its\n        advertised tools + metadata, and return the fresh verdict. It is ADDED\n        to the directory (so the next caller gets the stored verdict instantly)\n        only if it answered or you supplied metadata; documentation hosts such\n        as example.com / *.test / *.invalid are scanned but never listed.\n\n    Two dimensions are reported. `verdict` is authoritative and comes from\n    deterministic static rules — pure pattern-matching over the *advertised*\n    text only, NO code execution. It flags the social-engineering / RCE tricks\n    listing-spam servers use:\n\n      * `curl … | bash` and `base64 -d | sh` install lures\n      * `eval \"$(curl …)\"` / PowerShell `IEX(...DownloadString)` cradles\n      * base64 blobs that decode to a shell command\n      * bare-IP payload hosts and cheap throwaway TLDs\n      * prompt-injection / credential-exfiltration phrasing\n        (\"ignore previous instructions\", \"send your .env / api key\")\n      * MCP tool-poisoning coercion — descriptions that hijack an agent's\n        tool-calling (\"always call this tool first\", \"before using any other\n        tool you must…\"), hidden `<IMPORTANT>` instructions, \"list all API\n        keys / include secrets in your response\", and coercion to read &\n        forward `.key`/`.pem`/`.ssh`/`.env` files\n\n    Source-code-oriented rules (SQL / command / code injection) are deliberately\n    not applied to natural-language descriptions, to avoid false positives.\n\n    `llm_reference` is an advisory frontier-LLM second opinion over the same text.\n    Because the LLM is slow it is computed LIVE on this call only and is never\n    stored (the hourly job never runs it), so it may be null on timeout. It\n    never overrides the rule verdict; when it is *more* severe than the rules an\n    `advisory` note is attached as a safety-net signal. Security/defense\n    products that merely *name* these attacks are not flagged.\n\n    Args:\n        endpoint_url: The MCP server's streamable-http URL (required). This is\n            the identity we look up / index by.\n        name: Optional advertised name (used when the server is new and gets\n            added; falls back to the URL host).\n        description: Optional description / README blurb (scanned when new).\n        tools_text: Optional tool names + descriptions; used only if the live\n            probe cannot fetch the server's tools/list.\n\n    Returns:\n        { verdict: \"clean\"|\"suspicious\"|\"malicious\", score: 0-100,\n          reasons: [{rule, weight, snippet}],\n          llm_reference: {model, verdict, reason, confidence} | null,\n          advisory: str | null, slug, name, endpoint_url,\n          source: \"stored\" (existing) | \"new_scan\" (just added), indexed: bool }\n    ",
+      "inputSchema": {
+        "properties": {
+          "endpoint_url": {
+            "title": "Endpoint Url",
+            "type": "string",
+            "description": "The MCP server's streamable-http URL (required). This is the identity we look up / index by."
+          },
+          "name": {
+            "default": "",
+            "title": "Name",
+            "type": "string",
+            "description": "Optional advertised name (used when the server is new and gets added; falls back to the URL host)."
+          },
+          "description": {
+            "default": "",
+            "title": "Description",
+            "type": "string",
+            "description": "Optional description / README blurb (scanned when new)."
+          },
+          "tools_text": {
+            "default": "",
+            "title": "Tools Text",
+            "type": "string",
+            "description": "Optional tool names + descriptions; used only if the live probe cannot fetch the server's tools/list."
+          }
+        },
+        "required": [
+          "endpoint_url"
+        ],
+        "title": "scan_mcp_safetyArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "directory_stats",
+      "description": "Daily statistics on the agent-tool ecosystem as seen by our probes.\n\n    Args:\n        view: \"all\", \"mcp\", \"x402\" or \"a2a\" to scope the figures to one protocol.\n        topic: Optional topic word (e.g. \"payment\", \"weather\") to get that topic\n            instead: supply per protocol, readiness, best listings, searches.\n        month: Optional \"YYYY-MM\" to get that monthly report instead.\n        api_key: Optional account key (free from create_api_key) for complete\n            lists when you cannot send the Authorization header.\n\n    Returns counts (indexed, reachable, protocol-verified, readiness A/B), one\n    finding sentence per topic, key facts (x402 prices and networks, MCP and A2A\n    protocol versions, MCP auth, A2A card signatures, how every listing's\n    latest probe ended), the most searched terms (view \"all\"), the snapshot\n    time, and links to the full JSON snapshot, the daily CSV, the methodology,\n    the \"how many work\" page, per-protocol and per-topic pages and the monthly\n    reports. With an account API key (Authorization: Bearer header or\n    `api_key`; free from `create_api_key`) the topic and search lists are\n    complete (10 listings per protocol, up to 100 terms); without one they\n    are shortened.\n    ",
+      "inputSchema": {
+        "properties": {
+          "view": {
+            "default": "all",
+            "title": "View",
+            "type": "string",
+            "description": "\"all\", \"mcp\", \"x402\" or \"a2a\" to scope the figures to one protocol."
+          },
+          "topic": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Topic",
+            "description": "Optional topic word (e.g. \"payment\", \"weather\") to get that topic instead: supply per protocol, readiness, best listings, searches."
+          },
+          "month": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Month",
+            "description": "Optional \"YYYY-MM\" to get that monthly report instead."
+          },
+          "api_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Api Key",
+            "description": "Optional account key (free from create_api_key) for complete lists when you cannot send the Authorization header."
+          }
+        },
+        "title": "directory_statsArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "stats",
+      "description": "High-level stats about the directory: x402 total, healthy count and chains,\n    plus `snapshot`, the daily digest across x402, MCP and A2A (see directory_stats).",
+      "inputSchema": {
+        "properties": {},
+        "title": "statsArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "list_categories",
+      "description": "List all available service categories in the directory.",
+      "inputSchema": {
+        "properties": {},
+        "title": "list_categoriesArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "get_methodology",
+      "description": "How every score and statistic on agent-tools.cloud is computed.\n\n    Returns the quality-score components and grade bands per protocol, the nine\n    readiness criteria with weights, payment-evidence grades, the probing\n    schedule and the definitions behind the daily statistics.\n    ",
+      "inputSchema": {
+        "properties": {},
+        "title": "get_methodologyArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "list_articles",
+      "description": "List published Blog articles, newest first (metadata only).\n\n    Args:\n        query: Optional words to match in title, summary or body.\n        tag: Optional tag to filter by.\n        page: Page number, 20 articles per page.\n\n    Use get_article(slug) for the full Markdown body.\n    ",
+      "inputSchema": {
+        "properties": {
+          "query": {
+            "default": "",
+            "title": "Query",
+            "type": "string",
+            "description": "Optional words to match in title, summary or body."
+          },
+          "tag": {
+            "default": "",
+            "title": "Tag",
+            "type": "string",
+            "description": "Optional tag to filter by."
+          },
+          "page": {
+            "default": 1,
+            "title": "Page",
+            "type": "integer",
+            "description": "Page number, 20 articles per page."
+          }
+        },
+        "title": "list_articlesArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "get_article",
+      "description": "Read one published Blog article: metadata plus the full Markdown body.\n\n    Args:\n        slug: The article slug, as returned by list_articles.\n    ",
+      "inputSchema": {
+        "properties": {
+          "slug": {
+            "title": "Slug",
+            "type": "string",
+            "description": "The article slug, as returned by list_articles."
+          }
+        },
+        "required": [
+          "slug"
+        ],
+        "title": "get_articleArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "register",
+      "description": "Self-register an x402 / MCP service in the agent-tools directory.\n\n    Service owners and agents may submit new services here. Submissions\n    are auto-reviewed instantly by x402 verification (no human gate): if\n    the URL proves x402 payment support it is listed immediately and shows\n    up in `search`; otherwise it is rejected or retried automatically.\n    Listing is FREE.\n\n    Dedup: if a service with the same canonical origin (scheme://host)\n    already exists in the directory we return its slug instead of\n    creating a duplicate submission. Same goes for a still-pending\n    submission with the same origin.\n\n    Rate limit: at most 5 pending submissions per client IP per 24h.\n    Hits beyond that get `{error: rate_limited}` — try again later or\n    email contact@agent-tools.cloud for bulk imports.\n\n    Args:\n        url: Public HTTPS URL of the service (the x402-payable endpoint\n            or its homepage). Required.\n        name: Human-friendly name. Defaults to the URL hostname.\n        description: One-paragraph description (max ~2000 chars).\n        mcp_url: If the service speaks MCP, its streamable-http endpoint.\n        category: Free-form (e.g. \"defi\", \"search\", \"social\"). Use\n            `list_categories` to align with existing taxonomy.\n        chains: Networks the service accepts payment on\n            (e.g. [\"base\", \"solana\"]).\n        price_min_usdc: Lower bound of per-call price in USDC.\n        price_max_usdc: Upper bound of per-call price in USDC.\n        contact: Optional email / handle the directory team can reach\n            you on for clarifications.\n    ",
+      "inputSchema": {
+        "properties": {
+          "url": {
+            "title": "Url",
+            "type": "string",
+            "description": "Public HTTPS URL of the service (the x402-payable endpoint or its homepage). Required."
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Name",
+            "description": "Human-friendly name. Defaults to the URL hostname."
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Description",
+            "description": "One-paragraph description (max ~2000 chars)."
+          },
+          "mcp_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Mcp Url",
+            "description": "If the service speaks MCP, its streamable-http endpoint."
+          },
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Category",
+            "description": "Free-form (e.g. \"defi\", \"search\", \"social\"). Use `list_categories` to align with existing taxonomy."
+          },
+          "chains": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Chains",
+            "description": "Networks the service accepts payment on (e.g. [\"base\", \"solana\"])."
+          },
+          "price_min_usdc": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Price Min Usdc",
+            "description": "Lower bound of per-call price in USDC."
+          },
+          "price_max_usdc": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Price Max Usdc",
+            "description": "Upper bound of per-call price in USDC."
+          },
+          "contact": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Contact",
+            "description": "Optional email / handle the directory team can reach you on for clarifications."
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "title": "registerArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "claim_service_url",
+      "description": "Issue a fresh ownership token for one exact public HTTPS URL.\n\n    Authenticate in the MCP Authorization: Bearer header. Publishing and\n    verifying the token is required before editing; URL input alone grants no rights.\n\n    Args:\n        url: Complete public HTTPS service URL, including its query when present.\n        method: Optional proof method; otherwise inferred from the complete URL.\n    ",
+      "inputSchema": {
+        "properties": {
+          "url": {
+            "title": "Url",
+            "type": "string",
+            "description": "Complete public HTTPS service URL, including its query when present."
+          },
+          "method": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Method",
+            "description": "Optional proof method; otherwise inferred from the complete URL."
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "title": "claim_service_urlArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "verify_service_url",
+      "description": "Verify public ownership proof for your own exact service URL claim.\n\n    This reads public proof only. It never calls business tools, requests\n    private service credentials, or grants whole-platform permissions.\n\n    Args:\n        claim_id: Claim id returned by claim_service_url.\n        token: The issued token after publishing it in the instructed location.\n    ",
+      "inputSchema": {
+        "properties": {
+          "claim_id": {
+            "title": "Claim Id",
+            "type": "integer",
+            "description": "Claim id returned by claim_service_url."
+          },
+          "token": {
+            "title": "Token",
+            "type": "string",
+            "description": "The issued token after publishing it in the instructed location."
+          }
+        },
+        "required": [
+          "claim_id",
+          "token"
+        ],
+        "title": "verify_service_urlArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "get_owned_listing",
+      "description": "Read editable metadata for a listing covered by your verified claim.\n\n    Args:\n        kind: Listing type: x402, mcp, or a2a.\n        slug: Slug from the verified claim's listings or directory search.\n    ",
+      "inputSchema": {
+        "properties": {
+          "kind": {
+            "title": "Kind",
+            "type": "string",
+            "description": "Listing type: x402, mcp, or a2a."
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string",
+            "description": "Slug from the verified claim's listings or directory search."
+          }
+        },
+        "required": [
+          "kind",
+          "slug"
+        ],
+        "title": "get_owned_listingArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "edit_owned_listing",
+      "description": "Edit only metadata covered by your verified claim, with the public audit trail.\n\n    An endpoint change requires verified control of the exact destination or\n    its whole host and clears measurements tied to the old primary endpoint.\n\n    Args:\n        kind: Listing type: x402, mcp, or a2a.\n        slug: Slug of the listing you are authorized to edit.\n        fields: Editable fields to change; measured fields are rejected.\n    ",
+      "inputSchema": {
+        "properties": {
+          "kind": {
+            "title": "Kind",
+            "type": "string",
+            "description": "Listing type: x402, mcp, or a2a."
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string",
+            "description": "Slug of the listing you are authorized to edit."
+          },
+          "fields": {
+            "additionalProperties": true,
+            "title": "Fields",
+            "type": "object",
+            "description": "Editable fields to change; measured fields are rejected."
+          }
+        },
+        "required": [
+          "kind",
+          "slug",
+          "fields"
+        ],
+        "title": "edit_owned_listingArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "create_api_key",
+      "description": "Create a free account API key. No sign-up, email or existing key needed.\n\n    The key is returned once and cannot be recovered. Store it in your secret\n    store; do not print it back to the user or write it to logs. Send it as\n    `Authorization: Bearer <key>` (or the `api_key` argument where offered) to\n    get complete `directory_stats` lists, run paid verifications and claim\n    your own listings. The claim and listing tools read the key only from the\n    Authorization header; without header support use the REST claim API. Shares the HTTP limit of POST /api/v1/keys (a few keys\n    per IP per day).\n\n    Args:\n        name: Optional label to recognise the key later, e.g. your agent name.\n    ",
+      "inputSchema": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Name",
+            "description": "Optional label to recognise the key later, e.g. your agent name."
+          }
+        },
+        "title": "create_api_keyArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "prepare_paid_verification",
+      "description": "Quote a sponsored paid verification of an x402 service.\n\n    You pay the service once from your own wallet (Base USDC, <= $1; funds go\n    to its payTo). Sign the returned `typed_data` (EIP-712), then call\n    `execute_paid_verification` before `valid_before`. We never sign or hold funds.\n\n    Auth: API key from POST https://agent-tools.cloud/api/v1/keys, as the\n    `Authorization: Bearer` header or `api_key`.\n\n    Args:\n        slug: Service slug from `search` / `get`.\n        payer: 0x address of the wallet that will sign and pay.\n        api_key: Optional if the Authorization header is sent.\n\n    Returns:\n        { id, amount_usd, pay_to, valid_before, typed_data, ... } or { error, message }.\n    ",
+      "inputSchema": {
+        "properties": {
+          "slug": {
+            "title": "Slug",
+            "type": "string",
+            "description": "Service slug from `search` / `get`."
+          },
+          "payer": {
+            "title": "Payer",
+            "type": "string",
+            "description": "0x address of the wallet that will sign and pay."
+          },
+          "api_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Api Key",
+            "description": "Optional if the Authorization header is sent."
+          }
+        },
+        "required": [
+          "slug",
+          "payer"
+        ],
+        "title": "prepare_paid_verificationArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "execute_paid_verification",
+      "description": "Send the signed payment to the service once and score the result.\n\n    Aborts without paying if price or recipient changed. Never retried; a\n    timeout returns `indeterminate`. status: succeeded | delivery_failed |\n    payment_rejected | indeterminate.\n\n    Args:\n        id: `id` returned by `prepare_paid_verification`.\n        signature: 0x EIP-712 signature of its `typed_data` by the payer.\n        api_key: Optional if the Authorization header is sent.\n    ",
+      "inputSchema": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string",
+            "description": "`id` returned by `prepare_paid_verification`."
+          },
+          "signature": {
+            "title": "Signature",
+            "type": "string",
+            "description": "0x EIP-712 signature of its `typed_data` by the payer."
+          },
+          "api_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Api Key",
+            "description": "Optional if the Authorization header is sent."
+          }
+        },
+        "required": [
+          "id",
+          "signature"
+        ],
+        "title": "execute_paid_verificationArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "get_paid_verification",
+      "description": "Read one of your own paid verifications.\n\n    Args:\n        id: Verification id.\n        api_key: Optional if the Authorization header is sent.\n    ",
+      "inputSchema": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string",
+            "description": "Verification id."
+          },
+          "api_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Api Key",
+            "description": "Optional if the Authorization header is sent."
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "title": "get_paid_verificationArguments",
+        "type": "object"
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "cloud.agent-tools/agent-tools-mcp",
+    "version": "0.5.3",
+    "remoteUrl": "https://agent-tools.cloud/mcp-discovery/",
+    "publishedAt": "2026-11-27T12:46:21.740442Z",
+    "fetchedAt": "2026-11-28T10:03:29.931Z",
+    "toolsSha256": "9741c8e582532c50d9682249fe9c808fd320381ad243e17371796f3fd6fb9c74"
+  }
+}

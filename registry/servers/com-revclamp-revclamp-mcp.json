@@ -1,0 +1,645 @@
+{
+  "$schema": "../schema.json",
+  "name": "com.revclamp/revclamp-mcp",
+  "title": "RevClamp MCP Server",
+  "category": "Other",
+  "description": "Zero-take-rate Stripe 2025-03-31.basil, Visa CE 3.0 & EU/XI VIES VAT guardrails MCP server.",
+  "repository": "https://github.com/lhphong09t2/revclamp-mcp",
+  "tools": [
+    {
+      "name": "revclamp_audit_revenue_leakage",
+      "description": "Run a deterministic 90-day B2B revenue leakage and chargeback readiness audit across Stripe subscriptions, AI/API usage telemetry events, and open disputes. Executes as a 100% read-only, stateless diagnostic with zero external Stripe mutations. Returns structuredContent containing ok, mode, statelessEphemeralAudit, tenantId, dunningGracePeriodDays, costPerEventCents, and audit (scannedCustomers, scannedEvents, ghostLeakEventsCount, affectedCustomersCount, estimatedBleedUsd, disputesEligibleForAutoEvidence). Use this tool for portfolio-wide multi-customer audits; use revclamp_evaluate_ghost_usage for single-customer entitlement checks or revclamp_stage_stripe_dispute_ce3 to build a single dispute's Visa CE 3.0 evidence bundle.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "dunningGracePeriodDays": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 14,
+            "description": "Custom dunning grace window in integer days (valid range: 0 to 14, default: 3) allowed after latest_invoice_failed_at before flagging past_due subscriptions as unpaid ghost usage."
+          },
+          "costPerEventCents": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100000,
+            "description": "Estimated marginal compute or API cost per leaked usage event in integer USD cents (valid range: 1 to 100000, default: 142 i.e. $1.42/event)."
+          },
+          "customers": {
+            "type": "array",
+            "description": "Optional array of up to 50 Stripe customer snapshots (each with id like 'cus_123', optional email, subscriptions array or list object, and subscriptionsHasMore: false). Omit to run against workspace telemetry or deterministic sandbox fixtures."
+          },
+          "usageEvents": {
+            "type": "array",
+            "description": "Optional array of up to 200 product/AI API usage telemetry events (each with stripe_customer_id or email, event_name, and occurredAtSec Unix timestamp in seconds)."
+          },
+          "disputes": {
+            "type": "array",
+            "description": "Optional array of up to 50 Stripe dispute objects (each with id like 'du_123', customer, amount in cents, reason such as 'fraudulent', and status such as 'needs_response')."
+          },
+          "demo": {
+            "type": "boolean",
+            "description": "Optional simulation flag (boolean) for deterministic sample audit preview."
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "revclamp_evaluate_ghost_usage",
+      "description": "Evaluate whether a specific customer's AI or API usage event constitutes unpaid ghost usage across multi-subscription Stripe 2025-03-31.basil state, enforcing fail-closed pagination (has_more must be explicitly false) and configurable 0-14 day dunning grace windows. Executes as a stateless, read-only entitlement evaluator with zero side effects. Returns structuredContent containing ok, mode, statelessEphemeralAudit, tenantId, and evaluation (isGhostLeak, isGhostUsage, reason). Use this tool for real-time per-customer entitlement gating; use revclamp_audit_revenue_leakage for batch multi-customer portfolio audits.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "customerId": {
+            "type": "string",
+            "description": "Stripe customer identifier to evaluate (format example: 'cus_9s6XKzkNRiz8i3', max 64 chars)."
+          },
+          "subscriptions": {
+            "description": "Optional Stripe customer subscriptions payload: either a Stripe list object ({ data: [...], has_more: false }) or a raw array of up to 50 subscription objects containing id, status ('active', 'trialing', 'past_due', 'canceled', 'unpaid'), current_period_end, or items.data[].current_period_end in Unix seconds."
+          },
+          "subscriptionStatus": {
+            "type": "string",
+            "description": "Optional flat Stripe subscription status shorthand ('active', 'trialing', 'past_due', 'canceled', 'unpaid', 'incomplete', 'incomplete_expired', 'paused') when subscriptions is omitted."
+          },
+          "subscription_status": {
+            "type": "string",
+            "description": "Optional snake_case alias for subscriptionStatus."
+          },
+          "currentPeriodEndSec": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Optional flat subscription current_period_end in Unix epoch integer seconds."
+          },
+          "current_period_end": {
+            "description": "Optional flat subscription current_period_end (Unix epoch seconds, epoch milliseconds, or ISO-8601 string)."
+          },
+          "currentPeriodEnd": {
+            "description": "Optional camelCase alias for current_period_end (Unix epoch seconds, epoch milliseconds, or ISO-8601 string)."
+          },
+          "latestInvoiceFailedAtSec": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Optional flat latest_invoice_failed_at timestamp in Unix epoch integer seconds for past_due grace evaluation."
+          },
+          "latest_invoice_failed_at": {
+            "description": "Optional flat latest_invoice_failed_at timestamp (Unix epoch seconds, epoch milliseconds, or ISO-8601 string)."
+          },
+          "usageEvent": {
+            "type": "object",
+            "description": "Optional metered usage event object containing customer_id (or stripe_customer_id), event_name, and occurred_at (or occurred_at_sec)."
+          },
+          "subscriptionsHasMore": {
+            "type": "boolean",
+            "description": "Pagination completeness flag (boolean). Must be explicitly set to false when passing a raw subscriptions array so RevClamp can verify no active subscription was truncated on a later page."
+          },
+          "dunningGracePeriodDays": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 14,
+            "description": "Dunning grace window in integer days (valid range: 0 to 14, default: 3) after latest_invoice_failed_at during which past_due subscriptions remain entitled."
+          },
+          "usageTimestampSec": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "description": "Optional event timestamp as Unix epoch seconds, Unix epoch milliseconds, numeric string, or ISO-8601 string when the AI/API usage event occurred (defaults to current server Unix timestamp if omitted)."
+          },
+          "occurredAtSec": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "description": "Optional alias for usageTimestampSec: event timestamp as Unix epoch seconds, Unix epoch milliseconds, numeric string, or ISO-8601 string when the usage event occurred (used when usageTimestampSec is omitted)."
+          },
+          "occurredAt": {
+            "description": "Optional usage event timestamp as ISO-8601 string, Unix epoch seconds, or Unix epoch milliseconds."
+          },
+          "occurred_at": {
+            "description": "Optional snake_case alias for occurredAt (ISO-8601 string, Unix epoch seconds, or Unix epoch milliseconds)."
+          },
+          "timestamp": {
+            "description": "Optional alias for occurredAt (ISO-8601 string, Unix epoch seconds, or Unix epoch milliseconds)."
+          },
+          "demo": {
+            "type": "boolean",
+            "description": "Optional simulation flag (boolean) for deterministic ghost-usage preview."
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "revclamp_stage_stripe_dispute_ce3",
+      "description": "Evaluate Visa Compelling Evidence 3.0 (CE 3.0) qualification across 120-to-365-day historical charges (requiring at least 2 settled, non-refunded, non-disputed prior transactions sharing IP address, device fingerprint, or billing email) and assemble a non-destructive Stripe dispute evidence draft with submit hardcoded to false. Executes as a pure read-only staging computation that never auto-submits to card networks. Returns structuredContent containing ok, mode, statelessEphemeralAudit, tenantId, submitForcedFalse, ce3Qualification, and drawer (including stripeUpdateParams with submit: false and merged access_activity_log). Use this tool for single-dispute CE 3.0 qualification and evidence staging; use revclamp_audit_revenue_leakage for portfolio-wide dispute readiness counts.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "disputeId": {
+            "type": "string",
+            "description": "Stripe dispute identifier being staged (format example: 'du_1QxyzEnterpriseDispute01', default: 'du_mcp_staged_01', max 64 chars)."
+          },
+          "customerId": {
+            "type": "string",
+            "description": "Stripe customer identifier associated with the disputed charge (format example: 'cus_enterprise_88', default: 'cus_mcp_enterprise_01', max 64 chars)."
+          },
+          "disputeReason": {
+            "type": "string",
+            "description": "Stripe dispute reason code (e.g. 'fraudulent', 'unrecognized', 'subscription_canceled', 'product_unacceptable', 'general'; default: 'fraudulent'; Visa CE 3.0 applies to 'fraudulent' disputes)."
+          },
+          "existingUncategorizedText": {
+            "type": "string",
+            "description": "Optional existing merchant evidence notes in Stripe evidence.uncategorized_text or access_activity_log (up to 18,000 chars) to preserve via append-only merge without overwriting."
+          },
+          "existingAccessActivityLog": {
+            "type": "string",
+            "description": "Optional alias for existingUncategorizedText: existing merchant evidence notes in Stripe evidence.access_activity_log (up to 18,000 chars) to preserve via append-only merge."
+          },
+          "disputedTransaction": {
+            "type": "object",
+            "description": "Optional disputed charge snapshot object containing id (e.g. 'ch_disputed_01'), occurredAtSec (Unix seconds), customer_id, email, ip_address, and device_id."
+          },
+          "priorTransactions": {
+            "type": "array",
+            "description": "Optional array of up to 1000 historical Stripe charge objects (each with id, status: 'succeeded', disputed: false, refunded: false, occurredAtSec 120-365 days prior to disputedTransaction, email, ip_address, and device_id)."
+          },
+          "usageEvents": {
+            "type": "array",
+            "description": "Optional array of up to 200 customer product/API usage telemetry events (each with occurredAtSec Unix seconds, stripe_customer_id, and event_name) for append-only access_activity_log staging."
+          },
+          "demo": {
+            "type": "boolean",
+            "description": "Optional simulation flag (boolean) to stage a labeled sample dispute preview."
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "revclamp_validate_eu_vat_vies",
+      "description": "Normalize EU-27 and Northern Ireland (XI) B2B VAT identifiers (including mandatory Greece ISO-3166 GR to EL prefix normalization) and evaluate cross-border 0% VAT reverse-charge eligibility, VIES consultation evidence, or MS_UNAVAILABLE circuit-breaker fulfillment hold actions. Read-only and non-destructive; supports deterministic simulation modes ('VALID', 'INVALID', 'MS_UNAVAILABLE') or real-time European Commission VIES SOAP/REST lookup ('LIVE'). Returns structuredContent containing ok, mode, statelessEphemeralAudit, simulatedViesLookup, tenantId, normalizedVat, reverseChargeEligible, and viesDecision (status, action, zeroRateAllowed, consultationId). Use this tool for EU/XI VAT tax compliance; use revclamp_reconcile_b2b_net_terms for wholesale Net-15/30/60 deposit and credit-note accounting.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sellerCountry": {
+            "type": "string",
+            "default": "DE",
+            "description": "Two-letter EU-27 or XI member state prefix of the merchant's dispatch warehouse (e.g. 'DE', 'NL', 'FR', 'EL', 'XI'; 'GR' is automatically normalized to 'EL'; default: 'DE'; runtime alias: sellerCountryCode)."
+          },
+          "buyerVatId": {
+            "type": "string",
+            "description": "Buyer EU or Northern Ireland VAT registration number to normalize and validate (e.g. 'DE123456789', 'GR123456789', 'NL123456789B01', 'XI123456789', max 40 chars; runtime aliases: vatId, or buyerCountry/buyerCountryCode + vatNumber)."
+          },
+          "supplyType": {
+            "type": "string",
+            "enum": [
+              "GOODS",
+              "SERVICES"
+            ],
+            "default": "GOODS",
+            "description": "Cross-border transaction supply category: 'GOODS' (Directive 2006/112/EC Art. 138(1) intra-Community supply, default; permitted for Northern Ireland XI under Windsor Framework) or 'SERVICES' (Directive 2006/112/EC Art. 196 B2B reverse charge; excluded from EU VIES for Northern Ireland XI)."
+          },
+          "viesMode": {
+            "type": "string",
+            "enum": [
+              "FORMAT_ONLY",
+              "VALID",
+              "INVALID",
+              "MS_UNAVAILABLE",
+              "GLOBAL_MAX_CONCURRENT_REQ",
+              "LIVE"
+            ],
+            "default": "FORMAT_ONLY",
+            "description": "'FORMAT_ONLY' (default; pass 'LIVE' with workspace key for real-time EC VIES lookup)"
+          },
+          "consultationNumber": {
+            "type": "string",
+            "description": "Optional VIES requester consultation reference number (e.g. 'WAPIAAAAW998877', max 64 chars) to attach to deterministic 'VALID' mode tax audit records."
+          },
+          "demo": {
+            "type": "boolean",
+            "default": false,
+            "description": "Optional simulation flag (boolean) for deterministic VIES gateway preset evaluation."
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "revclamp_reconcile_b2b_net_terms",
+      "description": "Reconcile B2B wholesale Net-15, Net-30, and Net-60 invoice deposits, partial payments, and credit notes using exact integer minor-unit (EUR/USD cent) arithmetic with zero IEEE-754 floating-point drift. Executes as a pure, stateless, read-only financial reconciliation function. Returns structuredContent containing ok, mode, statelessEphemeralAudit, tenantId, and reconciliation (state, status, fulfillmentHold, releaseHoldAction, requiredDepositCents, remainingBalanceCents, creditDueCents, overpaidWarning, orderTag). Use this tool for B2B wholesale order deposit gating and Net-terms balance calculation; use revclamp_validate_eu_vat_vies for cross-border EU VAT number validation.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "orderId": {
+            "type": "string",
+            "description": "B2B wholesale order or invoice identifier (e.g. 'gid://shopify/Order/908812' or 'ORD-2026-9088', default: 'ord_local_b2b_01', max 64 chars)."
+          },
+          "totalOrderCents": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Gross invoice total in positive integer minor currency units / cents (e.g. 250000 for 2,500.00 EUR; must be > 0)."
+          },
+          "orderTotalCents": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Alias for totalOrderCents: gross invoice total in positive integer minor currency units / cents (must be > 0)."
+          },
+          "paidAmountCents": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Required cumulative amount collected from the buyer in non-negative integer cents (e.g. 75000 for 750.00 EUR; must be >= 0)."
+          },
+          "creditNoteCents": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Optional post-invoice credit notes or return adjustments in integer cents (valid range: 0 to totalOrderCents, default: 0; singular alias for creditNotesCents)."
+          },
+          "creditNotesCents": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Optional post-invoice credit notes or return adjustments in integer cents (valid range: 0 to totalOrderCents, default: 0; plural alias for creditNoteCents)."
+          },
+          "requiredDepositCents": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Optional explicit upfront deposit threshold in integer cents (valid range: 0 to effectiveTotalCents). Overrides requiredDepositPercent when provided."
+          },
+          "requiredDepositPercent": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100,
+            "description": "Optional upfront deposit percentage required before releasing warehouse fulfillment hold (valid range: 0 to 100, default: 30 i.e. 30% upfront deposit)."
+          },
+          "paymentTermsDays": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 180,
+            "description": "Optional B2B net payment terms maturity window in integer days (valid range: 1 to 180, e.g. 15, 30, 45, 60, 90; default: 30)."
+          },
+          "daysElapsedSinceInvoice": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 3650,
+            "description": "Optional elapsed integer days since invoice issuance (valid range: 0 to 3650, default: 0)."
+          },
+          "invoiceIssuedAtSec": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Optional invoice issuance Unix epoch timestamp in seconds (positive integer; computes dueAtSec = invoiceIssuedAtSec + paymentTermsDays * 86400)."
+          },
+          "toleranceCents": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 500,
+            "description": "Optional rounding/FX reconciliation tolerance in integer cents (valid range: 0 to min(500, 1% of totalOrderCents), default: 0)."
+          },
+          "demo": {
+            "type": "boolean",
+            "description": "Optional sandbox flag (boolean)."
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "revclamp_verify_webhook_signature",
+      "description": "Generate and verify canonical Stripe-Signature (t=<unix>,v1=<hex_sha256>), X-Shopify-Hmac-Sha256 (<base64_sha256>), and X-RevClamp-Signature (t=<unix>,v1=<hex_sha256>) headers over exact UTF-8 webhook payload bytes using crypto.timingSafeEqual and a 300-second replay window guard. Enforces a Zero-Trust guard that blocks known live/production credential patterns (sk_live_, rk_live_, non-test whsec_..., shpss_..., shpat_..., rg_live_, rc_live_, AKIA..., and PEM private keys) with -32602 LIVE_SECRET_FORBIDDEN_IN_SANDBOX. Returns structuredContent containing ok, mode, statelessEphemeralAudit, tenantId, and verification (provider, verificationMode, headerName, generatedHeader, expectedSignature, signatureValid, verificationReason, timingSafeCompared, replayWindowApplicable, timestampSec, timestampSkewSeconds, toleranceSeconds, withinReplayWindow, payloadByteLength, payloadSha256, commonIntegrationTrap). Use this tool to debug webhook signature mismatches and replay skew.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "provider": {
+            "type": "string",
+            "enum": [
+              "stripe",
+              "shopify",
+              "revclamp"
+            ],
+            "description": "Webhook signature provider scheme to evaluate: 'stripe' (Stripe-Signature t=<sec>,v1=<hex>, default), 'shopify' (X-Shopify-Hmac-Sha256 Base64 raw UTF-8 HMAC), or 'revclamp' (X-RevClamp-Signature t=<sec>,v1=<hex>)."
+          },
+          "secret": {
+            "type": "string",
+            "description": "Synthetic or test webhook signing secret (default: 'whsec_test_revclamp_sandbox_secret_2026', max 256 chars, or comma-separated rotation secrets). Live production secrets (sk_live_, rk_live_, non-test whsec_..., shpss_..., shpat_..., rg_live_, rc_live_, AKIA..., and PEM private keys) are rejected."
+          },
+          "secrets": {
+            "type": "array",
+            "maxItems": 5,
+            "items": {
+              "type": "string"
+            },
+            "description": "Optional array of 1 to 5 synthetic/test webhook signing secrets (each <= 256 chars) to evaluate during rolling webhook secret rotation."
+          },
+          "rawPayload": {
+            "type": "string",
+            "description": "Exact unparsed UTF-8 webhook request body string (up to 16,384 chars) used to compute the canonical SHA-256 HMAC digest. Defaults to a provider-specific sample JSON event if omitted."
+          },
+          "timestampSec": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9999999999,
+            "description": "Optional Unix epoch timestamp in integer seconds (valid range: 1 to 9999999999; defaults to current server Unix timestamp) used when generating or verifying timestamped Stripe/RevClamp headers."
+          },
+          "signatureHeader": {
+            "type": "string",
+            "description": "Optional supplied HTTP signature header value to verify via crypto.timingSafeEqual (e.g. 't=1760000000,v1=...' or Base64 digest, max 512 chars). Omit to run in GENERATE_AND_SELF_VERIFY mode."
+          },
+          "toleranceSec": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 3600,
+            "description": "Optional replay window tolerance in integer seconds (valid range: 1 to 3600, default: 300)."
+          },
+          "demo": {
+            "type": "boolean",
+            "description": "Optional sandbox flag; uses synthetic defaults when provider, secret, or rawPayload are omitted."
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "revclamp_calculate_roi_and_plan_fit",
+      "description": "Deterministically calculate monthly and annual B2B margin savings using exact integer USD cents when replacing a 25%-30% contingency chargeback agency with RevClamp flat-rate 0% commission plans ($19 Starter, $59 Growth, $199 Scale). Evaluates monthlyWonDisputeUsd, monthlyGhostBleedUsd, contingencyTakeRatePercent, and monthlyUsageEvents to recommend the optimal tier. Returns structuredContent containing ok, mode, statelessEphemeralAudit, tenantId, recommendedTier, annualNetMarginSavedUsd, roiMultiple, and calculation.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "monthlyWonDisputeUsd": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10000000,
+            "description": "Monthly won Stripe chargeback volume in USD (valid range: 0 to 10000000, default: 10000) subject to legacy agency take-rate fees."
+          },
+          "monthlyGhostBleedUsd": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10000000,
+            "description": "Monthly unpaid AI/API or SaaS usage bleed stopped by RevClamp basil entitlement guards in USD (valid range: 0 to 10000000, default: 600)."
+          },
+          "contingencyTakeRatePercent": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 50,
+            "description": "Competitor chargeback agency contingency commission percentage (valid range: 1 to 50, default: 25 for 25% take-rate tools)."
+          },
+          "monthlyUsageEvents": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 50000000,
+            "description": "Monthly verified usage events across your workspace (integer 0 to 50000000, default: 250000) used to recommend Starter (<=100k), Growth (<=1M), or Scale (<=5M)."
+          },
+          "demo": {
+            "type": "boolean",
+            "description": "Optional boolean flag (default: false) for sample preview parity across all 9 MCP tools."
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "revclamp_simulate_webhook_replay",
+      "description": "Deterministically evaluate an ordered or out-of-order sequence of 1-10 Stripe/Shopify/RevClamp subscription lifecycle webhooks against a 72-hour idempotency deduplication Set (eventId), a configurable idempotencyWindowSec (60s-2592000s, default: 259200s / 72h), and a monotonic transition timestamp guard (event.createdSec >= lastAppliedCreatedSec). Compares RevClamp's monotonic FSM against a naive overwrite-on-arrival handler to detect resurrected canceled subscriptions, stale tier downgrades, and duplicate retry side-effects. Returns structuredContent containing ok, mode, statelessEphemeralAudit, tenantId, simulation, steps, finalStatus, finalTier, finalEntitlementDecision, naiveFinalStatus, and naiveHandlerBug.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "scenarioPreset": {
+            "type": "string",
+            "enum": [
+              "out_of_order_stale_update_after_cancel",
+              "duplicate_event_id_replay_72h",
+              "valid_monotonic_upgrade_sequence",
+              "expired_72h_window_stale_event",
+              "custom"
+            ],
+            "description": "Scenario preset to evaluate when custom events are omitted (default: 'out_of_order_stale_update_after_cancel')."
+          },
+          "events": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 10,
+            "description": "Optional custom array of 1 to 10 webhook events ({ eventId, eventType, createdSec, subscriptionStatus, tier, currentPeriodEndSec }) in arrival order.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "eventId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 96,
+                  "pattern": "^[A-Za-z0-9_.:-]{1,96}$",
+                  "description": "Unique provider webhook event ID (e.g. evt_cancel_final_1050) checked against the 72-hour deduplication Set."
+                },
+                "eventType": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 96,
+                  "pattern": "^[A-Za-z0-9_.-]{1,96}$",
+                  "description": "Webhook event type string (e.g. customer.subscription.deleted, customer.subscription.updated, invoice.payment_failed)."
+                },
+                "createdSec": {
+                  "type": "integer",
+                  "minimum": 946684800,
+                  "maximum": 4102444800,
+                  "description": "Provider event creation timestamp in Unix seconds (must be <= nowSec + 34560000 / 400 days) compared monotonically against lastAppliedCreatedSec."
+                },
+                "subscriptionStatus": {
+                  "type": "string",
+                  "enum": [
+                    "active",
+                    "trialing",
+                    "past_due",
+                    "paused",
+                    "canceled",
+                    "cancelled",
+                    "unpaid",
+                    "cancel_at_period_end",
+                    "expired"
+                  ],
+                  "description": "Subscription lifecycle status carried by this webhook event."
+                },
+                "tier": {
+                  "type": "string",
+                  "enum": [
+                    "free",
+                    "starter_19",
+                    "growth_59",
+                    "scale_199"
+                  ],
+                  "description": "Optional RevClamp plan tier associated with the subscription state (default: 'growth_59')."
+                },
+                "currentPeriodEndSec": {
+                  "type": "integer",
+                  "minimum": 946684800,
+                  "maximum": 4102444800,
+                  "description": "Optional subscription current_period_end timestamp in Unix seconds."
+                },
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 96,
+                  "pattern": "^[A-Za-z0-9_.:-]{1,96}$",
+                  "description": "Alias for eventId when passing raw Stripe/Shopify event objects."
+                },
+                "type": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 96,
+                  "pattern": "^[A-Za-z0-9_.-]{1,96}$",
+                  "description": "Alias for eventType (defaults to 'customer.subscription.updated' when omitted)."
+                },
+                "created": {
+                  "type": "integer",
+                  "minimum": 946684800,
+                  "maximum": 4102444800,
+                  "description": "Alias for createdSec when passing Stripe Unix created timestamps."
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "active",
+                    "trialing",
+                    "past_due",
+                    "paused",
+                    "canceled",
+                    "cancelled",
+                    "unpaid",
+                    "cancel_at_period_end",
+                    "expired"
+                  ],
+                  "description": "Alias for subscriptionStatus."
+                },
+                "target_status": {
+                  "type": "string",
+                  "enum": [
+                    "active",
+                    "trialing",
+                    "past_due",
+                    "paused",
+                    "canceled",
+                    "cancelled",
+                    "unpaid",
+                    "cancel_at_period_end",
+                    "expired"
+                  ],
+                  "description": "Snake_case alias for subscriptionStatus."
+                },
+                "arrivedAtSec": {
+                  "type": "integer",
+                  "minimum": 946684800,
+                  "maximum": 4102444800,
+                  "description": "Optional arrival timestamp in Unix seconds for per-event deduplication window evaluation."
+                },
+                "arrived_at_sec": {
+                  "type": "integer",
+                  "minimum": 946684800,
+                  "maximum": 4102444800,
+                  "description": "Snake_case alias for arrivedAtSec in Unix seconds."
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "nowSec": {
+            "type": "integer",
+            "minimum": 946684800,
+            "maximum": 4102444800,
+            "description": "Reference evaluation timestamp in Unix seconds used to check the 72-hour idempotency window."
+          },
+          "idempotencyWindowSec": {
+            "type": "integer",
+            "minimum": 60,
+            "maximum": 2592000,
+            "description": "Deduplication and replay-acceptance window in seconds (valid range: 60 to 2592000, default: 259200 for 72 hours)."
+          },
+          "demo": {
+            "type": "boolean",
+            "description": "Optional sandbox flag to run the preset replay simulation."
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "revclamp_lint_dispute_evidence",
+      "description": "Deterministically lint a Stripe dispute evidence[access_activity_log] payload against Stripe's 18,000 UTF-16 code unit (String.prototype.length) ceiling, UTF-8 byte length, non-destructive --- BEGIN REVCLAMP CE3 EVIDENCE --- / --- END REVCLAMP CE3 EVIDENCE --- (or [RevClamp Verified Product Usage Log] / [/RevClamp Verified Product Usage Log]) delimiter markers, existing merchant note preservation, 17,922/17,920-char fixed wrapper capacity threshold (SKIP_POST_PRESERVE_DRAFT), and Visa Compelling Evidence 3.0 (CE 3.0) prior-charge (>= 2) + IP/device overlap qualification. Returns structuredContent containing ok, mode, statelessEphemeralAudit, tenantId, lint, utf16CodeUnits, maxUtf16Ceiling, remainingUtf16Units, withinCeiling, utf8Bytes, nonDestructiveMarkersPresent, merchantNotesPreserved, merchantNotesUtf16CodeUnits, fixedWrapperUtf16CodeUnits, merchantLogAtCapacity, stagingActionWhenAtCapacity, priorMatchedCount, hasIpMatch, hasDeviceMatch, ce3RubricPassed, and overallVerdict.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "preset": {
+            "type": "string",
+            "enum": [
+              "valid_ce3_non_destructive",
+              "utf16_overflow_19k",
+              "missing_device_and_overwrite_risk",
+              "custom",
+              "ce3_24k_truncation_trap",
+              "ce3_clean_compacted_14k",
+              "ce3_missing_device_binding_19k"
+            ],
+            "default": "valid_ce3_non_destructive",
+            "description": "Scenario preset to evaluate when custom evidenceLogText / accessActivityLog is omitted (default: 'valid_ce3_non_destructive')."
+          },
+          "existingMerchantNotes": {
+            "type": "string",
+            "maxLength": 30000,
+            "description": "Existing human AE/support notes inside evidence[access_activity_log] that must be preserved."
+          },
+          "evidenceLogText": {
+            "type": "string",
+            "maxLength": 30000,
+            "description": "Merged or candidate Stripe dispute evidence[access_activity_log] payload evaluated against the 18,000 UTF-16 code unit ceiling and non-destructive delimiter markers."
+          },
+          "accessActivityLog": {
+            "type": "string",
+            "maxLength": 30000,
+            "description": "Alias for evidenceLogText representing Stripe dispute evidence[access_activity_log] payload."
+          },
+          "priorMatchedCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100,
+            "description": "Number of prior undisputed Stripe charges (120d-365d old) with matching customer_id and IP/device fingerprint (Visa CE 3.0 requires >= 2)."
+          },
+          "hasIpMatch": {
+            "type": "boolean",
+            "description": "Whether the disputed charge IPv4/IPv6 address matches the historical undisputed charges."
+          },
+          "hasDeviceMatch": {
+            "type": "boolean",
+            "description": "Whether the disputed charge device_id fingerprint matches the historical undisputed charges."
+          },
+          "disputedTransaction": {
+            "type": "object",
+            "description": "Optional disputed Stripe charge/transaction metadata evaluated against priorTransactions for Visa CE 3.0 qualification."
+          },
+          "priorTransactions": {
+            "type": "array",
+            "description": "Optional historical undisputed Stripe charges (120d-365d prior) evaluated for Visa CE 3.0 two-identifier overlap."
+          },
+          "demo": {
+            "type": "boolean",
+            "default": false,
+            "description": "Set true to lint a sample preset fixture when evidenceLogText / accessActivityLog is omitted."
+          }
+        }
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "com.revclamp/revclamp-mcp",
+    "version": "1.20.34",
+    "remoteUrl": "https://revclamp.com/api/mcp",
+    "publishedAt": "2026-11-18T05:23:51.761054Z",
+    "fetchedAt": "2026-11-28T10:03:29.931Z",
+    "toolsSha256": "9fd0da976c2aa723e053467fb75227cf7269c981e4aa209f41ab7e315a7373a8"
+  }
+}

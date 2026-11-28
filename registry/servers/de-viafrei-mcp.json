@@ -1,0 +1,1609 @@
+{
+  "$schema": "../schema.json",
+  "name": "de.viafrei/mcp",
+  "title": "ViaFrei",
+  "category": "Social, Media & Knowledge",
+  "description": "The German Real-Time Mobility Context Platform for AI: traffic, trains, charging, parking, weather.",
+  "repository": "https://github.com/mavrovde/viafrei-mcp",
+  "tools": [
+    {
+      "name": "check_autobahn_traffic",
+      "description": "Per motorway (≤ 5), or one Bundesland's motorways with land: an Ampel, then jams, closures, roadworks in force, with place/delay/speed/map. Use when asked about a named motorway now: frei/clear (Ampel), Stau, delay, how it looks, or a LIST of closures; name every motorway (Munich→Berlin: A9). Do NOT use for open/closed/gesperrt/passable, even now, a closure with no time word or a later one (tonight, weekend), or a town, no motorway — check_road_status; Baustellen dated or geplant — find_roadworks_ahead; a named city street: not held; trains (get_train_departures). ~5 min old. Show attribution.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "roads": {
+            "description": "Autobahn numbers, e.g. [\"A9\"] or [\"A8\", \"A99\", \"A9\"] (1–5 per call). Name every motorway on the route so the whole drive is briefed in one call — \"A9\", \"A 9\" and \"a9\" are the same road. Results are grouped per road, in the order you list them. Give roads or land, not both.",
+            "minItems": 1,
+            "maxItems": 5,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[Aa] ?\\d{1,3}$"
+            }
+          },
+          "land": {
+            "description": "Optional, instead of roads: one Bundesland, and the answer is the motorways of the whole Land as its page shows them — counts, the longest jams, each motorway with something in force. Use it instead of roads and place when the question names a Land (\"Stau in Bayern?\", \"Autobahnen in NRW\"). For Berlin, Hamburg and Bremen only when the question names the Land; a city's traffic is check_road_status. Not with roads, place, lat/lon or radius_km.",
+            "type": "string",
+            "enum": [
+              "schleswig-holstein",
+              "hamburg",
+              "niedersachsen",
+              "bremen",
+              "nordrhein-westfalen",
+              "hessen",
+              "rheinland-pfalz",
+              "baden-wuerttemberg",
+              "bayern",
+              "saarland",
+              "berlin",
+              "brandenburg",
+              "mecklenburg-vorpommern",
+              "sachsen",
+              "sachsen-anhalt",
+              "thueringen"
+            ]
+          },
+          "place": {
+            "description": "Optional: the town, junction or address the person is at or asks about (\"A1 bei Köln\", \"A3 near Frankfurt\"). Then each road's events within radius_km come first, nearest first, and the headline counts them with the road-wide total beside it. Omit it for the whole road. Given with lat+lon, lat+lon is searched around and the place is its label, unless the two lie further apart than radius_km.",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "lat": {
+            "description": "Latitude in WGS 84, e.g. 48.137. Use with lon when the caller already holds coordinates; otherwise use place.",
+            "type": "number",
+            "minimum": -90,
+            "maximum": 90
+          },
+          "lon": {
+            "description": "Longitude in WGS 84, e.g. 11.576. Use with lat; otherwise use place.",
+            "type": "number",
+            "minimum": -180,
+            "maximum": 180
+          },
+          "radius_km": {
+            "default": 25,
+            "description": "Radius around place or lat+lon in km (1–100, default 25). Ignored without a place.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "language": {
+            "default": "de",
+            "description": "Set this on every call to the language the person is writing in: \"en\" if they wrote English, \"de\" if they wrote German. Do not leave it out: it defaults to German (\"de\"), which is only the fallback when the language is genuinely unclear, so an English question sent without it is answered in German — a wrong answer. Place names, station names and road numbers are never translated in either language; in English the German term is kept in parentheses so the person recognises it on signs and in local apps.",
+            "type": "string",
+            "enum": [
+              "de",
+              "en"
+            ]
+          },
+          "kinds": {
+            "default": [
+              "warning",
+              "closure",
+              "roadworks"
+            ],
+            "description": "Which event kinds to return: warning = live traffic (jams, slow traffic, hazards), closure = full closures, roadworks = construction sites. Set it when the SUBJECT of the question is one of those categories by name: \"Baustellen auf der A8?\" is [\"roadworks\"], \"welche Sperrungen sind in diesem Moment gemeldet?\" is [\"closure\"]. Omit it when the question is how the road IS — Stau, frei, a delay, \"wie sieht es aus\", \"everything\"; the German \"Stau?\" is the idiom for the whole picture, and a filter nobody asked for hides the closure on the same stretch. Whether a closure question is this tool's at all is decided by two things, and the noun (Sperrung, Vollsperrung, closure) is neither. FIRST THE CLOCK: only a question about this minute (jetzt, gerade, in diesem Moment, right now, at this very minute) can be this tool's — with no time word at all, or for a later window (tonight, heute Abend, am Wochenende, the coming days), it is check_road_status. SECOND, WHAT IS ASKED, which the clock cannot see: what is REPORTED or in force on a named motorway is this tool (\"which closures are in force on the A100 at this very minute?\"), while whether the road is OPEN or passable is check_road_status AT ANY CLOCK — \"ist die A8 offen\", \"ist die A3 in diesem Moment gesperrt?\", \"komme ich da durch?\" — and so is a closure asked around a town instead of on a motorway number. Baustellen with a date or the word geplant are find_roadworks_ahead. Default: all three.",
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "warning",
+                "roadworks",
+                "closure"
+              ]
+            }
+          },
+          "limit": {
+            "default": 10,
+            "description": "Maximum events to return across all roads (1–50, default 10). Each road's most important item comes first, in the order you listed the roads, so every road with something in force is on the first page when limit is at least the number of roads; after that jams, then closures, other reports, then roadworks, the roads taking turns within each. Only what is in force now is listed — closures announced for later are counted apart in the headline.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50
+          },
+          "cursor": {
+            "description": "Pagination cursor from a previous result's _meta.nextCursor. Omit for the first page.",
+            "type": "string",
+            "maxLength": 256
+          }
+        }
+      }
+    },
+    {
+      "name": "find_cheapest_fuel",
+      "description": "Returns the cheapest stations for one fuel grade near a place or coordinate: price per litre, brand, address, distance, open state. Use when the user asks where to fill up or what fuel costs. Do NOT use for charging an electric car (call find_charging_station), price history, or traffic (call check_autobahn_traffic). Radius ≤ 25 km, at most 10 stations. For a brand, a name, open now or at a named time, or nearest-first, call find_fuel_station. Each line names the age of its price and opening-hours claim. Prices are consumer information only; the attribution line and MTS-K note must be shown.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "place": {
+            "description": "Where to look, as free text: a city (\"München\", \"Munich\"), a district or Kreis (\"Kreis Fulda\"), a Bundesland, a station or stop (\"Hamburg Hbf\"), a motorway junction (\"AK Neufahrn\"), or a street address with a house number (\"Bahnhofstraße 12, 36037 Fulda\"). A motorway number alone (\"A7\") resolves to the road, which has no single point — name a town or junction on it instead. Use this instead of coordinates whenever the person named a place. An address needs its town or postcode — a street and a number alone exist in many towns. A place or lat+lon is required (unless the tool names another way in, such as a road): when the person named neither, ask them for a town, a postcode or their position before calling. Given both, the answer is about lat+lon with the place as its label, and is refused only when the two lie further apart than the search reaches.",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "lat": {
+            "description": "Latitude in WGS 84, e.g. 48.137. Use with lon when the caller already holds coordinates; otherwise use place.",
+            "type": "number",
+            "minimum": -90,
+            "maximum": 90
+          },
+          "lon": {
+            "description": "Longitude in WGS 84, e.g. 11.576. Use with lat; otherwise use place.",
+            "type": "number",
+            "minimum": -180,
+            "maximum": 180
+          },
+          "language": {
+            "default": "de",
+            "description": "Set this on every call to the language the person is writing in: \"en\" if they wrote English, \"de\" if they wrote German. Do not leave it out: it defaults to German (\"de\"), which is only the fallback when the language is genuinely unclear, so an English question sent without it is answered in German — a wrong answer. Place names, station names and road numbers are never translated in either language; in English the German term is kept in parentheses so the person recognises it on signs and in local apps.",
+            "type": "string",
+            "enum": [
+              "de",
+              "en"
+            ]
+          },
+          "fuel": {
+            "default": "e10",
+            "description": "Fuel grade: \"e5\" (Super E5), \"e10\" (Super E10, the standard German petrol) or \"diesel\" — LPG/Autogas and CNG are not held by any source here: say so, never substitute a petrol grade. Default \"e10\". Pass the grade the person named — a diesel driver is not helped by a petrol price.",
+            "type": "string",
+            "enum": [
+              "e5",
+              "e10",
+              "diesel"
+            ]
+          },
+          "radius_km": {
+            "default": 5,
+            "description": "Search radius around the place in kilometres (1–25, default 5). The provider's terms cap it at 25 km — a larger circle is a dataset request, not a consumer question.",
+            "type": "number",
+            "minimum": 1,
+            "maximum": 25
+          },
+          "limit": {
+            "default": 5,
+            "description": "How many stations to return, cheapest first (1–10, default 5). The provider's terms cap it at 10.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10
+          }
+        }
+      }
+    },
+    {
+      "name": "find_fuel_station",
+      "description": "Finds filling stations around a place or coordinate under any combination of filters — grade, brand, name, open now, open at a time you name, open 24 h — sorted by distance, price or name. Use when the question is WHICH station: the closest diesel to a stop, an ARAL open tonight, what one forecourt sells. Do NOT use for the plain \"where is fuel cheapest\" question (call find_cheapest_fuel) or for charging an electric car (call find_charging_station). Every result carries the attribution and the MTS-K note, and says how old each price and opening-hours claim is.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "place": {
+            "description": "Where to look, as free text: a city (\"München\", \"Munich\"), a district or Kreis (\"Kreis Fulda\"), a Bundesland, a station or stop (\"Hamburg Hbf\"), a motorway junction (\"AK Neufahrn\"), or a street address with a house number (\"Bahnhofstraße 12, 36037 Fulda\"). A motorway number alone (\"A7\") resolves to the road, which has no single point — name a town or junction on it instead. Use this instead of coordinates whenever the person named a place. An address needs its town or postcode — a street and a number alone exist in many towns. A place or lat+lon is required (unless the tool names another way in, such as a road): when the person named neither, ask them for a town, a postcode or their position before calling. Given both, the answer is about lat+lon with the place as its label, and is refused only when the two lie further apart than the search reaches.",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "lat": {
+            "description": "Latitude in WGS 84, e.g. 48.137. Use with lon when the caller already holds coordinates; otherwise use place.",
+            "type": "number",
+            "minimum": -90,
+            "maximum": 90
+          },
+          "lon": {
+            "description": "Longitude in WGS 84, e.g. 11.576. Use with lat; otherwise use place.",
+            "type": "number",
+            "minimum": -180,
+            "maximum": 180
+          },
+          "language": {
+            "default": "de",
+            "description": "Set this on every call to the language the person is writing in: \"en\" if they wrote English, \"de\" if they wrote German. Do not leave it out: it defaults to German (\"de\"), which is only the fallback when the language is genuinely unclear, so an English question sent without it is answered in German — a wrong answer. Place names, station names and road numbers are never translated in either language; in English the German term is kept in parentheses so the person recognises it on signs and in local apps.",
+            "type": "string",
+            "enum": [
+              "de",
+              "en"
+            ]
+          },
+          "fuel": {
+            "description": "Only stations with a current price for this grade: \"e5\" (Super E5), \"e10\" (Super E10) or \"diesel\" — LPG/Autogas and CNG are not held by any source here, so say so rather than call for them. Omit to get every station near the place whatever it sells — the answer then lists all the grades it holds a price for. Required when sort is \"price\", because a price ordering needs a grade.",
+            "type": "string",
+            "enum": [
+              "e5",
+              "e10",
+              "diesel"
+            ]
+          },
+          "radius_km": {
+            "default": 5,
+            "description": "Search radius around the place in kilometres (1–25, default 5). 25 km is the provider's own ceiling — a larger circle is a dataset request, not a consumer question.",
+            "type": "number",
+            "minimum": 1,
+            "maximum": 25
+          },
+          "brand": {
+            "description": "Only stations of this brand, matched case-insensitively anywhere in the brand field: \"ARAL\", \"Shell\", \"TotalEnergies\", \"JET\". Use it when the person named a chain (\"die ARAL an der B1\"). Free stations often carry no brand at all and are then not matched by any brand.",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 60
+          },
+          "name": {
+            "description": "Part of the station's own name or brand, case-insensitive: \"Autohof\", \"Raststätte Fulda\". Use it when the person named a specific forecourt rather than a chain. Combine with place to keep the search local.",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "open_now": {
+            "default": false,
+            "description": "When true, only stations the published opening hours say are open at this moment. Default false. A station whose hours we have never read is NOT returned by this filter and is counted in the answer instead — the result never guesses that an unknown station is open.",
+            "type": "boolean"
+          },
+          "open_at": {
+            "description": "Only stations open at that time in Germany (Europe/Berlin): \"23:30\" means the next time the clock shows 23:30, and \"2026-09-30 06:15\" a specific local date and time. Use it for \"is it still open tonight\". Do not pass it together with open_now — they ask the same question about two different clocks.",
+            "type": "string",
+            "pattern": "^(?:\\d{1,2}:\\d{2}|\\d{4}-\\d{2}-\\d{2}[T ]\\d{1,2}:\\d{2})$"
+          },
+          "whole_day": {
+            "default": false,
+            "description": "When true, only stations the provider flags as open around the clock (24/7). Default false. Use it when asked whether a station never closes (\"durchgehend geöffnet\", \"around the clock\") and for a night drive; it is a stricter filter than open_now, which is satisfied by a station that closes at 22:00.",
+            "type": "boolean"
+          },
+          "sort": {
+            "default": "distance",
+            "description": "Order of the answer: \"distance\" (nearest first, the default — use it for \"closest diesel to Hamburg Hbf\"), \"price\" (cheapest first, needs fuel), or \"name\" (alphabetical, for a person scanning a list of a brand's forecourts).",
+            "type": "string",
+            "enum": [
+              "distance",
+              "price",
+              "name"
+            ]
+          },
+          "limit": {
+            "default": 5,
+            "description": "How many stations to return (1–10, default 5).",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10
+          }
+        }
+      }
+    },
+    {
+      "name": "find_parking",
+      "description": "Parking near a place, a coordinate or along one motorway: lorry parks, car parks, P+R and disabled-badge bays, with total spaces, stated amenities (WC, shower) and published free spaces. Use when asked where to park or leave the car for the train (\"Parkhaus in Köln\", \"Rastplatz A3\", \"P+R\"). Do NOT use for fuel (find_cheapest_fuel) or EV charging (find_charging_station). Radius ≤ 25 km, ≤ 10 sites per list; ODbL and CC BY-SA sources are separate lists (up to three). No \"free now\" means no published count, not full. No prices: for \"was kostet\" say so, no call. Show each source's attribution.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "place": {
+            "description": "Where to look, as free text: a city (\"München\", \"Munich\"), a district or Kreis (\"Kreis Fulda\"), a Bundesland, a station or stop (\"Hamburg Hbf\"), a motorway junction (\"AK Neufahrn\"), or a street address with a house number (\"Bahnhofstraße 12, 36037 Fulda\"). A motorway number alone (\"A7\") resolves to the road, which has no single point — name a town or junction on it instead. Use this instead of coordinates whenever the person named a place. An address needs its town or postcode — a street and a number alone exist in many towns. A place or lat+lon is required (unless the tool names another way in, such as a road): when the person named neither, ask them for a town, a postcode or their position before calling. Given both, the answer is about lat+lon with the place as its label, and is refused only when the two lie further apart than the search reaches.",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "lat": {
+            "description": "Latitude in WGS 84, e.g. 48.137. Use with lon when the caller already holds coordinates; otherwise use place.",
+            "type": "number",
+            "minimum": -90,
+            "maximum": 90
+          },
+          "lon": {
+            "description": "Longitude in WGS 84, e.g. 11.576. Use with lat; otherwise use place.",
+            "type": "number",
+            "minimum": -180,
+            "maximum": 180
+          },
+          "language": {
+            "default": "de",
+            "description": "Set this on every call to the language the person is writing in: \"en\" if they wrote English, \"de\" if they wrote German. Do not leave it out: it defaults to German (\"de\"), which is only the fallback when the language is genuinely unclear, so an English question sent without it is answered in German — a wrong answer. Place names, station names and road numbers are never translated in either language; in English the German term is kept in parentheses so the person recognises it on signs and in local apps.",
+            "type": "string",
+            "enum": [
+              "de",
+              "en"
+            ]
+          },
+          "road": {
+            "description": "A single motorway number to list parking along, e.g. \"A3\" (\"A 3\" and \"a3\" are the same road). Use this when the person named a road and no town — \"Rastplatz auf der A7\". Give road OR place OR lat+lon, never two of them: a road is a 900 km line and a place is a point, so the two answer different questions. When the question names BOTH — \"Parkhaus in Köln an der A3\" — use the place: a person parks at a point, and the radius already covers the motorway beside it. A road list is in name order and cannot follow a direction of travel: for \"A4 Richtung Görlitz\" ask with place for the destination or the next town on the way instead, which answers nearest first.",
+            "type": "string",
+            "maxLength": 16
+          },
+          "kind": {
+            "default": "any",
+            "description": "Which kind of parking: \"car_park\" = public car park (Parkhaus/Parkplatz), \"park_and_ride\" = P+R beside a station, \"truck\" = lorry parking, \"any\" = all of them. Default \"any\". \"disabled_badge\" = on-street bays reserved for a disabled parking permit (Behindertenparkplatz, Schwerbehindertenparkplatz), where a municipality publishes them, with a sensor's free/occupied where one is fitted — pass it only when such a bay was asked for; it is never part of \"any\" and takes place or lat+lon, not road. Rest areas are NOT a kind we can filter: no source we hold classifies them, so for \"Rastanlage\"/\"Raststätte\"/\"rest area\" leave kind out (\"truck\" when lorry spaces were asked for); \"rest_area\" is still accepted and answered as \"any\", with a sentence saying why. Pass a kind only when the person named one — a lorry driver asking for a break wants \"truck\", someone leaving the car for the train wants \"park_and_ride\". A camper, a caravan or a coach is none of these: leave the argument out rather than filtering a tourist into lorry bays.",
+            "type": "string",
+            "enum": [
+              "any",
+              "rest_area",
+              "car_park",
+              "park_and_ride",
+              "truck",
+              "disabled_badge"
+            ]
+          },
+          "radius_km": {
+            "default": 10,
+            "description": "Search radius around place or lat+lon in kilometres (1–25, default 10). Ignored when you pass road, which covers the whole motorway. Start small in a city and widen if the answer is empty.",
+            "type": "number",
+            "minimum": 1,
+            "maximum": 25
+          },
+          "only_with_free_spaces": {
+            "default": false,
+            "description": "Set true only when the person asks whether spaces are free right now. It keeps just the facilities whose operator publishes live occupancy AND currently reports a space, and the result says how many were dropped for publishing nothing — most German parking publishes no occupancy at all, so true usually narrows the answer to very little. Default false.",
+            "type": "boolean"
+          },
+          "facilities": {
+            "description": "Keep only sites whose own publisher states ALL of these amenities: \"toilet\", \"shower\", \"restaurant\", \"snack\", \"cafe\", \"shop\", \"fuel\", \"charging\", \"drinking_water\", \"picnic\", \"playground\", \"wifi\", \"security\", \"accessible_toilet\". Pass it only when the person asks for one — \"Rastplatz mit Dusche an der A7\" → road \"A7\", facilities [\"shower\"]; \"car park with a toilet near Köln Hbf\" → facilities [\"toilet\"]. Many publishers state no amenities, so the filter can narrow the answer to little; an amenity nobody stated is unknown, not absent, and the answer says how many sites state any. A toilet, restaurant or charger merely NEAR a site (listed beside it, from OpenStreetMap or the charging register) never satisfies the filter. Leave it out otherwise: every listed site already carries its amenity line.",
+            "minItems": 1,
+            "maxItems": 5,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "toilet",
+                "accessible_toilet",
+                "shower",
+                "restaurant",
+                "snack",
+                "cafe",
+                "shop",
+                "fuel",
+                "charging",
+                "drinking_water",
+                "picnic",
+                "playground",
+                "wifi",
+                "security"
+              ]
+            }
+          },
+          "limit": {
+            "default": 5,
+            "description": "How many facilities to return, nearest first (1–10, default 5).",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10
+          }
+        }
+      }
+    },
+    {
+      "name": "check_road_status",
+      "description": "If a motorway/B/Land road (NI, NW, HE, BW, MV, SN, TH; B also SH, BY, BE; pass Land/town as place) is open/closed/restricted now/soon; by place, jams, city/Land messages, Hamburg traffic cameras; lorry limits, Lang-Lkw (vehicle). Use when asked if a road's open/closed/gesperrt/passable, even now — \"A8 in diesem Moment gesperrt?\" — closures tonight/weekend, or Stau in a town (Köln). Do NOT use for a named motorway frei/clear (Ampel) or its jams/delays — check_autobahn_traffic; dated roadworks — find_roadworks_ahead; a named city street: not held, no call. ≤14 days/11 entries. Show attribution.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "road": {
+            "description": "One road: a German motorway, e.g. \"A8\"; a Bundesstraße in Schleswig-Holstein, Niedersachsen, Nordrhein-Westfalen, Hessen, Baden-Württemberg, Bayern, Berlin, Mecklenburg-Vorpommern, Sachsen or Thüringen, e.g. \"B27\"; or a Landes- or Staatsstraße in Niedersachsen, Nordrhein-Westfalen, Hessen, Baden-Württemberg, Mecklenburg-Vorpommern, Sachsen or Thüringen, e.g. \"L1025\" or \"S296\". \"A8\", \"A 8\" and \"a8\" are the same road. Use this whenever the person named a road — it is the only input that reaches the planned-works data, which is filed by road and section and carries no coordinates. When the person also says WHERE — a town or a Bundesland (\"die B2 bei Potsdam\", \"L1025 in Niedersachsen\") — pass that as place too: only sources for that Land answer, and a Land no source covers is named. L and S numbers repeat in every Land, so give the Land with them. Otherwise give exactly one of road, place, or lat+lon.",
+            "type": "string",
+            "pattern": "^(?:[ABab] ?\\d{1,3}|[LlSs] ?\\d{1,4})$"
+          },
+          "place": {
+            "description": "Where to look, as free text: a city (\"München\", \"Munich\"), a district or Kreis (\"Kreis Fulda\"), a Bundesland, a station or stop (\"Hamburg Hbf\"), a motorway junction (\"AK Neufahrn\"), or a street address with a house number (\"Bahnhofstraße 12, 36037 Fulda\"). A motorway number alone (\"A7\") resolves to the road, which has no single point — name a town or junction on it instead. Use this instead of coordinates whenever the person named a place. An address needs its town or postcode — a street and a number alone exist in many towns. A place or lat+lon is required (unless the tool names another way in, such as a road): when the person named neither, ask them for a town, a postcode or their position before calling. Given both, the answer is about lat+lon with the place as its label, and is refused only when the two lie further apart than the search reaches.",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "lat": {
+            "description": "Latitude in WGS 84, e.g. 48.137. Use with lon when the caller already holds coordinates; otherwise use place.",
+            "type": "number",
+            "minimum": -90,
+            "maximum": 90
+          },
+          "lon": {
+            "description": "Longitude in WGS 84, e.g. 11.576. Use with lat; otherwise use place.",
+            "type": "number",
+            "minimum": -180,
+            "maximum": 180
+          },
+          "horizon_days": {
+            "default": 3,
+            "description": "Days ahead from now (0 = right now only, max 14, default 3). Only what was asked; count the days from today to the last day meant, both included: 0 for right now / jetzt / gerade; 1 for today, tonight, heute Abend; 2 for tomorrow; a weekday (\"am Freitag\") the days through it; \"this weekend\" the days through Sunday (Monday 7, Friday 3, Sunday 1); \"next week\" through next Sunday. A bare \"is the A8 open?\" asks for no window: omit it, never 0. Live closures, and by place the jams reported now, are always included.",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 14
+          },
+          "limit": {
+            "default": 10,
+            "description": "Maximum entries to return (1–11, default 10). By road, closures come first, then restrictions in force, then planned works; by place, nearest first.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 11
+          },
+          "vehicle": {
+            "description": "Set ONLY when the person asks for a lorry (Lkw, truck, HGV) or a long lorry (Lang-Lkw, EuroCombi, Gigaliner): then the answer is where that vehicle may go, instead of closures. \"long_lorry\" with a road (\"darf der Lang-Lkw auf die A7?\") answers whether the road is in the long-lorry positive network; with a place, the network roads near it. \"lorry\" or \"long_lorry\" with a place (\"Durchfahrtshöhe in Haan\", \"Lkw-Vorrangroute in Frankfurt\", \"Gewichtsgrenze in Bremen\") answers the height, weight, width and lorry-ban signs near it, and the lorry priority routes, where a publisher holds them (NRW, Frankfurt RheinMain, Bremen). Omit for cars and for closures.",
+            "type": "string",
+            "enum": [
+              "lorry",
+              "long_lorry"
+            ]
+          },
+          "language": {
+            "default": "de",
+            "description": "Set this on every call to the language the person is writing in: \"en\" if they wrote English, \"de\" if they wrote German. Do not leave it out: it defaults to German (\"de\"), which is only the fallback when the language is genuinely unclear, so an English question sent without it is answered in German — a wrong answer. Place names, station names and road numbers are never translated in either language; in English the German term is kept in parentheses so the person recognises it on signs and in local apps.",
+            "type": "string",
+            "enum": [
+              "de",
+              "en"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "find_roadworks_ahead",
+      "description": "Returns roadworks PLANNED on one motorway, one Bundes-/Landesstraße in NI, NW, HE, BW, MV, SN or TH (BY: B only), or city streets by place, in a date window: where, impact, dates, map links. Use when a date or window is named, it says geplant, or how long a site lasts (\"Baustellen auf der A7 in den Sommerferien?\"). ONE road/place per call. Do NOT use when more than one motorway is named, for the situation this minute, or for Baustellen with neither date nor geplant — all three are check_autobahn_traffic; whether a road is open — check_road_status. ≤ 92 days, max 20 sites. Show attribution.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "road": {
+            "description": "The road to look at, one per call: an Autobahn, e.g. \"A7\" or \"A100\"; a Bundesstraße in Niedersachsen, Nordrhein-Westfalen, Hessen, Baden-Württemberg, Bayern, Mecklenburg-Vorpommern, Sachsen or Thüringen, e.g. \"B6\"; a Landesstraße in Niedersachsen, Nordrhein-Westfalen, Hessen, Baden-Württemberg, Mecklenburg-Vorpommern or Thüringen, e.g. \"L1025\"; or a Staatsstraße in Sachsen, e.g. \"S296\" — \"A7\", \"A 7\" and \"a7\" are the same road. B and L roads in other Länder and Kreisstraßen are not covered. Ask again for a second road. Give road OR place.",
+            "type": "string",
+            "pattern": "^(?:[AaBb] ?\\d{1,3}|[LlSs] ?\\d{1,4})$"
+          },
+          "place": {
+            "description": "A place — a district, street or address, e.g. \"Hamburg-Altona\", \"Berlin-Mitte\", \"Kiel\" — for the city and Land roadworks held by point within 3 km of it. Where no such source covers the place, the answer says so. Give road OR place.",
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 120
+          },
+          "from": {
+            "description": "First day of the window, as YYYY-MM-DD in German local time. Omit for today. Resolve relative wording (\"next Friday\", \"in den Sommerferien\", \"nächsten Monat\") into real dates yourself, counted from today's date; this argument never takes words, and it never takes a fixed example date — the window a person means moves with the calendar.",
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          },
+          "to": {
+            "description": "Last day of the window, inclusive, as YYYY-MM-DD. Omit for 7 days after `from`, which is the right window for \"am I going to hit roadworks on this drive\". The window may span at most 92 days. For \"how long will this last\" / \"wie lange dauert die Baustelle noch\", leave both dates out: the default 7 days already returns the site's planned end date. Only widen — 28 days is the sensible step — when the person asked about a period that long.",
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          },
+          "language": {
+            "default": "de",
+            "description": "Set this on every call to the language the person is writing in: \"en\" if they wrote English, \"de\" if they wrote German. Do not leave it out: it defaults to German (\"de\"), which is only the fallback when the language is genuinely unclear, so an English question sent without it is answered in German — a wrong answer. Place names, station names and road numbers are never translated in either language; in English the German term is kept in parentheses so the person recognises it on signs and in local apps.",
+            "type": "string",
+            "enum": [
+              "de",
+              "en"
+            ]
+          },
+          "limit": {
+            "default": 10,
+            "description": "Maximum sites to return (1–20, default 10), ordered by planned start. Every returned site is in the structured result; the readable text prints the first 10 and says how many more of them are in the structured half. The answer always names how many sites the window holds in total, so a small limit never hides the size of the problem.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 20
+          }
+        }
+      }
+    },
+    {
+      "name": "find_charging_station",
+      "description": "Returns EV charging sites near a place or coordinate: operator, plugs, max power, price per kWh where published, and points free now where live status is published. Filters: plug, power (min/max kW), operator, free now, conditions (24/7, card, free of charge, public). Use when an EV driver asks where to charge (\"Wo kann ich laden?\", \"CCS 150 kW near Leipzig\", \"ist gerade eine Säule frei?\"). Do NOT use for petrol or diesel (find_cheapest_fuel) or E-Kennzeichen rules (get_driving_rules). Radius ≤ 25 km, ≤ 10 sites; missing availability is unknown, never free. Show the attribution line.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "place": {
+            "description": "Where to look, as free text: a city (\"München\", \"Munich\"), a district or Kreis (\"Kreis Fulda\"), a Bundesland, a station or stop (\"Hamburg Hbf\"), a motorway junction (\"AK Neufahrn\"), or a street address with a house number (\"Bahnhofstraße 12, 36037 Fulda\"). A motorway number alone (\"A7\") resolves to the road, which has no single point — name a town or junction on it instead. Use this instead of coordinates whenever the person named a place. An address needs its town or postcode — a street and a number alone exist in many towns. A place or lat+lon is required (unless the tool names another way in, such as a road): when the person named neither, ask them for a town, a postcode or their position before calling. Given both, the answer is about lat+lon with the place as its label, and is refused only when the two lie further apart than the search reaches.",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "lat": {
+            "description": "Latitude in WGS 84, e.g. 48.137. Use with lon when the caller already holds coordinates; otherwise use place.",
+            "type": "number",
+            "minimum": -90,
+            "maximum": 90
+          },
+          "lon": {
+            "description": "Longitude in WGS 84, e.g. 11.576. Use with lat; otherwise use place.",
+            "type": "number",
+            "minimum": -180,
+            "maximum": 180
+          },
+          "language": {
+            "default": "de",
+            "description": "Set this on every call to the language the person is writing in: \"en\" if they wrote English, \"de\" if they wrote German. Do not leave it out: it defaults to German (\"de\"), which is only the fallback when the language is genuinely unclear, so an English question sent without it is answered in German — a wrong answer. Place names, station names and road numbers are never translated in either language; in English the German term is kept in parentheses so the person recognises it on signs and in local apps.",
+            "type": "string",
+            "enum": [
+              "de",
+              "en"
+            ]
+          },
+          "radius_km": {
+            "default": 10,
+            "description": "Search radius around the place in kilometres (1–25, default 10). A charging stop is worth a detour, so this is wider than the fuel radius — but 25 km is the cap, and a larger circle is a dataset request rather than a driver's question.",
+            "type": "number",
+            "minimum": 1,
+            "maximum": 25
+          },
+          "connector": {
+            "description": "Plug the vehicle needs: \"ccs2\" (CCS Combo 2 — the DC fast-charging standard on almost every European EV), \"type2\" (Typ 2 / Mennekes, the AC socket), \"chademo\" (older Japanese DC, e.g. Nissan Leaf) or \"mcs\" (Megawatt Charging System, the plug of electric heavy lorries — only for a lorry or truck). Omit unless the person named their plug or their vehicle — filtering on a guess hides chargers they could have used.",
+            "type": "string",
+            "enum": [
+              "ccs2",
+              "type2",
+              "chademo",
+              "mcs"
+            ]
+          },
+          "min_power_kw": {
+            "description": "Only charging points of at least this many kW (1–1000). Use when the person names a number or asks for fast charging: 50 = DC fast (a bare \"fast\"/\"schnell\"/\"Schnelllader\"), 150 = HPC (\"HPC\", \"ultra\", \"ultraschnell\"), 300 = the fastest posts in Germany. Omit for \"where can I charge\" — 11 kW overnight is a valid answer to that question.",
+            "type": "number",
+            "minimum": 1,
+            "maximum": 1000
+          },
+          "max_power_kw": {
+            "description": "Only charging points of at most this many kW (1–1000). Use for a normal AC post (\"normale AC-Säule\", \"Wallbox\": 22) or, with min_power_kw, a band (50 and 149 = DC fast but not HPC). Never below min_power_kw. Omit unless the person set an upper limit.",
+            "type": "number",
+            "minimum": 1,
+            "maximum": 1000
+          },
+          "operator": {
+            "description": "Only sites of this charge-point operator brand, as the person names it: \"IONITY\", \"EnBW\", \"Tesla\", \"Aral pulse\". Spellings of one brand match together (\"EnBW mobility+ AG\", \"ENBW\"); sites whose source names no operator are left out. Omit unless the person named an operator — a question about WHO operates the chargers sets none.",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "conditions": {
+            "description": "Only sites with ONE point that meets every listed term: \"open247\" (open around the clock, \"rund um die Uhr\", \"24/7\"), \"card\" (pay by credit or debit card at the charger, \"mit Karte zahlen\"), \"free\" (free of charge, \"kostenlos\"), \"public\" (open to the public, not customers only). Example: [\"open247\"]. The Bundesnetzagentur charging register states these, and \"free\" also an operator's published ad-hoc tariff of 0 no older than 90 days; a site that states nothing is left out and counted, never assumed. Omit unless the person asked for one.",
+            "minItems": 1,
+            "maxItems": 4,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "open247",
+                "card",
+                "free",
+                "public"
+              ]
+            }
+          },
+          "only_available": {
+            "default": false,
+            "description": "When true, return only sites with at least one point reported FREE right now. Default false. Use it when the person asks what is free at this moment. Note that only some operators publish live status: the result always says how many nearby sites were dropped because their status is unknown, so the filter never silently hides a charger that may well be free.",
+            "type": "boolean"
+          },
+          "limit": {
+            "default": 5,
+            "description": "How many lines to return, nearest first (1–10, default 5). Places within 50 m that read alike are folded into one line that says how many units it holds; structuredContent.sites has one entry per place of the lines shown, with siteIds naming every record of that place, so it can be longer than limit.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10
+          }
+        }
+      }
+    },
+    {
+      "name": "find_hydrogen_station",
+      "description": "Returns hydrogen (H2) filling stations near a place or coordinate, nearest first, with operator, address, pumps (700 bar car, 350 bar truck/bus), opening hours where published and the age of the record. Use when someone asks where to refuel a fuel-cell car, lorry or bus (\"Wasserstofftankstelle\", \"H2 tanken\", \"hydrogen station near me\"). Do NOT use for petrol or diesel (call find_fuel_station) or EV charging (call find_charging_station); LPG/Autogas and CNG are not held — say so. Radius ≤ 150 km, ≤ 10 stations; no live availability or price is published. Shows the attribution line.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "place": {
+            "description": "Where to look, as free text: a city (\"München\", \"Munich\"), a district or Kreis (\"Kreis Fulda\"), a Bundesland, a station or stop (\"Hamburg Hbf\"), a motorway junction (\"AK Neufahrn\"), or a street address with a house number (\"Bahnhofstraße 12, 36037 Fulda\"). A motorway number alone (\"A7\") resolves to the road, which has no single point — name a town or junction on it instead. Use this instead of coordinates whenever the person named a place. An address needs its town or postcode — a street and a number alone exist in many towns. A place or lat+lon is required (unless the tool names another way in, such as a road): when the person named neither, ask them for a town, a postcode or their position before calling. Given both, the answer is about lat+lon with the place as its label, and is refused only when the two lie further apart than the search reaches.",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "lat": {
+            "description": "Latitude in WGS 84, e.g. 48.137. Use with lon when the caller already holds coordinates; otherwise use place.",
+            "type": "number",
+            "minimum": -90,
+            "maximum": 90
+          },
+          "lon": {
+            "description": "Longitude in WGS 84, e.g. 11.576. Use with lat; otherwise use place.",
+            "type": "number",
+            "minimum": -180,
+            "maximum": 180
+          },
+          "language": {
+            "default": "de",
+            "description": "Set this on every call to the language the person is writing in: \"en\" if they wrote English, \"de\" if they wrote German. Do not leave it out: it defaults to German (\"de\"), which is only the fallback when the language is genuinely unclear, so an English question sent without it is answered in German — a wrong answer. Place names, station names and road numbers are never translated in either language; in English the German term is kept in parentheses so the person recognises it on signs and in local apps.",
+            "type": "string",
+            "enum": [
+              "de",
+              "en"
+            ]
+          },
+          "radius_km": {
+            "default": 50,
+            "description": "Search radius around place or lat+lon in kilometres (1–150, default 50). Hydrogen stations are few, so the default is wide; when none is inside, the answer still names the nearest one beyond. Example: 50",
+            "type": "number",
+            "minimum": 1,
+            "maximum": 150
+          },
+          "vehicle": {
+            "description": "Which pump the vehicle needs: \"car\" (Pkw — 700 bar, e.g. Toyota Mirai, Hyundai Nexo; a few sites also offer 350 bar for cars) or \"truck\" (Lkw or bus — 350 bar). Omit unless the person said what they drive.",
+            "type": "string",
+            "enum": [
+              "car",
+              "truck"
+            ]
+          },
+          "limit": {
+            "default": 5,
+            "description": "How many stations to list, nearest first (1–10, default 5).",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10
+          }
+        }
+      }
+    },
+    {
+      "name": "find_speed_cameras",
+      "description": "A town's published speed-enforcement locations (fixed, red-light, section control, announced mobile checks, measuring sites) by kind and street plus OpenStreetMap's fixed cameras. § 23 Abs. 1c StVO binds a driver's device use, not publication. Use when someone planning a trip asks where speed cameras are (\"Blitzer Köln\"). Planning only: show the answer's StVO notice verbatim. To someone driving: the notice and the list for a stop. Never read locations to a driver or warn live. Do NOT use for speed limits (get_driving_rules) or roadworks (check_road_status). Area ≤ 25 km. Shows the attribution.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "place": {
+            "description": "Where to look, as free text: a city (\"München\", \"Munich\"), a district or Kreis (\"Kreis Fulda\"), a Bundesland, a station or stop (\"Hamburg Hbf\"), a motorway junction (\"AK Neufahrn\"), or a street address with a house number (\"Bahnhofstraße 12, 36037 Fulda\"). A motorway number alone (\"A7\") resolves to the road, which has no single point — name a town or junction on it instead. Use this instead of coordinates whenever the person named a place. An address needs its town or postcode — a street and a number alone exist in many towns. A place or lat+lon is required (unless the tool names another way in, such as a road): when the person named neither, ask them for a town, a postcode or their position before calling. Given both, the answer is about lat+lon with the place as its label, and is refused only when the two lie further apart than the search reaches.",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "lat": {
+            "description": "Latitude in WGS 84, e.g. 48.137. Use with lon when the caller already holds coordinates; otherwise use place.",
+            "type": "number",
+            "minimum": -90,
+            "maximum": 90
+          },
+          "lon": {
+            "description": "Longitude in WGS 84, e.g. 11.576. Use with lat; otherwise use place.",
+            "type": "number",
+            "minimum": -180,
+            "maximum": 180
+          },
+          "language": {
+            "default": "de",
+            "description": "Set this on every call to the language the person is writing in: \"en\" if they wrote English, \"de\" if they wrote German. Do not leave it out: it defaults to German (\"de\"), which is only the fallback when the language is genuinely unclear, so an English question sent without it is answered in German — a wrong answer. Place names, station names and road numbers are never translated in either language; in English the German term is kept in parentheses so the person recognises it on signs and in local apps.",
+            "type": "string",
+            "enum": [
+              "de",
+              "en"
+            ]
+          },
+          "radius_km": {
+            "default": 5,
+            "description": "The area around place or lat+lon, in kilometres (1–25, default 5). An area, not an order: the list is never sorted by distance. Example: 5",
+            "type": "number",
+            "minimum": 1,
+            "maximum": 25
+          },
+          "limit": {
+            "default": 20,
+            "description": "How many locations to list in each block, the official lists and OpenStreetMap's (1–50, default 20); the answer says how many more the area holds.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50
+          }
+        }
+      }
+    },
+    {
+      "name": "find_place",
+      "description": "Looks up a place name and returns every match, each with its kind, population, English name and coordinate; the official key (AGS/RS) only in the structured result. Use when the person asks where somewhere is, when you need a coordinate for another tool, and above all to RECOVER after a tool reported a name as ambiguous — this is where you find out which Neustadt is which. Pass `near` to rank and separate same-named places by distance. Do NOT use to find a company, shop or landmark: call find_poi. At most 10 results, radius <= 200 km. Every result carries an attribution line to show the user.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "language": {
+            "default": "de",
+            "description": "Set this on every call to the language the person is writing in: \"en\" if they wrote English, \"de\" if they wrote German. Do not leave it out: it defaults to German (\"de\"), which is only the fallback when the language is genuinely unclear, so an English question sent without it is answered in German — a wrong answer. Place names, station names and road numbers are never translated in either language; in English the German term is kept in parentheses so the person recognises it on signs and in local apps.",
+            "type": "string",
+            "enum": [
+              "de",
+              "en"
+            ]
+          },
+          "query": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 120,
+            "description": "The place name to look up, as the person said it — \"Neustadt\", \"Munich\", \"Kreis Fulda\", \"Köln Hbf\". English names and spellings without umlauts both work."
+          },
+          "kind": {
+            "description": "Narrow to one kind: \"city\", \"district\" (Kreis), \"admin\" (Land or Regierungsbezirk), \"station\", \"stop\", \"motorway\" or \"junction\". Omit unless the person was specific.",
+            "type": "string",
+            "enum": [
+              "city",
+              "district",
+              "admin",
+              "station",
+              "stop",
+              "motorway",
+              "junction"
+            ]
+          },
+          "near": {
+            "description": "A second place to measure from, used to tell same-named candidates apart: \"Neustadt\" near \"Hamburg\" is one of twenty Neustadts. Every result then carries its distance from this point.",
+            "type": "string",
+            "maxLength": 120
+          },
+          "lat": {
+            "description": "Latitude to measure from, instead of `near`.",
+            "type": "number",
+            "minimum": -90,
+            "maximum": 90
+          },
+          "lon": {
+            "description": "Longitude to measure from, instead of `near`.",
+            "type": "number",
+            "minimum": -180,
+            "maximum": 180
+          },
+          "radius_km": {
+            "description": "When near/lat+lon is given, keep only candidates within this many kilometres (1–200). Omit to rank by distance without dropping any.",
+            "type": "number",
+            "minimum": 1,
+            "maximum": 200
+          },
+          "limit": {
+            "default": 5,
+            "description": "How many candidates to return, best match first (1–10, default 5).",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10
+          }
+        },
+        "required": [
+          "query"
+        ]
+      }
+    },
+    {
+      "name": "find_poi",
+      "description": "Finds a business or landmark by name or kind — company, shop, clinic, hotel, hostel — with address, category and coordinate. Use when the person names a THING rather than a town: \"the adesso office in Dortmund\", \"the nearest Aldi\", \"a hotel in Weimar\". The coordinate passes to any other tool as lat/lon. Do NOT use for a town, district or station (every tool's `place` resolves those), nor for fuel, charging or parking (own tools). Give \"in\" (a town) when you can: far faster than nationwide. 25 per page, 50 via cursor; radius <= 50 km. OpenStreetMap under ODbL 1.0; show the attribution line.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "language": {
+            "default": "de",
+            "description": "Set this on every call to the language the person is writing in: \"en\" if they wrote English, \"de\" if they wrote German. Do not leave it out: it defaults to German (\"de\"), which is only the fallback when the language is genuinely unclear, so an English question sent without it is answered in German — a wrong answer. Place names, station names and road numbers are never translated in either language; in English the German term is kept in parentheses so the person recognises it on signs and in local apps.",
+            "type": "string",
+            "enum": [
+              "de",
+              "en"
+            ]
+          },
+          "name": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 120,
+            "description": "The name of the thing to find — a company, shop, clinic, hotel, office or landmark. Part of the name is enough: \"adesso\" finds \"adesso SE\". A chain name works too, because brands are matched as well as names. A kind word alone, German or English (\"Apotheke\", \"pharmacy\", \"trade fair\"), lists that kind nearest first. When the person names a company AND a type (\"the Bosch office\"), put the company here and the type in category. Never for fuel, charging or parking, even near a named company or landmark (\"a charger by the Allianz Arena\"): those have their own tools, asked with the place."
+          },
+          "in": {
+            "description": "A town to search in — \"Dortmund\", \"Fulda\". Strongly preferred: it is both far faster and far less ambiguous than a nationwide search. Use this OR near/lat+lon, not both.",
+            "type": "string",
+            "maxLength": 120
+          },
+          "near": {
+            "description": "A place to search around, when the question is \"the nearest X\" rather than \"X in Y\". Use with radius_km.",
+            "type": "string",
+            "maxLength": 120
+          },
+          "lat": {
+            "description": "Latitude of the point to search around, when the caller already holds a coordinate.",
+            "type": "number",
+            "minimum": -90,
+            "maximum": 90
+          },
+          "lon": {
+            "description": "Longitude of the point to search around.",
+            "type": "number",
+            "minimum": -180,
+            "maximum": 180
+          },
+          "category": {
+            "description": "Narrow to one OpenStreetMap family: \"office\" (companies, agencies), \"shop\", \"amenity\" (fuel, pharmacy, school, restaurant, town hall), \"healthcare\" (hospitals, clinics, doctors, pharmacies), \"tourism\" (hotels, attractions), \"leisure\", \"industrial\" (factories, plants), \"historic\" (castles, monuments, city gates), \"natural\" (mountain peaks) or \"building\". Set it whenever the person names the type (\"Bosch office\" → office, \"Hotel Adler\" → tourism); omit it when they name no type.",
+            "type": "string",
+            "enum": [
+              "office",
+              "amenity",
+              "shop",
+              "tourism",
+              "healthcare",
+              "leisure",
+              "industrial",
+              "historic",
+              "natural",
+              "building"
+            ]
+          },
+          "radius_km": {
+            "default": 10,
+            "description": "Search radius in kilometres around near/lat+lon (1–50, default 10). Ignored when \"in\" is used.",
+            "type": "number",
+            "minimum": 1,
+            "maximum": 50
+          },
+          "limit": {
+            "default": 10,
+            "description": "How many to return per page, best match first (1–25, default 10). The answer says when more matched; fetch them with cursor, up to 50 in all.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 25
+          },
+          "cursor": {
+            "description": "Pagination cursor from a previous result's _meta.nextCursor. Omit for the first page.",
+            "type": "string",
+            "maxLength": 256
+          }
+        },
+        "required": [
+          "name"
+        ]
+      }
+    },
+    {
+      "name": "find_address",
+      "description": "Looks up a street address: its coordinate, and the named OpenStreetMap objects at it (company, shop, office) or that none are. Use when the person gives a STREET AND NUMBER — \"Bahnhofstraße 12, Fulda\" — for the point or the business there, never who lives there. The coordinate passes to any other tool as lat/lon. Do NOT use for a town/district/station name alone (find_place) or a company/shop/landmark by name (find_poi). At most 5 points; a door mapped twice is folded, points far apart say how far; several towns are a question. OpenStreetMap ODbL 1.0; show the attribution line.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "language": {
+            "default": "de",
+            "description": "Set this on every call to the language the person is writing in: \"en\" if they wrote English, \"de\" if they wrote German. Do not leave it out: it defaults to German (\"de\"), which is only the fallback when the language is genuinely unclear, so an English question sent without it is answered in German — a wrong answer. Place names, station names and road numbers are never translated in either language; in English the German term is kept in parentheses so the person recognises it on signs and in local apps.",
+            "type": "string",
+            "enum": [
+              "de",
+              "en"
+            ]
+          },
+          "query": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 160,
+            "description": "A street address, as a person writes one: street and house number, plus a town or postcode — \"Bahnhofstraße 12, 36037 Fulda\" or \"Bahnhofstraße 12, Fulda\". Both orders work. A street and number with neither a town nor a postcode cannot be placed (the same street name exists in about two thousand German towns) and is refused."
+          },
+          "limit": {
+            "default": 3,
+            "description": "How many results to return (1–5, default 3) — more than one means the same address carries more than one OpenStreetMap object.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 5
+          }
+        },
+        "required": [
+          "query"
+        ]
+      }
+    },
+    {
+      "name": "describe_location",
+      "description": "Turns a coordinate into words: the nearest address, settlement and motorway junction with their distances, and the Gemeinde, Kreis and Land the point lies in; also any low-emission zone. Use when you already HAVE a lat/lon and need to say where that is. Do NOT use to look up a place or address BY NAME — that is find_place, find_poi or find_address; this only goes coordinate to words. Those come from the municipality the point lies in (its key), not the nearest Kreis point; near the border the answer says so. OpenStreetMap ODbL 1.0 for the address; show the attribution line.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "language": {
+            "default": "de",
+            "description": "Set this on every call to the language the person is writing in: \"en\" if they wrote English, \"de\" if they wrote German. Do not leave it out: it defaults to German (\"de\"), which is only the fallback when the language is genuinely unclear, so an English question sent without it is answered in German — a wrong answer. Place names, station names and road numbers are never translated in either language; in English the German term is kept in parentheses so the person recognises it on signs and in local apps.",
+            "type": "string",
+            "enum": [
+              "de",
+              "en"
+            ]
+          },
+          "lat": {
+            "type": "number",
+            "minimum": -90,
+            "maximum": 90,
+            "description": "Latitude of the point to describe (WGS84)."
+          },
+          "lon": {
+            "type": "number",
+            "minimum": -180,
+            "maximum": 180,
+            "description": "Longitude of the point to describe (WGS84)."
+          }
+        },
+        "required": [
+          "lat",
+          "lon"
+        ]
+      }
+    },
+    {
+      "name": "find_nearby",
+      "description": "Overview of what is around a place or coordinate: fuel, EV charging, parking, nearest railway station and motorway junction, with distances; everyday places (shop, pharmacy, cash, food, hotel, workshop, police) only when named in categories. Use when asked \"what is around me\". Do NOT use for a fuel grade's price (find_cheapest_fuel), charger status (find_charging_station), parking occupancy (find_parking), a NAME lookup (find_place/find_poi/find_address), or a coordinate's address (describe_location). Radius ≤ 15 km, up to 3 per category (5 per need). Shows each source's attribution.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "place": {
+            "description": "Where to look, as free text: a city (\"München\", \"Munich\"), a district or Kreis (\"Kreis Fulda\"), a Bundesland, a station or stop (\"Hamburg Hbf\"), a motorway junction (\"AK Neufahrn\"), or a street address with a house number (\"Bahnhofstraße 12, 36037 Fulda\"). A motorway number alone (\"A7\") resolves to the road, which has no single point — name a town or junction on it instead. Use this instead of coordinates whenever the person named a place. An address needs its town or postcode — a street and a number alone exist in many towns. A place or lat+lon is required (unless the tool names another way in, such as a road): when the person named neither, ask them for a town, a postcode or their position before calling. Given both, the answer is about lat+lon with the place as its label, and is refused only when the two lie further apart than the search reaches.",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "lat": {
+            "description": "Latitude in WGS 84, e.g. 48.137. Use with lon when the caller already holds coordinates; otherwise use place.",
+            "type": "number",
+            "minimum": -90,
+            "maximum": 90
+          },
+          "lon": {
+            "description": "Longitude in WGS 84, e.g. 11.576. Use with lat; otherwise use place.",
+            "type": "number",
+            "minimum": -180,
+            "maximum": 180
+          },
+          "language": {
+            "default": "de",
+            "description": "Set this on every call to the language the person is writing in: \"en\" if they wrote English, \"de\" if they wrote German. Do not leave it out: it defaults to German (\"de\"), which is only the fallback when the language is genuinely unclear, so an English question sent without it is answered in German — a wrong answer. Place names, station names and road numbers are never translated in either language; in English the German term is kept in parentheses so the person recognises it on signs and in local apps.",
+            "type": "string",
+            "enum": [
+              "de",
+              "en"
+            ]
+          },
+          "radius_km": {
+            "default": 5,
+            "description": "Search radius around place or lat+lon in kilometres (1–15, default 5). This tool answers \"what is around me\", not \"search a wide area\" — for that, use the specific tool with its own wider radius.",
+            "type": "number",
+            "minimum": 1,
+            "maximum": 15
+          },
+          "categories": {
+            "description": "Which categories to include: \"fuel\", \"charging\", \"parking\", \"station\" (railway station), \"junction\" (motorway junction) — omit for these five. Everyday places from OpenStreetMap only when named: \"groceries\", \"health\" (pharmacy, doctor, hospital), \"money\" (cash machine, bank, post office), \"food\", \"lodging\", \"garage\" (car repair, tyres, car wash), \"police\" (police stations), \"toilets\" (public toilets) (\"safety\", the former name for both, still answers as both); each uses its own radius (1–2 km, widened up to 5 km where fewer than three are near), not radius_km.",
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "fuel",
+                "charging",
+                "parking",
+                "station",
+                "junction",
+                "groceries",
+                "health",
+                "money",
+                "food",
+                "lodging",
+                "garage",
+                "police",
+                "toilets",
+                "safety"
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "find_sharing",
+      "description": "Returns rentable shared bikes near a place or coordinate: bike-sharing stations with bikes and free docks now, and free-floating bikes around, with distance and data age (nextbike incl. KVB Rad, MyRadl, VAG_Rad; Donkey Republic). Use when someone asks for a rental or shared bike (\"Leihrad\", \"Fahrradverleih\", \"nächstes nextbike\", \"bike share near me\"). Do NOT use for parking (find_parking) or a general look around a place (find_nearby). Radius ≤ 5 km, ≤ 20 stations; e-scooters are not covered. Shows each source's attribution.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "place": {
+            "description": "Where to look, as free text: a city (\"München\", \"Munich\"), a district or Kreis (\"Kreis Fulda\"), a Bundesland, a station or stop (\"Hamburg Hbf\"), a motorway junction (\"AK Neufahrn\"), or a street address with a house number (\"Bahnhofstraße 12, 36037 Fulda\"). A motorway number alone (\"A7\") resolves to the road, which has no single point — name a town or junction on it instead. Use this instead of coordinates whenever the person named a place. An address needs its town or postcode — a street and a number alone exist in many towns. A place or lat+lon is required (unless the tool names another way in, such as a road): when the person named neither, ask them for a town, a postcode or their position before calling. Given both, the answer is about lat+lon with the place as its label, and is refused only when the two lie further apart than the search reaches.",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "lat": {
+            "description": "Latitude in WGS 84, e.g. 48.137. Use with lon when the caller already holds coordinates; otherwise use place.",
+            "type": "number",
+            "minimum": -90,
+            "maximum": 90
+          },
+          "lon": {
+            "description": "Longitude in WGS 84, e.g. 11.576. Use with lat; otherwise use place.",
+            "type": "number",
+            "minimum": -180,
+            "maximum": 180
+          },
+          "language": {
+            "default": "de",
+            "description": "Set this on every call to the language the person is writing in: \"en\" if they wrote English, \"de\" if they wrote German. Do not leave it out: it defaults to German (\"de\"), which is only the fallback when the language is genuinely unclear, so an English question sent without it is answered in German — a wrong answer. Place names, station names and road numbers are never translated in either language; in English the German term is kept in parentheses so the person recognises it on signs and in local apps.",
+            "type": "string",
+            "enum": [
+              "de",
+              "en"
+            ]
+          },
+          "radius_km": {
+            "default": 1,
+            "description": "Search radius around place or lat+lon in kilometres (0.1–5, default 1). Example: 1",
+            "type": "number",
+            "minimum": 0.1,
+            "maximum": 5
+          },
+          "limit": {
+            "default": 8,
+            "description": "How many stations to list, nearest first (1–20, default 8). Free-floating bikes are summarised, not listed one by one.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 20
+          },
+          "only_available": {
+            "default": true,
+            "description": "true (default): list only stations with at least one bike to rent right now. false: also list empty stations, e.g. to find a free dock to return a bike.",
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    {
+      "name": "get_driving_rules",
+      "description": "Returns the German road rules a visitor needs: low-emission zones (Umweltzone) and the Feinstaubplakette, speed limits (advisory 130), winter tyres, alcohol, the Sunday lorry ban, tolls, Rettungsgasse, what must be in the car, electric cars. Use when someone drives through Germany or asks whether they may enter a city or street. Do NOT use for live traffic or closures: check_autobahn_traffic; to FIND a charger: find_charging_station. city narrows to its zone; place or lat+lon checks a point against the published zone boundaries. Sourced, dated; show the attribution. Not legal advice.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "topic": {
+            "description": "Which rule to answer. \"lez\" = low-emission zone and Feinstaubplakette, \"speed\" = speed limits including the Autobahn advisory 130, \"winter\" = winter-tyre duty, \"alcohol\" = alcohol and drugs, \"toll\" = car and lorry toll, \"truck_ban\" = Sunday and holiday lorry ban, \"equipment\" = what the law requires in the car, \"emergency\" = 112/110, rescue lane, breakdown, crash, \"ev\" = electric car (E-Kennzeichen, charging payment, plugs). Omit for a one-line overview of all nine; with place or lat+lon, omitted means \"lez\".",
+            "type": "string",
+            "enum": [
+              "lez",
+              "speed",
+              "winter",
+              "alcohol",
+              "toll",
+              "truck_ban",
+              "equipment",
+              "emergency",
+              "ev"
+            ]
+          },
+          "city": {
+            "description": "City the question is about, e.g. \"Stuttgart\", \"München\", \"Munich\". Narrows \"lez\" to that city's zone and adds the per-city caveat for \"ev\". Other topics are nationwide. Omit when the question is not about one city.",
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 60
+          },
+          "place": {
+            "description": "A street address, district, station or other point (\"Alexanderplatz, Berlin\", \"Kölner Dom\") to check against the published low-emission-zone boundaries: inside, outside with the distance, or unknown. Given with lat+lon, lat+lon is checked and the place is its label, unless the two lie further apart than 10 km plus the town's extent.",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "lat": {
+            "description": "Latitude (WGS 84) of the point to check against the zone boundaries. Use with lon; otherwise use place.",
+            "type": "number",
+            "minimum": -90,
+            "maximum": 90
+          },
+          "lon": {
+            "description": "Longitude (WGS 84) of the point to check against the zone boundaries. Use with lat; otherwise use place.",
+            "type": "number",
+            "minimum": -180,
+            "maximum": 180
+          },
+          "language": {
+            "default": "de",
+            "description": "Set this on every call to the language the person is writing in: \"en\" if they wrote English, \"de\" if they wrote German. Do not leave it out: it defaults to German (\"de\"), which is only the fallback when the language is genuinely unclear, so an English question sent without it is answered in German — a wrong answer. Place names, station names and road numbers are never translated in either language; in English the German term is kept in parentheses so the person recognises it on signs and in local apps.",
+            "type": "string",
+            "enum": [
+              "de",
+              "en"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "check_transit_disruption",
+      "description": "Public-transport punctuality now in a German region: share of trips >5 min late, skipped stops, cancellations, trend, alerts in force. Use when asked if buses and trains run normally, a strike, storm or works disrupt them, or for a line with no place (\"ist die RB33 pünktlich?\" → line: answered where it runs, or asks which region). Do NOT use for a station's departures or a line from a named DEPARTURE station (\"RE1 ab Köln Hbf?\"; \"nach …\" is no station) — get_train_departures. Figures are region-wide. Window ≤ 120 min. CC BY-SA (DELFI) or CC BY 4.0 (VBB, Berlin/Brandenburg): show attribution.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "region": {
+            "description": "The German region to report on, as free text: a Bundesland (\"Bayern\", \"Bavaria\", \"Nordrhein-Westfalen\"), a city (\"Hamburg\", \"Köln\"), a Kreis (\"Landkreis Fulda\") or one of the conurbations Ruhrgebiet, Rhein-Ruhr and Rhein-Main. A town inside a Kreis is reported as that Kreis and the answer says so, because the data is filed at Kreis level. Not a stop, not a street, not an address. Give either region OR lat+lon, never both.",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "lat": {
+            "description": "Latitude in WGS 84, e.g. 48.137. Use with lon when the caller already holds coordinates; otherwise use region.",
+            "type": "number",
+            "minimum": -90,
+            "maximum": 90
+          },
+          "lon": {
+            "description": "Longitude in WGS 84, e.g. 11.576. Use with lat; otherwise use region.",
+            "type": "number",
+            "minimum": -180,
+            "maximum": 180
+          },
+          "line": {
+            "description": "A line name as on the vehicle, e.g. \"RB33\", \"S1\", \"RE 1\", \"U6\". Give it when the question names a line; with no region the answer covers the Kreise the line runs through, or names the regions where lines of that name run. With region, it is that region's line of the name.",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 16
+          },
+          "language": {
+            "default": "de",
+            "description": "Set this on every call to the language the person is writing in: \"en\" if they wrote English, \"de\" if they wrote German. Do not leave it out: it defaults to German (\"de\"), which is only the fallback when the language is genuinely unclear, so an English question sent without it is answered in German — a wrong answer. Place names, station names and road numbers are never translated in either language; in English the German term is kept in parentheses so the person recognises it on signs and in local apps.",
+            "type": "string",
+            "enum": [
+              "de",
+              "en"
+            ]
+          },
+          "window_min": {
+            "default": 60,
+            "description": "How many minutes back to look, 5–120 (default 60). The trend compares this window with the equally long one before it, so 60 means \"the last hour against the hour before\". Use a short window for \"right now\" and a long one for \"has it been bad all morning\".",
+            "type": "integer",
+            "minimum": 5,
+            "maximum": 120
+          }
+        }
+      }
+    },
+    {
+      "name": "check_weather_warnings",
+      "description": "Returns the official DWD weather warnings in force for a place — storm, snow, ice, heavy rain, thunderstorm, heat — with Warnstufe 1–4, area, validity and the official text unaltered. At a town or coordinate it adds the DWD road-surface forecast (Straßenwetter-Prognose: dry to black ice, road temperature) for the nearest road-weather stations. Use when asked about weather on a trip, safe driving, storm or snow warnings, or icy roads (Glätte, Glatteis). Do NOT use for a general forecast (not offered) or jams (check_autobahn_traffic). Show the attribution line.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "place": {
+            "description": "Where to look, as free text: a city (\"München\", \"Munich\"), a district or Kreis (\"Kreis Fulda\"), a Bundesland, a station or stop (\"Hamburg Hbf\"), a motorway junction (\"AK Neufahrn\"), or a street address with a house number (\"Bahnhofstraße 12, 36037 Fulda\"). A motorway number alone (\"A7\") resolves to the road, which has no single point — name a town or junction on it instead. Use this instead of coordinates whenever the person named a place. An address needs its town or postcode — a street and a number alone exist in many towns. A place or lat+lon is required (unless the tool names another way in, such as a road): when the person named neither, ask them for a town, a postcode or their position before calling. Given both, the answer is about lat+lon with the place as its label, and is refused only when the two lie further apart than the search reaches.",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "lat": {
+            "description": "Latitude in WGS 84, e.g. 48.137. Use with lon when the caller already holds coordinates; otherwise use place.",
+            "type": "number",
+            "minimum": -90,
+            "maximum": 90
+          },
+          "lon": {
+            "description": "Longitude in WGS 84, e.g. 11.576. Use with lat; otherwise use place.",
+            "type": "number",
+            "minimum": -180,
+            "maximum": 180
+          },
+          "language": {
+            "default": "de",
+            "description": "Set this on every call to the language the person is writing in: \"en\" if they wrote English, \"de\" if they wrote German. Do not leave it out: it defaults to German (\"de\"), which is only the fallback when the language is genuinely unclear, so an English question sent without it is answered in German — a wrong answer. Place names, station names and road numbers are never translated in either language; in English the German term is kept in parentheses so the person recognises it on signs and in local apps.",
+            "type": "string",
+            "enum": [
+              "de",
+              "en"
+            ]
+          },
+          "min_level": {
+            "default": 0,
+            "description": "Lowest official DWD level to report, 0–4 (default 0, i.e. everything). The DWD's own names: 1 = Wetterwarnung, 2 = Markante Wetterwarnung, 3 = Unwetterwarnung, 4 = Warnung vor extremem Unwetter; 0 = Vorabinformation Unwetter, an advance notice that is not yet a Warnstufe. Raise it ONLY when the question names a level or a Warnstufe in so many words (\"ab Stufe 3\", \"level 3 or higher\", \"nur Stufe 4\"). Unwetter, Unwetterwarnung, severe and storm are the ordinary way to ask about bad weather, not a filter: leave it at 0 there — a level the caller filtered away is a warning the person is never told about.",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 4
+          }
+        }
+      }
+    },
+    {
+      "name": "get_train_departures",
+      "description": "Next trains at a German railway station: platform, delay, cancellations. Use when asked when a train, S-Bahn or ICE leaves a named station, or if a train or line from it is late; later today (\"heute Abend\") stays here. A line with no DEPARTURE station (\"ist die S1 pünktlich?\"; a destination, \"nach …\", is not one) — check_transit_disruption. Lists U-Bahn and trams too. Do NOT use for one bus/tram/U-Bahn line, a non-railway stop, another day or over 2 h — get_departures. Types ICE/IC/RE/RB/S; no destination filter; whole station: describe_station. ≤ 15 rows, ≤ 120 min. Show the attribution line.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "station": {
+            "description": "The railway station, as the person says it: \"Hamburg Hbf\", \"Köln Hbf\", \"Munich Central\", \"Frankfurt (Main) Hbf\". Pass their words — English names and \"central station\" are understood. If the name fits several stations (a bare \"Hauptbahnhof\"), call anyway: the result lists them and asks which; do not guess one yourself. Give either station OR eva_no, never both.",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "eva_no": {
+            "description": "The station's EVA number (6–8 digits, e.g. 8002549 for Hamburg Hbf), when a previous result gave you one. It skips the name lookup and is exact — use it to answer a follow-up about a station this tool has already named.",
+            "type": "string",
+            "pattern": "^\\d{6,8}$"
+          },
+          "when": {
+            "description": "Start of the window as an ISO-8601 instant with an offset (\"2026-09-20T18:30:00+02:00\"). Leave it out for \"now\", which is what almost every question means. Times in the answer are Europe/Berlin whatever you pass.",
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+          },
+          "duration_min": {
+            "default": 60,
+            "description": "How far ahead to look, in minutes (5–120, default 60). Use a small window for \"what leaves now\" and a larger one for \"this evening\". Above 120 is refused: a departure board is not a timetable search.",
+            "type": "integer",
+            "minimum": 5,
+            "maximum": 120
+          },
+          "limit": {
+            "default": 10,
+            "description": "How many departures to return, earliest first (1–15, default 10). More than 15 is refused — that is a board a person can read, not a dataset.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 15
+          },
+          "categories": {
+            "description": "Keep only these train types, when the person named one: \"ICE\", \"IC\" (also EC, ECE, Railjet, Nightjet), \"RE\" (also IRE), \"RB\" or \"S\" (S-Bahn). \"next ICE to …\" is [\"ICE\"], \"Fernzug\" is [\"ICE\", \"IC\"], \"Regionalzug\" is [\"RE\", \"RB\"]. The board then lists only those, so pair it with a longer duration_min. Omit it for \"which trains leave\". A replacement bus is never a train type.",
+            "minItems": 1,
+            "maxItems": 5,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "ICE",
+                "IC",
+                "RE",
+                "RB",
+                "S"
+              ]
+            }
+          },
+          "language": {
+            "default": "de",
+            "description": "Set this on every call to the language the person is writing in: \"en\" if they wrote English, \"de\" if they wrote German. Do not leave it out: it defaults to German (\"de\"), which is only the fallback when the language is genuinely unclear, so an English question sent without it is answered in German — a wrong answer. Place names, station names and road numbers are never translated in either language; in English the German term is kept in parentheses so the person recognises it on signs and in local apps.",
+            "type": "string",
+            "enum": [
+              "de",
+              "en"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "get_departures",
+      "description": "Scheduled departures from any German stop — bus, tram, U-/S-Bahn, train, ferry — or the nearest stops around a place (\"Abfahrten in der Nähe\"). Use when asked when a bus, tram, U-/Stadtbahn or ferry goes (\"welche Bahnen\" at a Hbf too), or for another DAY or a time over 2 h away: \"Wann fährt der nächste Bus ab Fulda Bahnhof?\" Do NOT use for a rail station's trains today: get_train_departures. Plan times with live delay/cancellation where held; punctuality: check_transit_disruption. No A-to-B journeys: say so, no call. Holds ≥ 48 h ahead, ≤ 3 days. 15 per call. Show the attribution line.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "stop": {
+            "description": "The stop, as the person says it: \"Fulda, Bahnhof\", \"München, Marienplatz\", \"Köln, Hbf\", \"Hamburg, Rathausmarkt\" (town first). Include the town when the person did — half the names in Germany exist in twenty towns, and a bare \"Bahnhof\" or \"Hauptbahnhof\" comes back as a list of candidates to choose from, so call it and let the result ask. Pass their words; do not guess an id. Give either stop OR the stop id, never both.",
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 120
+          },
+          "stop_id": {
+            "description": "The stop's timetable id, exactly as a previous result of this tool gave it (\"de:06631:1234\"). It skips the name lookup and is exact — use it for a follow-up about a stop this tool has already named, and for one the person picked out of a candidate list.",
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 64
+          },
+          "place": {
+            "description": "A place to list the nearest stops around, when the person names no one stop: a town, district or address (\"Bahnhofstraße 12, Fulda\", \"Köln-Ehrenfeld\"). Lists the nearest stops within 5 km with their next departures, as viafrei.de's place page does. Give exactly one of stop, stop_id, place or lat+lon.",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "lat": {
+            "description": "Latitude in WGS 84, e.g. 50.551 — with lon, the nearest stops around a point the caller already holds. Use place for a named place.",
+            "type": "number",
+            "minimum": -90,
+            "maximum": 90
+          },
+          "lon": {
+            "description": "Longitude in WGS 84, e.g. 9.676. Use with lat.",
+            "type": "number",
+            "minimum": -180,
+            "maximum": 180
+          },
+          "when": {
+            "description": "Start of the window as an ISO-8601 instant with an offset (\"2026-10-02T07:30:00+02:00\"). Leave it out for \"now\". Convert the person's words yourself — \"morgen früh\", \"tonight\" — and pass the instant; the answer is always rendered in Europe/Berlin.",
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+          },
+          "duration_min": {
+            "default": 60,
+            "description": "How far past that moment to look, in minutes (5–1440, default 60). Small for \"what goes now\", a few hours for an evening. To look further ahead (the timetable reaches at least 48 h), move `when` instead of widening this: a window of a whole day returns at most 15 rows and would answer about the wrong half of it.",
+            "type": "integer",
+            "minimum": 5,
+            "maximum": 1440
+          },
+          "modes": {
+            "description": "Keep only these kinds of service: \"bus\", \"tram\", \"subway\" (U-Bahn), \"rail\" (every train, including S-Bahn and regional) or \"ferry\". Omit it unless the person named a kind — \"nur Busse\", \"welche Tram\". Several are allowed, which is what \"die Busse und Bahnen vor dem Hbf\" means. An S-Bahn is \"rail\": the feed does not always distinguish it, and the line name (\"S 6\") says which it is.",
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "rail",
+                "subway",
+                "tram",
+                "bus",
+                "ferry"
+              ]
+            }
+          },
+          "limit": {
+            "default": 10,
+            "description": "How many departures to return, earliest first (1–15, default 10). With only a place or a position this is per stop (default 4, for each of up to 8 nearest stops). The result always says how many more were in the window.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 15
+          },
+          "language": {
+            "default": "de",
+            "description": "Set this on every call to the language the person is writing in: \"en\" if they wrote English, \"de\" if they wrote German. Do not leave it out: it defaults to German (\"de\"), which is only the fallback when the language is genuinely unclear, so an English question sent without it is answered in German — a wrong answer. Place names, station names and road numbers are never translated in either language; in English the German term is kept in parentheses so the person recognises it on signs and in local apps.",
+            "type": "string",
+            "enum": [
+              "de",
+              "en"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "check_station_facilities",
+      "description": "Whether the lifts and escalators of a railway station or Köln Stadtbahn stop work now: each with place, state, reason. Another tram, U-Bahn or bus stop (named with its city: \"Stuttgart Charlottenplatz\") gets its step-free survey where one exists. Use when asked about step-free access, broken lifts, wheelchair or pram: \"Funktioniert der Aufzug am Kölner Hbf?\", \"is the lift at Hamburg Hbf working?\". Do NOT use for departures, platforms or delays: get_train_departures (trains), get_departures (bus/tram/U-Bahn); whole station: describe_station. At most 50, broken first. Show the attribution line.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "station": {
+            "description": "The railway station — or Köln Stadtbahn stop — as the person says it: \"Köln Hbf\", \"Hamburg Hbf\", \"Munich Central\", \"Neumarkt Köln\". Pass their words — English names and \"central station\" are understood. If the name fits several stations the result lists them and asks which; do not guess one yourself. Give either station OR eva_no, never both.",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "eva_no": {
+            "description": "The station's EVA number (6–8 digits, e.g. 8000207 for Köln Hbf), when a previous result — a departure board, for instance — already gave you one. It skips the name lookup and is exact.",
+            "type": "string",
+            "pattern": "^\\d{6,8}$"
+          },
+          "facility": {
+            "default": "any",
+            "description": "Which equipment to report: \"elevator\" for lifts only, \"escalator\" for escalators only, \"any\" for both (default). Pass a value only when the person named the equipment itself (\"Aufzug\", \"Rolltreppe\", \"lift\", \"escalator\"): a question about a wheelchair, a pram, heavy luggage or step-free access keeps the default — an escalator carries a suitcase too, and a filter there hides half of what the traveller needs. Filtering does not change how a broken one is reported, only which ones are listed.",
+            "type": "string",
+            "enum": [
+              "any",
+              "elevator",
+              "escalator"
+            ]
+          },
+          "limit": {
+            "default": 20,
+            "description": "How many facilities to list (1–50, default 20). Out-of-service equipment is listed first and the counts in the summary always cover ALL of them, so a shorter list never hides a broken lift.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50
+          },
+          "language": {
+            "default": "de",
+            "description": "Set this on every call to the language the person is writing in: \"en\" if they wrote English, \"de\" if they wrote German. Do not leave it out: it defaults to German (\"de\"), which is only the fallback when the language is genuinely unclear, so an English question sent without it is answered in German — a wrong answer. Place names, station names and road numbers are never translated in either language; in English the German term is kept in parentheses so the person recognises it on signs and in local apps.",
+            "type": "string",
+            "enum": [
+              "de",
+              "en"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "describe_station",
+      "description": "One German railway station as its viafrei.de page shows it: address, step-free platforms now, lifts and escalators (out of service first), platforms, the next departures with live delays, service alerts, parking and charging. Use when asked about a station as a whole: \"Was gibt es am Bahnhof Köln Hbf?\", \"tell me about Leipzig Hbf\", \"is Hannover Hbf step-free today?\". Do NOT use for one lift (check_station_facilities), one train's delay or platform (get_train_departures) or a bus stop (get_departures). Show the attribution line.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "station": {
+            "description": "The railway station, as the person says it: \"Köln Hbf\", \"Leipzig Hauptbahnhof\", \"Munich Central\". If the name fits several stations, call anyway: the result lists them and asks which. Give either station OR eva_no, never both.",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "eva_no": {
+            "description": "The station's EVA number (6–8 digits, e.g. 8000207 for Köln Hbf), when a previous result gave you one: exact, no name lookup.",
+            "type": "string",
+            "pattern": "^\\d{6,8}$"
+          },
+          "departures": {
+            "default": 10,
+            "description": "How many of the next departures to include (0–10, default 10, as many as the station page shows at least). 0 leaves the board out — for \"tell me about the station\" without trains.",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10
+          },
+          "language": {
+            "default": "de",
+            "description": "Set this on every call to the language the person is writing in: \"en\" if they wrote English, \"de\" if they wrote German. Do not leave it out: it defaults to German (\"de\"), which is only the fallback when the language is genuinely unclear, so an English question sent without it is answered in German — a wrong answer. Place names, station names and road numbers are never translated in either language; in English the German term is kept in parentheses so the person recognises it on signs and in local apps.",
+            "type": "string",
+            "enum": [
+              "de",
+              "en"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "watch_situation",
+      "description": "Opens a watch so THIS conversation is told when something changes: a road closed or restricted, a motorway jam, a stop running late, a weather warning, a charger freeing up. Use when asked to be told later: \"sag mir Bescheid, wenn die A8 wieder frei ist\", \"tell me when a warning comes for Kiel\". A name is enough as key; no lookup first. Do NOT use to look up now, nor for e-mail, SMS or alerts outside this chat — we cannot send one; say so. Set hours (≤ 24, default 3) for the time asked; condition narrows it (only the reopening, one charge point). Session-scoped, ≤ 10 watches. Show attribution.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "language": {
+            "default": "de",
+            "description": "Set this on every call to the language the person is writing in: \"en\" if they wrote English, \"de\" if they wrote German. Do not leave it out: it defaults to German (\"de\"), which is only the fallback when the language is genuinely unclear, so an English question sent without it is answered in German — a wrong answer. Place names, station names and road numbers are never translated in either language; in English the German term is kept in parentheses so the person recognises it on signs and in local apps.",
+            "type": "string",
+            "enum": [
+              "de",
+              "en"
+            ]
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "road",
+              "station",
+              "region",
+              "place",
+              "weather",
+              "charger"
+            ],
+            "description": "What kind of thing to watch. `road` = one motorway or federal road (key: \"A8\", \"B27\") — reports a closure or restriction appearing or clearing, and on a motorway a jam (condition events) appearing or clearing; `station` = one public-transport stop (key: its name, \"Köln Hbf\", or its DHID) — reports departures running late past the threshold; `region` = a city, district or Land (key: its name, \"Hamburg\", or its AGS key, \"14612\") — reports the share of late trips crossing the threshold; `place` = a town or address (key: \"Fulda\") — reports road restrictions appearing within the radius, not a jam; `weather` = one DWD warn cell (key: a place name, \"Kiel\", or the cell id) — reports an official warning coming into force; `charger` = one charging site (key: a place, \"Würzburg\", or the site id) — reports a point turning free."
+          },
+          "key": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "The thing to watch, in the person's own words — a name is enough and no read tool is needed first; the server resolves it and the answer names the key it resolved to. `road`: a road number (\"A8\", \"B27\"). `place`: a town or address (\"Fulda\"). `weather`: a place name (\"Kiel\"), resolved to the DWD warn cell it lies in — or a warn cell id (\"801002000\"); a Land or Kreis is an area and takes no single cell. `station`: a stop or station name (\"Köln Hbf\", \"München, Marienplatz\"), resolved to its DHID the way get_departures resolves a stop — or a DHID (\"de:14612:28\"); an EVA number from get_train_departures (\"8000207\") is not a DHID and is refused. `charger`: a place (\"Würzburg\"), resolved to the nearest charging site that reports live occupancy — or a site id from find_charging_station. `region`: a city, district or Land (\"Hamburg\", \"Landkreis Fulda\"), resolved to its AGS key the way check_transit_disruption resolves its region — or an AGS key (\"14612\"). A name that fits several places or stops gets a which-one list and opens no watch; call again with the chosen line."
+          },
+          "request": {
+            "description": "The person's request in their own words (\"sag mir Bescheid, wenn sich auf der A7 ein Stau bildet\"). Pass it on every call: a jam asked for on a motorway is watched (the Autobahn GmbH's and the police's jam reports); on another road, and for a `place` watch, closures and restrictions only, never a jam or slow traffic, and the answer says so.",
+            "type": "string",
+            "maxLength": 200
+          },
+          "hours": {
+            "description": "How long to watch, in hours (default 3, maximum 24). Prefer this over `until`: it needs no knowledge of the current time. Give one of `hours` or `until`, never both.",
+            "type": "number",
+            "minimum": 0.25,
+            "maximum": 24
+          },
+          "until": {
+            "description": "An explicit end instant as ISO-8601 with an offset (\"2026-09-20T18:40:00+02:00\"), at most 24 hours ahead. Use only when the person named a time; otherwise use `hours`. Give one of `hours` or `until`, never both.",
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+          },
+          "condition": {
+            "description": "Optional threshold; the keys of each kind, with an example: road {\"event\": \"reopen\"} (only the reopening), {\"events\": [\"jams\"]} (jams on a motorway); station {\"delay_min\": 20}; region {\"late_share\": 0.3, \"delay_min\": 5, \"min_trips\": 20}; place {\"radius_km\": 10}; weather {\"min_level\": 3}; charger {\"point_id\": \"2\"} (one charge point). Any other key, or a key of another kind, is refused by name; leave it out for the default. The answer repeats the condition it applies.",
+            "type": "object",
+            "properties": {
+              "delay_min": {
+                "description": "station: minutes of delay that count as a disruption (default 10).",
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 600
+              },
+              "late_share": {
+                "description": "region: share of observed trips running late that trips the watch (default 0.25).",
+                "type": "number",
+                "minimum": 0.01,
+                "maximum": 1
+              },
+              "min_trips": {
+                "description": "region: below this many observed trips the share is noise (default 10).",
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 10000
+              },
+              "radius_km": {
+                "description": "place: how far around the place to look (default 25).",
+                "type": "number",
+                "minimum": 0.1,
+                "maximum": 200
+              },
+              "min_level": {
+                "description": "weather: lowest DWD warning level worth reporting (default 2).",
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 4
+              },
+              "event": {
+                "description": "road: 'reopen' reports only a restriction (or jam) clearing; 'any' reports both (default).",
+                "type": "string",
+                "enum": [
+                  "reopen",
+                  "any"
+                ]
+              },
+              "events": {
+                "description": "road: what to report — 'restrictions' (closures, roadworks, restrictions; the default) and/or 'jams' (a jam the Autobahn GmbH or the police report on the motorway, motorways only). A jam watch: [\"jams\"]; both: [\"restrictions\", \"jams\"].",
+                "minItems": 1,
+                "maxItems": 4,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "restrictions",
+                    "jams"
+                  ]
+                }
+              },
+              "point_id": {
+                "description": "charger: one charge point of the site instead of any of them.",
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "kind",
+          "key"
+        ]
+      }
+    },
+    {
+      "name": "stop_watch",
+      "description": "Ends a watch this conversation opened with watch_situation, so no further notifications arrive for it. Use when the person no longer needs to be told — \"du musst mir nichts mehr zur A8 sagen\", \"stop watching that charger\". No id at hand: pass kind (\"weather\") and key in the person's words (\"A8\", \"Bamberg\", \"Kiel\"); one match is stopped, several are listed. Do NOT use to look a situation up (call check_road_status), to list what is running (read viafrei://watches), or to cancel anything outside this chat. Another session's watch is never found. Results carry their attribution line.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "language": {
+            "default": "de",
+            "description": "Set this on every call to the language the person is writing in: \"en\" if they wrote English, \"de\" if they wrote German. Do not leave it out: it defaults to German (\"de\"), which is only the fallback when the language is genuinely unclear, so an English question sent without it is answered in German — a wrong answer. Place names, station names and road numbers are never translated in either language; in English the German term is kept in parentheses so the person recognises it on signs and in local apps.",
+            "type": "string",
+            "enum": [
+              "de",
+              "en"
+            ]
+          },
+          "watch_id": {
+            "description": "The numeric id of the watch to stop, as `watch_situation` returned it (the 12 in viafrei://watch/12).",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "uri": {
+            "description": "The watch's resource uri, e.g. \"viafrei://watch/12\". Give either this or `watch_id`, not both.",
+            "type": "string",
+            "maxLength": 64
+          },
+          "kind": {
+            "description": "Instead of an id: the kind of watch the person means, as watch_situation took it (\"road\", \"station\", \"region\", \"place\", \"weather\", \"charger\"). \"Turn off the charging alert\" is kind \"charger\" alone.",
+            "type": "string",
+            "enum": [
+              "road",
+              "station",
+              "region",
+              "place",
+              "weather",
+              "charger"
+            ]
+          },
+          "key": {
+            "description": "Instead of an id: the watched subject in the person's words, as it was given to watch_situation — a road or place (\"A8\", \"Bamberg\"), and with `kind` a place for a weather or charger watch or a stop name for a station watch (\"Kiel\", \"Köln Hbf\"), which is resolved the way watch_situation resolved it. The id the watch carries works too. For a station, region, weather or charger watch a key that matches none of them falls back to `kind` alone. Matched against this session's open watches, case and spaces ignored. One match is stopped; several are listed and none is stopped.",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        }
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "de.viafrei/mcp",
+    "version": "2.7.13",
+    "remoteUrl": "https://mcp.viafrei.de/mcp",
+    "publishedAt": "2026-11-28T00:24:06.577906Z",
+    "fetchedAt": "2026-11-28T10:03:29.931Z",
+    "toolsSha256": "b07f8a2fbabdcc475daa304b5c4a98bdad2bb6d26248274be5155aa928e18297"
+  }
+}

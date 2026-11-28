@@ -1,0 +1,314 @@
+{
+  "$schema": "../schema.json",
+  "name": "io.github.sethblack/bseoa",
+  "title": "Black SEO Analyzer",
+  "category": "Developer Tools & DevOps",
+  "description": "Technical SEO audits: check a page or crawl a whole site, locally or hosted. Compares crawls.",
+  "repository": "https://github.com/sethblack/black-seo-analyzer",
+  "tools": [
+    {
+      "name": "account_status",
+      "description": "Report this account's plan and usage live: whether hosted audits are active, the page budget used and remaining in the rolling 30 days and when it resets, how long crawl sessions are kept, and the licenses on the account. Call it when a tool returned trial_expired, no_hosted_addon or quota_exceeded, when the user says their plan has changed, or when they ask what their plan includes. Read-only: it never changes the account.",
+      "inputSchema": {
+        "properties": {},
+        "type": "object"
+      }
+    },
+    {
+      "name": "check_page",
+      "description": "Audit one URL immediately and return its SEO issues (schema bseoa.issue/v1: key, category, severity, message, fix_hint, docs_url). This is the fast path and the right first call for \"what is wrong with this page?\" - it fetches a single page and never follows links. Prefer it over start_crawl whenever the user asked about one specific page rather than a whole site, and that includes a site's homepage or bare domain (\"check https://example.com/ for SEO problems\") when the user did not ask for a crawl, a site audit or a number of pages. Does not count against the account's page budget; limited to 30 calls a minute. JavaScript rendering (spa) is not available on the hosted connector.",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "spa": {
+            "default": false,
+            "description": "Render JavaScript with a headless browser before auditing. Slower; only\nneeded for single-page apps whose content is not in the served HTML.",
+            "type": "boolean"
+          },
+          "url": {
+            "description": "Absolute URL of the page to audit, including the scheme (https://...).",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "compare_crawls",
+      "description": "Compare two crawls of the same site and report which issues are new in the later crawl, which were fixed, and how many persist. Use it to answer \"did my changes help?\" or \"what regressed since the last deploy?\", and to gate a release: only the new_issues list represents a regression, so a pre-existing backlog never counts against a change. Get both session ids from list_crawls; base_session is the earlier crawl.",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "base_session": {
+            "description": "Session id of the earlier (\"before\") crawl.",
+            "type": "string"
+          },
+          "compare_session": {
+            "description": "Session id of the later (\"after\") crawl.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "base_session",
+          "compare_session"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "crawl_status",
+      "description": "Report the progress of a crawl started by start_crawl: state (\"queued\", \"running\", \"finished\" or \"failed\"), the crawl session_id to read results from, the pages stored so far, and the error text if it failed. Poll every few seconds; a queued crawl starts as soon as the worker is free. Do not call issues_summary or query_issues for that crawl until state is \"finished\", or you will read a partial result.",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "job_id": {
+            "description": "The job id returned by start_crawl.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_id"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "issues_summary",
+      "description": "Summarize a crawl: total issue count, counts by severity and by category, and every distinct issue key with how many pages it affects plus up to five example URLs. Always call this before query_issues - it is small, it tells you which keys are worth drilling into, and it is what you should base a prioritized fix plan on. Omit session_id to summarize the account's most recent crawl.",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "session_id": {
+            "default": null,
+            "description": "Crawl session id from list_crawls. Omit to use the most recent crawl in\nthe database.",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      }
+    },
+    {
+      "name": "list_crawls",
+      "description": "List the crawl sessions stored for this account, newest last, with their session_id, start URL, start and end times, and page count. Single-page checks made with check_page are not crawls and are not listed. Call this first when the user refers to \"the last crawl\" or when you need a session_id for issues_summary, query_issues, page_report or compare_crawls. A session with no end time is still running or was interrupted.",
+      "inputSchema": {
+        "properties": {},
+        "type": "object"
+      }
+    },
+    {
+      "name": "page_report",
+      "description": "Report everything recorded about one crawled URL: status code, redirect target, title and meta description, Open Graph tags, word count, link and asset counts, headings, TTFB, Web Vitals score, and the full issue list for that page. Use it after query_issues or issues_summary when you need the context behind a specific page's issues. It never returns the page's HTML source; to inspect markup, fetch the URL yourself.",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "session_id": {
+            "default": null,
+            "description": "Crawl session id from list_crawls. Omit to use the most recent crawl.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "url": {
+            "description": "The exact page URL as it appears in the crawl, including the scheme.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "query_issues",
+      "description": "List individual issues from a crawl, filtered by severity, issue key, category or URL prefix, as bseoa.issue/v1 records with the affected URL, the localized message, a fix hint and a docs link. Returns at most 100 issues per call: when the response has a non-null next_offset there are more, so call again with offset set to that value. Narrow with min_severity or key from issues_summary rather than paging through everything.",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "category": {
+            "default": null,
+            "description": "Only return issues in this category, e.g. \"metadata\", \"links\", \"images\".",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "key": {
+            "default": null,
+            "description": "Only return issues with this exact key, e.g.\n\"metadata.missing_meta_description\". Get keys from issues_summary.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "limit": {
+            "default": null,
+            "description": "How many issues to return. Capped at 100 per call.",
+            "format": "uint",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "min_severity": {
+            "default": null,
+            "description": "Only return issues at this severity or above: \"low\", \"medium\", \"high\",\nor \"critical\".",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "offset": {
+            "default": null,
+            "description": "Zero-based index of the first issue to return. Pass the `next_offset`\nfrom the previous response to page through a large result set.",
+            "format": "uint",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "session_id": {
+            "default": null,
+            "description": "Crawl session id from list_crawls. Omit to use the most recent crawl.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "url_prefix": {
+            "default": null,
+            "description": "Only return issues for URLs starting with this prefix, e.g.\n\"https://example.com/blog/\".",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      }
+    },
+    {
+      "name": "search_docs",
+      "description": "Search Black SEO Analyzer's own documentation and return the matching sections with their URLs. Use it for questions about bseoa itself: what a tool, command, flag or setting does, crawl limits and the page budget, licenses and the hosted plan, installing or configuring the CLI, GUI or connector, or what an issue key means (pass issue_key for that issue's reference page with its fix). Pass query for a question, issue_key for one issue, or neither to list the documentation pages. Works whatever the account's hosted status; does not count against the page budget; limited to 30 calls a minute.",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "issue_key": {
+            "default": null,
+            "description": "An issue key exactly as an issue reports it, for example\nmetadata.missing_meta_description: returns that issue's reference page\nwith its fix. Takes precedence over query.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "max_results": {
+            "default": null,
+            "description": "How many sections to return for a query: 5 by default, at most 10.",
+            "format": "uint",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "query": {
+            "default": null,
+            "description": "The user's question or a few keywords, for example \"does hosted render\nJavaScript\", \"max pages\", \"what does the hosted plan include\". Leave it\nout to list the documentation pages.",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      }
+    },
+    {
+      "name": "serp_preview",
+      "description": "Fetch each URL and report how its title and meta description will look in a search result: character length, pixel width, whether the engine will truncate it, and the Open Graph and Twitter Card fallbacks. Use it when the user asks how a page \"looks in Google\" or is rewriting titles and descriptions - it is about the snippet, not the page's other SEO problems, which check_page covers. At most 50 URLs per call; does not count against the page budget; limited to 30 calls a minute.",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "engine": {
+            "default": null,
+            "description": "Search engine whose truncation rules to apply: \"google\" (default) or\n\"bing\".",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "urls": {
+            "description": "Absolute URLs to preview. At most 50 per call.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "urls"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "start_crawl",
+      "description": "Queue a crawl of a whole site and return a job_id immediately; a worker runs the crawl and the pages count against the account's rolling 30-day page budget. Use it only when the user asks to crawl or audit a site, or names a number of pages; a request to check a single URL, even a homepage, is check_page, and never start a crawl alongside check_page unasked. Pass the max_pages the user named. One crawl per account runs at a time. Poll crawl_status with the job_id until state is \"finished\", then read the results with issues_summary and query_issues. max_pages defaults to 500 and is capped at 2000 and at the pages remaining in the budget. JavaScript rendering (spa) is not available on the hosted connector.",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "audit_profile": {
+            "default": null,
+            "description": "Which analyzers to run: \"full\" (default), \"standard\", \"core\",\n\"critical\", or \"quick\". Use \"quick\" or \"critical\" when the user wants a\nfast answer rather than a complete audit.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "max_pages": {
+            "default": null,
+            "description": "Maximum number of pages to fetch. Defaults to 500. Raise it only when\nthe user has asked for a full-site audit and accepts a longer run.",
+            "format": "uint",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "spa": {
+            "default": false,
+            "description": "Render JavaScript with a headless browser. Much slower; use only for\nsingle-page apps.",
+            "type": "boolean"
+          },
+          "url": {
+            "description": "Absolute URL to start crawling from, including the scheme.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "type": "object"
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "io.github.sethblack/bseoa",
+    "version": "26.11.18",
+    "remoteUrl": "https://mcp.blackseoanalyzer.com/mcp",
+    "publishedAt": "2026-11-17T16:59:46.620065Z",
+    "fetchedAt": "2026-11-28T10:03:29.931Z",
+    "toolsSha256": "09e3ac6cd48fcd2686e9b4f48bdb37dc4f0daf8fab13f9759c58b18f5e8919e6"
+  }
+}

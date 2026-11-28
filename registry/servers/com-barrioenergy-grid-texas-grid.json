@@ -1,0 +1,2876 @@
+{
+  "$schema": "../schema.json",
+  "name": "com.barrioenergy.grid/texas-grid",
+  "title": "Barrio Grid",
+  "category": "E-Commerce & Retail",
+  "description": "Texas power grid siting: substations, transmission, ERCOT prices, queue, parcels, water.",
+  "tools": [
+    {
+      "name": "grid_context",
+      "description": "Summarize the power grid around a Texas address or coordinate, including the high and low side voltage and OpenStreetMap class (transmission or distribution) of the 3 nearest substations: county, the likely serving utility, the 3 nearest substations with distance, transmission lines nearby, ERCOT generation queue projects nearby, and planned transmission upgrades within 25 miles, and railroads: the nearest rail lines with owner and type, and whether a railroad lies between the site and its nearest substation (or a point you pass as to_lat/to_lng). Use when someone asks what power infrastructure is near a site, whether a property could host a data center, battery or large load, or who the utility is.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "address": {
+            "type": "string",
+            "description": "Texas street address, e.g. '1201 Main St, Houston, TX'. Use this or lat/lng."
+          },
+          "lat": {
+            "type": "number",
+            "description": "Latitude (WGS84). Use with lng instead of address."
+          },
+          "lng": {
+            "type": "number",
+            "description": "Longitude (WGS84). Use with lat instead of address."
+          },
+          "radius_mi": {
+            "type": "number",
+            "description": "Search radius in miles for lines and queue projects. Default 5, max 25."
+          },
+          "to_lat": {
+            "type": "number",
+            "description": "Optional second point (e.g. a planned substation pad or a named POI) to test rail crossings against, instead of the nearest substation."
+          },
+          "to_lng": {
+            "type": "number",
+            "description": "Longitude of the optional second point."
+          }
+        }
+      }
+    },
+    {
+      "name": "nearest_substation",
+      "description": "Find the closest high-voltage substations to a Texas address or coordinate, or list those inside a county, with high and low side voltage, OpenStreetMap station class (transmission or distribution bus), owner and distance in miles. Use when someone asks where power is near a site, how far a property is from a substation, or whether a nearby station has a distribution bus to meter a load from. Pro adds mapped transformers and substations mapped in OpenStreetMap but missing from the federal layer.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "address": {
+            "type": "string",
+            "description": "Texas street address, e.g. '1201 Main St, Houston, TX'. Use this or lat/lng."
+          },
+          "lat": {
+            "type": "number",
+            "description": "Latitude (WGS84). Use with lng instead of address."
+          },
+          "lng": {
+            "type": "number",
+            "description": "Longitude (WGS84). Use with lat instead of address."
+          },
+          "county": {
+            "type": "string",
+            "description": "Texas county name, e.g. 'Jackson'. With no address or lat/lng, lists substations inside that county, nearest the county center first."
+          },
+          "min_kv": {
+            "type": "number",
+            "description": "Minimum substation voltage in kV. Default 69. Use 138 or 345 for large loads."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "How many substations. Default 5, max 20."
+          },
+          "osm_only_radius_mi": {
+            "type": "number",
+            "description": "Pro. How far to look for substations missing from the federal layer (osm_only_substations). Default 5, max 50. Use 25 when the user asks for stations the federal data misses."
+          },
+          "bus_kv_max": {
+            "type": "number",
+            "description": "Pro. Keep stations that have a bus at or below this kV (the lowest mapped OpenStreetMap voltage, else the listed kV). A 345/138/69 kV station passes bus_kv_max 69, which min_kv cannot express."
+          },
+          "osm_class": {
+            "type": "string",
+            "enum": [
+              "distribution",
+              "transmission",
+              "switching"
+            ],
+            "description": "Keep stations whose OpenStreetMap class matches. Distribution means a distribution bus is mapped."
+          }
+        }
+      }
+    },
+    {
+      "name": "find_powered_land",
+      "description": "Search for land parcels in Texas that sit close to a high-voltage substation: powered land for data centers, battery storage, crypto mining or other large loads. Filter by county or by a point and radius, minimum acreage, maximum distance to a substation and minimum substation voltage. Returns parcel acreage, location, property ID, situs address, legal description and appraisal values, and the nearest qualifying substation with its owner. Filter by owner type (company, individual, trust_estate, public, private), and by max_wetland_pct to drop parcels that are largely mapped wetland (USFWS NWI), and by bus_kv_max or osm_class to keep parcels whose nearest substation has a lower-voltage or distribution bus mapped in OpenStreetMap. Set group_by_owner to roll parcels up by landowner and rank owners by total acres near qualifying substations, e.g. 'who controls 200+ acres within a mile of a 138 kV substation'; undivided-interest accounts on the same polygon are counted once. Enterprise Lite and Enterprise: below them it returns the count of qualifying parcels and their acreage, not the parcels or owners. Parcel coverage is limited to the counties listed in the response.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "county": {
+            "type": "string",
+            "description": "Texas county name, e.g. 'Jackson'. Use this or a location."
+          },
+          "address": {
+            "type": "string",
+            "description": "Texas street address, e.g. '1201 Main St, Houston, TX'. Use this or lat/lng."
+          },
+          "lat": {
+            "type": "number",
+            "description": "Latitude (WGS84). Use with lng instead of address."
+          },
+          "lng": {
+            "type": "number",
+            "description": "Longitude (WGS84). Use with lat instead of address."
+          },
+          "radius_mi": {
+            "type": "number",
+            "description": "Radius around the location in miles. Default 10, max 50."
+          },
+          "min_acres": {
+            "type": "number",
+            "description": "Minimum parcel size in acres. Default 5, minimum 5."
+          },
+          "max_sub_mi": {
+            "type": "number",
+            "description": "Maximum distance from parcel to substation in miles. Default 3, max 10."
+          },
+          "min_kv": {
+            "type": "number",
+            "description": "Minimum substation voltage in kV. Default 138."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Maximum parcels returned. Default 25, max 200. With group_by_owner: owners returned, default 25, max 100."
+          },
+          "owner_type": {
+            "type": "string",
+            "enum": [
+              "any",
+              "company",
+              "individual",
+              "trust_estate",
+              "public",
+              "private"
+            ],
+            "description": "Landowner type, classified from the appraisal district owner name. private = everything except government, school districts and other public owners. Default any (private when group_by_owner is set)."
+          },
+          "group_by_owner": {
+            "type": "boolean",
+            "description": "Group qualifying parcels by landowner and return owners ranked by total acres, with parcel count, largest parcel, prop IDs, nearest substation and mailing address. Needs a county or a location."
+          },
+          "min_total_acres": {
+            "type": "number",
+            "description": "With group_by_owner: only owners holding at least this many acres in total. Default 50."
+          },
+          "min_parcel_acres": {
+            "type": "number",
+            "description": "With group_by_owner: smallest parcel counted toward an owner's total. Default 5, minimum 1 (below 5 acres the radius is capped at 10 miles)."
+          },
+          "max_wetland_pct": {
+            "type": "number",
+            "description": "Drop parcels where more than this percent of the area is mapped wetland or open water (USFWS National Wetlands Inventory), e.g. 10. Every returned parcel carries wetland_pct and wetland_acres either way. Not used with group_by_owner."
+          },
+          "bus_kv_max": {
+            "type": "number",
+            "description": "Keep parcels whose nearest qualifying substation has a bus at or below this kV (lowest mapped OpenStreetMap voltage, else the listed kV). A 345/138/69 kV station passes bus_kv_max 69 even though min_kv judges it by its top voltage. Not used with group_by_owner."
+          },
+          "osm_class": {
+            "type": "string",
+            "enum": [
+              "distribution",
+              "transmission",
+              "switching"
+            ],
+            "description": "Keep parcels whose nearest qualifying substation has this OpenStreetMap class. distribution means a distribution bus is mapped. Stations not mapped in OpenStreetMap are dropped. Not used with group_by_owner."
+          },
+          "min_flat_pct": {
+            "type": "number",
+            "description": "Enterprise. Minimum percent of the parcel under 5 percent slope (USGS 3DEP). Adds flat_pct, mean_slope_pct and wells_active to each parcel."
+          },
+          "same_side_of_rail": {
+            "type": "boolean",
+            "description": "Enterprise. Keep only parcels with no active railroad between the parcel and its own nearest qualifying substation (straight line, TxDOT/FRA rail). Every parcel then carries rail_crossings and rail_lines."
+          },
+          "measure_terrain": {
+            "type": "boolean",
+            "description": "Enterprise. Add flat_pct, mean_slope_pct and wells_active without filtering."
+          },
+          "measure_gas": {
+            "type": "boolean",
+            "description": "Enterprise. Add nearest_gas_mi without filtering."
+          },
+          "max_dist_line_mi": {
+            "type": "number",
+            "description": "Enterprise. Keep parcels whose centroid is within this many miles of a distribution line under 69 kV (OpenStreetMap mapped, plus the gridfinder model unless dist_mapped_only). For small loads and distribution-connected solar or storage, typically under 10 MW. Adds nearest_dist_line_mi and dist_line_basis. Measured on the first 80 parcels after the other filters."
+          },
+          "dist_mapped_only": {
+            "type": "boolean",
+            "description": "Enterprise. With max_dist_line_mi, count only lines traced in OpenStreetMap, not modeled ones. Mapped coverage is thin in many counties."
+          },
+          "max_fiber_mi": {
+            "type": "number",
+            "description": "Enterprise. Keep parcels within this many miles of a mapped fiber route (provider GIS or carrier corridor). Adds nearest_fiber_mi and nearest_fiber_provider. Measured on the first 80 parcels after the other filters."
+          },
+          "max_gas_mi": {
+            "type": "number",
+            "description": "Enterprise. Keep parcels within this many miles of a mapped natural gas pipeline (RRC; see min_gas_diameter_in and gas_interstate). Straight-line distance to the mapped line. Not used with group_by_owner."
+          },
+          "min_gas_diameter_in": {
+            "type": "number",
+            "description": "Enterprise. Only count gas lines of at least this diameter in inches (for example 12) when measuring nearest_gas_mi."
+          },
+          "gas_interstate": {
+            "type": "string",
+            "enum": [
+              "all",
+              "interstate",
+              "intrastate"
+            ],
+            "description": "Enterprise. Only count interstate (FERC regulated) or intrastate (Railroad Commission regulated) gas lines. Default all."
+          }
+        }
+      }
+    },
+    {
+      "name": "ercot_queue",
+      "description": "List ERCOT generation interconnection queue projects (solar, wind, battery storage, gas) near a Texas address or coordinate, in a county, or at a named point of interconnection (POI) substation, with fuel, MW, study status, POI substation and distance. Use when someone asks what generation or storage is planned nearby, how congested an area is, about the ERCOT queue in a county, or what is queued at a substation. Free accounts get every location and type; names, sizes, owners and dates are Pro.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "county": {
+            "type": "string",
+            "description": "Texas county name. Use this or a location or poi."
+          },
+          "address": {
+            "type": "string",
+            "description": "Texas street address, e.g. '1201 Main St, Houston, TX'. Use this or lat/lng."
+          },
+          "lat": {
+            "type": "number",
+            "description": "Latitude (WGS84). Use with lng instead of address."
+          },
+          "lng": {
+            "type": "number",
+            "description": "Longitude (WGS84). Use with lat instead of address."
+          },
+          "poi": {
+            "type": "string",
+            "description": "Point of interconnection substation name to match, e.g. 'Paint Creek' or 'Bearkat'."
+          },
+          "fuel": {
+            "type": "string",
+            "description": "Filter by fuel: SOL, WIN, GAS, OTH, NUC."
+          },
+          "radius_mi": {
+            "type": "number",
+            "description": "Radius in miles. Default 10, max 50."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Default 50, max 100."
+          }
+        }
+      }
+    },
+    {
+      "name": "data_centers",
+      "description": "Data center projects in Texas (hyperscale, AI campuses, colocation, HPC conversions, powered land) near an address or coordinate, in a county, by status, or by company: name, companies (developer, end user, parents), status and date, MW, acres, capex, utility and substation, tax abatements, local opposition, confidence and sources. Barrio Energy research compiled from utility and PUCT filings, county and city records, abatement agreements and news. Use for 'what data centers are near X', 'data centers in Y County', 'who is building data centers in Texas', 'where is Google building'. Free accounts get locations only; names, companies, status, MW and sources are Pro. Status and company filtering are Pro. Campuses list their buildings; MW totals count campuses only.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "address": {
+            "type": "string",
+            "description": "Texas street address, e.g. '1201 Main St, Houston, TX'. Use this or lat/lng."
+          },
+          "lat": {
+            "type": "number",
+            "description": "Latitude (WGS84). Use with lng instead of address."
+          },
+          "lng": {
+            "type": "number",
+            "description": "Longitude (WGS84). Use with lat instead of address."
+          },
+          "radius_mi": {
+            "type": "number",
+            "description": "Radius around the location in miles. Default 25, max 150."
+          },
+          "county": {
+            "type": "string",
+            "description": "Texas county name. Use this or a location."
+          },
+          "company": {
+            "type": "string",
+            "description": "Company name, e.g. Google, Crusoe, CyrusOne (Pro)."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "operating",
+              "construction",
+              "permitting",
+              "announced",
+              "cancelled"
+            ],
+            "description": "Filter by status group. Cancelled projects are left out unless asked for."
+          },
+          "min_mw": {
+            "type": "number",
+            "description": "Minimum stated MW."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Default 25, max 100."
+          }
+        }
+      }
+    },
+    {
+      "name": "company_footprint",
+      "description": "Which companies are building data centers across Texas and where: companies ranked by number of projects (default 3 or more), with total stated MW, counties and how many are under construction or operating; or every project for one company. Use for 'who has the most data center projects in Texas', 'show me Crusoe's footprint', 'companies with 3+ sites'. Pro.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "company": {
+            "type": "string",
+            "description": "One company to list every project for. Omit to rank companies."
+          },
+          "min_projects": {
+            "type": "integer",
+            "description": "When ranking: minimum projects per company. Default 3."
+          }
+        }
+      }
+    },
+    {
+      "name": "battery_queue",
+      "description": "Battery energy storage projects in the ERCOT interconnection queue (GIS report) near a Texas address or coordinate, in a county, or at a named point of interconnection: developer, MW, POI substation, study stage (screening, FIS started, FIS complete, IA signed, energized), projected COD, co-location with solar or wind, plus totals (projects, MW, MW with signed IA, MW by zone). Use when someone asks what storage is planned near a site, how crowded a substation is with batteries, who is developing storage in a county, or which queued batteries have interconnection agreements. Pair with volatile_nodes to compare spreads against competition. Free accounts get every location and type; names, sizes, owners and dates are Pro.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "address": {
+            "type": "string",
+            "description": "Texas street address, e.g. '1201 Main St, Houston, TX'. Use this or lat/lng."
+          },
+          "lat": {
+            "type": "number",
+            "description": "Latitude (WGS84). Use with lng instead of address."
+          },
+          "lng": {
+            "type": "number",
+            "description": "Longitude (WGS84). Use with lat instead of address."
+          },
+          "radius_mi": {
+            "type": "number",
+            "description": "Radius around the location in miles. Default 15, max 100."
+          },
+          "county": {
+            "type": "string",
+            "description": "Texas county name. Use this or a location or poi."
+          },
+          "poi": {
+            "type": "string",
+            "description": "Point of interconnection substation name or bus number to match, e.g. 'Lolita' or 'Hillje'."
+          },
+          "min_mw": {
+            "type": "number",
+            "description": "Minimum project MW. Default 0."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "all",
+              "active",
+              "ia",
+              "energized"
+            ],
+            "description": "all (default), active = not yet energized, ia = interconnection agreement signed or energized, energized only."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Default 50, max 200."
+          }
+        }
+      }
+    },
+    {
+      "name": "power_plants",
+      "description": "Existing power plants and batteries in ERCOT from the EIA-860M monthly generator inventory, near a Texas address or coordinate or in a county: plant, operator, technology, nameplate MW, storage MWh and duration, first operating year, planned retirements, plus planned units EIA has on file. Filter by kind: storage, solar, wind, gas, coal, nuclear, hydro, other. Use when someone asks what is already built near a site, how much operating battery storage sits near a node or substation (saturation, versus the queue), battery durations in an area, or which gas or coal plants are nearby or retiring. Pair with battery_queue (what is coming) and volatile_nodes (spreads). Free accounts get location, kind and a size band; names, operators, exact MW and MWh, years and status are Pro.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "address": {
+            "type": "string",
+            "description": "Texas street address, e.g. '1201 Main St, Houston, TX'. Use this or lat/lng."
+          },
+          "lat": {
+            "type": "number",
+            "description": "Latitude (WGS84). Use with lng instead of address."
+          },
+          "lng": {
+            "type": "number",
+            "description": "Longitude (WGS84). Use with lat instead of address."
+          },
+          "radius_mi": {
+            "type": "number",
+            "description": "Radius around the location in miles. Default 15, max 100."
+          },
+          "county": {
+            "type": "string",
+            "description": "Texas county name. Use this or a location."
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "storage",
+              "solar",
+              "wind",
+              "gas",
+              "coal",
+              "nuclear",
+              "hydro",
+              "other"
+            ],
+            "description": "Technology group. Omit for all."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "operating",
+              "planned",
+              "all"
+            ],
+            "description": "operating (default), planned (EIA-reported planned units), or all."
+          },
+          "min_mw": {
+            "type": "number",
+            "description": "Minimum nameplate MW. Default 0."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Default 50, max 200."
+          }
+        }
+      }
+    },
+    {
+      "name": "parcel_owner",
+      "description": "Who owns land in Texas: county appraisal district parcel records at an address or coordinate, around a named substation (e.g. 'Hillje'), or by property ID. Returns property ID, acreage, situs (site) address, legal description, land/improvement/market value and tax year for each parcel, nearest first, flagging the parcel that contains the point. Enterprise Lite and Enterprise for owners and lists: below them it returns the one parcel record at the point or property ID (acres, legal description, values) without the owner, and counts of parcels and owners around it; the property ID is enough to look the owner up at the county appraisal district. Every response also carries utility_pad: whether a utility-owned parcel under 10 acres (a likely substation pad) sits within the radius, yes or no and a count for everyone, with owner and property ID on Enterprise Lite and Enterprise. Use when someone asks who owns a property, the land by a substation, a landowner's mailing address, whether a utility already owns a pad nearby, or wants to contact landowners for a site.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "address": {
+            "type": "string",
+            "description": "Texas street address, e.g. '1201 Main St, Houston, TX'. Use this or lat/lng."
+          },
+          "lat": {
+            "type": "number",
+            "description": "Latitude (WGS84). Use with lng instead of address."
+          },
+          "lng": {
+            "type": "number",
+            "description": "Longitude (WGS84). Use with lat instead of address."
+          },
+          "substation": {
+            "type": "string",
+            "description": "Substation name, e.g. 'Hillje'. Spelling can be approximate. Use instead of a location."
+          },
+          "county": {
+            "type": "string",
+            "description": "County name. Narrows a substation name or property ID match."
+          },
+          "prop_id": {
+            "type": "string",
+            "description": "Appraisal district property ID (with county)."
+          },
+          "radius_mi": {
+            "type": "number",
+            "description": "Search radius in miles around the point or substation. Default 0.5, max 5."
+          },
+          "min_acres": {
+            "type": "number",
+            "description": "Skip parcels smaller than this (the parcel containing the point is always returned). Default 0."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Parcels returned, nearest first. Default 10, max 100."
+          }
+        }
+      }
+    },
+    {
+      "name": "jurisdiction",
+      "description": "Who governs a Texas address or coordinate: county (with FIPS), whether it is inside city limits (which city) or inside a city's extraterritorial jurisdiction (ETJ, estimated from the statutory distance), the nearest city and distance, school district, groundwater conservation district or rule of capture, ERCOT load zone and likely utility, and the FEMA flood zone (100-year floodplain, floodway, 500-year floodplain, outside, or not mapped) with distance to the nearest 100-year floodplain, mapped wetlands on the spot and within half a mile (USFWS National Wetlands Inventory; free says yes or no, Pro adds type, acres and distance) and USFWS critical habitat within 5 miles, and whether it is in a Qualified Opportunity Zone (QOZ) now and from 2027 (Texas OZ 2.0 tracts). Use when someone asks if a site is inside city limits or ETJ, whether it is in an opportunity zone, whether it is in a floodplain or flood zone, whether there are wetlands or endangered species critical habitat, whether zoning applies, which county or school district a parcel is in, who permits water wells there, or wants the permitting picture before buying land.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "address": {
+            "type": "string",
+            "description": "Texas street address, e.g. '1201 Main St, Houston, TX'. Use this or lat/lng."
+          },
+          "lat": {
+            "type": "number",
+            "description": "Latitude (WGS84). Use with lng instead of address."
+          },
+          "lng": {
+            "type": "number",
+            "description": "Longitude (WGS84). Use with lat instead of address."
+          }
+        }
+      }
+    },
+    {
+      "name": "pipelines_near",
+      "description": "Natural gas (and optionally liquids) pipelines near a Texas address or coordinate from Railroad Commission of Texas T-4 permit data: operator, system name, commodity, nominal diameter, interstate or intrastate, transmission or gathering, distance in miles and miles of line within the radius, plus a summary (nearest line, largest diameter, nearest 12-inch-plus, nearest interstate). Use when someone asks about gas supply for a behind-the-meter plant, generator or data center, which pipelines cross or border a tract, or who the pipeline operators are near a site. Also returns gas_infrastructure within 15 miles: the nearest trunklines (20-inch-plus or interstate), compressor stations (HIFLD certificated horsepower, TCEQ gas transmission sites), processing plants with design capacity and throughput in MMcf/d, and EIA-tracked capacity expansion projects by the operators of those lines. Line capacity and available takeaway are not public; this finds who to call.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "address": {
+            "type": "string",
+            "description": "Texas street address, e.g. '1201 Main St, Houston, TX'. Use this or lat/lng."
+          },
+          "lat": {
+            "type": "number",
+            "description": "Latitude (WGS84). Use with lng instead of address."
+          },
+          "lng": {
+            "type": "number",
+            "description": "Longitude (WGS84). Use with lat instead of address."
+          },
+          "radius_mi": {
+            "type": "number",
+            "description": "Search radius in miles. Default 5, max 25."
+          },
+          "gas_only": {
+            "type": "boolean",
+            "description": "Only natural gas lines. Default true; false adds crude, HVL/NGL, refined products, CO2."
+          },
+          "min_diameter_in": {
+            "type": "number",
+            "description": "Only systems with at least this nominal diameter in inches, e.g. 12 for transmission-scale supply."
+          },
+          "interstate": {
+            "type": "string",
+            "enum": [
+              "all",
+              "interstate",
+              "intrastate"
+            ],
+            "description": "Pro. Keep only interstate (FERC-regulated) or only intrastate (Railroad Commission regulated) systems. Default all. Free calls get all systems plus a note."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Systems returned. Default 25, max 60."
+          }
+        }
+      }
+    },
+    {
+      "name": "fiber_near",
+      "description": "Fiber optic networks near a Texas address or coordinate: long-haul, middle-mile and metro fiber routes by provider with distance in miles, the nearest carrier hotels, colocation facilities and data centers (PeeringDB-keyed) with distance, and which providers offer fiber-to-the-premises nearby (FCC Broadband Data Collection). Routes are marked by how their path is known: gis_published is the provider's own GIS (real cable path, FiberLight as of March 2022), carrier_on_corridor is a carrier reported on a named highway corridor between two cities (path inferred, not surveyed). Use when someone asks about fiber, connectivity, latency, backhaul or dark fiber for a data center, mining or industrial site, who the carriers are near a tract, or how far a site is from a carrier hotel. Free shows the providers and distances; Pro adds fiber counts, placement (aerial or underground), use (backbone, lateral), status and route names, facility names, and fiber-to-premises locations and speeds. Lit capacity and pricing are not public; this finds who to call.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "address": {
+            "type": "string",
+            "description": "Texas street address, e.g. '1201 Main St, Houston, TX'. Use this or lat/lng."
+          },
+          "lat": {
+            "type": "number",
+            "description": "Latitude (WGS84). Use with lng instead of address."
+          },
+          "lng": {
+            "type": "number",
+            "description": "Longitude (WGS84). Use with lat instead of address."
+          },
+          "radius_mi": {
+            "type": "number",
+            "description": "Search radius for routes and fiber-to-premises in miles. Default 5, max 25. Facilities are always the nearest ten within 100 miles."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Provider route groups returned, nearest first. Default 15, max 40."
+          }
+        }
+      }
+    },
+    {
+      "name": "distribution_near",
+      "description": "What distribution service is near a Texas address or coordinate, for loads and generators small enough to sit on a distribution feeder (typically under about 10 MW): the nearest substations that OpenStreetMap shows with a distribution bus, with high and low side voltage, the PUCT certificated utility or co-op that serves the point, and distribution lines (under 69 kV) within a radius, each marked mapped (traced in OpenStreetMap, with voltage and operator where tagged) or modeled (gridfinder statistical model, likely route only). Use for 'can I put a 9.9 MW data center or behind-the-meter solar here', 'is there a distribution line along this parcel', 'which distribution sub would feed this', 'who is the distribution utility at this point'. Feeder capacity, hosting capacity and voltage on most lines are not public in Texas; this tells you where to look and who to call, and the utility confirms. Free shows counts and distances; Pro adds voltages, operators, line locations and station detail.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "address": {
+            "type": "string",
+            "description": "Texas street address, e.g. '1201 Main St, Houston, TX'. Use this or lat/lng."
+          },
+          "lat": {
+            "type": "number",
+            "description": "Latitude (WGS84). Use with lng instead of address."
+          },
+          "lng": {
+            "type": "number",
+            "description": "Longitude (WGS84). Use with lat instead of address."
+          },
+          "radius_mi": {
+            "type": "number",
+            "description": "Radius for distribution lines in miles. Default 1, max 5."
+          },
+          "include_modeled": {
+            "type": "boolean",
+            "description": "Include modeled (gridfinder) lines. Default true."
+          }
+        }
+      }
+    },
+    {
+      "name": "logistics_screen",
+      "description": "How freight, heavy equipment and crews reach a Texas address or coordinate, from federal public data: the nearest major highway (interstate, freeway or principal arterial) and nearest interstate with traffic (AADT, average daily vehicles) and truck counts from FHWA HPMS 2024; the nearest active rail line with owner, subdivision and trackage rights and the nearest rail yard (FRA North American Rail Network); the nearest transload site with the modes it connects (US Army Corps ERDC), rail intermodal or Ro-Ro terminal, and port (BTS); and the nearest public-use airport and nearest public airport with a 5,000 ft runway (FAA NASR), with drive miles and minutes by road where the router answers. Straight-line miles otherwise. Free shows what is nearby and how far; Pro adds names, owners, traffic and truck counts, runway length and drive times.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "address": {
+            "type": "string",
+            "description": "Texas street address, e.g. '1201 Main St, Houston, TX'. Use this or lat/lng."
+          },
+          "lat": {
+            "type": "number",
+            "description": "Latitude (WGS84). Use with lng instead of address."
+          },
+          "lng": {
+            "type": "number",
+            "description": "Longitude (WGS84). Use with lat instead of address."
+          }
+        }
+      }
+    },
+    {
+      "name": "heavy_haul",
+      "description": "Enterprise. Routes an oversize or heavy truck load to a Texas site and flags what is on the way, from federal and state public data. Origin defaults to the nearest port; or pass origin as nearest_intermodal, nearest_transload, or an origin address or coordinate (a town the load ships from). The route is a truck route on OpenStreetMap (Valhalla) that honors mapped height, width and weight limits for the load given. Along it: FHWA National Bridge Inventory bridges within 25 m that are posted, restricted or closed, have clearance under the load height plus 1 ft, or have an operating rating under the load weight; TxGIO low-water crossings within 50 m (inventory about 2010); and, on the last miles to the site, local roads, minor collectors and lanes under 11 ft from FHWA HPMS 2024. No permit, escort or cost figures: TxDMV routes every oversize or overweight permit, and a heavy-haul carrier confirms the route.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "address": {
+            "type": "string",
+            "description": "Texas street address, e.g. '1201 Main St, Houston, TX'. Use this or lat/lng."
+          },
+          "lat": {
+            "type": "number",
+            "description": "Latitude (WGS84). Use with lng instead of address."
+          },
+          "lng": {
+            "type": "number",
+            "description": "Longitude (WGS84). Use with lat instead of address."
+          },
+          "origin": {
+            "type": "string",
+            "description": "nearest_port (default), nearest_intermodal, nearest_transload, or an address or town the load ships from."
+          },
+          "origin_lat": {
+            "type": "number",
+            "description": "Origin latitude (with origin_lng) instead of origin."
+          },
+          "origin_lng": {
+            "type": "number",
+            "description": "Origin longitude."
+          },
+          "weight_tons": {
+            "type": "number",
+            "description": "Gross load weight in US tons (truck, trailer and load). Default 80 (a typical overweight lowboy)."
+          },
+          "height_ft": {
+            "type": "number",
+            "description": "Loaded height in feet. Default 15."
+          },
+          "width_ft": {
+            "type": "number",
+            "description": "Loaded width in feet. Default 12."
+          },
+          "length_ft": {
+            "type": "number",
+            "description": "Overall length in feet. Default 90."
+          },
+          "last_mi": {
+            "type": "number",
+            "description": "Miles at the site end to list minor roads for. Default 5, max 20."
+          },
+          "via": {
+            "type": "string",
+            "description": "Optional through points to force the route, as lat,lng pairs separated by semicolons (up to 8), e.g. to go around a flagged bridge."
+          },
+          "include_geometry": {
+            "type": "boolean",
+            "description": "Return the route line as GeoJSON (route_geojson) for drawing on a map."
+          }
+        }
+      }
+    },
+    {
+      "name": "haul_compare",
+      "description": "Enterprise. Compares ways to move a heavy load to a Texas site from an origin (default the nearest port; or a Texas town, address or point): (1) truck direct on the truck router, (2) truck to the nearest active rail line, rail on the FRA North American Rail Network to the rail-served transload or intermodal terminal nearest the site, then truck to the site. Gives miles per leg, railroads on the rail leg and how many times the line changes railroad, and an indicative linehaul cost per option from published national averages (BTS NTS Table 3-21 revenue per ton-mile: truck 27.07 cents 2022, Class I rail 5.19 cents 2023; ATRI 2025 truck operating cost $2.336 per mile). The averages are general freight, not oversize permit loads, and exclude transload handling, switching, permits, escorts and rigging, so use them to rank options, not to budget. (3) truck to the nearest dock, barge on the Gulf Intracoastal Waterway, ship channels and connected rivers to the dock nearest the site, then truck (BTS domestic water 3.84 cents per ton-mile, 2022). Docks are USACE navigation units; confirm one handles project cargo. Run heavy_haul on the truck legs for bridges and low-water crossings.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "address": {
+            "type": "string",
+            "description": "Texas street address, e.g. '1201 Main St, Houston, TX'. Use this or lat/lng."
+          },
+          "lat": {
+            "type": "number",
+            "description": "Latitude (WGS84). Use with lng instead of address."
+          },
+          "lng": {
+            "type": "number",
+            "description": "Longitude (WGS84). Use with lat instead of address."
+          },
+          "origin": {
+            "type": "string",
+            "description": "nearest_port (default), or a Texas address or town the load ships from."
+          },
+          "origin_lat": {
+            "type": "number",
+            "description": "Origin latitude (with origin_lng) instead of origin."
+          },
+          "origin_lng": {
+            "type": "number",
+            "description": "Origin longitude."
+          },
+          "weight_tons": {
+            "type": "number",
+            "description": "Payload in US tons to move. Default 100."
+          }
+        }
+      }
+    },
+    {
+      "name": "crew_access",
+      "description": "Enterprise. For a Texas address or coordinate: workers who live within 30, 45 and 60 minutes' drive (US Census LODES 2022 residence counts by 2020 block group, all jobs, with construction, manufacturing, utilities and transportation-warehousing workers broken out), hotels, motels, RV parks and campgrounds within 30 and 60 minutes (OpenStreetMap) with the nearest listed, and the nearest airports with scheduled airline service (FAA Part 139 Class I) with drive miles and minutes. Drive-time areas from the Valhalla router on OpenStreetMap, car costing, free-flow (no traffic).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "address": {
+            "type": "string",
+            "description": "Texas street address, e.g. '1201 Main St, Houston, TX'. Use this or lat/lng."
+          },
+          "lat": {
+            "type": "number",
+            "description": "Latitude (WGS84). Use with lng instead of address."
+          },
+          "lng": {
+            "type": "number",
+            "description": "Longitude (WGS84). Use with lat instead of address."
+          },
+          "include_geometry": {
+            "type": "boolean",
+            "description": "Return the 30/45/60 minute drive-time polygons as GeoJSON."
+          }
+        }
+      }
+    },
+    {
+      "name": "logistics_report",
+      "description": "Enterprise. Print-ready PDF logistics report for a Texas site: roads, rail, terminals, ports and airports near it (logistics_screen); ways to bring heavy equipment in, truck direct versus truck-rail-truck with indicative linehaul costs (haul_compare); the heavy-haul truck route from the nearest port or a named origin with posted and low-clearance bridges, low-water crossings and the minor roads on the last miles that may need work (heavy_haul); and crew access: workers within 30/45/60 minutes, lodging, and airline and regional airports with drive times (crew_access). Returns a link that expires in 30 minutes.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "address": {
+            "type": "string",
+            "description": "Texas street address, e.g. '1201 Main St, Houston, TX'. Use this or lat/lng."
+          },
+          "lat": {
+            "type": "number",
+            "description": "Latitude (WGS84). Use with lng instead of address."
+          },
+          "lng": {
+            "type": "number",
+            "description": "Longitude (WGS84). Use with lat instead of address."
+          },
+          "origin": {
+            "type": "string",
+            "description": "nearest_port (default), or a Texas address or town the equipment ships from."
+          },
+          "weight_tons": {
+            "type": "number",
+            "description": "Heaviest single load in US tons (gross for the truck route; payload for the cost comparison). Default 120."
+          },
+          "height_ft": {
+            "type": "number",
+            "description": "Loaded height in feet. Default 15."
+          }
+        }
+      }
+    },
+    {
+      "name": "water_screen",
+      "description": "Groundwater picture for a Texas address or coordinate from public state well records (TWDB Groundwater Database and TWDB/TDLR Submitted Drillers Reports, cleaned and refreshed monthly): which TWDB major and minor aquifers lie under the point (outcrop or subsurface), the groundwater conservation district (or none, which means rule of capture), supply wells within the radius with depth bands, reported yields (low, median and 75th percentile, weighted by test method; pump tests count most, jetted and estimated least), the highest-yield wells with depth, screen, aquifer and test method, a per-aquifer summary (wells, median depth, 75th percentile yield, median TDS with the newest sample year, median water-level trend in ft/yr), and flags. The groundwater district's adopted rules (exempt-well limits, permits, spacing, production caps per acre, export rules, fees, metering) with rule numbers, pages and short quotes, where two independent extractions agreed; otherwise a link to the rules. Optional demand_mgd or demand_gpm returns how many wells at the local 75th percentile yield would meet it, and the acres of groundwater rights a per-acre district cap implies. Use when someone asks about water for a data center, cooling, a plant, irrigation or a well: how deep, how much, how salty, who regulates it. Driller yields are completion estimates, not long-term capacity; district permits decide what can be pumped. Free shows the aquifers, district and well counts; Pro adds yields, depths, quality, trends, district rules and the well list.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "address": {
+            "type": "string",
+            "description": "Texas street address, e.g. '1201 Main St, Houston, TX'. Use this or lat/lng."
+          },
+          "lat": {
+            "type": "number",
+            "description": "Latitude (WGS84). Use with lng instead of address."
+          },
+          "lng": {
+            "type": "number",
+            "description": "Longitude (WGS84). Use with lat instead of address."
+          },
+          "radius_mi": {
+            "type": "number",
+            "description": "Search radius in miles. Default 5, max 15."
+          },
+          "demand_mgd": {
+            "type": "number",
+            "description": "Water demand in million gallons per day (optional)."
+          },
+          "demand_gpm": {
+            "type": "number",
+            "description": "Water demand in gallons per minute (optional; demand_mgd wins if both)."
+          }
+        }
+      }
+    },
+    {
+      "name": "water_well_plan",
+      "description": "Proposes a groundwater supply well for a Texas address or coordinate and grades nearby water buy areas, from public state well records (TWDB Groundwater Database and Submitted Drillers Reports) with every well assigned to a water-bearing unit (formation). Ranks the units under and around the point by grade, then for the best unit gives a proposed total depth and screen interval, expected yield (low, design and upside, weighted by test method), water quality (TDS with sample years), depth to water and level trend, annual yield per well and under the groundwater district's per-acre cap, wells needed for a demand, the analog wells it rests on, and a leave-one-out check of how well nearby wells predict each other. Buy-area grades: A = 75th percentile yield 300+ gpm, TDS under 1,000 mg/l, median depth 1,500 ft or less, water level falling no more than 1 ft/yr, 5+ analog wells; B = the same but TDS up to 3,000 or unknown; C = 130+ gpm with 3+ analogs. Use when someone asks where to drill for water, which formation to target, how much a well will make, or how many wells and acres of rights a load needs. Screening estimates from driller and state records: confirm with a test well, a pump test and the district. Enterprise; other tiers see which units are present and the grade of the nearest buy area.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "address": {
+            "type": "string",
+            "description": "Texas street address, e.g. '1201 Main St, Houston, TX'. Use this or lat/lng."
+          },
+          "lat": {
+            "type": "number",
+            "description": "Latitude (WGS84). Use with lng instead of address."
+          },
+          "lng": {
+            "type": "number",
+            "description": "Longitude (WGS84). Use with lat instead of address."
+          },
+          "radius_mi": {
+            "type": "number",
+            "description": "Analog search radius in miles. Default 5, max 15."
+          },
+          "demand_mgd": {
+            "type": "number",
+            "description": "Water demand in million gallons per day (optional)."
+          },
+          "demand_gpm": {
+            "type": "number",
+            "description": "Water demand in gallons per minute (optional; demand_mgd wins if both)."
+          },
+          "acres": {
+            "type": "number",
+            "description": "Contiguous acres owned or leased for groundwater rights (optional; applies the district's per-acre cap)."
+          }
+        }
+      }
+    },
+    {
+      "name": "water_cross_section",
+      "description": "Draws a geologic cross section between two Texas points (or through one point along a bearing): ground surface and every aquifer and confining unit of the Texas Water Development Board groundwater availability models, with top and bottom elevations, fresh versus brackish zones and outcrop, sampled along the line on a 1-mile model grid. Adds the state water wells within a buffer of the line, projected onto the section with their screens, depths, reported yields, salinity and the formation they produce from. Use for 'show me a cross section from here to there', 'how deep is the Simsboro across this county', 'where does the aquifer turn brackish', 'what formations would a well cross here'. Model layers are regional (about one mile), not a site survey: confirm with a test hole and geophysical log. Enterprise.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "from_lat": {
+            "type": "number"
+          },
+          "from_lng": {
+            "type": "number"
+          },
+          "to_lat": {
+            "type": "number"
+          },
+          "to_lng": {
+            "type": "number"
+          },
+          "lat": {
+            "type": "number",
+            "description": "Center point, with bearing_deg and length_mi, instead of from/to."
+          },
+          "lng": {
+            "type": "number"
+          },
+          "address": {
+            "type": "string",
+            "description": "Center address, with bearing_deg and length_mi, instead of from/to."
+          },
+          "bearing_deg": {
+            "type": "number",
+            "description": "Direction of the line through the center point, degrees from north. Default 135 (northwest to southeast, roughly down dip on the Gulf Coast plain)."
+          },
+          "length_mi": {
+            "type": "number",
+            "description": "Line length when a center point is given. Default 20, max 80."
+          },
+          "well_buffer_mi": {
+            "type": "number",
+            "description": "Show wells within this distance of the line. Default 1, max 3."
+          }
+        }
+      }
+    },
+    {
+      "name": "water_report",
+      "description": "Makes a print-ready PDF water report for a Texas address or coordinate: aquifers under the site and the groundwater district, the formations around it ranked by grade, the nearest graded water areas, a proposed supply well (depth, screen, expected yield, water quality, water level) drawn beside the analog wells it rests on, the analog well table, water quality by aquifer with sample years, the district's adopted rules with page numbers (exempt wells, permits, spacing, per-acre caps, export, fees, metering), a demand and water-rights check, and the method. Returns a link that opens the PDF and expires after 30 minutes. Use when someone wants a water report or a write-up of the water at their site. Enterprise.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "address": {
+            "type": "string",
+            "description": "Texas street address, e.g. '1201 Main St, Houston, TX'. Use this or lat/lng."
+          },
+          "lat": {
+            "type": "number",
+            "description": "Latitude (WGS84). Use with lng instead of address."
+          },
+          "lng": {
+            "type": "number",
+            "description": "Longitude (WGS84). Use with lat instead of address."
+          },
+          "radius_mi": {
+            "type": "number",
+            "description": "Analog search radius in miles. Default 5, max 15."
+          },
+          "demand_mgd": {
+            "type": "number",
+            "description": "Water demand in million gallons per day (optional)."
+          },
+          "demand_gpm": {
+            "type": "number",
+            "description": "Water demand in gallons per minute (optional)."
+          },
+          "acres": {
+            "type": "number",
+            "description": "Contiguous acres owned or leased for groundwater rights (optional)."
+          }
+        }
+      }
+    },
+    {
+      "name": "industrial_neighbors",
+      "description": "What heavy industry already operates near a Texas address or coordinate (TCEQ emissions-inventory sites with industry and NOx tons per year) and what has recently applied for TCEQ air permits nearby (gas plants, data centers, industrial projects, with received and issued dates, MW where known and a data-center flag). Use when someone asks whether a site is in an industrial area, what is being built nearby before it shows in the ERCOT queue, or about air-permit and neighbor context for a large load or generator.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "address": {
+            "type": "string",
+            "description": "Texas street address, e.g. '1201 Main St, Houston, TX'. Use this or lat/lng."
+          },
+          "lat": {
+            "type": "number",
+            "description": "Latitude (WGS84). Use with lng instead of address."
+          },
+          "lng": {
+            "type": "number",
+            "description": "Longitude (WGS84). Use with lat instead of address."
+          },
+          "radius_mi": {
+            "type": "number",
+            "description": "Radius in miles. Default 5, max 30."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Per list. Default 15, max 50."
+          }
+        }
+      }
+    },
+    {
+      "name": "site_screen",
+      "description": "A complete first-pass screen of a Texas site for a data center, battery, generator or industrial load in one call: likely utility and load zone, nearest substations by kV, transmission lines, planned grid upgrades, ERCOT generation and storage queue crowding, 30-day wholesale prices at the load zone and nearest node (average, TB4 spread), gas pipelines within 5 miles, jurisdiction (county, city limits, ETJ estimate, school district, groundwater district), Qualified Opportunity Zone (now and 2027), FEMA flood zone, mapped wetlands and USFWS critical habitat, railroads between the site and its substation, industrial neighbors and recent air permits, and parcel coverage. Ends with a flags list (strengths and risks) and a 0-100 screening score with stated weights. Use when someone asks 'is this a good site', 'screen this location', or wants the full picture before a site visit. Enterprise feature (approved accounts). Free and Pro get the score, flag counts, county, load zone and nearest substation; the flags and weights are Enterprise; the landowner is on Enterprise Lite through parcel_owner.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "address": {
+            "type": "string",
+            "description": "Texas street address, e.g. '1201 Main St, Houston, TX'. Use this or lat/lng."
+          },
+          "lat": {
+            "type": "number",
+            "description": "Latitude (WGS84). Use with lng instead of address."
+          },
+          "lng": {
+            "type": "number",
+            "description": "Longitude (WGS84). Use with lat instead of address."
+          },
+          "use": {
+            "type": "string",
+            "enum": [
+              "data_center",
+              "battery",
+              "generation",
+              "industrial",
+              "solar"
+            ],
+            "description": "Intended use; shifts the flags and score weights. Default data_center."
+          },
+          "to_lat": {
+            "type": "number",
+            "description": "Optional second point (e.g. a planned substation pad or a named POI) to test rail crossings against, instead of the nearest substation."
+          },
+          "to_lng": {
+            "type": "number",
+            "description": "Longitude of the optional second point."
+          }
+        }
+      }
+    },
+    {
+      "name": "report_pdf",
+      "description": "Makes a one-page, print-ready PDF of a site screen for a Texas address or coordinate: screen score, a to-scale schematic map of the nearest substations, the substations and transmission lines within 5 miles with kV and owner, likely utility and load zone, and a screening disclaimer. Returns a link that opens the PDF and expires after 30 minutes; the PDF is a snapshot taken when you call the tool. Use when the user asks for a report, a PDF, a one-pager or something to send to a colleague, landowner or lender. Pro and Enterprise Lite accounts get the score, counts and grid facts; Enterprise accounts also get the strengths and risks behind the score, prices, gas, flood, jurisdiction and the parcel at the point. Free accounts get a description of what the report holds. Counts as one call.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "address": {
+            "type": "string",
+            "description": "Texas street address, e.g. '1201 Main St, Houston, TX'. Use this or lat/lng."
+          },
+          "lat": {
+            "type": "number",
+            "description": "Latitude (WGS84). Use with lng instead of address."
+          },
+          "lng": {
+            "type": "number",
+            "description": "Longitude (WGS84). Use with lat instead of address."
+          },
+          "use": {
+            "type": "string",
+            "enum": [
+              "data_center",
+              "battery",
+              "generation",
+              "industrial",
+              "solar"
+            ],
+            "description": "Intended use; shifts the flags and score weights. Default data_center."
+          }
+        }
+      }
+    },
+    {
+      "name": "node_prices",
+      "description": "ERCOT wholesale power prices around a Texas address or coordinate, or for a named settlement point: the load zone price for the location, the nearest resource nodes (generator and battery pricing points) with distance, and the trading hubs. Returns day-ahead hourly settlement point prices ($/MWh) for the last 7 days by default with daily average, max, min, peak and off-peak averages, hours over $100 and negative hours; Pro can request up to 120 days and hourly real-time averages. For a single settlement point, also returns rt15_stats: TB4 and TB2 computed from 15-minute real-time prices (captures intra-hour spikes that hourly averages wash out), 15-minute max, min, intervals over $100, over $1,000 and negative, plus a scarcity block: how many 15-minute intervals since RTC+B (2025-12-05) ERCOT's reliability deployment price adder was above zero (Pro adds the adder size and the highest-scarcity days). Use when someone asks what power costs or sells for at a location, how volatile prices are near a site, what a battery would see at a node, or which node or load zone a site settles in.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "address": {
+            "type": "string",
+            "description": "Texas street address, e.g. '1201 Main St, Houston, TX'. Use this or lat/lng."
+          },
+          "lat": {
+            "type": "number",
+            "description": "Latitude (WGS84). Use with lng instead of address."
+          },
+          "lng": {
+            "type": "number",
+            "description": "Longitude (WGS84). Use with lat instead of address."
+          },
+          "settlement_point": {
+            "type": "string",
+            "description": "ERCOT settlement point name, e.g. HB_HOUSTON, LZ_SOUTH or a resource node like FO_FORMOSG6. Use this instead of a location to get one node's full series."
+          },
+          "days": {
+            "type": "integer",
+            "description": "Days of history. Default 7. Max 7 on the free tier, 120 on Pro."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "How many nearby resource nodes. Default 6, max 15."
+          }
+        }
+      }
+    },
+    {
+      "name": "volatile_nodes",
+      "description": "Rank ERCOT settlement points for storage, solar and generation over the last N days using day-ahead prices. Battery metrics: TB2 and TB4 (average daily top-minus-bottom 2-hour and 4-hour spreads, the standard arbitrage metric), annualized TB4 revenue per MW, hourly standard deviation, coefficient of variation, daily range, hours over $100, negative hours, evening peak (HE 17-21) average. Solar metrics: solar capture price (node average over HE 9-18), capture ratio, negative solar hours. Real-time: RT TB4, RT spikes and DART (day-ahead minus real-time). 15-minute real-time: rt15_tb4 (TB4 at 15-min resolution, capturing intra-hour spikes hourly averages wash out), rt15_spikes (15-min intervals over $100), rt15_over_1000, rt15_negative. Basis: node average minus its load zone average (generators are paid the node price, load pays the zone price). Every response also carries the system-wide ancillary service stack (RegUp/RRS/ECRS clearing prices, annualized per MW) for the same window. Filter to a load zone, or to nodes within a radius of an address or coordinate. Use when someone asks where a battery would make the most money, which nodes are most volatile, which nodes pay solar best, where prices spike or go negative, where congestion traps prices, or how a site compares. Default: top 20 resource nodes statewide by TB4 over 30 days.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "address": {
+            "type": "string",
+            "description": "Texas street address, e.g. '1201 Main St, Houston, TX'. Use this or lat/lng."
+          },
+          "lat": {
+            "type": "number",
+            "description": "Latitude (WGS84). Use with lng instead of address."
+          },
+          "lng": {
+            "type": "number",
+            "description": "Longitude (WGS84). Use with lat instead of address."
+          },
+          "radius_mi": {
+            "type": "number",
+            "description": "With a location: only nodes within this many miles. Default 50, max 150."
+          },
+          "load_zone": {
+            "type": "string",
+            "description": "Restrict to a load zone: LZ_HOUSTON, LZ_NORTH, LZ_SOUTH, LZ_WEST, LZ_AEN, LZ_CPS, LZ_LCRA, LZ_RAYBN."
+          },
+          "days": {
+            "type": "integer",
+            "description": "Window in days. Default 30. Max 30 free, 120 Pro."
+          },
+          "metric": {
+            "type": "string",
+            "enum": [
+              "tb4",
+              "tb2",
+              "stdev",
+              "cv",
+              "range",
+              "spikes",
+              "negative",
+              "avg",
+              "solar",
+              "solar_ratio",
+              "evening",
+              "basis",
+              "rt_tb4",
+              "rt_spikes",
+              "dart",
+              "rt15_tb4",
+              "rt15_spikes"
+            ],
+            "description": "Ranking metric. Default tb4. solar = best-paid solar nodes, basis = node minus zone, evening = post-sunset discharge value, rt_tb4 = real-time 4-hour spread, rt_spikes = real-time hours over $100, dart = day-ahead minus real-time, rt15_tb4 = 15-minute real-time TB4 (captures intra-hour spikes), rt15_spikes = 15-minute intervals over $100."
+          },
+          "include_zones_and_hubs": {
+            "type": "boolean",
+            "description": "Also rank load zones and hubs alongside resource nodes. Default false."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Default 20, max 50 (10 on the free tier)."
+          }
+        }
+      }
+    },
+    {
+      "name": "ancillary_prices",
+      "description": "ERCOT day-ahead ancillary service clearing prices (MCPC, $/MW per hour) for Regulation Up, Regulation Down, Responsive Reserve (RRS), ERCOT Contingency Reserve (ECRS) and Non-Spin: averages, maxima, hours over $10 and $50, a battery stack (best-paid of RegUp/RRS/ECRS each hour, annualized per MW), daily series for the window, and a monthly history back to 2024 that shows how AS prices have collapsed as storage entered. Also a realtime block with 15-minute real-time clearing prices since RTC+B (2025-12-05): average, maximum and intervals over $10/$50/$100 per service, a real-time battery stack, and scarcity intervals where ERCOT's reliability deployment price adder was above zero. System-wide, not nodal. Use when someone asks what ancillary services pay in ERCOT, how much of a battery's revenue comes from AS versus energy arbitrage, or how RRS/ECRS prices have trended.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "days": {
+            "type": "integer",
+            "description": "Window in days for stats and the daily series. Default 30. Max 30 free, 365 Pro."
+          },
+          "hourly": {
+            "type": "boolean",
+            "description": "Include every hourly clearing price in the window (Pro, max 31 days)."
+          },
+          "monthly_history": {
+            "type": "boolean",
+            "description": "Include monthly averages per service since 2024. Default true."
+          },
+          "realtime": {
+            "type": "boolean",
+            "description": "Include the real-time block: 15-minute real-time clearing prices per service and scarcity (reliability adder) intervals since RTC+B, 2025-12-05. Default true."
+          }
+        }
+      }
+    },
+    {
+      "name": "binding_constraints",
+      "description": "Which ERCOT transmission constraints bind near a site and how often, with SCED (real-time) and DAM (day-ahead) shadow prices. A binding constraint means a transmission line or transformer is at its limit, trapping cheaper energy behind it and splitting prices across the constraint. High shadow prices at a substation mean congestion creates local price extremes: good for a battery that can capture the spread, risky for a generator that might be curtailed. Shows the constraint name, overloaded element (from/to stations, voltage), contingency, how many 5-minute SCED intervals and DAM hours it bound in the window, and the average and maximum shadow price. Cross-reference with volatile_nodes to understand WHY a node is volatile (congestion versus load/supply fundamentals) and with grid_projects to see whether a planned upgrade will relieve a binding constraint. Use when someone asks why prices spike at a node, what congestion looks like near a site, whether a spread will persist, or what constraints affect a substation.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "address": {
+            "type": "string",
+            "description": "Texas street address, e.g. '1201 Main St, Houston, TX'. Use this or lat/lng."
+          },
+          "lat": {
+            "type": "number",
+            "description": "Latitude (WGS84). Use with lng instead of address."
+          },
+          "lng": {
+            "type": "number",
+            "description": "Longitude (WGS84). Use with lat instead of address."
+          },
+          "radius_mi": {
+            "type": "number",
+            "description": "Radius around the location in miles. Default 25, max 100."
+          },
+          "settlement_point": {
+            "type": "string",
+            "description": "ERCOT settlement point name (e.g. HB_WEST or BRUNI_RN) instead of lat/lng."
+          },
+          "days": {
+            "type": "integer",
+            "description": "Window in days. Default 30. Max 30 free, 120 Pro."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Default 20, max 50."
+          }
+        }
+      }
+    },
+    {
+      "name": "battery_performance",
+      "description": "What batteries near a site actually earned from ERCOT's 60-day disclosure reports: energy revenue (DAM awards and prices for discharge/charge intervals), ancillary-service revenue by product (RegUp, RegDn, RRS, ECRS, Non-Spin with MCPC clearing prices), total $/MW-month, cycles per day, and discharge/charge patterns. Data covers the most recent ~60 days of disclosed settlements for every registered ESR (energy storage resource) in ERCOT. Use to benchmark realistic battery revenue at a location, compare energy vs AS revenue splits, identify high-performing batteries and their operating patterns, or validate a pro-forma against actual disclosed results. Each battery is mapped to its settlement point and (where matched) its EIA-860M plant record for nameplate MW and MWh. Best used with volatile_nodes (which nodes have the best spreads) and binding_constraints (which congestion drives those spreads).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "address": {
+            "type": "string",
+            "description": "Texas street address, e.g. '1201 Main St, Houston, TX'. Use this or lat/lng."
+          },
+          "lat": {
+            "type": "number",
+            "description": "Latitude (WGS84). Use with lng instead of address."
+          },
+          "lng": {
+            "type": "number",
+            "description": "Longitude (WGS84). Use with lat instead of address."
+          },
+          "radius_mi": {
+            "type": "number",
+            "description": "Radius around the location in miles. Default 50, max 150."
+          },
+          "settlement_point": {
+            "type": "string",
+            "description": "ERCOT settlement point name to find batteries at that node."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Max batteries to return. Default 20, max 50."
+          }
+        }
+      }
+    },
+    {
+      "name": "price_history",
+      "description": "Monthly day-ahead (DAM) price history for an ERCOT settlement point, back to January 2020 where the node existed: average price, TB4 and TB2 battery spreads (top 4 or 2 hours minus bottom 4 or 2 hours of each day, a screening metric for storage arbitrage), maximum and minimum, negative-price hours, and hours over $100 and $1,000. Pro adds the full history with year-over-year change per month, an annual table with TB4 per MW-year, and a seasonality table (average by calendar month across years) so you can see Winter Storm Uri (February 2021), the summer 2023 heat, and how spreads have moved since. Pass a settlement_point (HB_HOUSTON, LZ_WEST, a resource node) or a location and the nearest resource node with history is used. Use for 'how have prices at this node changed', 'is the spread getting better or worse', 'what is the seasonal pattern', 'what happened to prices in Uri'. Day-ahead only: real-time 15-minute history starts 2026-09-05, see volatile_nodes. Free accounts get the last 12 months; Pro gets the full history, year-over-year, annual and seasonality tables.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "address": {
+            "type": "string",
+            "description": "Texas street address, e.g. '1201 Main St, Houston, TX'. Use this or lat/lng."
+          },
+          "lat": {
+            "type": "number",
+            "description": "Latitude (WGS84). Use with lng instead of address."
+          },
+          "lng": {
+            "type": "number",
+            "description": "Longitude (WGS84). Use with lat instead of address."
+          },
+          "settlement_point": {
+            "type": "string",
+            "description": "ERCOT settlement point (hub HB_*, zone LZ_*, or resource node) instead of an address or lat/lng."
+          },
+          "months": {
+            "type": "integer",
+            "description": "Number of most recent months to return. Default 12 free, all Pro. Max 12 free."
+          }
+        }
+      }
+    },
+    {
+      "name": "solar_curtailment",
+      "description": "Hourly solar output and a curtailment estimate for ERCOT, from ERCOT's own solar production report (NP4-745-CD), back to January 2024. Curtailment is a proxy: system-wide available solar (HSL) minus actual output over midday hours 10-17, as a percent of available. ERCOT does not publish regional or per-plant curtailment here, so regions (FarWest, NorthWest, CenterWest, CenterEast, FarEast, SouthEast) show output and midday shape only. Use for 'how much solar gets curtailed', 'is solar output growing', 'what is the midday solar shape in West Texas', 'worst curtailment days'. Free: the last 30 days system-wide curtailment percent and each region's share of solar output. Pro: monthly history by region or system, the 30-day hourly shape, the worst hours of each month and the daily curtailment series.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "region": {
+            "type": "string",
+            "description": "SystemWide (default), FarWest, NorthWest, CenterWest, CenterEast, FarEast or SouthEast."
+          },
+          "months": {
+            "type": "integer",
+            "description": "Months of history for Pro. Default 12, max 36."
+          }
+        }
+      }
+    },
+    {
+      "name": "solar_revenue_estimate",
+      "description": "Screening estimate for a solar project of a given size at a Texas point: expected energy (MWh per MW-ac per year) from NASA POWER monthly irradiance and temperature with stated assumptions (DC/AC 1.3, 14% losses, fixed tilt or single-axis tracking), the solar capture price at the nearest ERCOT resource node (node monthly day-ahead average over the last 12 complete months times the node's solar-hour price ratio from the last 90 days, weighted by ERCOT's system solar output shape), a system-wide curtailment haircut from ERCOT's solar report, and the resulting annual energy revenue. Day-ahead energy only: no real-time, RECs, PPA, basis to the project's own node, degradation or opex. A screening number, not a forecast. Use for 'how much would a solar farm here make', 'solar capture price near X', 'MWh per MW of solar in West Texas'. Free: MWh per MW-ac and a capture price band. Pro: the revenue, curtailment haircut and monthly table.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "address": {
+            "type": "string",
+            "description": "Texas street address, e.g. '1201 Main St, Houston, TX'. Use this or lat/lng."
+          },
+          "lat": {
+            "type": "number",
+            "description": "Latitude (WGS84). Use with lng instead of address."
+          },
+          "lng": {
+            "type": "number",
+            "description": "Longitude (WGS84). Use with lat instead of address."
+          },
+          "settlement_point": {
+            "type": "string",
+            "description": "ERCOT settlement point (hub, zone or resource node) for pricing; the irradiance still needs an address or lat/lng, otherwise the node's own location is used."
+          },
+          "mw_ac": {
+            "type": "number",
+            "description": "Project size in MW-ac. Default 100, 1 to 2000."
+          },
+          "dc_ac": {
+            "type": "number",
+            "description": "DC to AC ratio, 1.0 to 1.6. Default 1.3."
+          },
+          "tracking": {
+            "type": "string",
+            "enum": [
+              "single_axis",
+              "fixed"
+            ],
+            "description": "Default single_axis."
+          },
+          "losses_pct": {
+            "type": "number",
+            "description": "System losses excluding temperature and clipping, percent. Default 14."
+          },
+          "curtailment_pct": {
+            "type": "number",
+            "description": "Override the curtailment haircut, percent of energy (Pro). Default is ERCOT's trailing 12-month system-wide midday proxy."
+          },
+          "months": {
+            "type": "integer",
+            "description": "Months of price history for the capture price (Pro), 6 to 36. Default 12; calendar months seen more than once are averaged."
+          }
+        }
+      }
+    },
+    {
+      "name": "battery_economics",
+      "description": "Screening project economics for a battery at an ERCOT node or the node nearest a point of interconnection: a 24-month (12 to 36) backcast of day-ahead energy arbitrage and ancillary capacity revenue from real ERCOT prices, then capex split into a power part ($/kW) and an energy part ($/kWh) with editable defaults from NREL's 2025 utility-scale battery cost update (2026 mid case, 2024 dollars), fixed O&M, degradation, land and interconnection costs you enter, and a 20-year unlevered pre-tax cash flow with simple payback and IRR that holds the backcast revenue flat. History, not a forecast. Use for 'what would a 100 MW / 400 MWh battery here pencil to', 'payback for a battery at this node', 'battery IRR'. Enterprise.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "address": {
+            "type": "string",
+            "description": "Texas street address, e.g. '1201 Main St, Houston, TX'. Use this or lat/lng."
+          },
+          "lat": {
+            "type": "number",
+            "description": "Latitude (WGS84). Use with lng instead of address."
+          },
+          "lng": {
+            "type": "number",
+            "description": "Longitude (WGS84). Use with lat instead of address."
+          },
+          "settlement_point": {
+            "type": "string",
+            "description": "ERCOT settlement point instead of a location."
+          },
+          "mw": {
+            "type": "number",
+            "description": "Power in MW. Default 100."
+          },
+          "mwh": {
+            "type": "number",
+            "description": "Energy in MWh. Default 4 x MW."
+          },
+          "months": {
+            "type": "integer",
+            "description": "Backcast months, 12 to 36. Default 24."
+          },
+          "rte": {
+            "type": "number",
+            "description": "Round-trip efficiency. Default 0.85."
+          },
+          "cycles_per_day": {
+            "type": "number",
+            "description": "Default 1."
+          },
+          "as_share": {
+            "type": "number",
+            "description": "Share of MW offered to ancillary services, 0 to 1. Default 0."
+          },
+          "capex_power_usd_per_kw": {
+            "type": "number",
+            "description": "Power-related capex, USD per kW. Default 343 (NREL 2025 update, 2026 mid, power share)."
+          },
+          "capex_energy_usd_per_kwh": {
+            "type": "number",
+            "description": "Energy-related capex, USD per kWh. Default 222 (same source, energy share)."
+          },
+          "fom_pct_of_capex": {
+            "type": "number",
+            "description": "Fixed O&M per year as a percent of capex. Default 4 (NREL)."
+          },
+          "degradation_pct_per_year": {
+            "type": "number",
+            "description": "Default 2."
+          },
+          "land_usd": {
+            "type": "number",
+            "description": "Land purchase cost, USD. Default 0 (not included)."
+          },
+          "interconnection_usd": {
+            "type": "number",
+            "description": "Interconnection cost the project pays: project substation, gen-tie, switching station share. Default 0 (not included)."
+          },
+          "years": {
+            "type": "integer",
+            "description": "Cash flow years, 10 to 30. Default 20."
+          },
+          "cod_year": {
+            "type": "integer",
+            "description": "First operating year for the forward cases. Default next year."
+          },
+          "curve": {
+            "type": "string",
+            "description": "Name of a forward curve the account uploaded on the map; adds a custom case."
+          },
+          "target_irr_pct": {
+            "type": "number",
+            "description": "Target unlevered IRR for the tolling breakeven. Default 8."
+          }
+        }
+      }
+    },
+    {
+      "name": "find_building_land",
+      "description": "Pro. Finds parcels near a Texas address or coordinate that suit a warehouse or manufacturing building: acres in a range, a minimum share of ground under 5 percent slope (USGS 3DEP), and a limit on FEMA 100-year floodplain. Returns location, acres, flat share, floodplain acres and buildable acres after 50 ft setbacks and easements. No owner names here. Not about power: use it when someone wants to build on dirt. Then open Plan on the parcel to lay out the pad, cut and fill, parking, costs and permits.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "address": {
+            "type": "string",
+            "description": "Texas street address, e.g. '1201 Main St, Houston, TX'. Use this or lat/lng."
+          },
+          "lat": {
+            "type": "number",
+            "description": "Latitude (WGS84). Use with lng instead of address."
+          },
+          "lng": {
+            "type": "number",
+            "description": "Longitude (WGS84). Use with lat instead of address."
+          },
+          "radius_mi": {
+            "type": "number",
+            "description": "Search radius in miles, 1 to 10. Default 10."
+          },
+          "min_acres": {
+            "type": "number",
+            "description": "Default 100."
+          },
+          "max_acres": {
+            "type": "number",
+            "description": "Default 300."
+          },
+          "min_flat_pct": {
+            "type": "number",
+            "description": "Minimum share of the parcel under 5 percent slope. Default 60."
+          },
+          "max_flood_pct": {
+            "type": "number",
+            "description": "Maximum share in the FEMA 100-year floodplain. Default 30."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Default 6, max 10."
+          }
+        }
+      }
+    },
+    {
+      "name": "solar_find",
+      "description": "Enterprise. Finds contiguous same-owner land assemblies near a Texas address or coordinate that suit utility solar: total acres at or above a minimum, a minimum share of ground under 5 percent slope (USGS 3DEP), and a transmission line at or above a kV within a distance. Returns acres, flat acres, mean slope, parcel ids, nearest line kV and miles, distance from the search point, and oil and gas wells on the land (RRC, active and plugged). Owners are not named. Next step: site_screen, then a solar layout on the parcel ids.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "address": {
+            "type": "string",
+            "description": "Texas street address, e.g. '1201 Main St, Houston, TX'. Use this or lat/lng."
+          },
+          "lat": {
+            "type": "number",
+            "description": "Latitude (WGS84). Use with lng instead of address."
+          },
+          "lng": {
+            "type": "number",
+            "description": "Longitude (WGS84). Use with lat instead of address."
+          },
+          "radius_mi": {
+            "type": "number",
+            "description": "Search radius in miles, 1 to 60. Default 30."
+          },
+          "min_acres": {
+            "type": "number",
+            "description": "Minimum assembly size in acres. Default 800 (about 50 to 60 MW-ac)."
+          },
+          "min_flat_pct": {
+            "type": "number",
+            "description": "Minimum percent of the land under 5 percent slope. Default 80."
+          },
+          "line_kv_min": {
+            "type": "number",
+            "description": "Minimum transmission voltage in kV. Default 138."
+          },
+          "line_within_mi": {
+            "type": "number",
+            "description": "Line must be within this many miles. Default 2."
+          },
+          "limit": {
+            "type": "number",
+            "description": "Results, up to 25. Default 10."
+          }
+        }
+      }
+    },
+    {
+      "name": "solar_economics",
+      "description": "Screening project economics for a utility-scale or distribution-scale solar project at a Texas point: energy from solar_revenue_estimate (NASA POWER irradiance, single-axis trackers by default, DC/AC 1.34), revenue either merchant (day-ahead capture price at the nearest ERCOT resource node over the last 24 months, 12 to 36, with ERCOT's curtailment proxy) or a flat PPA price you enter with an optional escalator, capex in USD per W-ac (default 1.40, NREL ATB utility-scale PV one-axis, moderate case, 2026 interpolated, 2022 dollars, excludes interconnection), fixed O&M per kW-ac-year (default 22, NREL ATB), degradation, land and interconnection costs you enter, an optional federal investment tax credit percent (default 0: under the 2025 tax law, solar that begins construction after 4 July 2026 does not qualify; projects that began earlier must be placed in service by the end of 2027), and a 30-year unlevered cash flow with simple payback and IRR. History, not a forecast. Use for 'what would a 100 MW solar farm here pencil to', 'solar IRR at this node', 'solar with a 35 dollar PPA'. Enterprise.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "address": {
+            "type": "string",
+            "description": "Texas street address, e.g. '1201 Main St, Houston, TX'. Use this or lat/lng."
+          },
+          "lat": {
+            "type": "number",
+            "description": "Latitude (WGS84). Use with lng instead of address."
+          },
+          "lng": {
+            "type": "number",
+            "description": "Longitude (WGS84). Use with lat instead of address."
+          },
+          "settlement_point": {
+            "type": "string",
+            "description": "ERCOT settlement point for merchant pricing; irradiance still needs a location."
+          },
+          "mw_ac": {
+            "type": "number",
+            "description": "Size in MW-ac. Default 100."
+          },
+          "dc_ac": {
+            "type": "number",
+            "description": "DC/AC ratio. Default 1.34."
+          },
+          "tracking": {
+            "type": "string",
+            "enum": [
+              "single_axis",
+              "fixed"
+            ],
+            "description": "Default single_axis."
+          },
+          "months": {
+            "type": "integer",
+            "description": "Months of price history for merchant revenue, 12 to 36. Default 24."
+          },
+          "revenue_mode": {
+            "type": "string",
+            "enum": [
+              "merchant",
+              "ppa"
+            ],
+            "description": "Default merchant."
+          },
+          "ppa_usd_per_mwh": {
+            "type": "number",
+            "description": "Flat PPA price, USD per MWh (revenue_mode ppa)."
+          },
+          "ppa_escalator_pct": {
+            "type": "number",
+            "description": "PPA escalator, percent per year. Default 0."
+          },
+          "curtailment_pct": {
+            "type": "number",
+            "description": "Override the curtailment haircut, percent."
+          },
+          "capex_usd_per_wac": {
+            "type": "number",
+            "description": "Default 1.40."
+          },
+          "fom_usd_per_kwac_year": {
+            "type": "number",
+            "description": "Default 22."
+          },
+          "degradation_pct_per_year": {
+            "type": "number",
+            "description": "Default 0.5."
+          },
+          "itc_pct": {
+            "type": "number",
+            "description": "Federal ITC percent the project qualifies for. Default 0."
+          },
+          "land_usd": {
+            "type": "number",
+            "description": "Land cost, USD. Default 0."
+          },
+          "interconnection_usd": {
+            "type": "number",
+            "description": "Interconnection cost, USD. Default 0."
+          },
+          "years": {
+            "type": "integer",
+            "description": "Cash flow years, 10 to 40. Default 30."
+          },
+          "cod_year": {
+            "type": "integer",
+            "description": "First operating year for the forward cases. Default next year."
+          },
+          "curve": {
+            "type": "string",
+            "description": "Name of a forward curve the account uploaded on the map; adds a custom case."
+          },
+          "target_irr_pct": {
+            "type": "number",
+            "description": "Target unlevered IRR for the PPA breakeven price. Default 8."
+          }
+        }
+      }
+    },
+    {
+      "name": "land_value",
+      "description": "What land is worth around a Texas tract, for pricing an offer. Appraised value per acre of nearby raw-land parcels (county appraisal district market values as published in the TNRIS StratMap parcel collection; improved parcels, where buildings are over 20% of value, are left out): median, 25th and 75th percentile, acre-weighted average, and medians by size band (5-50, 50-200, 200+ acres), plus the subject parcel's own appraisal. Enterprise Lite and Enterprise only (free and Pro get the sample size and a note). Also returns current asking prices of land listed for sale nearby (found by live web search of listing sites such as LandWatch, Land.com and LoopNet, each with its link) and a suggested offer range per acre and for the tract. Texas does not disclose sale prices, so these are appraisals and asking prices, not closed sales. Use for 'what is land worth near X', 'price per acre around this tract', 'what should I offer for this land', 'land comps near'. Free and Pro: how many parcels and acres are in the sample, and what Enterprise Lite adds.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "address": {
+            "type": "string",
+            "description": "Texas street address, e.g. '1201 Main St, Houston, TX'. Use this or lat/lng."
+          },
+          "lat": {
+            "type": "number",
+            "description": "Latitude (WGS84). Use with lng instead of address."
+          },
+          "lng": {
+            "type": "number",
+            "description": "Longitude (WGS84). Use with lat instead of address."
+          },
+          "radius_mi": {
+            "type": "number",
+            "description": "Radius for the appraisal sample, 0.5 to 15 miles. Default 3."
+          },
+          "min_acres": {
+            "type": "number",
+            "description": "Smallest parcel to include, acres. Default 5."
+          },
+          "acres": {
+            "type": "number",
+            "description": "Size of the tract being priced, acres, for the offer total. Default: the parcel at the point."
+          },
+          "listings": {
+            "type": "boolean",
+            "description": "Include nearby asking prices from a live web search (about 10 seconds; Enterprise Lite gets 25 fresh searches a day). Default true."
+          }
+        }
+      }
+    },
+    {
+      "name": "regional_land_value",
+      "description": "What raw land costs across a region of Texas, from county appraisal district values (parcels of 5+ acres whose buildings are 20% of value or less; value divided by acres; newer appraisal roll used where available). Three modes. area: one county (county) or a point and radius (address or lat/lng, radius_mi 1 to 15): median, 25th and 75th percentile $/acre and how it compares with neighboring areas and the Texas reference. compare: 2 to 5 counties side by side. cheapest: the lowest-cost 10 km squares and counties statewide, or within near_mi of a point, with optional max_usd_per_acre and min_parcels. Use for 'what does land cost in X', 'is Y cheaper than Z', 'where is cheap land in Texas'. The tool knows nothing about water, power or fiber: for 'cheap land with good water' or 'cheap land near 345 kV', run cheapest, then water_screen, water_well_plan or nearest_substation on the squares that fit. For a single tract with asking prices and an offer range use land_value instead. Appraisals lag sale prices, and in farm and ranch counties some districts value land closer to agricultural use, so the cheapest areas can read low. Enterprise Lite and Enterprise; free and Pro get a note on what it returns.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "mode": {
+            "type": "string",
+            "enum": [
+              "area",
+              "compare",
+              "cheapest"
+            ],
+            "description": "area (default with a county or location), compare (with counties), cheapest (default otherwise)."
+          },
+          "county": {
+            "type": "string",
+            "description": "Texas county name for mode area, e.g. 'Dimmit'."
+          },
+          "counties": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "2 to 5 county names for mode compare."
+          },
+          "address": {
+            "type": "string",
+            "description": "Texas street address, e.g. '1201 Main St, Houston, TX'. Use this or lat/lng."
+          },
+          "lat": {
+            "type": "number",
+            "description": "Latitude (WGS84). Use with lng instead of address."
+          },
+          "lng": {
+            "type": "number",
+            "description": "Longitude (WGS84). Use with lat instead of address."
+          },
+          "radius_mi": {
+            "type": "number",
+            "description": "Radius for mode area around a location, 1 to 15 miles. Default 10."
+          },
+          "near_mi": {
+            "type": "number",
+            "description": "Mode cheapest: only squares within this many miles of the address or lat/lng, 10 to 300."
+          },
+          "max_usd_per_acre": {
+            "type": "number",
+            "description": "Mode cheapest: only squares with a median at or below this."
+          },
+          "min_parcels": {
+            "type": "number",
+            "description": "Mode cheapest: smallest number of raw-land parcels behind a square, 5 to 500. Default 20."
+          },
+          "limit": {
+            "type": "number",
+            "description": "Mode cheapest: how many squares, 1 to 50. Default 15."
+          }
+        }
+      }
+    },
+    {
+      "name": "battery_revenue_estimate",
+      "description": "Screening estimate of what a battery of a given size would have earned at an ERCOT settlement point (or the resource node nearest an address or lat/lng) over the last 12 complete months: day-ahead energy arbitrage from the node's monthly top-N minus bottom-N hour spreads (duration set by MWh divided by MW, RTE loss costed at the monthly average price, cycles beyond one valued at half), plus ancillary capacity revenue on the share of MW you offer to AS (best of RegUp, RRS, ECRS each month, offered every hour). Gross revenue only: no real-time, no degradation, no opex, no ramp or state-of-charge limits, and DAM energy and AS are not co-optimized. A screening number, not a forecast. Free returns the annual total; Pro adds the monthly table and a comparison with nearby nodes.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "address": {
+            "type": "string",
+            "description": "Texas street address, e.g. '1201 Main St, Houston, TX'. Use this or lat/lng."
+          },
+          "lat": {
+            "type": "number",
+            "description": "Latitude (WGS84). Use with lng instead of address."
+          },
+          "lng": {
+            "type": "number",
+            "description": "Longitude (WGS84). Use with lat instead of address."
+          },
+          "settlement_point": {
+            "type": "string",
+            "description": "ERCOT settlement point (hub, zone or resource node) instead of an address or lat/lng."
+          },
+          "mw": {
+            "type": "number",
+            "description": "Power rating in MW. Default 100, 1 to 2000."
+          },
+          "mwh": {
+            "type": "number",
+            "description": "Energy capacity in MWh. Default 4 x MW. Duration is capped at 4 hours for the spread (tb2/tb4)."
+          },
+          "rte": {
+            "type": "number",
+            "description": "Round-trip efficiency, 0.5 to 1. Default 0.85."
+          },
+          "cycles_per_day": {
+            "type": "number",
+            "description": "Full cycles per day, 0.25 to 2. Default 1. The second cycle is valued at half the first."
+          },
+          "as_share": {
+            "type": "number",
+            "description": "Fraction of MW offered to ancillary services instead of energy, 0 to 1. Default 0."
+          }
+        }
+      }
+    },
+    {
+      "name": "large_loads",
+      "description": "What large loads (data centers, crypto mining, industrial plants, LNG, hydrogen and other big electric customers) are planned or being connected in a Texas county, or near an address or coordinate: announced data center campuses tracked by Barrio Energy Research with coordinates, flagged when at or above ERCOT's 75 MW large load threshold (developer, end user, MW, status, utility, substation, abatements, opposition, sources; with an address, also campuses within 25 miles across county lines), load-driven transmission projects from ERCOT's Transmission Project and Information Tracking report (TPIT, monthly), with TSP, substation, kV, stated MW, status and in-service date; TCEQ air permit filings flagged as data centers; Grid Report articles that mention the county; plus the county's load zone and likely utility. With list_counties=true, ranks all 254 counties by large-load signals and lists the counties with none. Use when someone asks what data centers or large loads are coming to a county, how crowded an area is with large load requests, which counties have no large load activity, or who is building near a site. ERCOT does not publish its large load interconnection queue by county or project; this tool assembles the public county-level evidence and says so.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "county": {
+            "type": "string",
+            "description": "Texas county name, e.g. 'Hall' or 'Hall County'. Or pass address or lat/lng."
+          },
+          "address": {
+            "type": "string",
+            "description": "Texas street address, e.g. '1201 Main St, Houston, TX'. Use this or lat/lng."
+          },
+          "lat": {
+            "type": "number",
+            "description": "Latitude (WGS84). Use with lng instead of address."
+          },
+          "lng": {
+            "type": "number",
+            "description": "Longitude (WGS84). Use with lat instead of address."
+          },
+          "include_completed": {
+            "type": "boolean",
+            "description": "Also include load projects TPIT lists as completed in the last year. Default false."
+          },
+          "radius_mi": {
+            "type": "number",
+            "description": "With an address or lat/lng: also list announced data center campuses within this many miles, across county lines. Default 25, max 100."
+          },
+          "list_counties": {
+            "type": "boolean",
+            "description": "Rank every county instead of looking at one. Default false."
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "large",
+              "all",
+              "data_center"
+            ],
+            "description": "For list_counties: large = data centers and large loads only (default), all = also routine load-serving stations, data_center = data centers only."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Projects to return (default 40) or counties to rank (default 25, max 254)."
+          }
+        }
+      }
+    },
+    {
+      "name": "search_grid",
+      "description": "Find anything on the Texas grid by name when you do not have coordinates: substations (by name, owner company, city or ERCOT substation code), planned grid projects (by name, owner, utility or PUCT/ERCOT docket), battery storage projects (by name, developer, point of interconnection or ERCOT INR number), TCEQ air permits (by company, project or permit number), generation queue projects, ERCOT pricing nodes, and Texas cities and counties. Returns each match with its type, a short description, what field matched, and coordinates to pass to other tools. Use for questions like 'where is the Hillje substation', 'what does Formosa Plastics own', 'find 21INR0258', or 'which projects are under docket 25RPG025'.",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "query"
+        ],
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Name, company, code, INR, permit number, docket, city or county."
+          },
+          "kinds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "substation",
+                "project",
+                "battery",
+                "air_permit",
+                "queue",
+                "pricing_node",
+                "place"
+              ]
+            },
+            "description": "Limit to these result types. Default all."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Default 15, max 40."
+          }
+        }
+      }
+    },
+    {
+      "name": "grid_projects",
+      "description": "Planned and under-construction Texas grid projects near a site, in a county, or for a utility: new substations, approved new or rebuilt transmission lines, and substation upgrades, from ERCOT RPG and TPIT filings, PUCT CCN dockets and utility announcements (Barrio Energy research). Each project has status (proposed, approved, under construction, energized), expected in-service date, voltage, length, owner and utility, estimated cost, docket, why it is being built, a summary and source links, plus how precisely it is placed. Totals by type and cost come first. Use when someone asks what grid upgrades are coming near a site, where new 345 or 765 kV substations are planned, what a utility is building, or when new capacity arrives. Pro; free accounts see the totals and the nearest few names. Free accounts get every location and type; names, sizes, owners and dates are Pro.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "address": {
+            "type": "string",
+            "description": "Texas street address, e.g. '1201 Main St, Houston, TX'. Use this or lat/lng."
+          },
+          "lat": {
+            "type": "number",
+            "description": "Latitude (WGS84). Use with lng instead of address."
+          },
+          "lng": {
+            "type": "number",
+            "description": "Longitude (WGS84). Use with lat instead of address."
+          },
+          "radius_mi": {
+            "type": "number",
+            "description": "Radius around the location in miles. Default 25, max 150."
+          },
+          "county": {
+            "type": "string",
+            "description": "Texas county name."
+          },
+          "utility": {
+            "type": "string",
+            "description": "Utility or owner, e.g. 'AEP Texas', 'Oncor', 'CenterPoint', 'LCRA'."
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "new_substation",
+              "approved_line",
+              "substation_upgrade"
+            ],
+            "description": "Only this type."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "proposed",
+              "approved",
+              "under-construction",
+              "energized"
+            ],
+            "description": "active = anything not yet energized."
+          },
+          "min_kv": {
+            "type": "number",
+            "description": "Minimum voltage, e.g. 345."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Default 20, max 100."
+          }
+        }
+      }
+    },
+    {
+      "name": "air_permits",
+      "description": "TCEQ New Source Review air permits for electric generating equipment in Texas, statewide, by county, or near a site: company, project, permit number, new facility or renewal/amendment, pending or issued, filed and issued dates, fuel and technology, MW where stated, and a data-center flag. Pending applications come first. Air permits show gas turbines, engines and data-center backup or prime power before projects reach the ERCOT queue or the news. Use for 'new data center air permits in Texas', 'who filed for gas generation in Bexar County this year', 'pending permits near this site', or 'what has Company X filed'. Pro; free accounts see the totals. Free accounts get every location and type; names, sizes, owners and dates are Pro.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "address": {
+            "type": "string",
+            "description": "Texas street address, e.g. '1201 Main St, Houston, TX'. Use this or lat/lng."
+          },
+          "lat": {
+            "type": "number",
+            "description": "Latitude (WGS84). Use with lng instead of address."
+          },
+          "lng": {
+            "type": "number",
+            "description": "Longitude (WGS84). Use with lat instead of address."
+          },
+          "radius_mi": {
+            "type": "number",
+            "description": "Radius around the location in miles. Default 25, max 150."
+          },
+          "county": {
+            "type": "string",
+            "description": "Texas county name."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "issued"
+            ],
+            "description": "Only pending or only issued."
+          },
+          "new_facilities_only": {
+            "type": "boolean",
+            "description": "Only initial permits for new facilities (no renewals or amendments)."
+          },
+          "data_centers_only": {
+            "type": "boolean",
+            "description": "Only permits flagged as data centers."
+          },
+          "since": {
+            "type": "string",
+            "description": "Only permits filed or issued on or after this date, YYYY-MM-DD."
+          },
+          "days": {
+            "type": "integer",
+            "description": "Only permits filed or issued in the last N days (alternative to since)."
+          },
+          "fuel": {
+            "type": "string",
+            "description": "Fuel or technology keyword, e.g. 'natural gas', 'turbine', 'diesel'."
+          },
+          "company": {
+            "type": "string",
+            "description": "Company or project name contains."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Default 25, max 100."
+          }
+        }
+      }
+    },
+    {
+      "name": "substation_detail",
+      "description": "One call on a named Texas substation (or the nearest one to a point): high and low side voltage and OpenStreetMap station class, owner, city and county, lines connected, an inferred station class (distribution, transmission, switching, generation tie, customer-owned) with its evidence, how likely_utility was derived and whether it disagrees with the station owner, transmission within 2 miles, battery storage projects whose point of interconnection is this substation (with stage and MW), generation queue nearby, 7-day wholesale prices at the nearest pricing nodes and load zone, planned upgrades within 10 miles, and who owns the land around it. Use for 'tell me about the Lolita substation', 'what is the low side voltage at Normanna', 'what is interconnecting at Hillje', or 'who owns the land next to this sub'. Names are also matched against OpenStreetMap names. Planned upgrades, mapped transformers and OpenStreetMap-only stations nearby are Pro; free accounts see how many there are.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Substation name or ERCOT substation code, e.g. 'Lolita', 'Hillje'. Spelling can be approximate."
+          },
+          "county": {
+            "type": "string",
+            "description": "County, to pick between substations with the same name."
+          },
+          "address": {
+            "type": "string",
+            "description": "Texas street address, e.g. '1201 Main St, Houston, TX'. Use this or lat/lng."
+          },
+          "lat": {
+            "type": "number",
+            "description": "Latitude (WGS84). Use with lng instead of address."
+          },
+          "lng": {
+            "type": "number",
+            "description": "Longitude (WGS84). Use with lat instead of address."
+          }
+        }
+      }
+    },
+    {
+      "name": "whats_new",
+      "description": "Everything that happened near a Texas site or in a county over the last N days, newest first, by the date it happened: battery storage milestones (entered screening, study requested or approved, interconnection agreement signed, construction started, approved to energize), generation projects entering the ERCOT queue, TCEQ air permits filed or issued (including data centers), newly tracked planned grid projects, and Grid Report articles about the county. Counts by category come first. Use for 'what's new around this site', 'any new filings in Jackson County this month', or a periodic check on a watched area. Pro; free accounts see the counts.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "address": {
+            "type": "string",
+            "description": "Texas street address, e.g. '1201 Main St, Houston, TX'. Use this or lat/lng."
+          },
+          "lat": {
+            "type": "number",
+            "description": "Latitude (WGS84). Use with lng instead of address."
+          },
+          "lng": {
+            "type": "number",
+            "description": "Longitude (WGS84). Use with lat instead of address."
+          },
+          "radius_mi": {
+            "type": "number",
+            "description": "Radius around the location in miles. Default 25, max 150."
+          },
+          "county": {
+            "type": "string",
+            "description": "Texas county name."
+          },
+          "days": {
+            "type": "integer",
+            "description": "Look-back window in days. Default 30, max 365."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Events returned. Default 40, max 100."
+          }
+        }
+      }
+    },
+    {
+      "name": "grid_news",
+      "description": "Search or list the latest articles from Barrio Energy's newsletter The Grid Report: weekly reporting on the Texas grid, ERCOT, Batch Zero and the large load interconnection process, PUCT dockets, data center and battery development, transmission build-out (765 kV, STEP), powered land and county politics. Returns title, date, link and a summary; ask for full text of one article by id. Use when someone asks what is new on the Texas grid, about Batch Zero or ERCOT large loads, or wants context and sources on a Texas power topic. Free and unmetered.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Keywords to search titles and text, e.g. 'Batch Zero', '765 kV', 'Nueces', 'battery'. Omit for the latest articles."
+          },
+          "since_days": {
+            "type": "integer",
+            "description": "Only articles published in the last N days."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Default 5, max 20."
+          },
+          "article_id": {
+            "type": "string",
+            "description": "Return the full text of one article, e.g. 'article-51'."
+          }
+        }
+      }
+    },
+    {
+      "name": "local_sentiment",
+      "description": "Local government stance toward data centers and large loads for a Texas county or city, or for the county and city at an address or coordinate: a score built from official actions since September 2024 (Chapter 312 and 380/381 abatements, JETI, reinvestment zones, zoning and SUP votes, development and water agreements, EDC incentives, moratoria, restrictive ordinances, zoning denials) plus projects withdrawn after opposition, weighted by type, each project counted once per jurisdiction, decayed with a 12-month half-life to zero at 24 months. Community opposition and lawsuits are listed but not scored. Counties and cities are scored separately. Returns score, stance (favorable 3+, leaning favorable 0.5 to 3, mixed or neutral under 0.5 either way, leaning hostile, hostile -3 or less), counts of positive, negative and neutral actions, and the recent actions with date, body, vote, project, summary and source links. Use when someone asks whether a county or city is friendly to data centers, where abatements are being granted, where projects have been denied or fought, or what the local politics are around a site. Pro.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "county": {
+            "type": "string",
+            "description": "Texas county, e.g. 'Ellis'."
+          },
+          "city": {
+            "type": "string",
+            "description": "Texas city, e.g. 'Temple'."
+          },
+          "address": {
+            "type": "string",
+            "description": "Texas street address, e.g. '1201 Main St, Houston, TX'. Use this or lat/lng."
+          },
+          "lat": {
+            "type": "number",
+            "description": "Latitude (WGS84). Use with lng instead of address."
+          },
+          "lng": {
+            "type": "number",
+            "description": "Longitude (WGS84). Use with lat instead of address."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Recent actions to list per jurisdiction. Default 10, max 30."
+          }
+        }
+      }
+    },
+    {
+      "name": "data_center_news",
+      "description": "Local and trade news about Texas data center and large load projects near an address or coordinate or in a county: headline, outlet, date and link, located to the project site, town or county, tagged by topic (abatement, zoning, opposition, water, power, jobs, construction, cancellation, moratorium, lawsuit). Pro adds a short summary of each story and the linked projects. Use when someone asks what is being reported about data centers near a site or in a county, or wants the local story behind a project.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "county": {
+            "type": "string",
+            "description": "Texas county."
+          },
+          "address": {
+            "type": "string",
+            "description": "Texas street address, e.g. '1201 Main St, Houston, TX'. Use this or lat/lng."
+          },
+          "lat": {
+            "type": "number",
+            "description": "Latitude (WGS84). Use with lng instead of address."
+          },
+          "lng": {
+            "type": "number",
+            "description": "Longitude (WGS84). Use with lat instead of address."
+          },
+          "radius_mi": {
+            "type": "number",
+            "description": "With an address or lat/lng. Default 25, max 100."
+          },
+          "since_days": {
+            "type": "integer",
+            "description": "Only stories from the last N days. Default 730."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Default 10, max 40."
+          }
+        }
+      }
+    },
+    {
+      "name": "upgrade_to_pro",
+      "description": "Use when the user asks how to upgrade, about plans, pricing, what Pro includes, or billing, and when they hit a free limit. Gets checkout links for Barrio Grid Connector Pro: 499 USD a month (first month 249 USD for new subscribers) or 4,990 USD a year (two months free). 5,000 calls a month, the full map, names, MW and dates, and the Pro tools. Also returns Enterprise Lite (999 USD a month total: Pro plus tract search and landowner and appraisal records). Use when the user hits the free limit or asks for more calls or data. Checkout is Stripe and accepts Link. Only buy with the user's explicit approval. The link is tied to the signed-in account, so this same connection becomes Pro as soon as payment clears; nothing to copy or reconnect.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "description": "Optional. Email to prefill at checkout; defaults to the signed-in account's email."
+          }
+        }
+      }
+    },
+    {
+      "name": "my_projects",
+      "description": "Reads what the signed-in user keeps on the Barrio Grid map, in three lists: Properties (sites they own or control), Prospects (sites they are pursuing) and Saved places (points they bookmarked on the map or asked an assistant to save). Each list holds projects: sites, tracts, boundaries and routes imported from KMZ, KML or GeoJSON (Google Earth, Land id and similar exports), dropped on the map, or synced from the user's own systems. With no project, lists everything grouped by list (pass list to narrow). With a project name or id, returns each feature's name, type, a representative point (lat/lng), acreage for shapes, folder and note. With screen: true, runs site_screen on up to 25 features and ranks them by score with the top strengths and risks. Use when the user refers to their own sites ('my properties', 'my prospects', 'the places I saved', 'my Edna tract'), or asks to compare, rank or screen their own sites; follow up on any single site with the location tools. Private to the account; in a team workspace it also includes teammates' shared Properties and Prospects, each tagged added_by. Pro reads features and screens; free accounts see project names and counts.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "list": {
+            "type": "string",
+            "enum": [
+              "properties",
+              "prospects",
+              "saved"
+            ],
+            "description": "Only this list. Omit for all three."
+          },
+          "project": {
+            "type": "string",
+            "description": "Project name (or part of it) or id. Omit to list projects. 'Saved places' reads the saved places."
+          },
+          "screen": {
+            "type": "boolean",
+            "description": "Screen and rank up to 25 sites in the project with site_screen. Default false."
+          },
+          "use": {
+            "type": "string",
+            "enum": [
+              "data_center",
+              "battery",
+              "generation",
+              "industrial",
+              "solar"
+            ],
+            "description": "With screen: intended use, shifts the weights. Default data_center."
+          }
+        }
+      }
+    },
+    {
+      "name": "save_place",
+      "description": "Saves a point (an address or lat/lng in Texas) to the signed-in user's Saved places on the Barrio Grid map, with an optional name and note, so they can find it on the map later and ask about it in any conversation. Use when the user asks to save, bookmark, pin or remember a location ('save this site', 'pin 1201 Main St as the Main Street option'). Only call it when the user asked for it. Returns a map link that opens the place. Free accounts keep 10 saved places, Pro 500. Read them back with my_projects list: saved.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "address": {
+            "type": "string",
+            "description": "Texas street address or place. Pass this or lat/lng."
+          },
+          "lat": {
+            "type": "number"
+          },
+          "lng": {
+            "type": "number"
+          },
+          "name": {
+            "type": "string",
+            "description": "Short label, e.g. 'Edna 40 acres'. Defaults to the matched address."
+          },
+          "note": {
+            "type": "string",
+            "description": "Optional note in the user's words."
+          }
+        }
+      }
+    },
+    {
+      "name": "save_site",
+      "description": "Saves a Texas site (address or lat/lng) with a radius to the signed-in user's watched sites. Each Monday morning the user gets one email listing what changed within the radius (battery storage milestones, generation queue entries, TCEQ air permits including data centers, new planned grid projects, geolocated news within the radius or in the same county), only in weeks when something did. Use when the user asks to watch, monitor or track a site or to be told when something changes near it. Only call it when the user asked. Pass id (from list_saved_sites) to change a watched site's name, location, radius or weekly_email. Pro and up, 25 sites; free accounts get an explanation and nothing is saved. Different from save_place, which only pins a point on the map.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "address": {
+            "type": "string",
+            "description": "Texas street address or place. Pass this or lat/lng."
+          },
+          "lat": {
+            "type": "number"
+          },
+          "lng": {
+            "type": "number"
+          },
+          "name": {
+            "type": "string",
+            "description": "Short label, e.g. 'Edna 40 acres'."
+          },
+          "radius_mi": {
+            "type": "number",
+            "description": "Watch radius in miles. Default 10, 0.5 to 50."
+          },
+          "weekly_email": {
+            "type": "boolean",
+            "description": "Include in the Monday email. Default true."
+          },
+          "id": {
+            "type": "string",
+            "description": "Existing watched site id to update."
+          }
+        }
+      }
+    },
+    {
+      "name": "list_saved_sites",
+      "description": "Lists the signed-in user's watched sites with id, name, location, radius and whether the Monday change email is on. Use before changing or removing a site, or when the user asks what they are watching. Pro and up; free accounts get an explanation.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "remove_saved_site",
+      "description": "Removes a watched site by id (from list_saved_sites) and turns off any price alerts tied to it. Use only when the user asks to stop watching or delete a site.",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Watched site id from list_saved_sites."
+          }
+        }
+      }
+    },
+    {
+      "name": "set_price_alert",
+      "description": "Creates a price alert for the signed-in user: one email when a metric at an ERCOT settlement point is above or below a threshold on each of the last N delivery days (default 3), checked each morning, then quiet for 7 days. Metrics: tb4 (4-hour day-ahead battery spread, USD/MWh, the default), rt_tb4, dam_avg, negative_hours (day-ahead hours below zero per day), rt_spikes (real-time hours above $100 per day). Pass settlement_point (HB_HOUSTON, LZ_WEST, a resource node) or an address or lat/lng to use the nearest node. Use when the user asks to be told, alerted or notified about prices, negative prices or spikes. Only call it when the user asked. Pass id (from list_price_alerts) to change one. Pro and up, 25 alerts; free accounts get an explanation and nothing is saved.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "settlement_point": {
+            "type": "string",
+            "description": "ERCOT settlement point, e.g. HB_NORTH, LZ_SOUTH, FO_FORMOSG6."
+          },
+          "address": {
+            "type": "string",
+            "description": "Texas address; the nearest settlement point is used."
+          },
+          "lat": {
+            "type": "number"
+          },
+          "lng": {
+            "type": "number"
+          },
+          "metric": {
+            "type": "string",
+            "enum": [
+              "tb4",
+              "rt_tb4",
+              "dam_avg",
+              "negative_hours",
+              "rt_spikes"
+            ],
+            "description": "Default tb4."
+          },
+          "op": {
+            "type": "string",
+            "enum": [
+              "gt",
+              "lt"
+            ],
+            "description": "gt = above the threshold (default), lt = below."
+          },
+          "threshold": {
+            "type": "number",
+            "description": "Level to cross, in the metric's unit."
+          },
+          "days": {
+            "type": "integer",
+            "description": "Consecutive delivery days the condition must hold. Default 3, 1 to 30."
+          },
+          "site_id": {
+            "type": "string",
+            "description": "Optional watched site id (from list_saved_sites) to tie the alert to; removing the site turns the alert off."
+          },
+          "id": {
+            "type": "string",
+            "description": "Existing alert id to update."
+          }
+        }
+      }
+    },
+    {
+      "name": "list_price_alerts",
+      "description": "Lists the signed-in user's price alerts with id, node, metric, threshold, days and when each last fired. Use before changing or removing an alert or when the user asks what alerts they have. Pro and up.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "remove_price_alert",
+      "description": "Deletes a price alert by id (from list_price_alerts). Use only when the user asks to stop or delete an alert.",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Alert id from list_price_alerts."
+          }
+        }
+      }
+    },
+    {
+      "name": "request_feature",
+      "description": "Sends a feature request, a missing dataset, or a note that an answer was wrong or incomplete to the Barrio Energy team, with the signed-in account's email so they can reply when it ships. Use ONLY when the user explicitly asks to send feedback or a request, or says yes after you offer to send one. Never call it on your own because an answer came back empty or the user seemed dissatisfied; offer first, in one sentence, and wait for a yes. Write the request in the user's terms: what they wanted, the place or tool involved, and what was missing. Never counts toward usage limits.",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "request",
+          "user_confirmed"
+        ],
+        "properties": {
+          "request": {
+            "type": "string",
+            "description": "What the user wants or what was missing, in a sentence or three. Include the county, address or tool if relevant."
+          },
+          "user_confirmed": {
+            "type": "boolean",
+            "description": "Must be true: the user explicitly asked to send this or approved sending it in this conversation."
+          },
+          "email": {
+            "type": "string",
+            "description": "Optional. Reply-to email if the user gave a different one; defaults to the signed-in account's email."
+          }
+        }
+      }
+    },
+    {
+      "name": "permit_plan",
+      "description": "Every permit a project needs at a Texas address or coordinate, from federal and state agencies down to the county and city that govern the spot: agency, permit, why it applies, review time (measured from TCEQ records or quoted from the agency, never estimated), fee where published, form link and a verbatim quote with its source URL. Includes permit holds and moratoria in force (for example the TCEQ pause on permits related to data center projects) and flags which permits they block. Works for data centers, battery storage, solar and advanced manufacturing. Use when someone asks what permits they need, how long permitting takes, whether anything is on hold, what the county or city requires, about wastewater discharge or pretreatment permits, or for the permitting picture before buying land. Free shows who governs the spot and how many holds apply; Pro lists every permit with review times and hold detail; Enterprise adds the sequenced timeline with the critical path and the TxDOT driveway form packet.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "address": {
+            "type": "string",
+            "description": "Texas street address, e.g. '1201 Main St, Houston, TX'. Use this or lat/lng."
+          },
+          "lat": {
+            "type": "number",
+            "description": "Latitude (WGS84). Use with lng instead of address."
+          },
+          "lng": {
+            "type": "number",
+            "description": "Longitude (WGS84). Use with lat instead of address."
+          },
+          "use": {
+            "type": "string",
+            "enum": [
+              "data_center",
+              "battery",
+              "solar",
+              "manufacturing"
+            ],
+            "description": "Project type. Default data_center."
+          },
+          "disturbed_acres": {
+            "type": "number",
+            "description": "Acres of soil disturbed during construction."
+          },
+          "building_sf": {
+            "type": "number",
+            "description": "Building floor area in square feet."
+          },
+          "height_ft": {
+            "type": "number",
+            "description": "Tallest structure or crane height in feet above ground."
+          },
+          "gensets": {
+            "type": "integer",
+            "description": "Number of backup / emergency engines."
+          },
+          "onsite_gen_mw": {
+            "type": "number",
+            "description": "On-site generation that runs beyond emergency use (MW). 0 if none."
+          },
+          "oil_storage_gal": {
+            "type": "number",
+            "description": "Aboveground oil storage capacity in gallons (fuel tanks, transformer oil)."
+          },
+          "wastewater": {
+            "type": "string",
+            "enum": [
+              "city_sewer",
+              "direct_discharge",
+              "land_application",
+              "septic",
+              "none"
+            ],
+            "description": "Where process water / cooling blowdown goes."
+          },
+          "water_source": {
+            "type": "string",
+            "enum": [
+              "utility",
+              "well",
+              "surface",
+              "none"
+            ],
+            "description": "Water supply."
+          },
+          "frontage": {
+            "type": "string",
+            "enum": [
+              "state",
+              "county",
+              "city",
+              "private"
+            ],
+            "description": "Road the driveway connects to."
+          }
+        }
+      }
+    },
+    {
+      "name": "permit_holds",
+      "description": "Permit holds, pauses and local moratoria that apply at a Texas address or coordinate, or statewide when no location is given: who imposed it, what project types and permit types it covers, since when, what ends it, and the source with a verbatim quote. Use when someone asks whether permits are frozen, about the TCEQ data center permit pause, or whether a county or city has a moratorium on data centers, battery storage, solar or crypto mining. Free gives the count; Pro the detail.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "address": {
+            "type": "string",
+            "description": "Texas street address, e.g. '1201 Main St, Houston, TX'. Use this or lat/lng."
+          },
+          "lat": {
+            "type": "number",
+            "description": "Latitude (WGS84). Use with lng instead of address."
+          },
+          "lng": {
+            "type": "number",
+            "description": "Longitude (WGS84). Use with lat instead of address."
+          }
+        }
+      }
+    },
+    {
+      "name": "ahj_profile",
+      "description": "What a Texas county or city requires and where its rules live: official website, where its code is published and the edition, the documents we read (with dates), departments and contacts, whether it has zoning and an industrial pretreatment program, what we could not find, and when it was last researched. Pass a county or city name, or a location for the AHJs that govern it. Free shows the name, website and research status; Pro the full profile.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "address": {
+            "type": "string",
+            "description": "Texas street address, e.g. '1201 Main St, Houston, TX'. Use this or lat/lng."
+          },
+          "lat": {
+            "type": "number",
+            "description": "Latitude (WGS84). Use with lng instead of address."
+          },
+          "lng": {
+            "type": "number",
+            "description": "Longitude (WGS84). Use with lat instead of address."
+          },
+          "name": {
+            "type": "string",
+            "description": "County or city name, e.g. 'Bastrop County' or 'City of Taylor'."
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "county",
+              "city"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "zoning_at",
+      "description": "Whether a Texas spot is under city zoning, and for data centers, battery storage, solar and manufacturing which zoning districts allow the use outright, by special or conditional use permit, or not at all, with the code's own term for the use and a verbatim quote. Unincorporated county land has no zoning. Pro.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "address": {
+            "type": "string",
+            "description": "Texas street address, e.g. '1201 Main St, Houston, TX'. Use this or lat/lng."
+          },
+          "lat": {
+            "type": "number",
+            "description": "Latitude (WGS84). Use with lng instead of address."
+          },
+          "lng": {
+            "type": "number",
+            "description": "Longitude (WGS84). Use with lat instead of address."
+          },
+          "use": {
+            "type": "string",
+            "enum": [
+              "data_center",
+              "battery",
+              "solar",
+              "manufacturing"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "ask_code",
+      "description": "Full-text search of the ordinances, court orders, development regulations, fee schedules and permit pages we downloaded for a Texas county or city. Returns matching passages with their source URL and download date, so an answer can quote the code. Pass the AHJ (name or location) and a question or keywords, e.g. 'battery storage setback' or 'industrial user wastewater permit'. Enterprise.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "address": {
+            "type": "string",
+            "description": "Texas street address, e.g. '1201 Main St, Houston, TX'. Use this or lat/lng."
+          },
+          "lat": {
+            "type": "number",
+            "description": "Latitude (WGS84). Use with lng instead of address."
+          },
+          "lng": {
+            "type": "number",
+            "description": "Longitude (WGS84). Use with lat instead of address."
+          },
+          "name": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "county",
+              "city"
+            ]
+          },
+          "query": {
+            "type": "string",
+            "description": "Question or keywords."
+          }
+        },
+        "required": [
+          "query"
+        ]
+      }
+    },
+    {
+      "name": "code_changes",
+      "description": "Documents that changed since the previous quarterly research of a Texas county or city (amended ordinances, new court orders, revised fee schedules), or statewide when no AHJ is given. Enterprise.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "address": {
+            "type": "string",
+            "description": "Texas street address, e.g. '1201 Main St, Houston, TX'. Use this or lat/lng."
+          },
+          "lat": {
+            "type": "number",
+            "description": "Latitude (WGS84). Use with lng instead of address."
+          },
+          "lng": {
+            "type": "number",
+            "description": "Longitude (WGS84). Use with lat instead of address."
+          },
+          "name": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "county",
+              "city"
+            ]
+          },
+          "days": {
+            "type": "integer",
+            "description": "Look back this many days. Default 90."
+          }
+        }
+      }
+    },
+    {
+      "name": "permit_report",
+      "description": "Makes a print-ready PDF permit report for a Texas address or coordinate and project type: who governs the spot, holds in force, every permit by level (federal, state, utility, county, city) with why it applies, status, review time, fee, form and the verbatim source quote with its URL, the sequenced timeline with the critical path, and what each county or city does not publish. Same inputs as permit_plan. Returns a link valid 30 minutes. Enterprise.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "address": {
+            "type": "string",
+            "description": "Texas street address, e.g. '1201 Main St, Houston, TX'. Use this or lat/lng."
+          },
+          "lat": {
+            "type": "number",
+            "description": "Latitude (WGS84). Use with lng instead of address."
+          },
+          "lng": {
+            "type": "number",
+            "description": "Longitude (WGS84). Use with lat instead of address."
+          },
+          "use": {
+            "type": "string",
+            "enum": [
+              "data_center",
+              "battery",
+              "solar",
+              "manufacturing"
+            ],
+            "description": "Project type. Default data_center."
+          },
+          "disturbed_acres": {
+            "type": "number",
+            "description": "Acres of soil disturbed during construction."
+          },
+          "building_sf": {
+            "type": "number",
+            "description": "Building floor area in square feet."
+          },
+          "height_ft": {
+            "type": "number",
+            "description": "Tallest structure or crane height in feet above ground."
+          },
+          "gensets": {
+            "type": "integer",
+            "description": "Number of backup / emergency engines."
+          },
+          "onsite_gen_mw": {
+            "type": "number",
+            "description": "On-site generation that runs beyond emergency use (MW). 0 if none."
+          },
+          "oil_storage_gal": {
+            "type": "number",
+            "description": "Aboveground oil storage capacity in gallons (fuel tanks, transformer oil)."
+          },
+          "wastewater": {
+            "type": "string",
+            "enum": [
+              "city_sewer",
+              "direct_discharge",
+              "land_application",
+              "septic",
+              "none"
+            ],
+            "description": "Where process water / cooling blowdown goes."
+          },
+          "water_source": {
+            "type": "string",
+            "enum": [
+              "utility",
+              "well",
+              "surface",
+              "none"
+            ],
+            "description": "Water supply."
+          },
+          "frontage": {
+            "type": "string",
+            "enum": [
+              "state",
+              "county",
+              "city",
+              "private"
+            ],
+            "description": "Road the driveway connects to."
+          }
+        }
+      }
+    },
+    {
+      "name": "layer_clip",
+      "description": "Enterprise. Returns Grid map layers as GeoJSON clipped to your boundary (a polygon or a set of parcel ids), so an assistant or GIS can work on a site without pulling public services one by one. Layers: parcels (Appraisal parcels (id, prop_id, county, acres, situs, values, source year). Owner names are not included: use parcel_lookup.); flood_zones (FEMA NFHL flood zones (zone, floodway, BFE).); flood_ble (TWDB/FEMA Base Level Engineering flood extents (10, 1, 0.2 percent chance). An estimate, not the regulatory FIRM.); ble_coverage (Where BLE studies exist: 0.05 degree coverage squares. Outside them, no BLE answer means not studied.); wetlands (USFWS National Wetlands Inventory polygons.); crit_habitat (USFWS critical habitat.); soil_bedrock (SSURGO map units with minimum depth to bedrock (cm), hydrologic group, drainage class.); soil_hazard (SSURGO map units flagged for flooding, ponding or caliche.); soil_restrictions (SSURGO map units with name, hydrologic group, hydric rating and every component restriction (kind, hardness, depth, component share).); washes (Washes and drainage keep-outs (DEM channels by contributing area plus NHD), with buffer used.); streams (NHDPlus HR flowlines with total drainage area (km2), stream order, perennial flag and name.); roads_major (HPMS public roads (functional class, AADT, trucks, lanes, surface).); roads_local (Census TIGER/Line all roads, including local public roads (name, route type, MTFCC).); railroads (Rail lines (owner, subdivision, class, status).); pipelines (Trunk pipelines (operator, system, commodity, diameter).); fiber (Long-haul and metro fiber routes.); water_wells (State water wells (TWDB GWDB and SDR): depth, aquifer, use, yield, TDS.); aquifers (TWDB major and minor aquifers.); utility_ccn (PUCT electric CCN service areas.); osm_substations (OpenStreetMap substations (voltages, operator).) Each layer comes back inline when small and always as a download link (30 minutes). Boundary limit about 150,000 acres; up to 8 layers and 50,000 features per layer per call.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "boundary": {
+            "type": "object",
+            "description": "GeoJSON Polygon or MultiPolygon (or a Feature or FeatureCollection of them) in lng/lat, EPSG:4326."
+          },
+          "parcel_ids": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "description": "Grid parcel ids to use as the boundary instead (merged). Up to 500."
+          },
+          "layers": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "parcels",
+                "flood_zones",
+                "flood_ble",
+                "ble_coverage",
+                "wetlands",
+                "crit_habitat",
+                "soil_bedrock",
+                "soil_hazard",
+                "soil_restrictions",
+                "washes",
+                "streams",
+                "roads_major",
+                "roads_local",
+                "railroads",
+                "pipelines",
+                "fiber",
+                "water_wells",
+                "aquifers",
+                "utility_ccn",
+                "osm_substations"
+              ]
+            },
+            "description": "Layers to clip (1 to 8)."
+          },
+          "max_features": {
+            "type": "number",
+            "description": "Per layer cap, default 20,000, max 50,000."
+          },
+          "simplify_m": {
+            "type": "number",
+            "description": "Optional simplification tolerance in meters for polygons and lines (0 = none)."
+          },
+          "inline": {
+            "type": "boolean",
+            "description": "Return small layers inline (default true)."
+          }
+        }
+      }
+    },
+    {
+      "name": "terrain_clip",
+      "description": "Enterprise. Clips a raster to your boundary and returns a GeoTIFF download link (30 minutes) with summary stats. product=terrain (default): two bands, elevation in meters and slope in percent (Horn), from USGS 3DEP 1/3 arc-second (about 10 m) where loaded, in the boundary's UTM zone, masked to the boundary plus buffer_m, with acres by slope class (<2, 2-5, 5-8, 8-15, 15+ percent). product=ghi: Global Solar Atlas long-term average GHI in kWh/m2/day at about 250 m. Up to about 150,000 acres per call. Not a survey.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "boundary": {
+            "type": "object",
+            "description": "GeoJSON Polygon or MultiPolygon (or a Feature or FeatureCollection of them) in lng/lat, EPSG:4326."
+          },
+          "parcel_ids": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "description": "Grid parcel ids to use as the boundary instead (merged). Up to 500."
+          },
+          "product": {
+            "type": "string",
+            "enum": [
+              "terrain",
+              "ghi"
+            ],
+            "description": "Default terrain."
+          },
+          "res_m": {
+            "type": "number",
+            "description": "Terrain cell size in meters, 5 to 90. Default 10."
+          },
+          "buffer_m": {
+            "type": "number",
+            "description": "Terrain kept outside the boundary, meters, 0 to 2000. Default 100."
+          }
+        }
+      }
+    },
+    {
+      "name": "aggregate_screen",
+      "description": "Finds construction material on land near any Texas point: red select (red sandy clay select fill), sand, gravel, ironstone (iron ore gravel road material), caliche, limestone near the surface and roadfill, and every known pit, active and old. Returns: the soil and surface geology at the point with its material rating; pits within the radius (TCEQ-registered aggregate operations with operator, material and registration; USGS past producers; OpenStreetMap quarries; bare ground from 2001 and 2021 land cover that marks old or unregistered pits); market prices (TxDOT bid medians for the district: embankment fill and flexible base; landowner royalty and at-pit price references, each with its source); and ranked parcels of 10+ acres that carry the material, by default untapped ones with no pit yet, with material acres, red select depth, thickness, soil class and plasticity, caliche and limestone depth, appraised land $/acre, distance from the point, the nearest pit of the same material, and a dirt value range: landowner royalty and operator sales at the pit for the in-place red select volume, or per acre-foot where the soil survey gives no thickness. Use for 'where can I find red select near Tyler', 'caliche pit land near Midland', 'borrow pit for my pad', 'old gravel pits near here', 'what is the dirt on this tract worth'. Soil survey ratings cover the top 1.5 to 2 m and map soil associations, not every acre: confirm with test pits, lab gradation and plasticity, and a TCEQ APO registration before mining. Enterprise; free and Pro get counts.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "address": {
+            "type": "string",
+            "description": "Texas street address, e.g. '1201 Main St, Houston, TX'. Use this or lat/lng."
+          },
+          "lat": {
+            "type": "number",
+            "description": "Latitude (WGS84). Use with lng instead of address."
+          },
+          "lng": {
+            "type": "number",
+            "description": "Longitude (WGS84). Use with lat instead of address."
+          },
+          "material": {
+            "type": "string",
+            "enum": [
+              "red_select",
+              "sand",
+              "gravel",
+              "ironstone",
+              "caliche",
+              "limestone",
+              "roadfill",
+              "any"
+            ],
+            "description": "Material to rank parcels by. Default any (each parcel's best material)."
+          },
+          "radius_mi": {
+            "type": "number",
+            "description": "Search radius in miles. Default 15, max 40."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "untapped",
+              "pit",
+              "all"
+            ],
+            "description": "untapped (default): parcels with the material and no known pit or bare ground; pit: parcels that already have one; all."
+          },
+          "min_acres": {
+            "type": "number",
+            "description": "Smallest parcel, acres. Default 10."
+          },
+          "min_material_acres": {
+            "type": "number",
+            "description": "Least acres of the material on the parcel. Default 5."
+          },
+          "royalty_usd_per_ton": {
+            "type": "number",
+            "description": "Optional landowner royalty in $/ton the user supplies; replaces the cited royalty range in the dirt value."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Parcels to return. Default 15, max 50."
+          }
+        }
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "com.barrioenergy.grid/texas-grid",
+    "version": "2.69.0",
+    "remoteUrl": "https://grid.barrioenergy.com/mcp",
+    "publishedAt": "2026-11-27T13:42:25.794185Z",
+    "fetchedAt": "2026-11-28T10:03:29.931Z",
+    "toolsSha256": "61b40362a4a4282e1b54ab7fe31aabefe57d70f21011dca887a1ab1ed0973a5a"
+  }
+}

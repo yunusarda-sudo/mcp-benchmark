@@ -1,0 +1,734 @@
+{
+  "$schema": "../schema.json",
+  "name": "com.andrechek.room-planner/room-planner",
+  "title": "Room Planner",
+  "category": "Other",
+  "description": "Lay out a room to scale, check furniture, doors and clearances, and get a link to edit the plan.",
+  "repository": "https://github.com/EricAndrechek/Room-Planner",
+  "tools": [
+    {
+      "name": "create_plan",
+      "description": "Use when the user wants to lay out, furnish, fit furniture into, or get a floor plan of a room or home: returns a checked plan, a drawing, and an editable Room Planner link. One room or a whole floor (rooms joined by doors), any outline, round and L-shaped pieces.\nReturns {plan, issues, summary, url, editable}: the plan normalised in its unit, every layout issue (as check_layout), a summary, the link. `url` opens the plan in the Room Planner editor; it encodes the whole plan, so only a complete link works. Issues list overlaps, blocked doors and swings and pieces outside rooms (errors, warnings) and tight gaps (info); message positions are piece centres.\nPlan format (version 4): {version:4, name, unit, rooms, items}. Every length is in unit (use the user's). One floor coordinate system: x grows right, y grows DOWN; the floor's top-left corner at {x:0,y:0}.\n- Room outline: interior corners, clockwise. A W x D rectangle at (X,Y) is [{x:X,y:Y},{x:X+W,y:Y},{x:X+W,y:Y+D},{x:X,y:Y+D}], walls 0 top, 1 right, 2 bottom, 3 left; wall i runs from outline[i] to outline[i+1].\n- Opening offset runs clockwise from the wall's start corner to the opening's near edge (RIGHT TO LEFT on a bottom wall, BOTTOM TO TOP on a left wall), or from the end named by from (\"left\"/\"right\"/\"top\"/\"bottom\" as seen on the plan, or \"end\"): a door 2 ft from the bottom of the right wall is {wall:1, offset:2, from:\"bottom\"}.\n- Item placement {x, y, rotation} is the CENTRE of the piece, rotation clockwise degrees; width runs along x and depth along y before rotation. No placement: set aside (kept, off the floor).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "plan": {
+            "type": "object",
+            "properties": {
+              "version": {
+                "type": "number",
+                "const": 4,
+                "description": "Always 4."
+              },
+              "name": {
+                "default": "Untitled",
+                "description": "Plan name.",
+                "type": "string",
+                "maxLength": 100
+              },
+              "unit": {
+                "type": "string",
+                "enum": [
+                  "ft",
+                  "in",
+                  "m",
+                  "cm"
+                ],
+                "description": "Unit of every length."
+              },
+              "rooms": {
+                "minItems": 1,
+                "maxItems": 50,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_-]{1,40}$",
+                      "description": "Unique in the plan."
+                    },
+                    "name": {
+                      "description": "E.g. \"Bedroom\".",
+                      "type": "string",
+                      "maxLength": 80
+                    },
+                    "outline": {
+                      "minItems": 3,
+                      "maxItems": 64,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "x": {
+                            "type": "number",
+                            "minimum": -100000,
+                            "maximum": 100000,
+                            "description": "Floor x (grows right)."
+                          },
+                          "y": {
+                            "type": "number",
+                            "minimum": -100000,
+                            "maximum": 100000,
+                            "description": "Floor y (grows DOWN)."
+                          }
+                        },
+                        "required": [
+                          "x",
+                          "y"
+                        ]
+                      },
+                      "description": "Interior corners, clockwise. Rectangle from top-left: walls 0 top, 1 right, 2 bottom, 3 left."
+                    },
+                    "openings": {
+                      "default": [],
+                      "description": "Doors and windows.",
+                      "maxItems": 64,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "pattern": "^[A-Za-z0-9_-]{1,40}$",
+                            "description": "Unique in the plan."
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "door",
+                              "window"
+                            ],
+                            "description": "Door or window."
+                          },
+                          "wall": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991,
+                            "description": "Wall i runs from outline[i] to outline[i+1]."
+                          },
+                          "offset": {
+                            "type": "number",
+                            "minimum": 0,
+                            "description": "From the wall's start corner to the opening's near edge."
+                          },
+                          "width": {
+                            "type": "number",
+                            "exclusiveMinimum": 0,
+                            "maximum": 10000,
+                            "description": "Width along the wall."
+                          },
+                          "from": {
+                            "description": "Input only: the end offset is measured from. Default \"start\".",
+                            "type": "string",
+                            "enum": [
+                              "start",
+                              "end",
+                              "left",
+                              "right",
+                              "top",
+                              "bottom"
+                            ]
+                          },
+                          "type": {
+                            "default": "swing-in",
+                            "description": "Doors only. \"swing-in\": into the room that lists it.",
+                            "type": "string",
+                            "enum": [
+                              "swing-in",
+                              "swing-out",
+                              "double-in",
+                              "double-out",
+                              "sliding",
+                              "pocket",
+                              "bifold",
+                              "opening"
+                            ]
+                          },
+                          "hinge": {
+                            "default": "start",
+                            "description": "Doors only. \"start\": on the left, from inside facing the wall.",
+                            "type": "string",
+                            "enum": [
+                              "start",
+                              "end"
+                            ]
+                          },
+                          "swingAngle": {
+                            "description": "Doors only: how far it opens, degrees.",
+                            "anyOf": [
+                              {
+                                "type": "number",
+                                "const": 90
+                              },
+                              {
+                                "type": "number",
+                                "const": 180
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "kind",
+                          "wall",
+                          "offset",
+                          "width"
+                        ],
+                        "additionalProperties": {}
+                      }
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "outline"
+                  ],
+                  "additionalProperties": {}
+                },
+                "description": "One floor: rooms touch to share a wall, never overlap."
+              },
+              "items": {
+                "default": [],
+                "description": "Furniture.",
+                "maxItems": 500,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_-]{1,40}$",
+                      "description": "Unique in the plan."
+                    },
+                    "label": {
+                      "type": "string",
+                      "maxLength": 80,
+                      "description": "E.g. \"Queen bed\"."
+                    },
+                    "color": {
+                      "default": "#93c5fd",
+                      "description": "Fill, \"#rrggbb\".",
+                      "type": "string",
+                      "pattern": "^#[0-9a-fA-F]{6}$"
+                    },
+                    "shape": {
+                      "default": "rect",
+                      "description": "\"ellipse\": round or oval; \"l\" needs cut.",
+                      "type": "string",
+                      "enum": [
+                        "rect",
+                        "l",
+                        "ellipse"
+                      ]
+                    },
+                    "width": {
+                      "type": "number",
+                      "exclusiveMinimum": 0,
+                      "maximum": 10000,
+                      "description": "Along x, before rotation."
+                    },
+                    "depth": {
+                      "type": "number",
+                      "exclusiveMinimum": 0,
+                      "maximum": 10000,
+                      "description": "Along y, before rotation."
+                    },
+                    "cut": {
+                      "description": "Shape \"l\" only: the rectangle removed from one corner.",
+                      "type": "object",
+                      "properties": {
+                        "corner": {
+                          "type": "string",
+                          "enum": [
+                            "tl",
+                            "tr",
+                            "br",
+                            "bl"
+                          ],
+                          "description": "Corner removed."
+                        },
+                        "width": {
+                          "type": "number",
+                          "exclusiveMinimum": 0,
+                          "maximum": 10000,
+                          "description": "Removed part, along x."
+                        },
+                        "depth": {
+                          "type": "number",
+                          "exclusiveMinimum": 0,
+                          "maximum": 10000,
+                          "description": "Removed part, along y."
+                        }
+                      },
+                      "required": [
+                        "corner",
+                        "width",
+                        "depth"
+                      ]
+                    },
+                    "placement": {
+                      "description": "Omit to set the piece aside: off the floor, not checked.",
+                      "type": "object",
+                      "properties": {
+                        "x": {
+                          "type": "number",
+                          "minimum": -100000,
+                          "maximum": 100000,
+                          "description": "Floor x of the CENTRE."
+                        },
+                        "y": {
+                          "type": "number",
+                          "minimum": -100000,
+                          "maximum": 100000,
+                          "description": "Floor y of the CENTRE."
+                        },
+                        "rotation": {
+                          "default": 0,
+                          "description": "Clockwise degrees.",
+                          "type": "number",
+                          "minimum": 0,
+                          "exclusiveMaximum": 360
+                        }
+                      },
+                      "required": [
+                        "x",
+                        "y"
+                      ]
+                    },
+                    "locked": {
+                      "description": "Not movable in the planner.",
+                      "type": "boolean"
+                    },
+                    "hidden": {
+                      "description": "Not drawn or checked.",
+                      "type": "boolean"
+                    },
+                    "notes": {
+                      "description": "The user's notes.",
+                      "type": "string",
+                      "maxLength": 500
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "label",
+                    "width",
+                    "depth"
+                  ],
+                  "additionalProperties": {}
+                }
+              },
+              "settings": {
+                "description": "Display preferences.",
+                "type": "object",
+                "properties": {
+                  "unitSystem": {
+                    "description": "Display unit. Default: unit (\"ft\" as \"ft-in\").",
+                    "type": "string",
+                    "enum": [
+                      "ft-in",
+                      "ft",
+                      "in",
+                      "m",
+                      "cm"
+                    ]
+                  }
+                },
+                "additionalProperties": {}
+              }
+            },
+            "required": [
+              "version",
+              "unit",
+              "rooms"
+            ],
+            "additionalProperties": {},
+            "description": "The whole plan; format in create_plan's description."
+          }
+        },
+        "required": [
+          "plan"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "check_layout",
+      "description": "Use when a plan only needs checking, without making a link or a drawing: returns the same issues as create_plan. The plan format is in create_plan's description.\nReturns {ok, issues, summary}; ok is true when no issue is an error or a warning. Each issue is {code, severity, message, ids}, ids naming the piece first, then what it hits. Errors: item_overlap, item_outside_room (outside every room). Warnings: door_blocked (a piece in a door's swing or track), doorway_blocked (in the passage either side of a door), opening_overlap, opening_off_wall, room_overlap, window_between_rooms, unknown_field (a key the format lacks, usually a typo). Info: tight_clearance, a straight gap from 6 in / 15 cm up to minClearance (in the plan's unit, default 24 in / 61 cm) between two pieces or a piece and a wall; closer pieces (chairs at a table) are taken as meant. Messages name rooms, pieces by label (with their centre when labels repeat) and doors by where they are on the wall.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "plan": {
+            "type": "object",
+            "properties": {
+              "version": {
+                "type": "number",
+                "const": 4,
+                "description": "Always 4."
+              },
+              "name": {
+                "default": "Untitled",
+                "description": "Plan name.",
+                "type": "string",
+                "maxLength": 100
+              },
+              "unit": {
+                "type": "string",
+                "enum": [
+                  "ft",
+                  "in",
+                  "m",
+                  "cm"
+                ],
+                "description": "Unit of every length."
+              },
+              "rooms": {
+                "minItems": 1,
+                "maxItems": 50,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_-]{1,40}$",
+                      "description": "Unique in the plan."
+                    },
+                    "name": {
+                      "description": "E.g. \"Bedroom\".",
+                      "type": "string",
+                      "maxLength": 80
+                    },
+                    "outline": {
+                      "minItems": 3,
+                      "maxItems": 64,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "x": {
+                            "type": "number",
+                            "minimum": -100000,
+                            "maximum": 100000,
+                            "description": "Floor x (grows right)."
+                          },
+                          "y": {
+                            "type": "number",
+                            "minimum": -100000,
+                            "maximum": 100000,
+                            "description": "Floor y (grows DOWN)."
+                          }
+                        },
+                        "required": [
+                          "x",
+                          "y"
+                        ]
+                      },
+                      "description": "Interior corners, clockwise. Rectangle from top-left: walls 0 top, 1 right, 2 bottom, 3 left."
+                    },
+                    "openings": {
+                      "default": [],
+                      "description": "Doors and windows.",
+                      "maxItems": 64,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "pattern": "^[A-Za-z0-9_-]{1,40}$",
+                            "description": "Unique in the plan."
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "door",
+                              "window"
+                            ],
+                            "description": "Door or window."
+                          },
+                          "wall": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991,
+                            "description": "Wall i runs from outline[i] to outline[i+1]."
+                          },
+                          "offset": {
+                            "type": "number",
+                            "minimum": 0,
+                            "description": "From the wall's start corner to the opening's near edge."
+                          },
+                          "width": {
+                            "type": "number",
+                            "exclusiveMinimum": 0,
+                            "maximum": 10000,
+                            "description": "Width along the wall."
+                          },
+                          "from": {
+                            "description": "Input only: the end offset is measured from. Default \"start\".",
+                            "type": "string",
+                            "enum": [
+                              "start",
+                              "end",
+                              "left",
+                              "right",
+                              "top",
+                              "bottom"
+                            ]
+                          },
+                          "type": {
+                            "default": "swing-in",
+                            "description": "Doors only. \"swing-in\": into the room that lists it.",
+                            "type": "string",
+                            "enum": [
+                              "swing-in",
+                              "swing-out",
+                              "double-in",
+                              "double-out",
+                              "sliding",
+                              "pocket",
+                              "bifold",
+                              "opening"
+                            ]
+                          },
+                          "hinge": {
+                            "default": "start",
+                            "description": "Doors only. \"start\": on the left, from inside facing the wall.",
+                            "type": "string",
+                            "enum": [
+                              "start",
+                              "end"
+                            ]
+                          },
+                          "swingAngle": {
+                            "description": "Doors only: how far it opens, degrees.",
+                            "anyOf": [
+                              {
+                                "type": "number",
+                                "const": 90
+                              },
+                              {
+                                "type": "number",
+                                "const": 180
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "kind",
+                          "wall",
+                          "offset",
+                          "width"
+                        ],
+                        "additionalProperties": {}
+                      }
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "outline"
+                  ],
+                  "additionalProperties": {}
+                },
+                "description": "One floor: rooms touch to share a wall, never overlap."
+              },
+              "items": {
+                "default": [],
+                "description": "Furniture.",
+                "maxItems": 500,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_-]{1,40}$",
+                      "description": "Unique in the plan."
+                    },
+                    "label": {
+                      "type": "string",
+                      "maxLength": 80,
+                      "description": "E.g. \"Queen bed\"."
+                    },
+                    "color": {
+                      "default": "#93c5fd",
+                      "description": "Fill, \"#rrggbb\".",
+                      "type": "string",
+                      "pattern": "^#[0-9a-fA-F]{6}$"
+                    },
+                    "shape": {
+                      "default": "rect",
+                      "description": "\"ellipse\": round or oval; \"l\" needs cut.",
+                      "type": "string",
+                      "enum": [
+                        "rect",
+                        "l",
+                        "ellipse"
+                      ]
+                    },
+                    "width": {
+                      "type": "number",
+                      "exclusiveMinimum": 0,
+                      "maximum": 10000,
+                      "description": "Along x, before rotation."
+                    },
+                    "depth": {
+                      "type": "number",
+                      "exclusiveMinimum": 0,
+                      "maximum": 10000,
+                      "description": "Along y, before rotation."
+                    },
+                    "cut": {
+                      "description": "Shape \"l\" only: the rectangle removed from one corner.",
+                      "type": "object",
+                      "properties": {
+                        "corner": {
+                          "type": "string",
+                          "enum": [
+                            "tl",
+                            "tr",
+                            "br",
+                            "bl"
+                          ],
+                          "description": "Corner removed."
+                        },
+                        "width": {
+                          "type": "number",
+                          "exclusiveMinimum": 0,
+                          "maximum": 10000,
+                          "description": "Removed part, along x."
+                        },
+                        "depth": {
+                          "type": "number",
+                          "exclusiveMinimum": 0,
+                          "maximum": 10000,
+                          "description": "Removed part, along y."
+                        }
+                      },
+                      "required": [
+                        "corner",
+                        "width",
+                        "depth"
+                      ]
+                    },
+                    "placement": {
+                      "description": "Omit to set the piece aside: off the floor, not checked.",
+                      "type": "object",
+                      "properties": {
+                        "x": {
+                          "type": "number",
+                          "minimum": -100000,
+                          "maximum": 100000,
+                          "description": "Floor x of the CENTRE."
+                        },
+                        "y": {
+                          "type": "number",
+                          "minimum": -100000,
+                          "maximum": 100000,
+                          "description": "Floor y of the CENTRE."
+                        },
+                        "rotation": {
+                          "default": 0,
+                          "description": "Clockwise degrees.",
+                          "type": "number",
+                          "minimum": 0,
+                          "exclusiveMaximum": 360
+                        }
+                      },
+                      "required": [
+                        "x",
+                        "y"
+                      ]
+                    },
+                    "locked": {
+                      "description": "Not movable in the planner.",
+                      "type": "boolean"
+                    },
+                    "hidden": {
+                      "description": "Not drawn or checked.",
+                      "type": "boolean"
+                    },
+                    "notes": {
+                      "description": "The user's notes.",
+                      "type": "string",
+                      "maxLength": 500
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "label",
+                    "width",
+                    "depth"
+                  ],
+                  "additionalProperties": {}
+                }
+              },
+              "settings": {
+                "description": "Display preferences.",
+                "type": "object",
+                "properties": {
+                  "unitSystem": {
+                    "description": "Display unit. Default: unit (\"ft\" as \"ft-in\").",
+                    "type": "string",
+                    "enum": [
+                      "ft-in",
+                      "ft",
+                      "in",
+                      "m",
+                      "cm"
+                    ]
+                  }
+                },
+                "additionalProperties": {}
+              }
+            },
+            "required": [
+              "version",
+              "unit",
+              "rooms"
+            ],
+            "additionalProperties": {},
+            "description": "The whole plan; format in create_plan's description."
+          },
+          "minClearance": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Gaps from 6 in up to this are tight_clearance; plan's unit, default 24 in."
+          }
+        },
+        "required": [
+          "plan"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "read_plan",
+      "description": "Use when the user shares a Room Planner link, to read and modify that plan. Takes a link to the Room Planner web app (https://room-planner.andrechek.com; link formats #s=, #j=, #p= and the older ?config= are documented at https://room-planner.andrechek.com/agents/#plan-links) and decodes the plan from the link itself; it fetches nothing. Returns {plan, summary, issues, url, editable}, the plan in the unit it is shown in, ready to edit and send to create_plan for a new link. A link cut off when copied returns an error, since the whole link is needed. Clients with MCP Apps show the drawing in the chat.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "The whole link, as the user gave it."
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "additionalProperties": false
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "com.andrechek.room-planner/room-planner",
+    "version": "1.1.0",
+    "remoteUrl": "https://room-planner.andrechek.com/mcp",
+    "publishedAt": "2026-11-27T21:21:27.517702Z",
+    "fetchedAt": "2026-11-28T10:03:29.931Z",
+    "toolsSha256": "a35e9998b6ad415bc85e049f78255f80f97ffac1e598f12e8ab49ede165d0604"
+  }
+}

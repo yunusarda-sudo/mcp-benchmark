@@ -1,0 +1,676 @@
+{
+  "$schema": "../schema.json",
+  "name": "com.fortitude21/dangerous-goods",
+  "title": "Fortitude21 Dangerous Goods, Packaging and CBAM Tools",
+  "category": "Other",
+  "description": "Dangerous goods and CBAM calculators plus search and quote tools for Fortitude21's container range",
+  "tools": [
+    {
+      "name": "un_number_packaging",
+      "description": "Find which UN-approved packagings may carry a dangerous liquid under ADR 2025 Table A and its packing instructions.\nUse when: the user has a UN number from section 14 of a safety data sheet, or a substance name, and asks what it can travel in and how large. Instead: decode_un_packaging_mark to read a mark already on a container; adr_1000_points to test a vehicle load.\nInputs: send un or name. If both arrive, un wins and name is not read. name is a case-insensitive substring search over proper shipping names and common names and needs at least 3 characters, so a broad word such as \"acid\" returns up to 20 candidates to choose from. Where one candidate is the everyday meaning (petrol: UN 1203, paint: UN 1263), that entry is answered and the other matches are listed in assumed.\nBehaviour: covers 157 liquids for road transport under ADR; sea (IMDG Code) and air (IATA) rules can differ. An uncovered number returns ok:false with covered_un_numbers, and a name with no match returns ok:false asking for the number. A number with several Table A rows (packing groups or variants) returns each as its own entry, so choose by the packing group on the safety data sheet. Unknown arguments are ignored and named in assumed.\nConstraints: no authentication, key or headers. At most 10 requests per 10 seconds per IP address; above that HTTP 429, so space out repeated calls.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "un": {
+            "type": "string",
+            "description": "Four digits, with or without a \"UN\" prefix, e.g. \"1203\" or \"UN 1203\""
+          },
+          "name": {
+            "type": "string",
+            "description": "Substance name, e.g. \"acetone\""
+          }
+        }
+      }
+    },
+    {
+      "name": "decode_un_packaging_mark",
+      "description": "Decode a UN packaging mark part by part: packaging code, performance level, density or gross mass, test pressure, year, state and maker, for packagings, IBCs, large packagings, salvage and reconditioned marks.\nUse when: the user has read a mark off a drum, jerrican, box or IBC. Instead: un_number_packaging to find which codes a substance may use; ibc_inspection_dates for an IBC's test dates.\nInputs: mark alone decodes. Adding un also checks, against ADR 2025 Table A, whether that container may carry that substance, using the density limit printed in the mark. A bare code such as 3H1 decodes to its meaning only. If the user has not read the mark, ask for it rather than describing the container.\nBehaviour: text it cannot read as a mark returns ok:false, and only the first 120 characters are read. If un is not one of the 157 covered numbers, the mark still decodes and check carries the error. Unknown arguments are ignored and named in assumed.\nConstraints: no authentication, key or headers. At most 10 requests per 10 seconds per IP address; above that HTTP 429, so space out repeated calls.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "mark": {
+            "type": "string",
+            "description": "The mark as printed, parts separated by slashes, e.g. \"UN 3H1/Y1.9/150/26/D/BAM 12345\" or an IBC mark \"31HA1/Y/03 22/D/BAM 12345/10800/1200\""
+          },
+          "un": {
+            "type": "string",
+            "description": "Optional UN number (four digits) to check the container against, e.g. \"1203\""
+          }
+        },
+        "required": [
+          "mark"
+        ]
+      }
+    },
+    {
+      "name": "ibc_inspection_dates",
+      "description": "Work out when an IBC (intermediate bulk container) is due for its leakproofness test and its 2.5-year and 5-year inspections, the last month it may be filled and, for plastic and composite IBCs, the end of its five-year life.\nUse when: the user asks whether an IBC is in date or may still be filled. Instead: decode_un_packaging_mark to read the rest of an IBC mark; bund_size to size spill containment under IBCs.\nInputs: mark alone is enough, since the code and month of manufacture are read from it. Otherwise send made, plus code if known; without code a composite 31HA1 tote is assumed. leak and insp move the due dates on from the last test; without them every date counts from manufacture. bottle restarts the five-year life of a remanufactured composite. A full date is read only when its day cannot be mistaken for the month. regime=us has no five-year life.\nBehaviour: dates are judged against the current month, so the same IBC moves from ok to soon to overdue as time passes. Every default is listed in assumed; an unreadable date or code returns ok:false.\nConstraints: no authentication, key or headers. At most 10 requests per 10 seconds per IP address; above that HTTP 429, so space out repeated calls.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "mark": {
+            "type": "string",
+            "description": "The IBC UN mark from the plate; the code and month of manufacture are read from it, e.g. \"31HA1/Y/03 22/D/BAM 12345/10800/1200\""
+          },
+          "code": {
+            "type": "string",
+            "description": "IBC code when no mark is given, e.g. 31HA1 (composite), 31H1 (rigid plastic), 31A (steel)"
+          },
+          "made": {
+            "type": "string",
+            "description": "Month of manufacture, e.g. \"03/2022\", \"2022-03\" or \"March 2022\""
+          },
+          "leak": {
+            "type": "string",
+            "description": "Month of the last leakproofness test, same formats"
+          },
+          "insp": {
+            "type": "string",
+            "description": "Month of the last inspection, same formats. Usually the same month as leak"
+          },
+          "repair": {
+            "type": "string",
+            "description": "Month of the last repair, if any"
+          },
+          "bottle": {
+            "type": "string",
+            "description": "Month the inner receptacle was replaced, for remanufactured composite IBCs"
+          },
+          "regime": {
+            "type": "string",
+            "enum": [
+              "un",
+              "us"
+            ],
+            "description": "un: UN Model Regulations and ADR (default). us: 49 CFR 180.352"
+          }
+        }
+      }
+    },
+    {
+      "name": "adr_1000_points",
+      "description": "Total the ADR 1.1.3.6 points for a road load of dangerous goods and say whether it stays within the small-load exemption, and what still applies if it does.\nUse when: the user asks whether a vehicle load needs full ADR. Instead: un_number_packaging for container rules; bund_size for storage.\nInputs: one line per substance and package size, so the same UN number in two package sizes is two lines. packing_group matters only where a UN number has entries in more than one transport category, such as UN 1263 paint; without it those lines are refused with the entries to choose from. Points are quantity_per_package times packages times the category multiplier: 50 for category 1, 3 for category 2, 1 for category 3 and 0 for category 4. A category 0 substance needs full ADR at any quantity.\nBehaviour: covers 92 UN numbers. If any line cannot be read, the whole load is refused with a reason per line and never totalled without it. An exempt load still carries duties, listed in still_required. Unknown arguments are ignored and named in assumed.\nConstraints: no authentication, key or headers. At most 10 requests per 10 seconds per IP address; above that HTTP 429, so space out repeated calls.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "lines": {
+            "type": "array",
+            "description": "One item per substance carried",
+            "items": {
+              "type": "object",
+              "properties": {
+                "un": {
+                  "type": "string",
+                  "description": "UN number, e.g. \"1203\""
+                },
+                "packing_group": {
+                  "type": "string",
+                  "enum": [
+                    "I",
+                    "II",
+                    "III"
+                  ],
+                  "description": "Packing group from section 14 of the safety data sheet. Required where the UN number has entries in more than one transport category, such as 1263 paint; the refusal lists them"
+                },
+                "quantity_per_package": {
+                  "type": "number",
+                  "description": "Litres (liquids) or kg (solids) in each package, e.g. 20 for a 20 L jerrican"
+                },
+                "packages": {
+                  "type": "integer",
+                  "description": "Number of packages of this size",
+                  "default": 1
+                }
+              },
+              "required": [
+                "un",
+                "quantity_per_package"
+              ]
+            }
+          }
+        },
+        "required": [
+          "lines"
+        ]
+      }
+    },
+    {
+      "name": "bund_size",
+      "description": "Work out the minimum sump capacity for a bund or spill pallet under the containment rule where the containers are stored, and name the rule.\nUse when: sizing a spill pallet, bund or drip tray. Instead: ibc_inspection_dates for IBC tests; un_number_packaging for container approval.\nInputs: count only the containers stored together over one bund; size separate stores in separate calls. Give at least one count: drums, ibcs, small and other add up, and small and other each need their size. liquid and mode=tray can change which rule applies. With no region the rule for England is used; a country without its own rule gets the common 110% and 25% rule; both are noted in assumed.\nBehaviour: the rule comes labelled as law, code, guidance or practice, so say which when advising. A region it cannot read returns ok:false with the 16 region codes, and a count without its size returns ok:false naming the size. Unknown arguments are ignored and named in assumed.\nConstraints: no authentication, key or headers. At most 10 requests per 10 seconds per IP address; above that HTTP 429, so space out repeated calls.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "region": {
+            "type": "string",
+            "description": "A region code (gb-eng, gb-wls, gb-sct, gb-nir, ie, de, fr, nl, es, us, ca, au, nz, sg, jp, world), a country name or a US state such as \"Texas\""
+          },
+          "liquid": {
+            "type": "string",
+            "description": "oil (fuel, diesel, petrol; the default), flam (flammable liquids), other (chemicals), or waste (US only)"
+          },
+          "drums": {
+            "type": "integer",
+            "description": "Number of 205-litre drums"
+          },
+          "ibcs": {
+            "type": "integer",
+            "description": "Number of 1,000-litre IBCs"
+          },
+          "small": {
+            "type": "integer",
+            "description": "Number of smaller containers; needs smallSize"
+          },
+          "smallSize": {
+            "type": "number",
+            "description": "Litres in each smaller container, e.g. 25"
+          },
+          "other": {
+            "type": "integer",
+            "description": "Number of other containers; needs otherSize"
+          },
+          "otherSize": {
+            "type": "number",
+            "description": "Litres in each other container, e.g. 500"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "bund",
+              "tray"
+            ],
+            "description": "bund (default) for a bund or spill pallet, tray for a drip tray"
+          }
+        }
+      }
+    },
+    {
+      "name": "jerry_can_quantity",
+      "description": "Work out how much water or fuel to hold, with a margin, and how many jerry cans and 20 ft containers that takes.\nUse when: planning an emergency water store, or fuel for a trip, boat, generator or machinery. Instead: un_number_packaging for transport rules.\nWater (the default): people times days times the scenario's litres a person a day. Rates: relief 15 (Sphere minimum, the default); acute 7.5; protracted 50; survival 3; national advice nl, se and dk 3, no 2.86, fi and de 2; custom takes rate. National scenarios also supply a household of 4 and their own days when those are left out.\nFuel (mode=fuel, or set by any fuel input): road and overland work from distance and consumption, and returnTrip=1 adds the way back on overland. marine, agri and generator work from hours and consumption; generator also takes kva and load instead of consumption. Hours or kva with no scenario selects generator. units=us switches to miles, mpg and US gallons.\nEither mode: volume with no scenario is the amount to hold. reserve sets the margin; by default 10% for water and 0 to 50% by fuel scenario.\nBehaviour: a missing people, days, distance or hours returns ok:false with needs naming it; no demo figure is substituted. A defaulted consumption, household or period is noted in assumed, and so are unknown arguments.\nConstraints: no authentication, key or headers. At most 10 requests per 10 seconds per IP address; above that HTTP 429, so space out repeated calls.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "mode": {
+            "type": "string",
+            "enum": [
+              "water",
+              "fuel"
+            ],
+            "description": "water (default) or fuel. Set to fuel when distance, hours, kva or consumption is given"
+          },
+          "scenario": {
+            "type": "string",
+            "description": "Water: relief (default), acute, protracted, survival, nl, se, no, fi, dk, de, custom. Fuel: road (default), overland, marine, generator, agri, direct"
+          },
+          "people": {
+            "type": "number",
+            "description": "Water: people to supply. Required unless a national scenario sets a household of 4"
+          },
+          "days": {
+            "type": "number",
+            "description": "Water: days to cover. Required unless the scenario sets it"
+          },
+          "weeks": {
+            "type": "number",
+            "description": "Weeks to cover, converted to days when days is not given"
+          },
+          "rate": {
+            "type": "number",
+            "description": "Water, custom scenario: litres a person a day"
+          },
+          "distance": {
+            "type": "number",
+            "description": "Fuel, road and overland: trip distance in km (miles with units=us). Required for those scenarios"
+          },
+          "consumption": {
+            "type": "number",
+            "description": "Fuel: L/100 km for road and overland, L/h for marine, agri and generator; with units=us, miles per US gallon or US gallons an hour. Defaults noted in assumed"
+          },
+          "hours": {
+            "type": "number",
+            "description": "Fuel, marine, agri and generator: running hours to cover. Required for those scenarios"
+          },
+          "kva": {
+            "type": "number",
+            "description": "Fuel, generator: rating in kVA, used with load instead of consumption"
+          },
+          "load": {
+            "type": "number",
+            "description": "Fuel, generator: load in per cent, with kva"
+          },
+          "units_n": {
+            "type": "number",
+            "description": "Fuel: number of vehicles, boats or machines (default 1)"
+          },
+          "volume": {
+            "type": "number",
+            "description": "Litres (US gallons with units=us) to hold. With no scenario it replaces the calculation in either mode"
+          },
+          "reserve": {
+            "type": "number",
+            "description": "Margin in per cent added to the base volume"
+          },
+          "units": {
+            "type": "string",
+            "enum": [
+              "metric",
+              "us"
+            ],
+            "description": "metric (default) or us for miles, mpg and US gallons"
+          },
+          "returnTrip": {
+            "type": "string",
+            "enum": [
+              "0",
+              "1"
+            ],
+            "description": "Fuel, overland: 1 to count the return leg"
+          },
+          "can": {
+            "type": "string",
+            "description": "Optional product slug of the can to size in, e.g. product-20l-nato-steel-fuel-can. Default: the scenario's usual can"
+          }
+        }
+      }
+    },
+    {
+      "name": "cbam_cost",
+      "description": "Work out the EU CBAM certificates owed on imported goods after the free allocation adjustment, what they cost at the official certificate price, and where the importer stands against the 50-tonne annual threshold, on EU default values.\nUse when: the user asks what CBAM will cost on cement, fertiliser, iron and steel, aluminium or hydrogen imported into the EU. Instead: uk_cbam_cost for imports into the UK.\nInputs: one line per goods and origin. cn is the CN code (4 to 10 digits); words such as \"steel tubes\" are matched against the official descriptions and return candidates when several fit. origin is an ISO code or an English country name; tonnes is the net mass. period is 2026-Q1 to 2026-Q4 or a year from 2027, defaulting to the current quarter; 2026 prices are quarterly and later ones weekly, so from 2027 the latest published price applies unless price is sent. other_tonnes adds CBAM goods not listed, for the threshold; unit_kg adds the cost per item.\nBehaviour: summary states the result in one sentence. Under 50 t a year (lines plus other_tonnes) owed is none and the totals show what becomes owed above it. A country without its own default values takes the table for other countries and territories, noted in assumed; origins in the EU, Iceland, Liechtenstein, Norway or Switzerland are refused as outside CBAM. Electricity and verified actual emissions are not covered; an estimate, not a declaration.\nConstraints: no authentication, key or headers. At most 10 requests per 10 seconds per IP address; above that HTTP 429, so space out repeated calls.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "lines": {
+            "type": "array",
+            "description": "One item per goods and origin. Or send cn, origin and tonnes for a single line",
+            "items": {
+              "type": "object",
+              "properties": {
+                "cn": {
+                  "type": "string",
+                  "description": "CN code, e.g. \"7310\" or \"73102990\", or words describing the goods"
+                },
+                "origin": {
+                  "type": "string",
+                  "description": "Country of origin: ISO code such as \"CN\" or a name such as \"Viet Nam\""
+                },
+                "tonnes": {
+                  "type": "number",
+                  "description": "Net mass in tonnes"
+                }
+              },
+              "required": [
+                "cn",
+                "origin",
+                "tonnes"
+              ]
+            }
+          },
+          "cn": {
+            "type": "string",
+            "description": "Single line: CN code or words"
+          },
+          "origin": {
+            "type": "string",
+            "description": "Single line: country of origin"
+          },
+          "tonnes": {
+            "type": "number",
+            "description": "Single line: net mass in tonnes"
+          },
+          "period": {
+            "type": "string",
+            "description": "Quarter of import for 2026, e.g. \"2026-Q3\", or a year from 2027, e.g. \"2027\". Default: the current quarter"
+          },
+          "price": {
+            "type": "number",
+            "description": "Certificate price in EUR, to override the published price"
+          },
+          "other_tonnes": {
+            "type": "number",
+            "description": "Other CBAM goods (cement, fertiliser, iron and steel, aluminium) imported this year, tonnes, for the 50 t threshold"
+          },
+          "unit_kg": {
+            "type": "number",
+            "description": "Net mass of one item in kg, e.g. 3.1 for a 20 L steel jerry can, for the cost per item"
+          },
+          "path": {
+            "type": "string",
+            "enum": [
+              "law",
+              "proposal"
+            ],
+            "description": "law (default): the free allocation phase-out in force. proposal: COM(2026) 616, not law"
+          },
+          "compare_with": {
+            "type": "string",
+            "description": "Optional second country of origin: the same lines made there, returned as comparison and never added to the totals"
+          }
+        }
+      }
+    },
+    {
+      "name": "uk_cbam_cost",
+      "description": "Work out the UK CBAM liability in pounds on goods imported from 1 January 2027: tonnes times the UK default embedded emissions for the commodity code times the CBAM rate for the sector, with the £50,000 threshold and, if an origin is sent, the EU CBAM cost of the same goods in 2027 for comparison.\nUse when: the user asks about UK CBAM on aluminium, cement, fertiliser, hydrogen, or iron and steel goods. Instead: cbam_cost for imports into the EU.\nInputs: one line per commodity code: code (8 digits; a shorter code or words return candidates) and tonnes. value_gbp, the customs value of all CBAM goods over the last 12 months, tests the threshold. origin adds the EU comparison for that country.\nBehaviour: summary states the result in one sentence. The UK sets one default per code for every origin. Until HMRC publishes the first quarterly rates, the rates are the illustrative ones GOV.UK published on 16 October 2026, shown in rate_basis and noted in assumed. Imports before the threshold trigger date owe nothing. Default values only; an estimate, not a return.\nConstraints: no authentication, key or headers. At most 10 requests per 10 seconds per IP address; above that HTTP 429, so space out repeated calls.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "lines": {
+            "type": "array",
+            "description": "One item per commodity code. Or send code and tonnes for a single line",
+            "items": {
+              "type": "object",
+              "properties": {
+                "code": {
+                  "type": "string",
+                  "description": "UK commodity code, e.g. \"73102990\", or words describing the goods"
+                },
+                "tonnes": {
+                  "type": "number",
+                  "description": "Net mass in tonnes"
+                }
+              },
+              "required": [
+                "code",
+                "tonnes"
+              ]
+            }
+          },
+          "code": {
+            "type": "string",
+            "description": "Single line: commodity code or words"
+          },
+          "tonnes": {
+            "type": "number",
+            "description": "Single line: net mass in tonnes"
+          },
+          "value_gbp": {
+            "type": "number",
+            "description": "Customs value of all CBAM goods imported over the last 12 months, GBP, for the £50,000 threshold"
+          },
+          "origin": {
+            "type": "string",
+            "description": "Optional country of origin, e.g. \"CN\", to add the EU CBAM cost of the same goods in 2027"
+          },
+          "unit_kg": {
+            "type": "number",
+            "description": "Net mass of one item in kg, for the liability per item"
+          }
+        }
+      }
+    },
+    {
+      "name": "search_products",
+      "description": "Search the Fortitude21 catalogue of liquid containment: jerry cans, pails, tins, drums, spill pallets, closures and handling equipment in steel, stainless, aluminium, tinplate and UN-rated HDPE.\nUse when: finding products that fit a need. Then: get_product_details for one record, compare_products for two to six, get_product_pricing for terms, create_quote_request to ask for a price.\nInputs: q and every filter combine with AND, so each one narrows the result. q expands synonyms, such as bund for spill pallet, and words no product mentions are named in query.terms_no_product_mentions so they can be dropped. category also takes the exact category name. application matches words in the product's listed uses. certification=UN matches any product with a UN status that is not excluded; a design code must appear in that status. sort defaults to relevance with q and to name without.\nBehaviour: a product with no recorded value for a filtered attribute is left out rather than assumed to match, so an empty result means nothing meets every condition: drop a filter and search again. An unknown category, pricing_type or sort returns ok:false listing the valid values. Results are summaries; get_product_details has the full record.\nConstraints: no authentication, key or headers. At most 10 requests per 10 seconds per IP address; above that HTTP 429, so space out repeated calls.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "q": {
+            "type": "string",
+            "description": "Free text, e.g. \"20 litre steel fuel can\" or \"spill pallet for 4 drums\". Leave out to list by filters alone"
+          },
+          "category": {
+            "type": "string",
+            "description": "Category slug from get_product_categories, e.g. spill-containment"
+          },
+          "material": {
+            "type": "string",
+            "description": "hdpe, polypropylene, polyethylene, stainless, steel, galvanised, aluminium, tinplate, plastic or metal. Resolved to the material family, so hdpe does not return polypropylene"
+          },
+          "capacity_min": {
+            "type": "number",
+            "description": "Minimum capacity in litres, e.g. 20"
+          },
+          "capacity_max": {
+            "type": "number",
+            "description": "Maximum capacity in litres"
+          },
+          "application": {
+            "type": "string",
+            "description": "Intended use, e.g. \"defence\", \"agriculture\", \"marine\""
+          },
+          "certification": {
+            "type": "string",
+            "description": "UN for any UN-rated design, or a design code such as 3H1 or 3A1"
+          },
+          "pricing_type": {
+            "type": "string",
+            "enum": [
+              "PUBLIC_PRICE",
+              "STARTING_FROM",
+              "PRICE_ON_REQUEST",
+              "CONTRACT_PRICE"
+            ],
+            "description": "Filter by pricing model. Most products are PRICE_ON_REQUEST"
+          },
+          "sort": {
+            "type": "string",
+            "enum": [
+              "relevance",
+              "capacity",
+              "capacity_desc",
+              "price",
+              "name"
+            ],
+            "description": "Order of results. relevance (default) needs q"
+          },
+          "page": {
+            "type": "integer",
+            "description": "Page number, from 1"
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Results per page, 1 to 100. Default 20"
+          }
+        }
+      }
+    },
+    {
+      "name": "get_product_details",
+      "description": "Get the complete published record for one Fortitude21 product.\nUse when: the user needs the specifications, sizes, part numbers or images of one product, usually after search_products. Instead: get_product_pricing for commercial terms; get_product_documents for certificates; check_product_requirements for what a quotation still needs.\nInputs: sku takes the product slug, with or without its product- prefix, the product part number, or the part number of one size, which returns the whole product that size belongs to. Letter case is ignored.\nReturns: product with identity, typed specifications and the source of each figure, the spec table, orderable units with their part numbers, size and model tables, images, documents available on request and pricing.\nBehaviour: a figure the factory has not supplied comes back as available on request, never left out, so an absent value is not read as zero. Any price in the record is indicative, never a quotation. An unknown sku returns ok:false with example ids and a search link.\nConstraints: no authentication, key or headers. At most 10 requests per 10 seconds per IP address; above that HTTP 429, so space out repeated calls.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sku": {
+            "type": "string",
+            "description": "An F21 part number such as F21-NF-20, or a product slug such as product-20l-nato-steel-fuel-can. Both come from search_products results"
+          }
+        },
+        "required": [
+          "sku"
+        ]
+      }
+    },
+    {
+      "name": "compare_products",
+      "description": "Compare two to six Fortitude21 products on the attributes they publish.\nUse when: the user is choosing between products already found with search_products. Instead: get_product_details for one product in full.\nInputs: each entry in skus may be a slug, a product part number or the part number of one size, mixed freely; a size stands for its whole product. Products come back in the order given.\nBehaviour: rows every product has a value for go in comparable; rows some products lack go in partial, naming them, so a blank is never read as a worse figure. It does not rank or recommend: which product suits depends on the contents, the destination market and the order. Fewer than two skus or more than six returns ok:false, and an unknown one returns ok:false with not_found.\nConstraints: no authentication, key or headers. At most 10 requests per 10 seconds per IP address; above that HTTP 429, so space out repeated calls.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "skus": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 2,
+            "maxItems": 6,
+            "description": "Two to six F21 part numbers or product slugs, from search_products"
+          }
+        },
+        "required": [
+          "skus"
+        ]
+      }
+    },
+    {
+      "name": "get_product_pricing",
+      "description": "Get the published commercial terms for one Fortitude21 product: pricing type, currency, minimum order, quantity bands with any approved indicative unit price, validity, Incoterms and lead time.\nUse when: the user asks about price, minimum order or lead time for a known product. Instead: create_quote_request for an actual quotation; search_products with pricing_type to find products by pricing model.\nInputs: sku is read as in get_product_details. Without quantity it returns every band. With quantity it also returns the band that covers it; below the minimum order no unit price is given and assumed says so; a quantity in the top band returns a quotation band rather than a price. A quantity under 1 returns ok:false.\nBehaviour: any price is indicative, never a quotation: binding is always false, and prices exclude freight, duty and taxes. Products priced on request return no number. An unknown sku returns ok:false with example ids.\nConstraints: no authentication, key or headers. At most 10 requests per 10 seconds per IP address; above that HTTP 429, so space out repeated calls.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sku": {
+            "type": "string",
+            "description": "An F21 part number or product slug, from search_products"
+          },
+          "quantity": {
+            "type": "integer",
+            "description": "Optional units to price, e.g. 500. Returns the band that covers it in band and for_quantity"
+          }
+        },
+        "required": [
+          "sku"
+        ]
+      }
+    },
+    {
+      "name": "get_product_categories",
+      "description": "List the twelve Fortitude21 product categories with their slugs, taglines and product counts, in two families.\nUse when: you need a category slug for search_products, or want to show the user the range. Instead: search_products to list the products themselves.\nInputs: family limits the list to one family; any other value returns ok:false with valid_families.\nBehaviour: the list changes only when the catalogue does. Each product has one home category and may be cross-listed into others, so listed_count can exceed product_count.\nConstraints: no authentication, key or headers. At most 10 requests per 10 seconds per IP address; above that HTTP 429, so space out repeated calls.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "family": {
+            "type": "string",
+            "enum": [
+              "container",
+              "system"
+            ],
+            "description": "Optional. container: cans, pails, tins and drums. system: spill containment, closures, pouring and handling. Leave out for all twelve categories"
+          }
+        }
+      }
+    },
+    {
+      "name": "get_product_documents",
+      "description": "List which documents exist for one Fortitude21 product and how to request them.\nUse when: the user asks for a certificate, test report, mill certificate, food-contact declaration, specification sheet or drawing. Instead: check_product_requirements for the scope of a UN status and what a quotation needs; get_product_details for specifications.\nInputs: sku is read as in get_product_details; the part number of one size returns the documents for its whole product.\nBehaviour: it requests nothing itself; following request_url is the buyer's step. hosted is usually empty, because documents are issued against a specific design and production run. Each document says when it applies: a UN certificate only where the design carries one, a mill certificate for a stainless grade, a food-contact declaration where the product is specified for food or drinking water. An unknown sku returns ok:false with example ids.\nConstraints: no authentication, key or headers. At most 10 requests per 10 seconds per IP address; above that HTTP 429, so space out repeated calls.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sku": {
+            "type": "string",
+            "description": "An F21 part number or product slug, from search_products"
+          }
+        },
+        "required": [
+          "sku"
+        ]
+      }
+    },
+    {
+      "name": "check_product_requirements",
+      "description": "Report what Fortitude21 publishes about one product's certification: the exact scope of any UN status, its cautions, the documents that exist and what a quotation still needs.\nUse when: about to quote or ship a specific product. Instead: un_number_packaging, adr_1000_points, bund_size or decode_un_packaging_mark for the regulations themselves; the response names them.\nInputs: only sku is required, read as in get_product_details. destination_market and intended_contents only shorten information_still_needed, since each one left out is listed there; neither is checked against any rule. To learn whether the contents are dangerous goods, call un_number_packaging with their UN number.\nBehaviour: it states what the publisher says, not what a market requires, and does not confirm that Fortitude21 holds a certificate: UN approval is granted per design type and plant. An unknown sku returns ok:false.\nConstraints: no authentication, key or headers. At most 10 requests per 10 seconds per IP address; above that HTTP 429, so space out repeated calls.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sku": {
+            "type": "string",
+            "description": "An F21 part number or product slug, from search_products"
+          },
+          "destination_market": {
+            "type": "string",
+            "description": "Country or market the goods are going to, e.g. \"Australia\""
+          },
+          "intended_contents": {
+            "type": "string",
+            "description": "What the container will hold, ideally with its UN number, e.g. \"diesel, UN 1202\""
+          }
+        },
+        "required": [
+          "sku"
+        ]
+      }
+    },
+    {
+      "name": "create_quote_request",
+      "description": "Send a quotation request for one or more Fortitude21 products to a person who prices it, and get a reference back.\nUse when: the buyer wants a quotation and has agreed to share their contact details. Instead: get_product_pricing for indicative terms without contacting anyone.\nInputs: consent must be true and means the buyer agreed, not the agent. A quantity under the minimum order is recorded, not refused. Without a destination (delivery_destination or country) or incoterms the request is still sent, and the gaps come back in missing_information. A required_date not written as YYYY-MM-DD refuses the request.\nBehaviour: writes and is not idempotent. Each call stores an enquiry and emails it to Fortitude21's sales team, who reply by email, usually within one working day, so two calls send two requests. It never creates an order or accepts a price. An unknown sku or missing consent refuses the whole request.\nConstraints: no authentication, key or headers. At most 10 requests per 10 seconds per IP address; above that HTTP 429, so space out repeated calls.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "consent": {
+            "type": "boolean",
+            "description": "Must be true. Confirms the buyer agreed to their company and contact details being sent to Fortitude21"
+          },
+          "company": {
+            "type": "string",
+            "description": "Buying company name"
+          },
+          "contact_name": {
+            "type": "string",
+            "description": "Person to reply to"
+          },
+          "email": {
+            "type": "string",
+            "description": "Business email address for the reply"
+          },
+          "country": {
+            "type": "string",
+            "description": "Buyer country"
+          },
+          "delivery_destination": {
+            "type": "string",
+            "description": "Port or city the goods ship to"
+          },
+          "incoterms": {
+            "type": "string",
+            "description": "Preferred Incoterm, e.g. FOB, CIF, DDP"
+          },
+          "required_date": {
+            "type": "string",
+            "description": "Required delivery date, YYYY-MM-DD"
+          },
+          "source": {
+            "type": "string",
+            "description": "The agent or integration sending this, for the enquiry log"
+          },
+          "notes": {
+            "type": "string",
+            "description": "Anything else the quotation should account for"
+          },
+          "lines": {
+            "type": "array",
+            "description": "One entry per product",
+            "items": {
+              "type": "object",
+              "properties": {
+                "sku": {
+                  "type": "string",
+                  "description": "An F21 part number or product slug"
+                },
+                "quantity": {
+                  "type": "integer",
+                  "description": "Whole number of units required. Below the minimum order is recorded, not refused"
+                },
+                "specification": {
+                  "type": "string",
+                  "description": "Colour, branding, closure, gauge, anything specified"
+                },
+                "certification": {
+                  "type": "string",
+                  "description": "Certification the destination market requires"
+                }
+              },
+              "required": [
+                "sku",
+                "quantity"
+              ]
+            }
+          }
+        },
+        "required": [
+          "consent",
+          "company",
+          "contact_name",
+          "email",
+          "lines"
+        ]
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "com.fortitude21/dangerous-goods",
+    "version": "1.5.0",
+    "remoteUrl": "https://fortitude21.com/mcp",
+    "publishedAt": "2026-11-18T08:05:15.082864Z",
+    "fetchedAt": "2026-11-28T10:03:29.931Z",
+    "toolsSha256": "8e69554666f054e53e7e0bf9279cd686a342c1d6eb41db1b8b4397b4d618708e"
+  }
+}

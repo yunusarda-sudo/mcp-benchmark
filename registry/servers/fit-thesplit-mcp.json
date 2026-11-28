@@ -1,0 +1,316 @@
+{
+  "$schema": "../schema.json",
+  "name": "fit.thesplit/mcp",
+  "title": "The Split",
+  "category": "Other",
+  "description": "Fix, merge, split and join FIT, TCX and GPX activity files: heart-rate repair, multisport.",
+  "tools": [
+    {
+      "name": "upload_activity",
+      "description": "Upload a FIT, TCX or GPX file (base64, at most 15 MB decoded) and get its activityId and expiresAt. Files are held in memory only and expire (30 minutes after last use, 2 hours at most); originals are never changed. Base64 costs a lot of context: an agent with a shell should upload with curl to POST https://thesplit.fit/api/v1/activities (multipart field file) and use the returned activityId here. Call delete_activity for every activity you are done with.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "filename": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "pattern": "\\.(?:[fF][iI][tT]|[tT][cC][xX]|[gG][pP][xX])$",
+            "description": "The file's name, ending .fit, .tcx or .gpx (it selects the parser)."
+          },
+          "contentBase64": {
+            "type": "string",
+            "minLength": 4,
+            "pattern": "^[A-Za-z0-9+/]*={0,2}$",
+            "description": "The whole file, standard base64 with padding (length a multiple of 4). At most 15 MB decoded."
+          }
+        },
+        "required": [
+          "filename",
+          "contentBase64"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_activity_summary",
+      "description": "What an uploaded or produced activity is: format, sport, start, duration, sessions, data streams, warnings, expiresAt, and figures (elapsed and moving time, distance, max and average heart rate, calories, per-session figures). Read-only.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "activityId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9_-]{1,64}$",
+            "description": "The activityId from upload_activity or an earlier result."
+          }
+        },
+        "required": [
+          "activityId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "export_activity",
+      "description": "Get the download url of an activity as fit, tcx or gpx (the file itself is not returned; gpx needs GPS positions). Give the user the url; it works until expiresAt. The answer carries supportUrl and supportNote: you may mention the support link once, after delivering the file. Call delete_activity when the user has the file.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "activityId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9_-]{1,64}$",
+            "description": "The activityId from upload_activity or an earlier result."
+          },
+          "format": {
+            "type": "string",
+            "enum": [
+              "fit",
+              "tcx",
+              "gpx"
+            ],
+            "description": "File format of the download. gpx needs GPS positions in the activity."
+          }
+        },
+        "required": [
+          "activityId",
+          "format"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "delete_activity",
+      "description": "Discard an activity from the server's memory now instead of waiting for it to expire. Do this for every activity you are done with, results included.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "activityId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9_-]{1,64}$",
+            "description": "The activityId from upload_activity or an earlier result."
+          }
+        },
+        "required": [
+          "activityId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "analyze_cleanup",
+      "description": "Use when a recording opens fine but has wrong data in it (\"fix my run\", an odd heart-rate spike, the watch kept running at the start or end). It cleans up what is wrong inside a readable file; it does not fix a file that fails to open or is corrupt. Finds heart-rate spikes (one repair_hr step each; a low-confidence spike is proposed unticked) and an idle stretch at the start or end (one crop step), and reports heart-rate dropouts, which cannot be filled. If the user points at a time (\"around minute 20\"), pass suspectRanges in elapsed seconds from the start. One activity. Nothing is changed by this call, and nothing that alters heart rate or any other data is applied without the user's confirmation. Show the user every step whose needsUserConfirmation is true, with its title, reason and changes, and get an explicit yes; then call apply_plan with exactly the confirmed step ids. Relay findings and notes in plain words. If refusal is set, tell the user why and do not offer a workaround the answer does not give.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "activityId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9_-]{1,64}$",
+            "description": "The activity to check, from upload_activity / POST /activities."
+          },
+          "sensitivity": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 5,
+            "default": 3,
+            "description": "Spike detector sensitivity, 1 (only obvious spikes) to 5 (anything suspicious). Default 3."
+          },
+          "suspectRanges": {
+            "type": "array",
+            "maxItems": 10,
+            "description": "Up to 10 stretches the user thinks are wrong, in elapsed seconds from the activity's first record (\"around minute 20\" is fromSec 1140, toSec 1260). Each must be 1 to 3600 s long (toSec - fromSec).",
+            "items": {
+              "type": "object",
+              "properties": {
+                "fromSec": {
+                  "type": "number",
+                  "minimum": 0,
+                  "description": "Start of the stretch, seconds from the first record."
+                },
+                "toSec": {
+                  "type": "number",
+                  "description": "End of the stretch, seconds from the first record."
+                }
+              },
+              "required": [
+                "fromSec",
+                "toSec"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "activityId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "analyze_dual_recording",
+      "description": "Use to combine two recordings of one workout: a watch or bike computer plus a heart-rate-only recording that overlaps it, or a device plus a virtual-platform recording of one indoor ride. Works out which file is the base and the clock offset (pass offsetSec only if the user knows it) and previews what the single merge step will change, including the heart rate it would take from the other file. If the other file does not cover the start or end of the base, it also offers one optional crop step (never ticked) that cuts the result to the time both recorded. Merges have been checked on a limited set of device combinations; other combinations have not been tested, so tell the user to look at the result. Two activities, in any order. If they do not overlap but follow each other, use analyze_interrupted_workout. Nothing is changed by this call, and nothing that alters heart rate or any other data is applied without the user's confirmation. Show the user every step whose needsUserConfirmation is true, with its title, reason and changes, and get an explicit yes; then call apply_plan with exactly the confirmed step ids. Relay findings and notes in plain words. If refusal is set, tell the user why and do not offer a workaround the answer does not give.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "activityIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{1,64}$"
+            },
+            "minItems": 2,
+            "maxItems": 2,
+            "uniqueItems": true,
+            "description": "The two recordings of one workout (for example a watch file and a heart-rate strap file), in any order."
+          },
+          "offsetSec": {
+            "type": "number",
+            "minimum": -3600,
+            "maximum": 3600,
+            "description": "Seconds to add to the clock of activityIds[1]. Omit to let the server estimate it."
+          }
+        },
+        "required": [
+          "activityIds"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "analyze_multisport",
+      "description": "Use for a triathlon or other multisport recording. Lists the legs, checks whether a separate recording (for example a bike computer file, legActivityIds) matches a leg and proposes splicing it in, and proposes moving transitions to official split times the user gives (officialBoundaries, elapsed seconds from the start) or to a matched leg's own start or end (never ticked: a late start press is as likely as a late lap press). The engine cannot split one session into several. Nothing is changed by this call, and nothing that alters heart rate or any other data is applied without the user's confirmation. Show the user every step whose needsUserConfirmation is true, with its title, reason and changes, and get an explicit yes; then call apply_plan with exactly the confirmed step ids. Relay findings and notes in plain words. If refusal is set, tell the user why and do not offer a workaround the answer does not give.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "activityId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9_-]{1,64}$",
+            "description": "The multisport (triathlon) recording."
+          },
+          "legActivityIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{1,64}$"
+            },
+            "maxItems": 3,
+            "uniqueItems": true,
+            "description": "Up to 3 separate recordings of single legs (for example a bike computer file). Must not include activityId."
+          },
+          "officialBoundaries": {
+            "type": "array",
+            "maxItems": 8,
+            "description": "Up to 8 official transition times: each moves the boundary between session sessionIndex and the next to atSec, elapsed seconds from the file's first record. At most one per sessionIndex.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "sessionIndex": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "description": "Zero-based index of the session that ends at this boundary."
+                },
+                "atSec": {
+                  "type": "number",
+                  "exclusiveMinimum": 0,
+                  "description": "Official boundary time, seconds from the first record."
+                }
+              },
+              "required": [
+                "sessionIndex",
+                "atSec"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "activityId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "analyze_interrupted_workout",
+      "description": "Use when the watch stopped and restarted and one workout is in 2 to 5 files. Orders the pieces by time, checks they follow each other, proposes trimming a piece that overlaps the one before (the join depends on it), and proposes one join; one recording lying inside another is refused (try analyze_dual_recording). Pieces of different sports export as one multisport file. Nothing is changed by this call, and nothing that alters heart rate or any other data is applied without the user's confirmation. Show the user every step whose needsUserConfirmation is true, with its title, reason and changes, and get an explicit yes; then call apply_plan with exactly the confirmed step ids. Relay findings and notes in plain words. If refusal is set, tell the user why and do not offer a workaround the answer does not give.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "activityIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{1,64}$"
+            },
+            "minItems": 2,
+            "maxItems": 5,
+            "uniqueItems": true,
+            "description": "The 2 to 5 pieces of one workout, in any order."
+          }
+        },
+        "required": [
+          "activityIds"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "apply_plan",
+      "description": "Run exactly the steps of an analyze_* plan that the user confirmed (every step with needsUserConfirmation true must have been shown and agreed). The inputs are never changed: the result is a new activity with download urls and a before/after validation to relay. If the answer is an error with retryAfterSec (rate_limited, plan_incomplete, capacity_exceeded, server_busy), wait that long and call again with the same confirmedStepIds to continue; calling a completed plan again returns the same result. The answer carries supportUrl and supportNote: you may mention the support link once, after delivering the file. Call delete_activity for the inputs and the result when the user is done.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "planId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9_-]{1,64}$",
+            "description": "The planId an analyze_* call returned."
+          },
+          "confirmedStepIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{1,64}$"
+            },
+            "minItems": 1,
+            "maxItems": 120,
+            "uniqueItems": true,
+            "description": "Exactly the step ids the user confirmed. Only these run; a step's dependsOn must be confirmed too."
+          }
+        },
+        "required": [
+          "planId",
+          "confirmedStepIds"
+        ],
+        "additionalProperties": false
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "fit.thesplit/mcp",
+    "version": "1.0.0",
+    "remoteUrl": "https://thesplit.fit/mcp",
+    "publishedAt": "2026-11-17T15:27:03.65945Z",
+    "fetchedAt": "2026-11-28T10:03:29.931Z",
+    "toolsSha256": "74a6a266c52069c5ed07c5ecee3a0e516524f32fa10ad05176fcb2d209b3b5a0"
+  }
+}

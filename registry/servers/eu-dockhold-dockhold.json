@@ -1,0 +1,532 @@
+{
+  "$schema": "../schema.json",
+  "name": "eu.dockhold/dockhold",
+  "title": "Dockhold",
+  "category": "Developer Tools & DevOps",
+  "description": "Deploy your project to a live HTTPS URL from your AI tool; read logs, set variables, resize apps.",
+  "repository": "https://github.com/dockhold/mcp",
+  "tools": [
+    {
+      "name": "list_apps",
+      "description": "List the apps in your Dockhold account, with each app's id, status, URL, and source: github (its repository is in repo_url) or files (no repository; change it with deploy_files). Call this first whenever the user asks about their apps, or when you need an app_id for any other tool.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_app_status",
+      "description": "Get detailed status for one app: deploy status, URL, last deployed commit, and any error message. Call this to check whether a deploy has finished, to get an app's live URL, or to see why an app is in error. Status DEPLOYING with ready_at set means the new version is already reachable at its URL and Dockhold is confirming it stays up; the user can open it now. It moves to RUNNING once confirmed, or to ERROR with an error_message if it crashed.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "app_id": {
+            "type": "string",
+            "description": "The app id returned by list_apps"
+          }
+        },
+        "required": [
+          "app_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_app_logs",
+      "description": "Get the most recent runtime logs for one app. Call this when an app is crashing, returning errors, or a deploy succeeded but the app misbehaves: the logs usually name the cause. At most 32 KB, the newest lines; a line says where older ones were left out.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "app_id": {
+            "type": "string",
+            "description": "The app id returned by list_apps"
+          },
+          "tail": {
+            "type": "integer",
+            "description": "Number of recent log lines to return (max 200, default 100)"
+          }
+        },
+        "required": [
+          "app_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "deploy_app",
+      "description": "Deploy a GitHub repository as a live web app on Dockhold. Call this when the user wants to put an app online, get a shareable HTTPS URL, or host a demo. Returns the new app id. Two paths: a PUBLIC repo needs only repo_url; a PRIVATE repo needs repo_url plus github_installation_id (call list_github_repos first, each repo comes with the installation_id to pass here). Deploying a private repo turns on auto-deploy: future pushes to that repo redeploy the app automatically. The app builds and comes online automatically; poll get_app_status to watch it. Set memory_mb to size the app's compute, one of the values get_resource_usage reports under compute.steps_mb: 256 MB fits a static site or a small API, 512 MB fits a typical Node or Python web app, and anything that holds data in memory needs more. Omit it and the app gets the minimum slice (256 MB) so it doesn't take your whole compute pool; resize_app changes the size later with no rebuild, applied as a rolling update that replaces the app's instances. The response reports memory_mb (what this app got) and compute_available_mb (what's left in your pool), so size the next app off that. This tool needs a GitHub repo URL: if you wrote the code in this conversation, call deploy_files; if it only exists in a folder on the user's computer (no repo), it cannot be used here, and the user should run `npx dockhold login` then `npx dockhold deploy` in the project folder instead. Requires the deploy permission.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "repo_url": {
+            "type": "string",
+            "description": "GitHub repository URL, e.g. https://github.com/owner/repo. Public repos deploy with this alone; a private repo also needs github_installation_id."
+          },
+          "name": {
+            "type": "string",
+            "description": "A name for the app (1-64 chars)"
+          },
+          "github_installation_id": {
+            "type": "integer",
+            "description": "Required for PRIVATE repositories. Get it from list_github_repos: each repo comes with the installation_id to pass here. Omit for public repos."
+          },
+          "with_database": {
+            "type": "boolean",
+            "description": "Provision a managed Postgres database for the app (default false)"
+          },
+          "memory_mb": {
+            "type": "integer",
+            "description": "Compute size in MB for this app, one of the values get_resource_usage reports under compute.steps_mb. Omit to get the minimum slice (256 MB); resize_app changes it later with no rebuild."
+          }
+        },
+        "required": [
+          "repo_url",
+          "name"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "redeploy_app",
+      "description": "Restart an existing app (rolling restart with zero downtime). Call this after changing configuration, or to recover an app that is stuck or misbehaving. It restarts the version already running. It does not build or pull new code: call rebuild_app for that. If this app has storage, it is stopped and started again instead, so it is unreachable for a few seconds.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "app_id": {
+            "type": "string",
+            "description": "The app id returned by list_apps"
+          }
+        },
+        "required": [
+          "app_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "set_app_variable",
+      "description": "Set a single environment variable on an app and roll it out. Call this when an app needs plain configuration such as LOG_LEVEL or a feature flag. For secrets (API keys, passwords, tokens) call set_app_secret instead if this connection has the secrets permission, else have the person use the Secrets section of the Dockhold dashboard: this tool rejects secret-looking keys.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "app_id": {
+            "type": "string",
+            "description": "The app id returned by list_apps"
+          },
+          "key": {
+            "type": "string",
+            "description": "Environment variable name, e.g. LOG_LEVEL"
+          },
+          "value": {
+            "type": "string",
+            "description": "Environment variable value"
+          }
+        },
+        "required": [
+          "app_id",
+          "key",
+          "value"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "unset_app_variable",
+      "description": "Remove a single plain environment variable from an app and roll it out. The pair to set_app_variable; setting a variable to an empty string is not the same thing to most apps. Variables Dockhold sets itself (PORT, DATABASE_URL, DATA_DIR and the app's address) cannot be removed. For a secret, call unset_app_secret instead.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "app_id": {
+            "type": "string",
+            "description": "The app id returned by list_apps"
+          },
+          "key": {
+            "type": "string",
+            "description": "The environment variable name to remove"
+          }
+        },
+        "required": [
+          "app_id",
+          "key"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_resource_usage",
+      "description": "Show your account's compute, database-RAM, and storage pools: how much you've bought, how much is used, and how much is free, plus every app's current size. Call this before any resize tool (the allowed sizes come from its steps fields), and to explain to the user why an app ran out of memory or a deploy was refused for capacity.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "resize_app",
+      "description": "Change how much memory one app gets. Call this when an app is running out of memory (OOM) or the user asks to make an app bigger or smaller. memory_mb must be one of the sizes get_resource_usage reports under compute.steps_mb, and the new size has to fit your available compute pool (call get_resource_usage first). Applied with a zero-downtime rolling update. If this app has storage, it is stopped and started again instead, so it is unreachable for a few seconds.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "app_id": {
+            "type": "string",
+            "description": "The app id returned by list_apps"
+          },
+          "memory_mb": {
+            "type": "integer",
+            "description": "New memory size in MB, one of the values get_resource_usage reports under compute.steps_mb"
+          }
+        },
+        "required": [
+          "app_id",
+          "memory_mb"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "resize_database",
+      "description": "Change how much memory an app's managed database gets. Call this when the database is slow or out of memory. db_ram_mb must be one of the sizes get_resource_usage reports under db_ram.steps_mb and fit your database-RAM pool. WARNING: the database restarts briefly to apply the new size, so the app loses its database connection for a few seconds. Only works if the app has a managed database.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "app_id": {
+            "type": "string",
+            "description": "The app id returned by list_apps"
+          },
+          "db_ram_mb": {
+            "type": "integer",
+            "description": "New database memory in MB, one of the values get_resource_usage reports under db_ram.steps_mb"
+          }
+        },
+        "required": [
+          "app_id",
+          "db_ram_mb"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "resize_database_storage",
+      "description": "Grow the disk of an app's managed database. Call this when the database is running out of disk space. GROW-ONLY: you can increase storage but never shrink it. storage_gb must be one of the sizes get_resource_usage reports under storage.steps_gb and fit your storage pool. Applied online with no database restart. Only works if the app has a managed database.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "app_id": {
+            "type": "string",
+            "description": "The app id returned by list_apps"
+          },
+          "storage_gb": {
+            "type": "integer",
+            "description": "New database disk size in GB, one of the values get_resource_usage reports under storage.steps_gb; must be at least the current size (grow-only)"
+          }
+        },
+        "required": [
+          "app_id",
+          "storage_gb"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "set_app_storage",
+      "description": "Give an app storage that survives restarts and deploys, or grow the storage it already has. Call this when the app has to keep files: a SQLite database file, uploads, or anything the user expects to still be there tomorrow. The app reads and writes the folder at the path in the DATA_DIR environment variable, which Dockhold sets; anything written outside DATA_DIR is scratch space and is lost on the next restart. size_gb must be one of the sizes get_resource_usage reports under volume.steps_gb and has to fit your storage pool, which is the same pool a managed database draws on, so call get_resource_usage first. Storage can grow but never shrink. Three things to tell the user before calling this: an app with storage runs as a single copy, it cannot have scheduled tasks, and from now on each deploy stops the running version before the new one starts, so the app is unreachable for a few seconds. Write the app to save its files when it receives SIGTERM.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "app_id": {
+            "type": "string",
+            "description": "The app id returned by list_apps"
+          },
+          "size_gb": {
+            "type": "integer",
+            "description": "Storage size in GB, one of the values get_resource_usage reports under volume.steps_gb; must be at least the current size (storage grows, never shrinks)"
+          }
+        },
+        "required": [
+          "app_id",
+          "size_gb"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "remove_app_storage",
+      "description": "Remove an app's storage and erase every file on it. This destroys data permanently: there is no undo and no backup. Ask the user to confirm in their own words first, then pass confirm true. Call it when the user asks for the storage to go, or when they want something storage rules out: running more than one copy of the app, or a scheduled task. Afterwards the app is back to scratch space, where anything it writes is lost on the next restart.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "app_id": {
+            "type": "string",
+            "description": "The app id returned by list_apps"
+          },
+          "confirm": {
+            "type": "boolean",
+            "description": "Must be true. Set it only after the user has confirmed that erasing the files is what they want."
+          }
+        },
+        "required": [
+          "app_id",
+          "confirm"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "set_app_secret",
+      "description": "Store a sensitive value (an API key, a token, a password, a connection string) for one app. Use this instead of set_app_variable whenever the value would be damaging if someone else read it. The value is encrypted at rest, is injected into the app's environment under the name you give, and the app restarts to pick it up. Storing a secret takes effect on the next boot, so call this before telling the user the app is ready. No tool returns a stored value. Two things to tell the user before you call it. First, this token can write secrets to every app on their account, not only this one. Second, any value they give you has passed through your context, so prefer a value you read from a local file such as .env over one you asked them to type into the chat, and suggest they rotate anything that was pasted. If the vault key name is already used by a different app, this call is refused rather than overwriting it, and the message tells you what to pass as vault_key_name.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "app_id": {
+            "type": "string",
+            "description": "The app id returned by list_apps"
+          },
+          "name": {
+            "type": "string",
+            "description": "The environment variable name the app code reads, for example STRIPE_SECRET_KEY"
+          },
+          "value": {
+            "type": "string",
+            "description": "The secret value. It is encrypted at rest and is never returned by any tool."
+          },
+          "vault_key_name": {
+            "type": "string",
+            "description": "Optional name for the stored value in the account vault. Defaults to name. Pass an explicit one when the default is already used by another app."
+          }
+        },
+        "required": [
+          "app_id",
+          "name",
+          "value"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "unset_app_secret",
+      "description": "Stop injecting a stored secret into one app. The app restarts without it, so call this only when the app no longer needs that variable. The stored value stays in the account vault and any other app using it keeps working; deleting the stored value itself is a dashboard action. Do not report the secret as deleted, report it as removed from this app.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "app_id": {
+            "type": "string",
+            "description": "The app id returned by list_apps"
+          },
+          "name": {
+            "type": "string",
+            "description": "The environment variable name to stop injecting"
+          }
+        },
+        "required": [
+          "app_id",
+          "name"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "bind_app_secret",
+      "description": "Attach a secret that is already stored in the account vault to one app, under the environment variable name the app reads, and restart the app. Call this when the user says the key already exists in Dockhold (call list_secrets to see the names), or when a second app should use the same stored value: nothing passes through your context and no value is stored again. Sharing one entry between apps means they share the value; if the user wants separate credentials per app, store a new value with set_app_secret under a distinct vault_key_name instead. This token can attach any secret on the account to any app on the account.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "app_id": {
+            "type": "string",
+            "description": "The app id returned by list_apps"
+          },
+          "vault_key_name": {
+            "type": "string",
+            "description": "The stored secret's name in the account vault, as list_secrets reports it"
+          },
+          "name": {
+            "type": "string",
+            "description": "The environment variable name the app code reads. Defaults to vault_key_name."
+          }
+        },
+        "required": [
+          "app_id",
+          "vault_key_name"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "list_secrets",
+      "description": "List the names of every secret stored in the account vault and how many apps use each, so you can attach an existing one with bind_app_secret instead of asking the user for the value again. Returns names and counts only. No tool returns a stored value.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "list_app_secrets",
+      "description": "List the names of the secrets attached to one app, so you can tell which ones an app already has before setting another. Returns names only. No tool returns a stored value.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "app_id": {
+            "type": "string",
+            "description": "The app id returned by list_apps"
+          }
+        },
+        "required": [
+          "app_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "deploy_files",
+      "description": "Deploy files you wrote as a live web app. Use when the code is in this conversation and there is no GitHub repository. First call: name + every file; returns app_id, url and the file list. To change the app: the same app_id + only the changed files (merged; other files stay); delete removes paths; replace: true sends the whole app. Limits: 200 files, 256 KB a file, 512 KB a call, text only. What builds: a static site (index.html at the root); a FastAPI app (requirements.txt with fastapi, main.py with app, no index.html at the root); anything else: add a Dockerfile that listens on 0.0.0.0:$PORT and installs dependencies itself (npm install, pip install). Never write a lockfile by hand. Never put secrets in files: call set_app_secret if this connection has the secrets permission, else have the person add them in the Secrets section of the Dockhold dashboard, and read them on the server. Poll get_app_status until RUNNING. Free accounts get a few deploys a day: batch changes into one call; on free_daily_limit, show the person the message and do not retry. Requires the deploy permission.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "app_id": {
+            "type": "string",
+            "description": "The app to change, from an earlier answer or list_apps (source: files). Omit to create a new app."
+          },
+          "name": {
+            "type": "string",
+            "description": "A name for a new app (1-64 chars). Required when creating; leave it out to change an app."
+          },
+          "files": {
+            "type": "array",
+            "description": "The files to add or replace. Required when creating.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "description": "Relative path with / between folders, e.g. css/site.css"
+                },
+                "content": {
+                  "type": "string",
+                  "description": "The file's whole text"
+                }
+              },
+              "required": [
+                "path",
+                "content"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "replace": {
+            "type": "boolean",
+            "description": "Update only: the listed files become the whole app (default false: they are merged)"
+          },
+          "delete": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Update only, not with replace: paths to remove"
+          },
+          "with_database": {
+            "type": "boolean",
+            "description": "Create only: provision a managed Postgres database for the app (default false)"
+          },
+          "memory_mb": {
+            "type": "integer",
+            "description": "Create only: compute size in MB, one of the values get_resource_usage reports under compute.steps_mb. Omit to get the minimum slice (256 MB); resize_app changes it later."
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "list_github_repos",
+      "description": "List the GitHub repositories you have connected to Dockhold, across every installation. Call this before deploy_app when the target repo is private, or when the user asks which repos they can deploy. Each repo comes with its installation_id: pass that (with the repo's clone URL) to deploy_app to deploy a PRIVATE repository. Public repos don't need it.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "rebuild_app",
+      "description": "Builds the app again from the latest commit of its repository (or its last upload) and deploys it when the build passes. Use after a failed build, or to ship new commits when auto-deploy is off. One build per app at a time; limits on builds running and builds per hour; a refusal says when to try again. Poll get_app_status.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "app_id": {
+            "type": "string",
+            "description": "The app id returned by list_apps"
+          }
+        },
+        "required": [
+          "app_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "deploy_group",
+      "description": "Deploy several connected services in one go (e.g. a frontend + an API). Call this when the user's project is split across multiple repos that must talk to each other; for a single repo use deploy_app. Each service is a public GitHub repo that gets its own URL. Wire them by setting an env var to the exact token ${services.<otherServiceName>.url}, and Dockhold injects that service's live URL once it deploys. Give the backend its own database with \"db\":\"enable\" (DATABASE_URL is injected; a pure frontend doesn't need one). Builds run in parallel; poll get_app_status with each returned app_id.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "services": {
+            "type": "object",
+            "description": "Map of service name (lowercase letters, digits, hyphens) to its definition. Provide two or more.",
+            "additionalProperties": {
+              "type": "object",
+              "properties": {
+                "source": {
+                  "type": "string",
+                  "description": "Public GitHub repository URL for this service"
+                },
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "web"
+                  ],
+                  "description": "Only 'web' is supported today (the service gets a public URL)"
+                },
+                "port": {
+                  "type": "integer",
+                  "description": "Port this service listens on (1-65535)"
+                },
+                "env": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "description": "Environment variables. A value of EXACTLY ${services.<otherServiceName>.url} is replaced by that sibling service's live URL once it deploys; any other value is a literal of at most 4 KB; set a longer one with set_app_variable."
+                },
+                "db": {
+                  "type": "string",
+                  "enum": [
+                    "enable"
+                  ],
+                  "description": "Set to 'enable' to give THIS service its own managed Postgres database; DATABASE_URL is injected automatically. Usually only the backend/API needs it."
+                }
+              },
+              "required": [
+                "source",
+                "port"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "services"
+        ],
+        "additionalProperties": false
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "eu.dockhold/dockhold",
+    "version": "0.2.1",
+    "remoteUrl": "https://api.dockhold.eu/mcp",
+    "publishedAt": "2026-11-17T22:25:05.536951Z",
+    "fetchedAt": "2026-11-28T10:03:29.931Z",
+    "toolsSha256": "03d1b0b1fbea252d0d73d7b01aff1ce890ee4a80c87cd8bcdb52e008a1aa040b"
+  }
+}

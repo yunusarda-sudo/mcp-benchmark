@@ -1,0 +1,767 @@
+{
+  "$schema": "../schema.json",
+  "name": "io.github.GridlineGPU/mcp",
+  "title": "Gridline",
+  "category": "AI, LLMs & Agents",
+  "description": "Post-train open models (fine-tuning, RL, distillation), evaluate and batch them on Gridline.",
+  "repository": "https://github.com/GridlineGPU/gridline-mcp",
+  "tools": [
+    {
+      "name": "list_models",
+      "description": "List the base models you can batch or fine-tune on, and your own ft: models. Free: no charge.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "get_credit_balance",
+      "description": "Your credit balance and low-credit threshold (Gridline's usage summary), plus your most recent charges. Free: no charge.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "limit": {
+            "description": "Page size, 1 to 100.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          }
+        }
+      }
+    },
+    {
+      "name": "upload_file",
+      "description": "Upload a JSONL file's text to the Files API. purpose \"fine-tune\" for training/validation data (OpenAI chat format; DPO preference rows for DPO), \"batch\" for a batch input file (one request per line). content is the whole file as text, at most 4 MiB through this server; send larger files to POST https://api.gridlinegpu.com/openai/v1/files with your API key. Returns the file object; use its id in create_fine_tune, create_batch, create_distillation or an eval run. Free: no charge. Stored files count toward your storage limits.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "content": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 4194304,
+            "description": "The JSONL file's text, one JSON object a line."
+          },
+          "filename": {
+            "description": "File name to store, e.g. train.jsonl (default upload.jsonl).",
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+          },
+          "purpose": {
+            "type": "string",
+            "enum": [
+              "fine-tune",
+              "batch"
+            ],
+            "description": "\"fine-tune\" or \"batch\"."
+          }
+        },
+        "required": [
+          "content",
+          "purpose"
+        ]
+      }
+    },
+    {
+      "name": "create_fine_tune",
+      "description": "Start a fine-tuning job (OpenAI's /fine_tuning/jobs shape) that trains a LoRA or QLoRA adapter on an open base model and names the result with an ft: id, or quote it with dry_run: true. method: \"lora\" or \"qlora\" as a string, or OpenAI's {\"type\": \"supervised\", \"supervised\": {\"adapter\": \"lora\", \"hyperparameters\": {...}}} or {\"type\": \"dpo\", \"dpo\": {\"hyperparameters\": {\"beta\": ...}}}. Hyperparameters (n_epochs, batch_size, learning_rate_multiplier, lora_rank, lora_alpha, max_seq_length) go in hyperparameters or inside method, once. Costs credit: a fine-tune is charged per 1M trained tokens (training tokens × epochs) at the base model's published fine-tuning price, with the per-job minimum (https://gridlinegpu.com/pricing). When the job starts, its maximum possible cost is held from your credit and the unused part is returned when it ends; a job your credit cannot cover does not start (insufficient_quota). The created job object carries Gridline's quote (an upper bound). Jobs stopped by a platform fault or the time limit are not charged. Creating a job starts it, so send dry_run: true first: it runs the same checks and returns the same quote (object fine_tuning.job.quote, with quote.per_token.max_charge_usd and credit_check) and creates nothing. Requires confirm_spend: true unless dry_run is true.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "model": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Base model id, e.g. qwen3.5-9b (see list_models)."
+          },
+          "training_file": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "File id of the training data (purpose fine-tune)."
+          },
+          "validation_file": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "Optional validation file id."
+          },
+          "method": {
+            "description": "\"lora\", \"qlora\", or an OpenAI method object (supervised or dpo).",
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "lora",
+                  "qlora"
+                ]
+              },
+              {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {}
+              }
+            ]
+          },
+          "hyperparameters": {
+            "description": "Training settings.",
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {}
+          },
+          "suffix": {
+            "description": "A short label in the ft: model name.",
+            "type": "string",
+            "maxLength": 64
+          },
+          "seed": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "metadata": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "dry_run": {
+            "description": "true: return the quote and the credit check only; nothing is created or charged.",
+            "type": "boolean"
+          },
+          "confirm_spend": {
+            "description": "Must be true for this call to run: you have read the quote or price and accept the charge.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "model",
+          "training_file"
+        ]
+      }
+    },
+    {
+      "name": "list_fine_tunes",
+      "description": "List your fine-tuning jobs, newest first. Free: no charge.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "after": {
+            "description": "Cursor: the last id of the previous page.",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "limit": {
+            "description": "Page size, 1 to 100.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          }
+        }
+      }
+    },
+    {
+      "name": "get_fine_tune",
+      "description": "A fine-tuning job's status, its quote and, once it succeeds, its ft: model. Free: no charge.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "Fine-tuning job id (ftjob-...)."
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    },
+    {
+      "name": "list_fine_tune_events",
+      "description": "A fine-tuning job's events: progress, training and validation loss, warnings and errors. Free: no charge.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "Fine-tuning job id."
+          },
+          "after": {
+            "description": "Cursor: the last id of the previous page.",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "limit": {
+            "description": "Page size, 1 to 100.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    },
+    {
+      "name": "cancel_fine_tune",
+      "description": "Cancel a fine-tuning job. It stops the job; read the job afterwards (get_fine_tune) for its final state and charge. Free: no charge.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "Fine-tuning job id."
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    },
+    {
+      "name": "create_batch",
+      "description": "Run a batch (OpenAI's /batches shape) over an uploaded batch file on a base model or your ft: model. endpoint: \"/v1/chat/completions\" (default) or \"/v1/embeddings\". completion_window: \"24h\" (default) or Gridline's looser \"72h\". Costs credit: a batch is charged per 1M input and output tokens at the model's published batch price, and at least the model's per-batch minimum (https://gridlinegpu.com/pricing). A batch whose upper bound your credit cannot cover is refused before it runs. Requires confirm_spend: true.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "input_file_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "File id of the batch input (purpose batch)."
+          },
+          "endpoint": {
+            "description": "Default \"/v1/chat/completions\".",
+            "type": "string",
+            "enum": [
+              "/v1/chat/completions",
+              "/v1/embeddings"
+            ]
+          },
+          "completion_window": {
+            "description": "Default \"24h\".",
+            "type": "string",
+            "enum": [
+              "24h",
+              "72h"
+            ]
+          },
+          "metadata": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "confirm_spend": {
+            "description": "Must be true for this call to run: you have read the quote or price and accept the charge.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "input_file_id"
+        ]
+      }
+    },
+    {
+      "name": "get_batch",
+      "description": "A batch's status, request counts, cost and its output/error file ids. Free: no charge.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "Batch id (batch_...)."
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    },
+    {
+      "name": "cancel_batch",
+      "description": "Cancel a batch. A cancelled batch still delivers, and charges for, the requests that completed; the rest are not run. Free: no charge.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "Batch id."
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    },
+    {
+      "name": "create_eval",
+      "description": "Define an eval (OpenAI's Evals API): data_source_config (the item schema) and testing_criteria (graders: string_check, text_similarity, score_model). Defining it is free; runs cost credit (see create_eval_run).",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "data_source_config": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {},
+            "description": "OpenAI data_source_config."
+          },
+          "testing_criteria": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {}
+            },
+            "description": "Graders, OpenAI's shape."
+          },
+          "metadata": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "data_source_config",
+          "testing_criteria"
+        ]
+      }
+    },
+    {
+      "name": "create_eval_run",
+      "description": "Run an eval over a data source: a file of items, or completions sampled from a model (a base model or your ft: model, to compare them). Costs credit unless dry_run is true: an eval run is billed as ordinary batches at published batch prices, each at least its model's per-batch minimum (https://gridlinegpu.com/pricing). A run that only uses string_check and text_similarity on a file's own answers creates no batch and costs nothing. Send dry_run: true first to get the quote. Requires confirm_spend: true unless dry_run is true.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "eval_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "Eval id (eval_...)."
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "data_source": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {},
+            "description": "OpenAI eval run data_source."
+          },
+          "dry_run": {
+            "description": "true: return the quote only; nothing runs.",
+            "type": "boolean"
+          },
+          "metadata": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "confirm_spend": {
+            "description": "Must be true for this call to run: you have read the quote or price and accept the charge.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "eval_id",
+          "data_source"
+        ]
+      }
+    },
+    {
+      "name": "get_eval_run",
+      "description": "An eval run's status, per-grader results, cost and its results file. Free: no charge.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "eval_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "Eval id."
+          },
+          "run_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "Run id (evalrun_...)."
+          }
+        },
+        "required": [
+          "eval_id",
+          "run_id"
+        ]
+      }
+    },
+    {
+      "name": "list_output_items",
+      "description": "An eval run's graded items: each sample and every grader's result. Free: no charge.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "eval_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "Eval id."
+          },
+          "run_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "Run id."
+          },
+          "after": {
+            "description": "Cursor: the last id of the previous page.",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "limit": {
+            "description": "Page size, 1 to 100.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          }
+        },
+        "required": [
+          "eval_id",
+          "run_id"
+        ]
+      }
+    },
+    {
+      "name": "create_distillation",
+      "description": "Run one-call distillation (Gridline's /distillation/jobs): the teacher model answers your prompts in a batch, the answers become a fine-tuning file with held-out rows, the student base is fine-tuned on it, and (unless run_student_batch is false) the new ft: model answers the held-out prompts so you can compare it with the teacher. Give your prompts as prompts_file (a file id from upload_file, purpose \"batch\"); one prompt a line: {\"messages\": [...]} ending with the user's turn, or an OpenAI batch request line. Prompt baking: student_system trains the student on a shorter prompt than the teacher saw, so each request it serves later carries fewer input tokens. Omit it (or null) to keep the full prompt, \"\" to train with no system message, or text (at most 2,048 bytes, not blank) as the student's short system line; the held-out student batch asks the same shorter prompt and the quote counts it. Unset options take the server's defaults. Costs credit unless dry_run is true: a distillation job runs three stages, each billed as the ordinary batch or fine-tune it is: the teacher's batch over your prompts (batch price, per-batch minimum), the student fine-tune (per trained token, per-job minimum) and, unless run_student_batch is false, a student batch over the held-out prompts (https://gridlinegpu.com/pricing). Send dry_run: true first: it returns the quote (object distillation.quote, with max_total_usd, the sum of each stage's maximum, and each stage's bound) and creates nothing. spend_cap_usd refuses a job whose quote is over it (spend_cap_exceeded). Requires confirm_spend: true unless dry_run is true. Then poll get_distillation.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "teacher": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "description": "Teacher model id: any chat model list_models shows for you."
+          },
+          "student": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "description": "Student base model id (a fine-tune base)."
+          },
+          "prompts_file": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "File id of the prompts (purpose batch, from upload_file)."
+          },
+          "student_system": {
+            "description": "Prompt baking. Omit or null: the student trains on the prompt as the teacher saw it. \"\": no system message. Text: this short system message instead of yours.",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "n_epochs": {
+            "description": "Fine-tuning epochs (default: the student's).",
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "method": {
+            "description": "\"lora\" or \"qlora\".",
+            "type": "string",
+            "enum": [
+              "lora",
+              "qlora"
+            ]
+          },
+          "lora_rank": {
+            "description": "LoRA rank.",
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "max_tokens": {
+            "description": "Teacher answer limit (default 1,024 or the teacher's own limit).",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "temperature": {
+            "description": "Teacher temperature, 0 to 2.",
+            "type": "number",
+            "minimum": 0,
+            "maximum": 2
+          },
+          "validation_split": {
+            "description": "Share of prompts held out, 0 up to 1 (default 0.1).",
+            "type": "number",
+            "minimum": 0,
+            "exclusiveMaximum": 1
+          },
+          "run_student_batch": {
+            "description": "Run the ft: model on the held-out prompts (default true).",
+            "type": "boolean"
+          },
+          "keep_truncated": {
+            "description": "Keep teacher answers cut at max_tokens in the training file (default false: they are left out, still billed).",
+            "type": "boolean"
+          },
+          "spend_cap_usd": {
+            "description": "Refuse the job if the quote's max_total_usd is over this.",
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "maximum": 10000
+          },
+          "metadata": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "confirm_spend": {
+            "description": "Must be true for this call to run: you have read the quote or price and accept the charge.",
+            "type": "boolean"
+          },
+          "dry_run": {
+            "description": "true: return the quote only; no job is created and nothing is charged.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "teacher",
+          "student",
+          "prompts_file"
+        ]
+      }
+    },
+    {
+      "name": "list_distillations",
+      "description": "List your distillation jobs, newest first. Free: no charge.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "after": {
+            "description": "Cursor: the last id of the previous page.",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "limit": {
+            "description": "Page size, 1 to 100.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          }
+        }
+      }
+    },
+    {
+      "name": "get_distillation",
+      "description": "A distillation job's status and stage, its stages' batch and fine-tune ids, costs, and the ft: model once it succeeds. Free: no charge.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^distjob-[0-9a-f]{32}$",
+            "description": "Distillation job id (distjob-...)."
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    },
+    {
+      "name": "list_distillation_events",
+      "description": "A distillation job's stage events (transitions, newest first). Free: no charge.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^distjob-[0-9a-f]{32}$",
+            "description": "Distillation job id (distjob-...)."
+          },
+          "after": {
+            "description": "Cursor: the last id of the previous page.",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "limit": {
+            "description": "Page size, 1 to 100.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    },
+    {
+      "name": "cancel_distillation",
+      "description": "Cancel a distillation job; its current stage (a batch or fine-tune) is cancelled too. Stages already billed stay billed: read the job afterwards (get_distillation) for its final state and costs. Free: no charge.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^distjob-[0-9a-f]{32}$",
+            "description": "Distillation job id (distjob-...)."
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    },
+    {
+      "name": "request_merged_weights",
+      "description": "Ask for an ft: model merged into its base as full safetensors. Free: the merge and download are at no charge; the export is kept 7 days. Poll get_merged_weights until it succeeds.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "model": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "Your ft: model id."
+          }
+        },
+        "required": [
+          "model"
+        ]
+      }
+    },
+    {
+      "name": "get_merged_weights",
+      "description": "A merged-weights export's status and its file list. Free: no charge.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "model": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "Your ft: model id."
+          }
+        },
+        "required": [
+          "model"
+        ]
+      }
+    },
+    {
+      "name": "get_merged_file_url",
+      "description": "A short-lived (15 minute) download URL for one file of a merged-weights export. Download it with any HTTP client; the bytes are not passed through this tool. Free: no charge.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "model": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "Your ft: model id."
+          },
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500,
+            "description": "File path from get_merged_weights."
+          }
+        },
+        "required": [
+          "model",
+          "path"
+        ]
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "io.github.GridlineGPU/mcp",
+    "version": "0.1.7",
+    "remoteUrl": "https://api.gridlinegpu.com/mcp",
+    "publishedAt": "2026-11-27T23:51:22.95455Z",
+    "fetchedAt": "2026-11-28T10:03:29.931Z",
+    "toolsSha256": "70e1015c68083dcf33d4ecab73a6cd08cc2338aa9cb59b10c4d10269e0856a72"
+  }
+}

@@ -1,0 +1,1700 @@
+{
+  "$schema": "../schema.json",
+  "name": "tools.engram/engram",
+  "title": "Engram",
+  "category": "AI, LLMs & Agents",
+  "description": "Memory for AI agent teams across tools, sessions, repositories, and teammates.",
+  "tools": [
+    {
+      "name": "engram_start",
+      "description": "Begin meaningful work in a repository with a Markdown briefing: session id, ranked private/public memory, workspace guidance and optional checklists. Unlike engram_smarter, this includes workspace onboarding/activation guidance; unlike engram_rehydrate, it prepares a starting briefing instead of reconstructing a prior journal. Use once when beginning work; choose engram_smarter for a task switch and engram_rehydrate for recovery.\n\nSupply repo and task when known; context overrides the generated project/market/role/stack/task query. Reuses one eligible active journal; new_session=true deliberately creates a separate journal. Supply session_id for parallel work. Ambiguous automatic selection returns 409; list sessions and choose an exact id. Records a session event; repeating may add events or open another session. Consumes workspace daily call quota; quota exhaustion requires reset or a plan change, not immediate retries. OAuth: memory:read and session:write.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "session_id": {
+            "description": "Exact journal id from start/rehydrate/list_sessions. Disambiguates parallel work; writing requires your active session. Rehydrate may read shared or closed history.",
+            "type": "string"
+          },
+          "agent_tool": {
+            "description": "Calling client name for attribution, e.g. codex, claude-code, cursor, or gemini. Omit if unknown.",
+            "type": "string"
+          },
+          "project": {
+            "description": "Product/project name for session context. Start/setup use it as the repository hint when repo is omitted.",
+            "type": "string"
+          },
+          "repo": {
+            "description": "Repository slug, e.g. engram or billing-api, within the authenticated workspace. This is a memory filter, not a filesystem path or workspace selector.",
+            "type": "string"
+          },
+          "role": {
+            "description": "Agent responsibility used in task context, e.g. backend engineer. Start/setup default to implementation agent.",
+            "type": "string"
+          },
+          "market": {
+            "description": "Business/domain context, e.g. fintech or education; not a geographic access setting.",
+            "type": "string"
+          },
+          "task": {
+            "description": "Concrete current goal or decision, e.g. diagnose checkout retries; used to focus context and session recovery.",
+            "type": "string"
+          },
+          "stack": {
+            "description": "Project technologies used to focus context; omit when unknown.",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "description": "Technology name, e.g. TypeScript or PostgreSQL."
+            }
+          },
+          "context": {
+            "description": "Optional full task context; overrides the query generated from project, role, market, stack and task.",
+            "type": "string"
+          },
+          "new_session": {
+            "description": "Default false reuses one eligible active journal. True creates a separate journal for parallel work; retries can create another session. Keep the returned session_id.",
+            "type": "boolean"
+          },
+          "include_skills": {
+            "description": "Include relevant procedural checklists. If omitted, the server infers this from task/context keywords; false suppresses checklists.",
+            "type": "boolean"
+          },
+          "limit": {
+            "description": "Maximum retrieved memories, 1–30. Omitted defaults: focused=8, deep=16; explicit values override these defaults.",
+            "type": "number",
+            "minimum": 1,
+            "maximum": 30
+          },
+          "depth": {
+            "type": "string",
+            "enum": [
+              "focused",
+              "deep"
+            ],
+            "description": "Default focused uses a small retrieval budget; deep expands it when focused results are insufficient. An explicit limit overrides the default budget."
+          },
+          "pending_feedback": {
+            "description": "Batch feedback for earlier retrieval_ids, committed independently before this action. Requires outcome:write; same actual-use feedback is safe to retry. No extra call quota. Omit unassessed results.",
+            "minItems": 1,
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "retrieval_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "description": "Exact retrieval_id returned with these memories; never substitute session_id."
+                },
+                "memory_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "description": "Exact memory id included in this retrieval_id result list, not a repo, session id or memory text."
+                },
+                "relevance": {
+                  "description": "Initial fit to that query, independent of whether the memory was used.",
+                  "type": "string",
+                  "enum": [
+                    "relevant",
+                    "irrelevant",
+                    "uncertain"
+                  ]
+                },
+                "usefulness": {
+                  "description": "Actual use only. not_used/not_evaluated do not change confidence.",
+                  "type": "string",
+                  "enum": [
+                    "helpful",
+                    "unhelpful",
+                    "not_used",
+                    "not_evaluated"
+                  ]
+                },
+                "failure_reason": {
+                  "description": "Only with usefulness=unhelpful: outdated means obsolete, wrong_context means a poor query fit, incorrect means false, partial means partly useful.",
+                  "type": "string",
+                  "enum": [
+                    "outdated",
+                    "wrong_context",
+                    "incorrect",
+                    "partial",
+                    "other"
+                  ]
+                },
+                "detail": {
+                  "description": "Non-sensitive evidence for the supplied relevance/usefulness assessment. Initial-fit notes are separate from actual-use evidence. Never include credentials or raw customer data.",
+                  "type": "string",
+                  "maxLength": 2000
+                }
+              },
+              "required": [
+                "retrieval_id",
+                "memory_id"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "engram_rehydrate",
+      "description": "Recover interrupted work after compaction, resume or lost context. Returns Markdown checkpoints, decisions, gotchas, open loops and recent events. Unlike engram_start, this restores the prior journal when available; unlike engram_recall or engram_smarter, it recovers session history rather than only searching durable knowledge.\n\nsession_id selects an accessible workspace session. Closed or teammate journals are read-only history, never reopened. Automatic recovery requires one active journal for this member, repo/project and authenticated OAuth connection or supplied agent_tool within the recovery window. Multiple matches return 409: list sessions and choose an id. since filters events after selection. If none matches, loads durable task memory and opens a journal. Repeating active recovery adds events; it does not erase history. Consumes workspace daily call quota. OAuth: memory:read and session:write.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "session_id": {
+            "description": "Exact journal id from start/rehydrate/list_sessions. Disambiguates parallel work; writing requires your active session. Rehydrate may read shared or closed history.",
+            "type": "string"
+          },
+          "agent_tool": {
+            "description": "Calling client name for attribution, e.g. codex, claude-code, cursor, or gemini. Omit if unknown.",
+            "type": "string"
+          },
+          "project": {
+            "description": "Product/project name for session context. Start/setup use it as the repository hint when repo is omitted.",
+            "type": "string"
+          },
+          "repo": {
+            "description": "Repository slug, e.g. engram or billing-api, within the authenticated workspace. This is a memory filter, not a filesystem path or workspace selector.",
+            "type": "string"
+          },
+          "task": {
+            "description": "Concrete current goal or decision, e.g. diagnose checkout retries; used to focus context and session recovery.",
+            "type": "string"
+          },
+          "reason": {
+            "description": "Recovery trigger, e.g. context compaction or resumed after interruption; recorded in the journal.",
+            "type": "string"
+          },
+          "depth": {
+            "description": "Default standard: up to 30 events/4 summaries; brief uses 12/2, full 60/8. This controls journal detail, not retrieval depth.",
+            "type": "string",
+            "enum": [
+              "brief",
+              "standard",
+              "full"
+            ]
+          },
+          "since": {
+            "description": "Optional ISO 8601 lower bound for journal events, e.g. 2026-10-16T10:00:00Z; omit for normal recent-session recovery.",
+            "type": "string"
+          }
+        },
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "engram_recall",
+      "description": "Answer one concrete question from authenticated workspace/public memory before deciding or debugging. Unlike engram_smarter, this retrieves question-specific evidence without task checklists; unlike engram_get_context, it returns one ranked memory list instead of separate category samples. Use engram_rehydrate to recover an interrupted session.\n\nReturns JSON with ranked memories, ids, trust/conflict signals and retrieval hints. Example: {\"repo\":\"engram\",\"query\":\"What did we learn about Netlify SSR costs?\"}. No matches returns count=0; deepen or rephrase rather than assume the answer. repo/type/tags narrow the question; limit overrides the depth budget. Records retrieval telemetry without editing knowledge. Consumes workspace daily call quota; stop on quota errors and retry only transient failures. OAuth: memory:read.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Specific decision, error or question to search, e.g. how are checkout retries deduplicated?"
+          },
+          "repo": {
+            "description": "Optional repository filter within this workspace. Omit it for similar/other repositories or workspace-wide rules; a repo filter excludes those memories even if the question mentions them. It never selects a different workspace.",
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "CONVENTION",
+              "PATTERN",
+              "GOTCHA",
+              "SOLUTION",
+              "ARCHITECTURE",
+              "DEPENDENCY"
+            ],
+            "description": "Knowledge category: team rule, reusable pattern, pitfall, proven fix, design decision, or library/version quirk."
+          },
+          "tags": {
+            "description": "Topic labels for storing or filtering memory; omit when no useful labels apply.",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "description": "Searchable topic label, e.g. oauth or postgres."
+            }
+          },
+          "session_id": {
+            "description": "Exact journal id from start/rehydrate/list_sessions. Disambiguates parallel work; writing requires your active session. Rehydrate may read shared or closed history.",
+            "type": "string"
+          },
+          "limit": {
+            "description": "Maximum retrieved memories, 1–20. Omitted defaults: focused=5, deep=12; explicit values override these defaults.",
+            "type": "number",
+            "minimum": 1,
+            "maximum": 20
+          },
+          "depth": {
+            "description": "Default focused prefers precision. Use deep to expand the result budget if focused misses needed evidence; verify sources before acting. Omitted limits: focused=5, deep=12.",
+            "type": "string",
+            "enum": [
+              "focused",
+              "deep"
+            ]
+          },
+          "pending_feedback": {
+            "description": "Batch feedback for earlier retrieval_ids, committed independently before this action. Requires outcome:write; same actual-use feedback is safe to retry. No extra call quota. Omit unassessed results.",
+            "minItems": 1,
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "retrieval_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "description": "Exact retrieval_id returned with these memories; never substitute session_id."
+                },
+                "memory_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "description": "Exact memory id included in this retrieval_id result list, not a repo, session id or memory text."
+                },
+                "relevance": {
+                  "description": "Initial fit to that query, independent of whether the memory was used.",
+                  "type": "string",
+                  "enum": [
+                    "relevant",
+                    "irrelevant",
+                    "uncertain"
+                  ]
+                },
+                "usefulness": {
+                  "description": "Actual use only. not_used/not_evaluated do not change confidence.",
+                  "type": "string",
+                  "enum": [
+                    "helpful",
+                    "unhelpful",
+                    "not_used",
+                    "not_evaluated"
+                  ]
+                },
+                "failure_reason": {
+                  "description": "Only with usefulness=unhelpful: outdated means obsolete, wrong_context means a poor query fit, incorrect means false, partial means partly useful.",
+                  "type": "string",
+                  "enum": [
+                    "outdated",
+                    "wrong_context",
+                    "incorrect",
+                    "partial",
+                    "other"
+                  ]
+                },
+                "detail": {
+                  "description": "Non-sensitive evidence for the supplied relevance/usefulness assessment. Initial-fit notes are separate from actual-use evidence. Never include credentials or raw customer data.",
+                  "type": "string",
+                  "maxLength": 2000
+                }
+              },
+              "required": [
+                "retrieval_id",
+                "memory_id"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "engram_store",
+      "description": "Save independently maintained knowledge privately. Use type+content for one claim, optionally with claim metadata; use claims for 1–32 separate units committed together, each with its own id, lifecycle and outcomes. Never mix single-memory fields with claims. Keep a rule, a product decision and a dated deployment state separate. Necessary rationale stays with its claim. Use engram_reflect for session summaries, not a composite memory.\n\nTo correct knowledge, supply the complete replacement in content and old ids in supersedes_memory_ids; change_reason explains the replacement. Old entries retain history; this is not permanent deletion. For reviewed legacy notes, supply claims plus split_from(memory_id,content_sha256): first call previews without writes; applying requires dry_run=false and its exact source-and-plan confirmation. Mark superseded pieces historical; preserve the full old note as history. Split children inherit no old confidence/outcomes. This is a manual decomposition, not automatic truth verification. Repeating an applied identical split returns its prior ids.\n\nHelpful feedback measures usefulness, not truth/freshness. State metadata requires observation time and stage; tested/deployed require an evidence reference, which remains agent-provided. Legacy single-memory retries can boost confidence; declared-claim duplicates do not refresh evidence or confidence. Consumes memory/call quota; rejects secrets and low-quality content. OAuth: memory:write.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "CONVENTION",
+              "PATTERN",
+              "GOTCHA",
+              "SOLUTION",
+              "ARCHITECTURE",
+              "DEPENDENCY"
+            ],
+            "description": "Knowledge category: team rule, reusable pattern, pitfall, proven fix, design decision, or library/version quirk."
+          },
+          "content": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20000,
+            "description": "One independently changeable claim with its necessary rationale. Separate rules, decisions, implementation, tests and deployment status; never bundle a session report into one memory."
+          },
+          "claim": {
+            "description": "Metadata for the single content claim. For multiple claims, put metadata inside each claims item.",
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "rule",
+                  "decision",
+                  "state",
+                  "lesson",
+                  "reference"
+                ],
+                "description": "Independently maintained knowledge: lasting instruction, product choice, dated operational state, reusable lesson, or source reference."
+              },
+              "stage": {
+                "description": "For a state claim, the exact stage observed. Tested does not imply deployed.",
+                "type": "string",
+                "enum": [
+                  "proposed",
+                  "implemented",
+                  "tested",
+                  "deployed"
+                ]
+              },
+              "observed_at": {
+                "description": "When the claim was observed, including timezone. Required for state; never infer this from storage or helpful feedback.",
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+              },
+              "evidence": {
+                "description": "Non-sensitive source, test receipt or commit/deployment reference. Agent-provided evidence is not independently verified by Engram.",
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1000
+              },
+              "review_after": {
+                "description": "Optional time to request rechecking this claim; never automatically expires an owner instruction.",
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "additionalProperties": false
+          },
+          "claims": {
+            "description": "Separate independent claims, each with type/content/claim and optional per-claim replacement ids. Total serialized units <=20,000 characters; each consumes its own memory slot. historical is allowed only in a reviewed legacy split.",
+            "minItems": 1,
+            "maxItems": 32,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "CONVENTION",
+                    "PATTERN",
+                    "GOTCHA",
+                    "SOLUTION",
+                    "ARCHITECTURE",
+                    "DEPENDENCY"
+                  ],
+                  "description": "Knowledge category for this independently maintained unit; its truth/freshness classification belongs in claim."
+                },
+                "content": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 4000,
+                  "description": "One independently replaceable fact, instruction or lesson, at most 4000 characters. Keep unrelated rules and changing state in separate units; never include secrets."
+                },
+                "claim": {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "rule",
+                        "decision",
+                        "state",
+                        "lesson",
+                        "reference"
+                      ],
+                      "description": "Independently maintained knowledge: lasting instruction, product choice, dated operational state, reusable lesson, or source reference."
+                    },
+                    "stage": {
+                      "description": "For a state claim, the exact stage observed. Tested does not imply deployed.",
+                      "type": "string",
+                      "enum": [
+                        "proposed",
+                        "implemented",
+                        "tested",
+                        "deployed"
+                      ]
+                    },
+                    "observed_at": {
+                      "description": "When the claim was observed, including timezone. Required for state; never infer this from storage or helpful feedback.",
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                    },
+                    "evidence": {
+                      "description": "Non-sensitive source, test receipt or commit/deployment reference. Agent-provided evidence is not independently verified by Engram.",
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 1000
+                    },
+                    "review_after": {
+                      "description": "Optional time to request rechecking this claim; never automatically expires an owner instruction.",
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                    }
+                  },
+                  "required": [
+                    "kind"
+                  ],
+                  "additionalProperties": false,
+                  "description": "Declared kind and optional observation/evidence metadata for this unit; not independent verification or a grant of human authority."
+                },
+                "tags": {
+                  "description": "Up to 20 non-sensitive topic labels, each at most 64 characters; omit when no useful labels apply.",
+                  "maxItems": 20,
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  }
+                },
+                "historical": {
+                  "description": "Only for a reviewed legacy split: true keeps an obsolete piece as inactive history instead of current knowledge. Omit for ordinary new claims.",
+                  "type": "boolean"
+                },
+                "supersedes_memory_ids": {
+                  "description": "Up to 20 accessible private ids explicitly replaced by this unit. Requires change_reason; cannot be combined with a legacy split.",
+                  "maxItems": 20,
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  }
+                },
+                "change_reason": {
+                  "description": "Evidence-based reason these supplied ids are replaced; required when supersedes_memory_ids is present.",
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1000
+                }
+              },
+              "required": [
+                "type",
+                "content",
+                "claim"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "split_from": {
+            "description": "Creator or owner may preview decomposition of this exact private legacy note. No other repository/visibility may be substituted.",
+            "type": "object",
+            "properties": {
+              "memory_id": {
+                "type": "string",
+                "description": "Exact id from a recalled memory; do not substitute a repository name, URL, or the memory text."
+              },
+              "content_sha256": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$",
+                "description": "SHA-256 of the exact retained source text being reviewed."
+              }
+            },
+            "required": [
+              "memory_id",
+              "content_sha256"
+            ],
+            "additionalProperties": false
+          },
+          "dry_run": {
+            "description": "Legacy split defaults to preview. false applies only with its exact confirmation; omit for ordinary store.",
+            "type": "boolean"
+          },
+          "confirmation": {
+            "description": "Exact split confirmation returned by preview; bound to source hash and the complete proposed claim set.",
+            "type": "string",
+            "maxLength": 256
+          },
+          "repo": {
+            "description": "Repository slug, e.g. engram or billing-api, within the authenticated workspace. This is a memory filter, not a filesystem path or workspace selector.",
+            "type": "string"
+          },
+          "tags": {
+            "description": "Topic labels for storing or filtering memory; omit when no useful labels apply.",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "description": "Searchable topic label, e.g. oauth or postgres."
+            }
+          },
+          "agent_tool": {
+            "description": "Calling client name for attribution, e.g. codex, claude-code, cursor, or gemini. Omit if unknown.",
+            "type": "string"
+          },
+          "session_id": {
+            "description": "Exact journal id from start/rehydrate/list_sessions. Disambiguates parallel work; writing requires your active session. Rehydrate may read shared or closed history.",
+            "type": "string"
+          },
+          "context": {
+            "description": "Non-sensitive supporting metadata, e.g. {language: \"typescript\", component: \"auth\"}; never credentials or raw customer data.",
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {}
+          },
+          "supersedes_memory_ids": {
+            "description": "Up to 20 accessible memory ids explicitly replaced by this lesson; omit for an ordinary new memory. Old entries retain their history.",
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "description": "Exact id from a recalled memory; do not substitute a repository name, URL, or the memory text."
+            }
+          },
+          "change_reason": {
+            "description": "Why the supplied memories are superseded, up to 1,000 characters; used with supersedes_memory_ids.",
+            "type": "string",
+            "maxLength": 1000
+          },
+          "pending_feedback": {
+            "description": "Batch feedback for earlier retrieval_ids, committed independently before this action. Requires outcome:write; same actual-use feedback is safe to retry. No extra call quota. Omit unassessed results.",
+            "minItems": 1,
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "retrieval_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "description": "Exact retrieval_id returned with these memories; never substitute session_id."
+                },
+                "memory_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "description": "Exact memory id included in this retrieval_id result list, not a repo, session id or memory text."
+                },
+                "relevance": {
+                  "description": "Initial fit to that query, independent of whether the memory was used.",
+                  "type": "string",
+                  "enum": [
+                    "relevant",
+                    "irrelevant",
+                    "uncertain"
+                  ]
+                },
+                "usefulness": {
+                  "description": "Actual use only. not_used/not_evaluated do not change confidence.",
+                  "type": "string",
+                  "enum": [
+                    "helpful",
+                    "unhelpful",
+                    "not_used",
+                    "not_evaluated"
+                  ]
+                },
+                "failure_reason": {
+                  "description": "Only with usefulness=unhelpful: outdated means obsolete, wrong_context means a poor query fit, incorrect means false, partial means partly useful.",
+                  "type": "string",
+                  "enum": [
+                    "outdated",
+                    "wrong_context",
+                    "incorrect",
+                    "partial",
+                    "other"
+                  ]
+                },
+                "detail": {
+                  "description": "Non-sensitive evidence for the supplied relevance/usefulness assessment. Initial-fit notes are separate from actual-use evidence. Never include credentials or raw customer data.",
+                  "type": "string",
+                  "maxLength": 2000
+                }
+              },
+              "required": [
+                "retrieval_id",
+                "memory_id"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "engram_report_outcome",
+      "description": "Record whether a recalled memory helped; returns a confirmation. Use its exact memory_id and evidence in detail. success=false may include failure_reason; outdated marks obsolete knowledge, while success raises confidence.\n\nUse retrieval_id to link a single outcome to its exact query, or outcomes for up to 20 exposure-specific evaluations. Initial relevance is separate from actual usefulness. not_used and not_evaluated do not change confidence. Identical explicit actual-use retries add no votes; changing an already recorded actual-use vote returns a conflict. Without retrieval_id, legacy latest-exposure attribution remains inferred and retries may add votes. Only accessible workspace/public memories may be reported. Use engram_store with supersedes_memory_ids for a verified replacement, or engram_reflect to batch milestone outcomes. Consumes workspace daily call quota. OAuth: outcome:write.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "memory_id": {
+            "type": "string",
+            "description": "Exact id from a recalled memory; do not substitute a repository name, URL, or the memory text."
+          },
+          "success": {
+            "type": "boolean",
+            "description": "Whether this memory helped the actual task: true for a useful application, false for a misleading or unusable result."
+          },
+          "retrieval_id": {
+            "description": "Exact exposure id for a single outcome. An identical explicit retry succeeds with duplicate=true and no extra vote; changing the committed vote returns 409. Omitting this uses legacy latest-exposure inference within 24 hours, whose retries may add votes.",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "outcomes": {
+            "description": "Batch alternative to memory_id/success. Rate relevance separately from actual usefulness.",
+            "minItems": 1,
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "retrieval_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "description": "Exact retrieval_id returned with these memories; never substitute session_id."
+                },
+                "memory_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "description": "Exact memory id included in this retrieval_id result list, not a repo, session id or memory text."
+                },
+                "relevance": {
+                  "description": "Initial fit to that query, independent of whether the memory was used.",
+                  "type": "string",
+                  "enum": [
+                    "relevant",
+                    "irrelevant",
+                    "uncertain"
+                  ]
+                },
+                "usefulness": {
+                  "description": "Actual use only. not_used/not_evaluated do not change confidence.",
+                  "type": "string",
+                  "enum": [
+                    "helpful",
+                    "unhelpful",
+                    "not_used",
+                    "not_evaluated"
+                  ]
+                },
+                "failure_reason": {
+                  "description": "Only with usefulness=unhelpful: outdated means obsolete, wrong_context means a poor query fit, incorrect means false, partial means partly useful.",
+                  "type": "string",
+                  "enum": [
+                    "outdated",
+                    "wrong_context",
+                    "incorrect",
+                    "partial",
+                    "other"
+                  ]
+                },
+                "detail": {
+                  "description": "Non-sensitive evidence for the supplied relevance/usefulness assessment. Initial-fit notes are separate from actual-use evidence. Never include credentials or raw customer data.",
+                  "type": "string",
+                  "maxLength": 2000
+                }
+              },
+              "required": [
+                "retrieval_id",
+                "memory_id"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "detail": {
+            "description": "Brief evidence of how the memory changed the decision, or why it failed. Exclude secrets.",
+            "type": "string"
+          },
+          "failure_reason": {
+            "type": "string",
+            "enum": [
+              "outdated",
+              "wrong_context",
+              "incorrect",
+              "partial",
+              "other"
+            ],
+            "description": "Why an unsuccessful memory failed; outdated marks obsolete knowledge. Omit for a successful use."
+          },
+          "repo": {
+            "description": "Repository slug, e.g. engram or billing-api, within the authenticated workspace. This is a memory filter, not a filesystem path or workspace selector.",
+            "type": "string"
+          },
+          "session_id": {
+            "description": "Session where this memory was retrieved; used for outcome attribution, not to reopen or modify that journal. May be closed.",
+            "type": "string"
+          },
+          "pending_feedback": {
+            "description": "Batch feedback for earlier retrieval_ids, committed independently before this action. Requires outcome:write; same actual-use feedback is safe to retry. No extra call quota. Omit unassessed results.",
+            "minItems": 1,
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "retrieval_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "description": "Exact retrieval_id returned with these memories; never substitute session_id."
+                },
+                "memory_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "description": "Exact memory id included in this retrieval_id result list, not a repo, session id or memory text."
+                },
+                "relevance": {
+                  "description": "Initial fit to that query, independent of whether the memory was used.",
+                  "type": "string",
+                  "enum": [
+                    "relevant",
+                    "irrelevant",
+                    "uncertain"
+                  ]
+                },
+                "usefulness": {
+                  "description": "Actual use only. not_used/not_evaluated do not change confidence.",
+                  "type": "string",
+                  "enum": [
+                    "helpful",
+                    "unhelpful",
+                    "not_used",
+                    "not_evaluated"
+                  ]
+                },
+                "failure_reason": {
+                  "description": "Only with usefulness=unhelpful: outdated means obsolete, wrong_context means a poor query fit, incorrect means false, partial means partly useful.",
+                  "type": "string",
+                  "enum": [
+                    "outdated",
+                    "wrong_context",
+                    "incorrect",
+                    "partial",
+                    "other"
+                  ]
+                },
+                "detail": {
+                  "description": "Non-sensitive evidence for the supplied relevance/usefulness assessment. Initial-fit notes are separate from actual-use evidence. Never include credentials or raw customer data.",
+                  "type": "string",
+                  "maxLength": 2000
+                }
+              },
+              "required": [
+                "retrieval_id",
+                "memory_id"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "engram_cross_pollinate",
+      "description": "Reuse a lesson solved in another repository before rebuilding a shared pattern. Unlike engram_recall or engram_smarter, this explicitly excludes target_repo from source searches and adds transfer lessons and quality gates. Returns Markdown with ranked memories and source repos from other authenticated workspace repositories, with optional public knowledge.\n\nsource_repos restricts the search; include_public supplements sparse private results. Records retrieval telemetry without copying knowledge. Consumes workspace daily call quota. OAuth: memory:read.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "target_repo": {
+            "type": "string",
+            "description": "Destination repository slug for the current work; memories from this repo are excluded from the source search."
+          },
+          "context": {
+            "type": "string",
+            "description": "Natural-language task and relevant facts, e.g. migrate our PostgreSQL schema with zero downtime. Never include credentials or raw customer data."
+          },
+          "session_id": {
+            "description": "Exact journal id from start/rehydrate/list_sessions. Disambiguates parallel work; writing requires your active session. Rehydrate may read shared or closed history.",
+            "type": "string"
+          },
+          "source_repos": {
+            "description": "Restrict source repositories to these slugs; omit or pass an empty array to search other repositories.",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "description": "Source repository slug in this workspace."
+            }
+          },
+          "include_public": {
+            "description": "Default true: supplement private results with public knowledge when needed. False searches only other private workspace repositories.",
+            "type": "boolean"
+          },
+          "limit": {
+            "description": "Maximum retrieved memories, 1–25. Omitted defaults: focused=5, deep=12; explicit values override these defaults.",
+            "type": "number",
+            "minimum": 1,
+            "maximum": 25
+          },
+          "depth": {
+            "type": "string",
+            "enum": [
+              "focused",
+              "deep"
+            ],
+            "description": "Default focused uses a small retrieval budget; deep expands it when focused results are insufficient. An explicit limit overrides the default budget."
+          },
+          "pending_feedback": {
+            "description": "Batch feedback for earlier retrieval_ids, committed independently before this action. Requires outcome:write; same actual-use feedback is safe to retry. No extra call quota. Omit unassessed results.",
+            "minItems": 1,
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "retrieval_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "description": "Exact retrieval_id returned with these memories; never substitute session_id."
+                },
+                "memory_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "description": "Exact memory id included in this retrieval_id result list, not a repo, session id or memory text."
+                },
+                "relevance": {
+                  "description": "Initial fit to that query, independent of whether the memory was used.",
+                  "type": "string",
+                  "enum": [
+                    "relevant",
+                    "irrelevant",
+                    "uncertain"
+                  ]
+                },
+                "usefulness": {
+                  "description": "Actual use only. not_used/not_evaluated do not change confidence.",
+                  "type": "string",
+                  "enum": [
+                    "helpful",
+                    "unhelpful",
+                    "not_used",
+                    "not_evaluated"
+                  ]
+                },
+                "failure_reason": {
+                  "description": "Only with usefulness=unhelpful: outdated means obsolete, wrong_context means a poor query fit, incorrect means false, partial means partly useful.",
+                  "type": "string",
+                  "enum": [
+                    "outdated",
+                    "wrong_context",
+                    "incorrect",
+                    "partial",
+                    "other"
+                  ]
+                },
+                "detail": {
+                  "description": "Non-sensitive evidence for the supplied relevance/usefulness assessment. Initial-fit notes are separate from actual-use evidence. Never include credentials or raw customer data.",
+                  "type": "string",
+                  "maxLength": 2000
+                }
+              },
+              "required": [
+                "retrieval_id",
+                "memory_id"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "target_repo",
+          "context"
+        ],
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "engram_smarter",
+      "description": "Brief a materially different task within the same session. Unlike engram_recall, this combines goal-focused memories with optional procedural checklists; unlike engram_get_context, it ranks evidence for the task instead of returning category samples. Returns Markdown with ranked workspace/public memory and retrieval hints. Use engram_start to begin work and engram_rehydrate for lost context.\n\nExample: {\"repo\":\"engram\",\"context\":\"Improve public-page delivery on Netlify while preserving localized SEO and onboarding.\"}. context states the whole goal; repo/file focus retrieval without reading local files. limit overrides depth; include_skills=false suppresses checklists. Records retrieval/session telemetry without editing knowledge. Consumes workspace daily call quota. OAuth: memory:read.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "context": {
+            "type": "string",
+            "description": "Natural-language task and relevant facts, e.g. migrate our PostgreSQL schema with zero downtime. Never include credentials or raw customer data."
+          },
+          "repo": {
+            "description": "Repository slug, e.g. engram or billing-api, within the authenticated workspace. This is a memory filter, not a filesystem path or workspace selector.",
+            "type": "string"
+          },
+          "file": {
+            "description": "File path/name used only as a search hint, e.g. src/auth.ts. Engram does not read or modify local files.",
+            "type": "string"
+          },
+          "include_skills": {
+            "description": "Include relevant procedural checklists. If omitted, the server infers this from task/context keywords; false suppresses checklists.",
+            "type": "boolean"
+          },
+          "session_id": {
+            "description": "Exact journal id from start/rehydrate/list_sessions. Disambiguates parallel work; writing requires your active session. Rehydrate may read shared or closed history.",
+            "type": "string"
+          },
+          "agent_tool": {
+            "description": "Calling client name for attribution, e.g. codex, claude-code, cursor, or gemini. Omit if unknown.",
+            "type": "string"
+          },
+          "limit": {
+            "description": "Maximum retrieved memories, 1–30. Omitted defaults: focused=5, deep=12; explicit values override these defaults.",
+            "type": "number",
+            "minimum": 1,
+            "maximum": 30
+          },
+          "depth": {
+            "type": "string",
+            "enum": [
+              "focused",
+              "deep"
+            ],
+            "description": "Default focused uses a small retrieval budget; deep expands it when focused results are insufficient. An explicit limit overrides the default budget."
+          },
+          "pending_feedback": {
+            "description": "Batch feedback for earlier retrieval_ids, committed independently before this action. Requires outcome:write; same actual-use feedback is safe to retry. No extra call quota. Omit unassessed results.",
+            "minItems": 1,
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "retrieval_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "description": "Exact retrieval_id returned with these memories; never substitute session_id."
+                },
+                "memory_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "description": "Exact memory id included in this retrieval_id result list, not a repo, session id or memory text."
+                },
+                "relevance": {
+                  "description": "Initial fit to that query, independent of whether the memory was used.",
+                  "type": "string",
+                  "enum": [
+                    "relevant",
+                    "irrelevant",
+                    "uncertain"
+                  ]
+                },
+                "usefulness": {
+                  "description": "Actual use only. not_used/not_evaluated do not change confidence.",
+                  "type": "string",
+                  "enum": [
+                    "helpful",
+                    "unhelpful",
+                    "not_used",
+                    "not_evaluated"
+                  ]
+                },
+                "failure_reason": {
+                  "description": "Only with usefulness=unhelpful: outdated means obsolete, wrong_context means a poor query fit, incorrect means false, partial means partly useful.",
+                  "type": "string",
+                  "enum": [
+                    "outdated",
+                    "wrong_context",
+                    "incorrect",
+                    "partial",
+                    "other"
+                  ]
+                },
+                "detail": {
+                  "description": "Non-sensitive evidence for the supplied relevance/usefulness assessment. Initial-fit notes are separate from actual-use evidence. Never include credentials or raw customer data.",
+                  "type": "string",
+                  "maxLength": 2000
+                }
+              },
+              "required": [
+                "retrieval_id",
+                "memory_id"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "context"
+        ],
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "engram_reflect",
+      "description": "Checkpoint a milestone or handoff for later recovery with engram_rehydrate. Supply at least one of summary, learnings, used_memories or feedback. Returns Markdown with stored/skipped counts, outcomes and next actions. Use engram_store for one lesson and engram_report_outcome for one outcome.\n\nstore=false skips learning storage only: the journal and supplied outcomes/feedback can still be written. This checkpoint leaves the session open. Retrying may duplicate writes; verify prior success first. Consumes workspace daily call quota and memory quota for saved lessons. OAuth: session:write, memory:write and outcome:write.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "repo": {
+            "description": "Repository slug, e.g. engram or billing-api, within the authenticated workspace. This is a memory filter, not a filesystem path or workspace selector.",
+            "type": "string"
+          },
+          "task": {
+            "description": "Concrete current goal or decision, e.g. diagnose checkout retries; used to focus context and session recovery.",
+            "type": "string"
+          },
+          "session_id": {
+            "description": "Exact journal id from start/rehydrate/list_sessions. Disambiguates parallel work; writing requires your active session. Rehydrate may read shared or closed history.",
+            "type": "string"
+          },
+          "summary": {
+            "description": "Milestone/handoff summary: what changed, evidence, decisions and remaining work. Required unless learnings, outcomes or feedback are supplied.",
+            "type": "string"
+          },
+          "agent_tool": {
+            "description": "Calling client name for attribution, e.g. codex, claude-code, cursor, or gemini. Omit if unknown.",
+            "type": "string"
+          },
+          "store": {
+            "description": "Default true saves accepted durable learnings; false skips learning storage only. Session checkpoints, supplied outcomes and feedback are still recorded.",
+            "type": "boolean"
+          },
+          "used_memories": {
+            "description": "Actual-use outcomes. Supply retrieval_id on every item for an atomic exact batch of up to 20; do not mix exact and legacy items. Exact outcomes commit independently before other reflection work and return feedback_receipt even on later errors. Legacy items omit all retrieval_ids and process the first 20. Omit when none were applied.",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "memory_id": {
+                  "type": "string",
+                  "description": "Exact id from a recalled memory; do not substitute a repository name, URL, or the memory text."
+                },
+                "success": {
+                  "type": "boolean",
+                  "description": "Whether this memory helped the actual task: true for a useful application, false for a misleading or unusable result."
+                },
+                "detail": {
+                  "description": "Brief evidence of how the memory changed the decision, or why it failed. Exclude secrets.",
+                  "type": "string"
+                },
+                "failure_reason": {
+                  "type": "string",
+                  "enum": [
+                    "outdated",
+                    "wrong_context",
+                    "incorrect",
+                    "partial",
+                    "other"
+                  ],
+                  "description": "Why an unsuccessful memory failed; outdated marks obsolete knowledge. Omit for a successful use."
+                },
+                "retrieval_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "description": "Exact retrieval_id returned with a result list, distinct from the journal session_id. Links this evaluation to that particular query exposure."
+                }
+              },
+              "required": [
+                "memory_id",
+                "success"
+              ]
+            }
+          },
+          "learnings": {
+            "description": "Durable private workspace lessons to persist when store=true; only the first 8 are processed. Low-quality entries may be skipped. The summary remains a journal checkpoint.",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "CONVENTION",
+                    "PATTERN",
+                    "GOTCHA",
+                    "SOLUTION",
+                    "ARCHITECTURE",
+                    "DEPENDENCY"
+                  ],
+                  "description": "Knowledge category: team rule, reusable pattern, pitfall, proven fix, design decision, or library/version quirk."
+                },
+                "content": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 20000,
+                  "description": "One independently changeable claim with its necessary rationale. Separate rules, decisions, implementation, tests and deployment status; never bundle a session report into one memory."
+                },
+                "claim": {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "rule",
+                        "decision",
+                        "state",
+                        "lesson",
+                        "reference"
+                      ],
+                      "description": "Independently maintained knowledge: lasting instruction, product choice, dated operational state, reusable lesson, or source reference."
+                    },
+                    "stage": {
+                      "description": "For a state claim, the exact stage observed. Tested does not imply deployed.",
+                      "type": "string",
+                      "enum": [
+                        "proposed",
+                        "implemented",
+                        "tested",
+                        "deployed"
+                      ]
+                    },
+                    "observed_at": {
+                      "description": "When the claim was observed, including timezone. Required for state; never infer this from storage or helpful feedback.",
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                    },
+                    "evidence": {
+                      "description": "Non-sensitive source, test receipt or commit/deployment reference. Agent-provided evidence is not independently verified by Engram.",
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 1000
+                    },
+                    "review_after": {
+                      "description": "Optional time to request rechecking this claim; never automatically expires an owner instruction.",
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                    }
+                  },
+                  "required": [
+                    "kind"
+                  ],
+                  "additionalProperties": false,
+                  "description": "Declared knowledge kind and optional observation/evidence metadata. State needs stage and observed_at; tested/deployed also need evidence. This metadata does not establish current truth or human authority."
+                },
+                "tags": {
+                  "description": "Topic labels for storing or filtering memory; omit when no useful labels apply.",
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "description": "Searchable topic label, e.g. oauth or postgres."
+                  }
+                },
+                "context": {
+                  "description": "Non-sensitive supporting metadata, e.g. {language: \"typescript\", component: \"auth\"}; never credentials or raw customer data.",
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {}
+                }
+              },
+              "required": [
+                "type",
+                "content"
+              ]
+            }
+          },
+          "feedback": {
+            "description": "Optional product feedback or feedback-pulse dismissal; separate from outcomes about individual memories.",
+            "type": "object",
+            "properties": {
+              "signal": {
+                "description": "Quality of Engram retrieval during this work; omit if only dismissing the feedback pulse.",
+                "type": "string",
+                "enum": [
+                  "useful",
+                  "noisy",
+                  "stale",
+                  "missing_context",
+                  "too_long"
+                ]
+              },
+              "notes": {
+                "description": "Concrete non-sensitive feedback explaining the selected signal.",
+                "type": "string"
+              },
+              "dismiss": {
+                "description": "True permanently dismisses the optional weekly feedback pulse for this agent member.",
+                "type": "boolean"
+              }
+            }
+          },
+          "pending_feedback": {
+            "description": "Batch feedback for earlier retrieval_ids, committed independently before this action. Requires outcome:write; same actual-use feedback is safe to retry. No extra call quota. Omit unassessed results.",
+            "minItems": 1,
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "retrieval_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "description": "Exact retrieval_id returned with these memories; never substitute session_id."
+                },
+                "memory_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "description": "Exact memory id included in this retrieval_id result list, not a repo, session id or memory text."
+                },
+                "relevance": {
+                  "description": "Initial fit to that query, independent of whether the memory was used.",
+                  "type": "string",
+                  "enum": [
+                    "relevant",
+                    "irrelevant",
+                    "uncertain"
+                  ]
+                },
+                "usefulness": {
+                  "description": "Actual use only. not_used/not_evaluated do not change confidence.",
+                  "type": "string",
+                  "enum": [
+                    "helpful",
+                    "unhelpful",
+                    "not_used",
+                    "not_evaluated"
+                  ]
+                },
+                "failure_reason": {
+                  "description": "Only with usefulness=unhelpful: outdated means obsolete, wrong_context means a poor query fit, incorrect means false, partial means partly useful.",
+                  "type": "string",
+                  "enum": [
+                    "outdated",
+                    "wrong_context",
+                    "incorrect",
+                    "partial",
+                    "other"
+                  ]
+                },
+                "detail": {
+                  "description": "Non-sensitive evidence for the supplied relevance/usefulness assessment. Initial-fit notes are separate from actual-use evidence. Never include credentials or raw customer data.",
+                  "type": "string",
+                  "maxLength": 2000
+                }
+              },
+              "required": [
+                "retrieval_id",
+                "memory_id"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "engram_skill",
+      "description": "Discover a curated installable skill with action=search and query; action=resolve with skill_id and revision returns a pinned public file manifest. Neither action writes files or executes code. Automatic local installation is a separate CLI capability requiring owner opt-in. Curated discovery may be disabled by the operator. Unlike recall (project facts), skills describe repeatable procedures. Legacy checklist mode: omit skill or pass an empty string to list available names; otherwise load a name such as code-review or skill:code-review.\n\nReturns JSON with available_skills/usage for listing or skill/count/steps/combined for a guide. Unknown names return count=0 and a message. Reads workspace/public knowledge without installing or executing anything. Use engram_recall for a project fact and engram_smarter for task-based guide selection. Consumes workspace daily call quota. OAuth: memory:read.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "description": "Curated catalogue action: search ranks at most three task suggestions; resolve returns the exact release manifest. Omit for legacy checklist mode.",
+            "type": "string",
+            "enum": [
+              "search",
+              "resolve"
+            ]
+          },
+          "query": {
+            "description": "Actual task to match against curated skill descriptions; required for action=search.",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4000
+          },
+          "skill_id": {
+            "description": "Curated skill identifier, e.g. anthropics/frontend-design; required for action=resolve.",
+            "type": "string",
+            "maxLength": 151
+          },
+          "revision": {
+            "description": "Exact SHA-256 skill release from search; resolve rejects a mismatched revision.",
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "agent_tool": {
+            "description": "Calling client name for attribution, e.g. codex, claude-code, cursor, or gemini. Omit if unknown.",
+            "type": "string"
+          },
+          "skill": {
+            "description": "Checklist name, e.g. code-review, security or skill:deployment. Omit or pass an empty string to list available names; unknown names return count=0.",
+            "type": "string"
+          },
+          "session_id": {
+            "description": "Exact journal id from start/rehydrate/list_sessions. Disambiguates parallel work; writing requires your active session. Rehydrate may read shared or closed history.",
+            "type": "string"
+          },
+          "pending_feedback": {
+            "description": "Batch feedback for earlier retrieval_ids, committed independently before this action. Requires outcome:write; same actual-use feedback is safe to retry. No extra call quota. Omit unassessed results.",
+            "minItems": 1,
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "retrieval_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "description": "Exact retrieval_id returned with these memories; never substitute session_id."
+                },
+                "memory_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "description": "Exact memory id included in this retrieval_id result list, not a repo, session id or memory text."
+                },
+                "relevance": {
+                  "description": "Initial fit to that query, independent of whether the memory was used.",
+                  "type": "string",
+                  "enum": [
+                    "relevant",
+                    "irrelevant",
+                    "uncertain"
+                  ]
+                },
+                "usefulness": {
+                  "description": "Actual use only. not_used/not_evaluated do not change confidence.",
+                  "type": "string",
+                  "enum": [
+                    "helpful",
+                    "unhelpful",
+                    "not_used",
+                    "not_evaluated"
+                  ]
+                },
+                "failure_reason": {
+                  "description": "Only with usefulness=unhelpful: outdated means obsolete, wrong_context means a poor query fit, incorrect means false, partial means partly useful.",
+                  "type": "string",
+                  "enum": [
+                    "outdated",
+                    "wrong_context",
+                    "incorrect",
+                    "partial",
+                    "other"
+                  ]
+                },
+                "detail": {
+                  "description": "Non-sensitive evidence for the supplied relevance/usefulness assessment. Initial-fit notes are separate from actual-use evidence. Never include credentials or raw customer data.",
+                  "type": "string",
+                  "maxLength": 2000
+                }
+              },
+              "required": [
+                "retrieval_id",
+                "memory_id"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "engram_get_context",
+      "description": "Audit repository knowledge by category: conventions, gotchas, patterns, solutions and architecture. Unlike engram_recall or engram_smarter, this searches each category separately and returns five sample arrays for coverage review, rather than one task-ranked list. Returns JSON with repo/file/total and up to 21 entries; this is a bounded search, not a full repository-memory export.\n\nrepo is required; file/task refine search without reading files. Only when all five categories have no repo matches does the search broaden to workspace/public memory. Empty results are valid. Does not edit knowledge. Consumes workspace daily call quota. OAuth: memory:read.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "repo": {
+            "type": "string",
+            "description": "Repository slug to inspect, e.g. billing-api. If no repo-specific memories match, the server broadens to workspace/public knowledge."
+          },
+          "file": {
+            "description": "File path/name used only as a search hint, e.g. src/auth.ts. Engram does not read or modify local files.",
+            "type": "string"
+          },
+          "task": {
+            "description": "Concrete current goal or decision, e.g. diagnose checkout retries; used to focus context and session recovery.",
+            "type": "string"
+          },
+          "pending_feedback": {
+            "description": "Batch feedback for earlier retrieval_ids, committed independently before this action. Requires outcome:write; same actual-use feedback is safe to retry. No extra call quota. Omit unassessed results.",
+            "minItems": 1,
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "retrieval_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "description": "Exact retrieval_id returned with these memories; never substitute session_id."
+                },
+                "memory_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "description": "Exact memory id included in this retrieval_id result list, not a repo, session id or memory text."
+                },
+                "relevance": {
+                  "description": "Initial fit to that query, independent of whether the memory was used.",
+                  "type": "string",
+                  "enum": [
+                    "relevant",
+                    "irrelevant",
+                    "uncertain"
+                  ]
+                },
+                "usefulness": {
+                  "description": "Actual use only. not_used/not_evaluated do not change confidence.",
+                  "type": "string",
+                  "enum": [
+                    "helpful",
+                    "unhelpful",
+                    "not_used",
+                    "not_evaluated"
+                  ]
+                },
+                "failure_reason": {
+                  "description": "Only with usefulness=unhelpful: outdated means obsolete, wrong_context means a poor query fit, incorrect means false, partial means partly useful.",
+                  "type": "string",
+                  "enum": [
+                    "outdated",
+                    "wrong_context",
+                    "incorrect",
+                    "partial",
+                    "other"
+                  ]
+                },
+                "detail": {
+                  "description": "Non-sensitive evidence for the supplied relevance/usefulness assessment. Initial-fit notes are separate from actual-use evidence. Never include credentials or raw customer data.",
+                  "type": "string",
+                  "maxLength": 2000
+                }
+              },
+              "required": [
+                "retrieval_id",
+                "memory_id"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "repo"
+        ],
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "engram_setup",
+      "description": "Explain onboarding and inspect the authenticated workspace when an agent needs setup guidance. Returns one JSON response with plan/counts/limits, tool groups, activation checklist and suggested calls; no pagination or installation.\n\nHints personalize examples: project names the work; repo scopes activation guidance, falling back to project when omitted. Does not configure the machine, open a working session or edit knowledge. Use engram_start to begin work, engram_rehydrate to recover it and engram_proof to audit adoption. Consumes workspace daily call quota; exhaustion requires reset or a plan change. OAuth: memory:read.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "agent_tool": {
+            "description": "Calling client name for attribution, e.g. codex, claude-code, cursor, or gemini. Omit if unknown.",
+            "type": "string"
+          },
+          "project": {
+            "description": "Product/project name for session context. Start/setup use it as the repository hint when repo is omitted.",
+            "type": "string"
+          },
+          "repo": {
+            "description": "Repository slug, e.g. engram or billing-api, within the authenticated workspace. This is a memory filter, not a filesystem path or workspace selector.",
+            "type": "string"
+          },
+          "role": {
+            "description": "Agent responsibility used in task context, e.g. backend engineer. Start/setup default to implementation agent.",
+            "type": "string"
+          },
+          "market": {
+            "description": "Business/domain context, e.g. fintech or education; not a geographic access setting.",
+            "type": "string"
+          },
+          "task": {
+            "description": "Concrete current goal or decision, e.g. diagnose checkout retries; used to focus context and session recovery.",
+            "type": "string"
+          },
+          "stack": {
+            "description": "Project technologies used to focus context; omit when unknown.",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "description": "Technology name, e.g. TypeScript or PostgreSQL."
+            }
+          }
+        },
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "engram_proof",
+      "description": "Audit adoption before a rollout or when checking whether the workspace is using memory and reporting outcomes. Takes no arguments. Returns JSON with memory-bank breakdowns, learning-loop activity, proof points and a benchmark checklist.\n\nDoes not change knowledge or run a benchmark. Use engram_setup for onboarding and engram_recall for task knowledge. Consumes workspace daily call quota. OAuth: memory:read.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "engram_list_sessions",
+      "description": "Find an exact session_id before recovery, closing or a handoff. Unlike engram_rehydrate, this lists bounded metadata without replaying journal content or changing a session. Returns JSON sessions with member/client attribution, status, activity and checkpoint availability, plus next_cursor.\n\nDefault scope=mine lists this member's sessions; scope=workspace explicitly includes teammates in the authenticated workspace. repo/status/agent_tool/member_id filter results; a teammate member_id requires workspace scope. limit defaults to 20, maximum 50. Pass next_cursor unchanged to continue newest-started-first pagination. Empty results are valid. Consumes daily call quota. OAuth: memory:read.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "repo": {
+            "description": "Repository slug, e.g. engram or billing-api, within the authenticated workspace. This is a memory filter, not a filesystem path or workspace selector.",
+            "type": "string"
+          },
+          "scope": {
+            "description": "Default mine lists your sessions across clients; workspace includes shared teammate session metadata.",
+            "type": "string",
+            "enum": [
+              "mine",
+              "workspace"
+            ]
+          },
+          "status": {
+            "description": "Filter journal state; omit to include both active and closed sessions.",
+            "type": "string",
+            "enum": [
+              "active",
+              "closed"
+            ]
+          },
+          "agent_tool": {
+            "description": "Calling client name for attribution, e.g. codex, claude-code, cursor, or gemini. Omit if unknown.",
+            "type": "string"
+          },
+          "member_id": {
+            "description": "Member id to filter; another member requires scope=workspace. This is a filter, not authorization.",
+            "type": "string",
+            "maxLength": 128
+          },
+          "limit": {
+            "description": "Page size, default 20; from 1 to 50.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50
+          },
+          "cursor": {
+            "description": "Opaque next_cursor from the prior response. Keep filters unchanged; omit for the first page.",
+            "type": "string",
+            "maxLength": 512
+          }
+        },
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "engram_close_session",
+      "description": "Finish an exact journal at a real completion or handoff. Unlike engram_reflect, this atomically closes the session after saving a supplied final summary or confirming an existing checkpoint. Durable memories and journal history remain; closure ends journal writes without erasing knowledge. Returns JSON with session_id, closed_at, checkpoint_id, already_closed and memories_retained.\n\nGet session_id from start/rehydrate/list_sessions. Only this session's member or a human workspace owner may close it; team read access does not grant close authority. A missing checkpoint or failed save leaves it active. Repeating close returns the original receipt without duplicate summaries. Closed journals are read-only for explicit rehydrate and cannot be implicitly reopened. Consumes daily call quota. OAuth: session:write.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "description": "Exact journal id to close; required. Never pass a repo slug or a natural-language query."
+          },
+          "summary": {
+            "description": "Final checkpoint text, at most 6000 characters and no credentials. Omit when reusing an existing checkpoint. Erased journals reject new text; omit to reuse their redacted checkpoint, or start a new session.",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 6000
+          }
+        },
+        "required": [
+          "session_id"
+        ],
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "engram_retract_memory",
+      "description": "Withdraw an exact private memory that should no longer guide agents. Unlike engram_store with supersedes_memory_ids, this needs no replacement and keeps the content for explicit restoration. Unlike engram_delete_memory, it is reversible. Returns JSON memory_id, RETRACTED status and already_retracted.\n\nGet memory_id from recall/context; provide a non-sensitive reason, 1–1000 characters. Only the creator or a human workspace OWNER may withdraw it; team read access is not write authority. Current retrieval excludes it and source-dependent patterns. Recovery suppresses free text in referencing journals rather than replay withdrawn guidance. Start a clean session for new work or restore the source. Repeating is idempotent. Public-bank and superseded records are excluded. Consumes daily call quota. OAuth: memory:write.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "memory_id": {
+            "type": "string",
+            "description": "Exact id from a recalled memory; do not substitute a repository name, URL, or the memory text."
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1000,
+            "description": "Why this knowledge should stop guiding agents, 1–1000 characters. No secrets or copied sensitive content."
+          }
+        },
+        "required": [
+          "memory_id",
+          "reason"
+        ],
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "engram_restore_memory",
+      "description": "Make an explicitly retracted private memory available again. Unlike engram_store, this restores the original ID/content; storing matching retired content returns 409 rather than silently reviving it. Returns JSON memory_id, ACTIVE status and already_active. Retained source-dependent history becomes available when no other withdrawn sources remain.\n\nOnly the creator or a human workspace OWNER may restore. Memory quota still applies. A confirmed replacement or SUPERSEDED state requires the separate replacement-review workflow; permanently erased IDs cannot be restored. An already active record is an idempotent no-op. Consumes daily call quota. OAuth: memory:write.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "memory_id": {
+            "type": "string",
+            "description": "Exact id from a recalled memory; do not substitute a repository name, URL, or the memory text."
+          }
+        },
+        "required": [
+          "memory_id"
+        ],
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "engram_delete_memory",
+      "description": "Preview or permanently erase one private memory and its explicit derived patterns from the live database. Unlike engram_retract_memory, execution cannot be undone. Requires a human workspace OWNER API key; OAuth agents and member keys cannot erase. Does not delete independent memories or unrelated sessions.\n\nDefault dry_run=true returns counts, derived IDs, affected session IDs (first 50), scope and confirmation. Inspect it first: execution redacts the entire free-text history/checkpoints/task/context of referencing sessions, plus associated outcomes, links, jobs and linked evidence; shared entities remain if still referenced. Execute only the reviewed ID using dry_run=false and confirmation=\"delete:<memory_id>\". Returns erased_at/counts; repeated execution returns the original minimal ID/count receipt without erased text (a one-way content fingerprint blocks exact store replays). In-flight background writes and exact store retries cannot repopulate erased knowledge. Historical unlinked paraphrases, already delivered client context, application/provider logs, provider copies and backups are outside this live-database operation. Public-bank records are excluded. Consumes daily call quota.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "memory_id": {
+            "type": "string",
+            "description": "Exact id from a recalled memory; do not substitute a repository name, URL, or the memory text."
+          },
+          "dry_run": {
+            "description": "Default true previews impact without changing knowledge. False executes only with the exact confirmation string and human OWNER authority.",
+            "type": "boolean"
+          },
+          "confirmation": {
+            "description": "For execution only: copy delete:<exact memory_id> from the preview. Omit for preview; never substitute a repo name.",
+            "type": "string",
+            "maxLength": 135
+          }
+        },
+        "required": [
+          "memory_id"
+        ],
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "tools.engram/engram",
+    "version": "0.4.12",
+    "remoteUrl": "https://api.engram.tools/mcp",
+    "publishedAt": "2026-11-27T10:48:48.055436Z",
+    "fetchedAt": "2026-11-28T10:03:29.931Z",
+    "toolsSha256": "0f04d98198d8d5ca7e5f4a80f0b57c19d4e7dfd520a76eef644f9c0c940ce8b7"
+  }
+}

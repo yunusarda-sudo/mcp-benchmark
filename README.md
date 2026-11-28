@@ -4,7 +4,7 @@
 
 [![npm version](https://img.shields.io/npm/v/mcp-benchmark.svg)](https://www.npmjs.com/package/mcp-benchmark)
 [![CI](https://github.com/yunusarda-sudo/mcp-benchmark/actions/workflows/ci.yml/badge.svg)](https://github.com/yunusarda-sudo/mcp-benchmark/actions/workflows/ci.yml)
-[![MCP Registry Servers](https://img.shields.io/badge/MCP_Registry-3404_Servers-blueviolet)](LEADERBOARD.md)
+[![MCP Registry Servers](https://img.shields.io/badge/MCP_Registry-4080_Servers-blueviolet)](LEADERBOARD.md)
 [![Web Playground](https://img.shields.io/badge/Web_Playground-Live-10b981)](https://yunusarda-sudo.github.io/mcp-benchmark/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
@@ -197,16 +197,16 @@ Explore the full interactive leaderboard with sorting, search, and tool inspecti
 <!-- NEW_RELEASES_START -->
 | Published | Server | Grade | TQI | Tools | Data |
 |:---|:---|:---:|---:|---:|:---:|
-| 2026-11-27 | [**Muhurat by Devalok**](https://github.com/devalok-design/muhurat-mcp) · `day.muhurat/muhurat` | `A` | 89 | 9 | [json](registry/servers/day-muhurat-muhurat.json) |
-| 2026-11-27 | **IBDÅ** · `co.ibda/ibda` | `A` | 92 | 5 | [json](registry/servers/co-ibda-ibda.json) |
-| 2026-11-27 | **AgentStall: Africa and India data** · `io.github.nileshmakan2/agentstall` | `B` | 87 | 33 | [json](registry/servers/io-github-nileshmakan2-agentstall.json) |
-| 2026-11-27 | **Skin Bliss** · `com.getskinbliss/skin-bliss` | `A` | 91 | 2 | [json](registry/servers/com-getskinbliss-skin-bliss.json) |
-| 2026-11-27 | [**ColorID Paint Colors**](https://github.com/zeisoft/colorid-mcp) · `org.colorid/paint-colors` | `A` | 90 | 3 | [json](registry/servers/org-colorid-paint-colors.json) |
-| 2026-11-27 | **The notacompany newsletter** · `com.notacompany/newsletter` | `A` | 89 | 18 | [json](registry/servers/com-notacompany-newsletter.json) |
-| 2026-11-27 | **6102TTK — Turkish Commercial Law Decisions** · `com.6102ttk/karar-arama` | `A+` | 95 | 5 | [json](registry/servers/com-6102ttk-karar-arama.json) |
-| 2026-11-27 | [**BrainChain**](https://github.com/usebrainchain/brainchain-mcp) · `com.usebrainchain/brainchain` | `B` | 79 | 18 | [json](registry/servers/com-usebrainchain-brainchain.json) |
-| 2026-11-27 | **GoThere Japan Transit &amp; Travel** · `online.gothere/japan-travel` | `A` | 90 | 5 | [json](registry/servers/online-gothere-japan-travel.json) |
-| 2026-11-27 | **TheCitationChecker — Academic Citation &amp; DOI Verifier** · `com.thecitationchecker/citation-checker` | `A` | 92 | 2 | [json](registry/servers/com-thecitationchecker-citation-checker.json) |
+| 2026-11-28 | [**On 문서**](https://github.com/on-munseo/on-munseo.github.io) · `io.github.on-munseo/on-document` | `A` | 92 | 39 | [json](registry/servers/io-github-on-munseo-on-document.json) |
+| 2026-11-28 | **EnterTAO — Bittensor Service Registry** · `com.entertao/registry` | `A` | 93 | 11 | [json](registry/servers/com-entertao-registry.json) |
+| 2026-11-28 | [**TrueInterview**](https://github.com/kevin-2023-code/job-agent) · `io.trueinterview/trueinterview` | `B` | 87 | 40 | [json](registry/servers/io-trueinterview-trueinterview.json) |
+| 2026-11-28 | **Allureve shop search** · `uk.co.allureve/search` | `B` | 84 | 1 | [json](registry/servers/uk-co-allureve-search.json) |
+| 2026-11-28 | [**Agent Desk**](https://github.com/yellowstake/agent-desk) · `com.yellowstake/agent-desk` | `A` | 90 | 7 | [json](registry/servers/com-yellowstake-agent-desk.json) |
+| 2026-11-28 | [**TraceCheck**](https://github.com/TGS-checker/tracecheck-mcp) · `io.github.TGS-checker/tracecheck` | `C` | 76 | 2 | [json](registry/servers/io-github-tgs-checker-tracecheck.json) |
+| 2026-11-28 | **SalesSignals: UK public sector IT contract awards** · `io.salessignals/awards` | `A` | 89 | 5 | [json](registry/servers/io-salessignals-awards.json) |
+| 2026-11-28 | [**Cloud FinOps Skill &amp; MCP**](https://github.com/OptimNow/cloud-finops-skills) · `io.github.OptimNow/cloud-finops` | `C` | 66 | 7 | [json](registry/servers/io-github-optimnow-cloud-finops.json) |
+| 2026-11-28 | **Jammin** · `chat.jammin/rooms` | `A` | 93 | 19 | [json](registry/servers/chat-jammin-rooms.json) |
+| 2026-11-28 | **Find It Differently** · `com.finditdifferently/tours` | `A+` | 96 | 3 | [json](registry/servers/com-finditdifferently-tours.json) |
 <!-- NEW_RELEASES_END -->
 
 ### Top Synced Servers
@@ -225,15 +225,15 @@ Explore the full interactive leaderboard with sorting, search, and tool inspecti
 | 9 | **It's My Life Dog video info** · `com.itsmylifedog/video` | `A+` | 100 | 4 | 107 | [json](registry/servers/com-itsmylifedog-video.json) |
 | 10 | **GiftBack** · `com.joingiftback/giftback` | `A+` | 100 | 3 | 250 | [json](registry/servers/com-joingiftback-giftback.json) |
 | 11 | **Klarum** · `com.klarum/klarum` | `A+` | 100 | 3 | 110 | [json](registry/servers/com-klarum-klarum.json) |
-| 12 | **ScanGoal** · `com.scangoal/mcp` | `A+` | 100 | 5 | 116 | [json](registry/servers/com-scangoal-mcp.json) |
-| 13 | **トゥーンエル** · `com.tooneru/manga` | `A+` | 100 | 6 | 128 | [json](registry/servers/com-tooneru-manga.json) |
-| 14 | **VIN Decoder by Underwriters Technologies** · `com.undtec/vin` | `A+` | 100 | 1 | 103 | [json](registry/servers/com-undtec-vin.json) |
-| 15 | **GStars** · `dev.gstars/gstars` | `A+` | 100 | 4 | 219 | [json](registry/servers/dev-gstars-gstars.json) |
+| 12 | [**PayCall hotline data**](https://github.com/paycallteam/hotline-data) · `com.pay-call/hotlines` | `A+` | 100 | 4 | 217 | [json](registry/servers/com-pay-call-hotlines.json) |
+| 13 | **ScanGoal** · `com.scangoal/mcp` | `A+` | 100 | 5 | 116 | [json](registry/servers/com-scangoal-mcp.json) |
+| 14 | **トゥーンエル** · `com.tooneru/manga` | `A+` | 100 | 6 | 128 | [json](registry/servers/com-tooneru-manga.json) |
+| 15 | **VIN Decoder by Underwriters Technologies** · `com.undtec/vin` | `A+` | 100 | 1 | 103 | [json](registry/servers/com-undtec-vin.json) |
 <!-- LEADERBOARD_TOP_END -->
 
 <!-- SYNC_INFO_START -->
-**3404 servers · 49269 tools · last sync 2026-11-27.**
-Last run: 75806 registry entries scanned, 45331 auth-free remote candidates, 878 returned tools, 597 required authentication, 25 failed (probe cap reached).
+**4080 servers · 58524 tools · last sync 2026-11-28.**
+Last run: 76542 registry entries scanned, 45866 auth-free remote candidates, 922 returned tools, 549 required authentication, 29 failed (probe cap reached).
 Probed newest first by registry publish date, at most 1500 per run and at most 3 listed servers per operator (registrable domain of the remote host).
 <!-- SYNC_INFO_END -->
 

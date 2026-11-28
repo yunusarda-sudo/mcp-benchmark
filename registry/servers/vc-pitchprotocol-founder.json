@@ -1,0 +1,190 @@
+{
+  "$schema": "../schema.json",
+  "name": "vc.pitchprotocol/founder",
+  "title": "Pitch Protocol",
+  "category": "AI, LLMs & Agents",
+  "description": "Apply to Pitch Protocol, a pre-seed and seed investor, from your AI agent. Free, no web form.",
+  "tools": [
+    {
+      "name": "submit_answers",
+      "description": "Save the founder's answers to the intake questions. Upsert semantics with\nan explicit commit flag.\n\n**When:** `status == \"intake\"`, after research generates the questions.\nRead them from `get_status` → `intake.questions`.\n\n**Before you call:**\n- READ the questions to the founder verbatim. Ask only the question\n  `text` — do not volunteer or invent any internal rationale for why\n  we ask.\n- Collect answers conversationally; don't make them answer all five at\n  once if they'd rather talk through them.\n- If `finalize: true`: show every answer back to the founder for\n  confirmation first. This is one-way — after finalize they can't edit.\n- If `finalize: false` (autosave): no confirmation needed.\n\n**Answers shape:** array of `{questionId, answer}` objects. Only include\nquestion ids that were in the `get_status` response — other ids are\nrejected.\n\n**Upsert rules:**\n- Answers with matching `questionId` overwrite.\n- Prior answers for ids NOT in this batch are KEPT.\n- So you can save Q1 + Q2 in one call, Q3-Q5 in another, then commit\n  with `finalize: true` + empty `answers: []` at the end.\n\n**On error:**\n- `unknown questionIds` — check spelling / the id list from `get_status`.\n- `missing required` — on `finalize: true`, every `priority=required`\n  must have an answer. Error lists which are missing.\n- `alreadyAnswered` — you called finalize twice. Status is `submitted`;\n  no more edits.\n- Wrong status — not in `intake` yet (still researching) or already\n  past it.",
+      "inputSchema": {
+        "properties": {
+          "answers": {
+            "description": "Array of `{questionId, answer}` objects. Can be empty when finalize is true.",
+            "items": {
+              "properties": {
+                "answer": {
+                  "type": "string"
+                },
+                "questionId": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "questionId",
+                "answer"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "applicationId": {
+            "description": "Application id from `create_application`.",
+            "type": "string"
+          },
+          "finalize": {
+            "default": false,
+            "description": "If true, commits the answers and flips status to submitted. One-way — confirm with founder first.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "applicationId",
+          "answers"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "get_application_schema",
+      "description": "The authoritative field reference for the `PitchApplication` payload.\n\n**When:** call this FIRST in every session. Cache the response.\n**Before you call:** nothing — no inputs.\n**Returns:** markdown listing every field, type, limit, enum, plus a\ncomplete valid example.\n\nWith this in context, you can assemble a payload that validates on the\nfirst `create_application`.",
+      "inputSchema": {
+        "properties": {},
+        "required": [],
+        "type": "object"
+      }
+    },
+    {
+      "name": "verify_email",
+      "description": "Consume the 6-digit code the founder received and start the research\npipeline.\n\n**When:** after `create_application`, and ideally after the deck has\nbeen uploaded over plain HTTP (see the `curl` printed by\n`create_application`). Founder has read the code from their inbox.\n\n**Before you call:**\n- CONFIRM you have the right code from the founder (not guessing, not\n  stale). Once this succeeds, research starts and is irreversible.\n- If deck parsing is still pending, that's fine — research auto-defers\n  and dispatches when the deck resolves. Don't wait, don't re-verify.\n\n**Returns:** `status: researching` + whether research was dispatched now\nor deferred on the deck.\n\n**On error:**\n- `wrong code` — response includes attempts-remaining. Ask the founder\n  to check their inbox again. If the error says the code is invalidated,\n  call `resend_verification` for a new one.\n- `no active code` — they never received one, or it expired. Call\n  `resend_verification`.\n- Already verified — idempotent success; returns current status.\n  Don't retry in a loop.",
+      "inputSchema": {
+        "properties": {
+          "applicationId": {
+            "description": "Application id from `create_application`.",
+            "type": "string"
+          },
+          "code": {
+            "description": "The 6-digit numeric code from the founder's inbox.",
+            "maxLength": 6,
+            "minLength": 6,
+            "type": "string"
+          }
+        },
+        "required": [
+          "applicationId",
+          "code"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "get_status",
+      "description": "The primary status endpoint. Returns the full current state of an\napplication: status, email verification, deck state, intake questions\n(when ready), and a `nextAction` string.\n\n**While research runs (`status == \"researching\"`) — read this:**\n\nThis call WAITS server-side. It holds for up to ~45 seconds and returns\nthe instant research finishes (or after ~45s if nothing has changed yet).\nYou do NOT sleep or set timers yourself — you just call it again. Research\nusually completes within a handful of these blocking calls (~5–10 min\ntotal). Between calls, give the founder a short \"still researching…\" note\nso they're not left wondering — but do NOT ask permission to keep checking,\nand do NOT hand control back as if it failed. Keep calling until `status`\nleaves `researching`.\n\nIn all other states (`draft`, `intake`, `submitted`, `failed`,\n`withdrawn`) this returns immediately and `nextAction` is the\nfounder-facing instruction — read it to them verbatim and act on their reply.\n\n**When to call:**\n- After `verify_email` — call again and again until status leaves `researching`.\n- When the founder asks for an update.\n- To read intake questions when `status == \"intake\"`.\n\n**Before you call:** nothing.\n\n**Returns:** markdown by default. Use `responseFormat: \"json\"` when\nyou need to branch programmatically on `status` / `deck.state`.\n\n**On error:** `notFound` if the applicationId is wrong. Otherwise\nsafe to call repeatedly.",
+      "inputSchema": {
+        "properties": {
+          "applicationId": {
+            "description": "Application id from `create_application`.",
+            "type": "string"
+          },
+          "responseFormat": {
+            "default": "markdown",
+            "description": "`markdown` (default) or `json`. JSON returns the raw StatusView for programmatic use.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "applicationId"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "update_application",
+      "description": "Update an application's payload and/or contact email while it's still in\n`draft`.\n\n**When:** founder caught something wrong after `create_application`\nbut before `verify_email`. Also when changing the email address.\n\n**Before you call:**\n- Full-replace on payload: send the WHOLE `PitchApplication` object, not\n  a patch. Read current values from `get_status` if you don't have\n  them.\n- Email change resets verification: `emailVerified` goes back to false\n  and a fresh code is sent to the NEW address. Let the founder know.\n\n**Returns:** the fresh `StatusView` — markdown by default, JSON if\n`responseFormat: \"json\"`. Same shape as `get_status`.\n\n**On error:**\n- `notEditable` — status is past `draft`. Nothing to update; state is\n  locked. Read `get_status` to understand where you are.\n- Validation failed — payload doesn't satisfy the schema. Fix per the\n  error message and retry.",
+      "inputSchema": {
+        "properties": {
+          "applicationId": {
+            "description": "Application id from `create_application`.",
+            "type": "string"
+          },
+          "contactEmail": {
+            "description": "New contact email (optional). Resets verification and issues a new code.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "payload": {
+            "description": "Full PitchApplication JSON (optional). Replaces the current payload wholesale.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "responseFormat": {
+            "default": "markdown",
+            "description": "`markdown` (default) or `json`. JSON returns the raw StatusView for programmatic use.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "applicationId"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "resend_verification",
+      "description": "Issue a fresh 6-digit verification code. Supersedes any prior unconsumed\ncode.\n\n**When:** founder didn't receive the first code, the code expired, or\ntoo many wrong attempts invalidated it.\n\n**Before you call:** nothing. Safe to call multiple times (rate-limited).\n\n**Returns:** confirmation the new code was emailed (in dev: the code\nitself).\n\n**On error:**\n- Rate-limited — the error tells you how many seconds to wait. Don't\n  spam.\n- Already verified — status already past `draft`. Nothing to resend.\n  Call `get_status` to confirm the current state.",
+      "inputSchema": {
+        "properties": {
+          "applicationId": {
+            "description": "Application id from `create_application`.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "applicationId"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "create_application",
+      "description": "Create a new pitch application draft and send a 6-digit verification code\nto `contactEmail`.\n\n**When:** once you have a complete payload (research + deck + founder\nconfirmed). One per conversation with a given founder.\n\n**Before you call:**\n1. `get_application_schema` — know the fields, limits, enums.\n2. Get the founder's source material — deck, memo, one-pager, website, or\n   even a few sentences — and READ/parse it yourself (plus web search) to\n   fill the payload. The deck is an input you read, not a file to upload.\n3. Ask the founder for anything you can't find or confirm. Don't\n   fabricate — leave gaps and ask.\n4. Show the assembled payload to the founder for review before\n   submitting.\n\n**Returns:** `applicationId` — required for every subsequent tool call —\nplus `codeSent` and (in dev) `devCode`.\n\n**Next:** ask the founder for the 6-digit code and call `verify_email`.",
+      "inputSchema": {
+        "properties": {
+          "contactEmail": {
+            "description": "Email where the 6-digit verification code will be sent. Must be the founder's real address.",
+            "type": "string"
+          },
+          "payload": {
+            "description": "Full PitchApplication JSON payload. Call `get_application_schema` for field list + limits.",
+            "type": "string"
+          },
+          "submittedBy": {
+            "description": "Identifier for the agent/client submitting on the founder's behalf (e.g. your client name or ID). Required — every application must record who submitted it.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "contactEmail",
+          "submittedBy",
+          "payload"
+        ],
+        "type": "object"
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "vc.pitchprotocol/founder",
+    "version": "1.0.0",
+    "remoteUrl": "https://api.pitchprotocol.vc/mcp/founder?ppr=ppc_mcpregistry",
+    "publishedAt": "2026-11-17T16:53:48.017359Z",
+    "fetchedAt": "2026-11-28T10:03:29.931Z",
+    "toolsSha256": "7ed4aabb1b927f9b44673320fa0762a1792b9b862dfee30e3f287911f89ab2fc"
+  }
+}

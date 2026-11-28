@@ -1,0 +1,605 @@
+{
+  "$schema": "../schema.json",
+  "name": "rent.quub/hotels",
+  "title": "Quub hotel search and booking",
+  "category": "E-Commerce & Retail",
+  "description": "Live hotel prices worldwide, sourced destination guides, room holds by pay link. No key needed.",
+  "tools": [
+    {
+      "name": "search_hotels",
+      "description": "Live hotel prices for a place and dates, anywhere in the world. Each hotel: id, name, stars, guest rating (0 to 10), area or distance from the centre, the cheapest room with its total, due_at_property_total, board, refundable, the cancellation terms in words and as a deadline, offer_id (for prebook) and offer_valid_until. result says ok, no_availability, no_match_for_filters or supplier_error; with retryable true, retry once after retry_after_seconds. Prices are the total for the whole stay for one room, in the currency asked (EUR by default), as Nuitee, the booking partner and merchant of record, charges them, with the taxes Nuitee collects included. Taxes and fees paid at the property (often a city or tourist tax) are listed in taxes_at_property, summed in due_at_property_total, and are not in the total.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "place": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 160,
+            "description": "A city, an area, an address or a hotel name, with or without the country and accents, a Quub destination slug, or a Google place id. A hotel name answers place.kind \"hotel\" and matched_hotel_id (that hotel first; null when the partner lists no hotel of that name, and the results are the hotels around its address).",
+            "examples": [
+              "Lisbon",
+              "Wroclaw, Poland",
+              "Kotor, Montenegro",
+              "lisbon",
+              "Moxy Munich Airport"
+            ]
+          },
+          "checkin": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "description": "Check-in date, YYYY-MM-DD, today (UTC) to 500 days ahead.",
+            "examples": [
+              "2027-03-12"
+            ]
+          },
+          "checkout": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "description": "Check-out date, YYYY-MM-DD, 1 to 30 nights after check-in.",
+            "examples": [
+              "2027-03-14"
+            ]
+          },
+          "adults": {
+            "description": "Adults in the one room, 1 to 8. Default 2.",
+            "examples": [
+              2
+            ],
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 8
+          },
+          "children": {
+            "description": "Ages of children in the room, if any, at most 4. Quub cannot hold rooms with children yet; offers priced with children are refused by prebook.",
+            "examples": [
+              [
+                4,
+                9
+              ]
+            ],
+            "maxItems": 4,
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 17
+            }
+          },
+          "currency": {
+            "description": "ISO 4217 currency for the prices, default EUR.",
+            "examples": [
+              "EUR",
+              "USD"
+            ],
+            "type": "string",
+            "pattern": "^[A-Za-z]{3}$"
+          },
+          "nationality": {
+            "description": "Guest nationality, ISO 3166 alpha-2 (prices can depend on it). Default from the client's language, else NL.",
+            "examples": [
+              "GB"
+            ],
+            "type": "string",
+            "pattern": "^[A-Za-z]{2}$"
+          },
+          "limit": {
+            "description": "Hotels per page, 1 to 60. Default 20.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 60
+          },
+          "offset": {
+            "description": "Skip this many hotels, for the next page (has_more says if there is one). Default 0.",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 240
+          },
+          "sort": {
+            "description": "price (cheapest total first, default), rating (best first) or distance (closest to the centre first).",
+            "type": "string",
+            "enum": [
+              "price",
+              "rating",
+              "distance"
+            ]
+          },
+          "max_price": {
+            "description": "Most the whole stay may cost, in the asked currency.",
+            "examples": [
+              400
+            ],
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "maximum": 10000000
+          },
+          "free_cancellation": {
+            "description": "Only rooms that can be cancelled free of charge.",
+            "type": "boolean"
+          },
+          "min_rating": {
+            "description": "Lowest guest rating, 0 to 10.",
+            "examples": [
+              8
+            ],
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10
+          },
+          "breakfast": {
+            "description": "Only rooms with breakfast included.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "place",
+          "checkin",
+          "checkout"
+        ]
+      }
+    },
+    {
+      "name": "get_hotel",
+      "description": "One hotel's details (address, coordinates, stars, rating, photos, description, facilities, check-in and check-out times, parking) and, with dates, every bookable room: offer_id, room, board, refundable, cancellation_summary and the free cancellation deadline, total, per night, taxes included, taxes at the property, due_at_property_total, and a book_url a person can open. Prices are the total for the whole stay for one room, in the currency asked (EUR by default), as Nuitee, the booking partner and merchant of record, charges them, with the taxes Nuitee collects included. Taxes and fees paid at the property (often a city or tourist tax) are listed in taxes_at_property, summed in due_at_property_total, and are not in the total.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "hotel_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40,
+            "description": "The hotel id from search_hotels.",
+            "examples": [
+              "lp1c2c6"
+            ]
+          },
+          "checkin": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "description": "Check-in date, YYYY-MM-DD, today (UTC) to 500 days ahead.",
+            "examples": [
+              "2027-03-12"
+            ]
+          },
+          "checkout": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "description": "Check-out date, YYYY-MM-DD, 1 to 30 nights after check-in.",
+            "examples": [
+              "2027-03-14"
+            ]
+          },
+          "adults": {
+            "description": "Adults in the one room, 1 to 8. Default 2.",
+            "examples": [
+              2
+            ],
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 8
+          },
+          "children": {
+            "description": "Ages of children in the room, if any, at most 4. Quub cannot hold rooms with children yet; offers priced with children are refused by prebook.",
+            "examples": [
+              [
+                4,
+                9
+              ]
+            ],
+            "maxItems": 4,
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 17
+            }
+          },
+          "currency": {
+            "description": "ISO 4217 currency for the prices, default EUR.",
+            "examples": [
+              "EUR",
+              "USD"
+            ],
+            "type": "string",
+            "pattern": "^[A-Za-z]{3}$"
+          },
+          "nationality": {
+            "description": "Guest nationality, ISO 3166 alpha-2 (prices can depend on it). Default from the client's language, else NL.",
+            "examples": [
+              "GB"
+            ],
+            "type": "string",
+            "pattern": "^[A-Za-z]{2}$"
+          }
+        },
+        "required": [
+          "hotel_id"
+        ]
+      }
+    },
+    {
+      "name": "list_destinations",
+      "description": "The destinations Quub has a sourced guide for (slug, name, country, one line, last fact check, guide URL). Hotels can be searched anywhere, not only in these. Optional q filters by name, country or slug.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "q": {
+            "description": "Filter by name, country or slug.",
+            "examples": [
+              "Spain",
+              "lisbon"
+            ],
+            "type": "string",
+            "maxLength": 100
+          }
+        }
+      }
+    },
+    {
+      "name": "get_destination_guide",
+      "description": "The facts of one destination guide as data, each with its source URL: tourist tax, short-term rental rules, guest registration, parking with a rental car, monthly stays, airport, emergency number (key_facts), the areas to stay in, the articles, the FAQ and every source. Takes a slug or a name; when no guide matches, found is false and suggestions lists the closest guides.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "slug": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160,
+            "description": "A destination slug from list_destinations, or a name with or without the country.",
+            "examples": [
+              "lisbon",
+              "Wrocław",
+              "Kotor, Montenegro"
+            ]
+          }
+        },
+        "required": [
+          "slug"
+        ]
+      }
+    },
+    {
+      "name": "get_tourist_tax",
+      "description": "The tourist tax of one destination as a structured rule (rate per guest or room, tiers by lodging type, stars, town or season, the cap on taxed nights, age exemptions, long-stay waivers, where it is paid) with its source URL and read date, and with nights the amount for the stay and each step in words. A range means a tier was not chosen; a percentage needs nightly_price; both come back in needs instead of a guessed figure. Amounts in the rule currency. Takes a slug or a name; a miss answers found false with suggestions.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "destination": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160,
+            "description": "A destination slug or name, with or without the country.",
+            "examples": [
+              "lisbon",
+              "Belgrade",
+              "Berlin, Germany"
+            ]
+          },
+          "nights": {
+            "description": "Nights of the stay, 1 to 365. Without it the answer is the rule alone.",
+            "examples": [
+              30
+            ],
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 365
+          },
+          "adults": {
+            "description": "Adults whose age does not matter, 0 to 20. Default 2 when no ages are given.",
+            "examples": [
+              2
+            ],
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 20
+          },
+          "children_ages": {
+            "description": "Ages of the other guests: children, or an older adult where an age rule reaches adults, 0 to 120.",
+            "examples": [
+              [
+                4,
+                9
+              ]
+            ],
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 120
+            }
+          },
+          "tier": {
+            "description": "Tier ids from rule.charges[].tiers or needs, at most one per charge.",
+            "examples": [
+              [
+                "hotel-4"
+              ]
+            ],
+            "maxItems": 10,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 60
+            }
+          },
+          "nightly_price": {
+            "description": "Nightly price of the room or rental in the rule currency, for a tax that is a percentage.",
+            "examples": [
+              120
+            ],
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100000
+          },
+          "checkin": {
+            "description": "First night, YYYY-MM-DD, for seasonal or dated rates. Default today (UTC).",
+            "examples": [
+              "2027-06-01"
+            ],
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          },
+          "rooms": {
+            "description": "Rooms or rented units, for a charge per room, 1 to 10. Default 1.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10
+          }
+        },
+        "required": [
+          "destination"
+        ]
+      }
+    },
+    {
+      "name": "prebook",
+      "description": "Holds one room for its offer_id alone (from search_hotels or get_hotel) for 30 minutes and returns booking_id, booking_secret (shown once: keep it to read or cancel the booking), the confirmed total (price_changed and previous_total when the hotel repriced it), the cancellation terms, expires_at and pay_url. No key needed. Nothing is ever charged by a tool and no tool handles a card: the guest pays on the pay_url page, in Nuitee's card form, and the booking exists only after that payment. Give the guest pay_url with the total and the terms. Guest details are optional: send all four (name as on the ID shown at check-in, email, phone with country code) or none, and the guest enters them on the pay page. The same idempotency_key returns the same hold instead of a second one.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "offer_id": {
+            "type": "string",
+            "minLength": 8,
+            "maxLength": 4000,
+            "description": "offer_id from search_hotels or get_hotel. Enough on its own: Quub knows the hotel, dates, adults and currency it was issued for."
+          },
+          "hotel_id": {
+            "description": "Optional; if sent it must match the offer.",
+            "examples": [
+              "lp1c2c6"
+            ],
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40
+          },
+          "checkin": {
+            "description": "Optional; if sent it must match the offer.",
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "examples": [
+              "2027-03-12"
+            ]
+          },
+          "checkout": {
+            "description": "Optional; if sent it must match the offer.",
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "examples": [
+              "2027-03-14"
+            ]
+          },
+          "adults": {
+            "description": "Adults in the one room, 1 to 8. Default 2.",
+            "examples": [
+              2
+            ],
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 8
+          },
+          "currency": {
+            "description": "ISO 4217 currency for the prices, default EUR.",
+            "examples": [
+              "EUR",
+              "USD"
+            ],
+            "type": "string",
+            "pattern": "^[A-Za-z]{3}$"
+          },
+          "nationality": {
+            "description": "Guest nationality, ISO 3166 alpha-2 (prices can depend on it). Default from the client's language, else NL.",
+            "examples": [
+              "GB"
+            ],
+            "type": "string",
+            "pattern": "^[A-Za-z]{2}$"
+          },
+          "guest_first_name": {
+            "description": "As on the ID shown at check-in.",
+            "examples": [
+              "Ana"
+            ],
+            "type": "string",
+            "maxLength": 60
+          },
+          "guest_last_name": {
+            "description": "As on the ID shown at check-in.",
+            "examples": [
+              "Silva"
+            ],
+            "type": "string",
+            "maxLength": 60
+          },
+          "guest_email": {
+            "description": "Where the confirmation goes after the guest pays. Only an address the guest gave you for this.",
+            "examples": [
+              "ana@example.com"
+            ],
+            "type": "string",
+            "maxLength": 200
+          },
+          "guest_phone": {
+            "description": "With country code.",
+            "examples": [
+              "+351 912 345 678"
+            ],
+            "type": "string",
+            "maxLength": 30
+          },
+          "remarks": {
+            "description": "Special requests for the hotel, not guaranteed.",
+            "type": "string",
+            "maxLength": 500
+          },
+          "expected_total": {
+            "description": "With a key: the total you saw for this offer, so a change is flagged. Ignored without a key; the price is always the partner's.",
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "maximum": 10000000
+          },
+          "idempotency_key": {
+            "description": "A fresh UUID per hold (at least 16 characters without an API key). The same key and request within 24 hours return the same hold; without a key that repeat says only that the hold exists and its state.",
+            "examples": [
+              "4b0e7a2c-9d1f-4c3e-8a6b-2f5d7e9c1a30"
+            ],
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "offer_id"
+        ]
+      }
+    },
+    {
+      "name": "get_booking",
+      "description": "The state of one booking, to explain to the guest: held (guest details still to enter), awaiting_payment (with pay_url and expires_at), paid (the hotel is confirming), confirmed (confirmation number, hotel reference, voucher_url), cancelled (refund), expired (nobody paid in time) or failed; state_explained says it in one sentence. Needs the booking_secret from prebook; with the key that made it, the guest email works too.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "booking_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40,
+            "description": "booking_id from prebook, starts with Q.",
+            "examples": [
+              "QTUW3GNACEXXX32"
+            ]
+          },
+          "booking_secret": {
+            "description": "booking_secret from prebook.",
+            "type": "string",
+            "minLength": 8,
+            "maxLength": 200
+          },
+          "guest_email": {
+            "description": "With the key that made the booking: the guest email used for it.",
+            "type": "string",
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "booking_id"
+        ]
+      }
+    },
+    {
+      "name": "cancel_booking",
+      "description": "Gives an unpaid hold up at once (nothing was charged), or cancels a confirmed booking with a refundable rate; the refund follows the rate terms and goes back to the card through Nuitee. Non-refundable rates cannot be cancelled online. Only call this when the guest asked for it. Needs the booking_secret; with the key that made it, the guest email works too.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "booking_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40,
+            "description": "booking_id from prebook."
+          },
+          "booking_secret": {
+            "description": "booking_secret from prebook.",
+            "type": "string",
+            "minLength": 8,
+            "maxLength": 200
+          },
+          "guest_email": {
+            "description": "With the key that made the booking: the guest email used for it.",
+            "type": "string",
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "booking_id"
+        ]
+      }
+    },
+    {
+      "name": "list_bookings",
+      "description": "The bookings made with this connection's API key, newest first, each with its state and pay_url while payable. Needs a key; holds made without one are read with get_booking and their booking_secret.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "limit": {
+            "description": "How many, 1 to 100. Default 20.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          }
+        }
+      }
+    },
+    {
+      "name": "get_status",
+      "description": "Whether Quub and the booking partner are answering (ok, degraded, down or off), from the calls of the last minutes, plus the limits and how many holds without a key are left today. Call it before telling a person there are no hotels.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "request_api_key",
+      "description": "Sends an email with a one-time link to a free Quub API key. Not needed to search, hold or read a booking. A key raises the limits, lists its own bookings (list_bookings) and prices bookings at an 8 percent margin. The owner of the address opens the link, sees the key once and adds it to this connector (Authorization: Bearer quub_..., or ?key=quub_... on the server URL). Only send it to an address the person gave you for this.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 254,
+            "description": "Where the link goes."
+          },
+          "label": {
+            "description": "A name for the key, e.g. the agent or app.",
+            "type": "string",
+            "maxLength": 80
+          }
+        },
+        "required": [
+          "email"
+        ]
+      }
+    }
+  ],
+  "source": {
+    "type": "registry",
+    "registry": "registry.modelcontextprotocol.io",
+    "name": "rent.quub/hotels",
+    "version": "1.1.0",
+    "remoteUrl": "https://quub.rent/mcp",
+    "publishedAt": "2026-11-17T22:58:15.762395Z",
+    "fetchedAt": "2026-11-28T10:03:29.931Z",
+    "toolsSha256": "f9410d1733dc7b0d182a3a10714b4c47a288839808144a9c69443b8182f4c0b7"
+  }
+}
